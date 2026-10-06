@@ -458,7 +458,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
 
     // ---------- WhatsApp embutido (Baileys) ----------
     api.get("/api/whatsapp", async () => {
-      const session = await one("SELECT status, qr, pairing_code, phone, name, last_error, updated_at FROM wa_sessions WHERE id = $1", [SESSION_ID]);
+      const session = await one("SELECT status, qr, pairing_code, phone, name, last_error, updated_at, heartbeat_at, last_message_at, COALESCE(heartbeat_at > now() - interval '60 seconds', false) AS listening FROM wa_sessions WHERE id = $1", [SESSION_ID]);
       return { provider: config.WHATSAPP_PROVIDER, session };
     });
     api.post<{ Body: { phone?: string } }>("/api/whatsapp/connect", async (req, reply) => {

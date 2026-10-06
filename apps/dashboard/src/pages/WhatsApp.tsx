@@ -68,8 +68,20 @@ export function WhatsAppPage() {
         <div className="card card-pad">
           <div className="row" style={{ marginBottom: 14 }}>
             <span className={`badge ${cls}`}>{label}</span>
-            <span className="muted" style={{ fontSize: 12 }}>atualizado {ago(s.updated_at)}</span>
+            {s.listening ? (
+              <span className="badge badge-ok">● escutando agora</span>
+            ) : (
+              <span className="badge badge-err">worker sem sinal{s.heartbeat_at ? ` há ${ago(s.heartbeat_at).replace(/^há /, "")}` : ""}</span>
+            )}
           </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: -8, marginBottom: 12 }}>
+            Última mensagem recebida: {s.last_message_at ? ago(s.last_message_at) : "nenhuma ainda"}
+          </div>
+          {!s.listening && (
+            <div className="notice notice-warn" style={{ marginBottom: 12 }}>
+              Nenhum processo está segurando a conexão agora, então as mensagens não chegam. Confira se o serviço <code>worker</code> da stack está rodando; quando ele sobe, assume a conexão sozinho em até 45 segundos.
+            </div>
+          )}
 
           {s.status === "connected" && (
             <div>

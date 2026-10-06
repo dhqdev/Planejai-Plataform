@@ -6,7 +6,7 @@ pg.types.setTypeParser(1700, (v) => (v === null ? null : Number(v)));
 // int8 -> number
 pg.types.setTypeParser(20, (v) => (v === null ? null : Number(v)));
 
-export const pool = new pg.Pool({ connectionString: config.DATABASE_URL, max: 20 });
+export const pool = new pg.Pool({ connectionString: config.DATABASE_URL, max: 20, keepAlive: true });
 
 export async function query<T extends pg.QueryResultRow = any>(text: string, params: unknown[] = []) {
   return pool.query<T>(text, params);

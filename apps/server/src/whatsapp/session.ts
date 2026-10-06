@@ -7,6 +7,8 @@ import makeWASocket, {
   type WAMessage,
   type WASocket,
 } from "baileys";
+import { randomBytes } from "node:crypto";
+import { hostname } from "node:os";
 import type pg from "pg";
 import pino from "pino";
 import QRCode from "qrcode";
@@ -16,7 +18,10 @@ import { ingest } from "../ingest.js";
 import { clearAuthState, usePgAuthState } from "./auth-state.js";
 
 export const SESSION_ID = "default";
-const LOCK_KEY = 727275;
+/** identifica este processo no aluguel da conexão */
+const HOLDER = `${hostname()}:${process.pid}:${randomBytes(3).toString("hex")}`;
+const LEASE_SECONDS = 45;
+const HEARTBEAT_MS = 15_000;
 const MEDIA_MAX_BYTES = 20 * 1024 * 1024;
 
 type Status = "disconnected" | "connecting" | "qr" | "pairing" | "connected";
@@ -39,12 +44,15 @@ async function setStatus(status: Status, patch: { qr?: string | null; pairing_co
 /**
  * Conexão própria com o WhatsApp via Baileys (WhatsApp Web multi-device), no estilo do tekvosoft:
  * a sessão fica no Postgres, o QR/código de pareamento aparece no dashboard e a conexão se
- * recupera sozinha de quedas. Só um processo da stack segura a conexão (advisory lock).
+ * recupera sozinha de quedas. Só um processo da stack segura a conexão: ele "aluga" a sessão no banco
+ * e renova a cada 15s. Se o processo morrer sem avisar (container derrubado no redeploy), o aluguel vence
+ * em 45s e o worker novo assume sozinho.
  */
 class WhatsAppSession {
   sock: WASocket | null = null;
   private log: Log = console;
-  private lockClient: pg.PoolClient | null = null;
+  private holding = false;
+  private heartbeat: NodeJS.Timeout | null = null;
   private listenClient: pg.PoolClient | null = null;
   private retries = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
@@ -57,11 +65,15 @@ class WhatsAppSession {
 
   async start(log: Log) {
     this.log = log;
-    if (!(await this.acquireLock())) {
-      log.info("outro processo já segura a conexão do WhatsApp; tentando de novo em 30s");
-      setTimeout(() => void this.start(log), 30_000).unref();
+    if (this.stopping) return;
+    if (!(await this.acquireLease().catch(() => false))) {
+      log.info("outro processo está com a conexão do WhatsApp; tento assumir de novo em 15s");
+      setTimeout(() => void this.start(log), HEARTBEAT_MS).unref();
       return;
     }
+    this.holding = true;
+    this.heartbeat = setInterval(() => void this.beat().catch((err) => this.log.warn({ err }, "falha no sinal do WhatsApp")), HEARTBEAT_MS);
+    this.heartbeat.unref();
     // Comandos do dashboard (API) chegam por LISTEN/NOTIFY
     this.listenClient = await pool.connect();
     this.listenClient.on("notification", (msg) => {
@@ -77,15 +89,43 @@ class WhatsAppSession {
     log.info("gerenciador do WhatsApp (Baileys) iniciado");
   }
 
-  private async acquireLock() {
-    const client = await pool.connect();
-    const { rows } = await client.query("SELECT pg_try_advisory_lock($1) AS ok", [LOCK_KEY]);
-    if (rows[0]?.ok) {
-      this.lockClient = client;
-      return true;
+  /** Assume a conexão se ninguém estiver com ela ou se o aluguel do outro processo venceu. */
+  private async acquireLease() {
+    const r = await query(
+      `UPDATE wa_sessions SET holder = $2, lease_until = now() + make_interval(secs => $3), heartbeat_at = now()
+        WHERE id = $1 AND (holder IS NULL OR holder = $2 OR lease_until IS NULL OR lease_until < now()) RETURNING id`,
+      [SESSION_ID, HOLDER, LEASE_SECONDS],
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
+  /** Renova o aluguel, mostra no painel que está escutando e religa a conexão se ela sumiu sem aviso. */
+  private async beat() {
+    if (!(await this.acquireLease())) {
+      this.log.warn("outro processo assumiu o WhatsApp; soltando a conexão daqui");
+      await this.release();
+      setTimeout(() => void this.start(this.log), HEARTBEAT_MS).unref();
+      return;
     }
-    client.release();
-    return false;
+    if (this.stopping || this.sock || this.reconnectTimer) return;
+    const { state } = await usePgAuthState(SESSION_ID);
+    if (state.creds.registered) {
+      this.log.warn("conexão do WhatsApp sumiu sem aviso; reconectando");
+      await this.connect();
+    }
+  }
+
+  private async release() {
+    this.holding = false;
+    if (this.heartbeat) clearInterval(this.heartbeat);
+    this.heartbeat = null;
+    await this.teardown();
+    if (this.listenClient) {
+      await this.listenClient.query("UNLISTEN wa_command").catch(() => {});
+      this.listenClient.release();
+      this.listenClient = null;
+    }
+    await query("UPDATE wa_sessions SET holder = NULL, lease_until = NULL WHERE id = $1 AND holder = $2", [SESSION_ID, HOLDER]).catch(() => {});
   }
 
   async handleCommand(cmd: WaCommand) {
@@ -182,7 +222,7 @@ class WhatsAppSession {
           const code = (lastDisconnect?.error as any)?.output?.statusCode as number | undefined;
           const reason = lastDisconnect?.error?.message ?? "conexão fechada";
           this.sock = null;
-          if (this.stopping) return;
+          if (this.stopping || !this.holding) return;
           if (code === DisconnectReason.loggedOut || code === 403) {
             this.log.warn("WhatsApp desconectado pelo celular; limpando a sessão");
             await clearAuthState(SESSION_ID);
@@ -219,6 +259,7 @@ class WhatsAppSession {
   private async handleIncoming(sock: WASocket, raw: WAMessage) {
     const msg = parseWAMessage(raw, "baileys");
     if (!msg) return;
+    void query("UPDATE wa_sessions SET last_message_at = now() WHERE id = $1", [SESSION_ID]).catch(() => {});
     // Baixa a mídia já na chegada (a mídia do WhatsApp expira e o socket só existe aqui)
     if (msg.media && ["audio", "image", "document", "video"].includes(msg.kind)) {
       try {
@@ -233,15 +274,7 @@ class WhatsAppSession {
 
   async stop() {
     this.stopping = true;
-    await this.teardown();
-    if (this.listenClient) {
-      await this.listenClient.query("UNLISTEN wa_command").catch(() => {});
-      this.listenClient.release();
-    }
-    if (this.lockClient) {
-      await this.lockClient.query("SELECT pg_advisory_unlock($1)", [LOCK_KEY]).catch(() => {});
-      this.lockClient.release();
-    }
+    await this.release();
   }
 }
 

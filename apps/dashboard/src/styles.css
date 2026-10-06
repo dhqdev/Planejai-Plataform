@@ -354,3 +354,5 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
   .page-head .row { flex-wrap: wrap; }
 }
 .card:has(> table.table) { overflow-x: auto; }
+.notice { padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.45; }
+.notice-warn { background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }
