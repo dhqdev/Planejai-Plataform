@@ -1,5 +1,6 @@
 import type { Channel, OutboundImage } from "../../channels/types.js";
 import type { TeamRoom } from "../collab.js";
+import type { Guard } from "../guard.js";
 import type { Tracer } from "../trace.js";
 
 export interface UserRow {
@@ -47,6 +48,8 @@ export interface ToolContext {
   room: TeamRoom;
   /** quem chamou quem até aqui (evita ciclos A -> B -> A) */
   callChain: string[];
+  /** travas da execução (prazo e número de ações), as mesmas para o time todo */
+  guard?: Guard;
 }
 
 export interface Tool<A = any> {

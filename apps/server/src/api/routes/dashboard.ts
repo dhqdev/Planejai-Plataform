@@ -498,7 +498,13 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
         openrouter: Boolean(config.OPENROUTER_API_KEY),
       };
     });
-    api.put<{ Body: Record<string, unknown> }>("/api/settings", async (req) => saveSettings(req.body as any));
+    api.put<{ Body: Record<string, unknown> }>("/api/settings", async (req, reply) => {
+      try {
+        return await saveSettings(req.body as any);
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
 
     // ---------- Playground: conversar com o agente pelo dashboard ----------
     api.post<{ Body: { text?: string; image?: { base64: string; mimetype: string }; file?: { base64: string; mimetype: string; fileName?: string }; reset?: boolean } }>("/api/playground", async (req) => {

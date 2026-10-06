@@ -11,6 +11,8 @@ import { ctoSystemPrompt } from "./prompts.js";
 import { availableTools, runToolLoop } from "./runner.js";
 import { CTO_TOOLS, SPECIALISTS } from "./team.js";
 import { finishBrowser } from "./tools/research.js";
+import { Guard, GuardTimeout, redactSecrets } from "./guard.js";
+import { isOwner } from "../ingest.js";
 import { describeMessage, preprocessMedia } from "./media.js";
 import { Tracer } from "./trace.js";
 import { pushShort, recentShort, type ShortEntry } from "../shortmem.js";
@@ -21,6 +23,8 @@ import { Outbox, type ConversationRow, type ToolContext, type UserRow } from "./
 const HISTORY_LIMIT = 16;
 /** Mensagens que disparam a compactação em resumo */
 const SUMMARY_TRIGGER = 40;
+/** Numa enxurrada de mensagens, só as últimas entram numa resposta */
+const MAX_BATCH = 20;
 
 /** Formata texto de LLM para WhatsApp (markdown -> estilo WhatsApp) */
 export function toWhatsApp(text: string) {
@@ -100,11 +104,42 @@ async function processLocked(
   if (opts.event) {
     await query("INSERT INTO messages (conversation_id, role, content, processed) VALUES ($1, 'event', $2, false)", [conversationId, opts.event]);
   }
-  const pending = await many("SELECT * FROM messages WHERE conversation_id = $1 AND processed = false ORDER BY id", [conversationId]);
+  let pending = await many("SELECT * FROM messages WHERE conversation_id = $1 AND processed = false ORDER BY id", [conversationId]);
   if (!pending.length) return { executionId: null, bubbles: [], outbox: new Outbox() };
 
   const channel = opts.channel ?? getChannel(conversation.channel);
   const settings = await getSettings();
+
+  // Enxurrada: as mais antigas ficam registradas, mas só as últimas MAX_BATCH vão para o agente
+  if (pending.length > MAX_BATCH) {
+    const dropped = pending.slice(0, pending.length - MAX_BATCH);
+    await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [dropped.map((m) => m.id)]);
+    pending = pending.slice(-MAX_BATCH);
+  }
+
+  // Limites de uso por pessoa (o dono não tem limite; lembretes que ela mesma agendou sempre saem)
+  if (opts.trigger === "message" && !isOwner(user.phone)) {
+    const hit = await usageLimitHit(user.id, settings);
+    if (hit) {
+      await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
+      const tracer = await Tracer.start({ trigger: opts.trigger, userId: user.id, conversationId, input: pending.map((m) => m.content).join("\n") });
+      const step = await tracer.step({ agent: "cto", type: "info", name: "trava: limite diário", input: hit });
+      await step.ok({ blocked: true });
+      // avisa uma vez por dia; depois fica em silêncio até liberar
+      const notified = await one(
+        `UPDATE users SET profile = profile || jsonb_build_object('limit_notice_at', now()) WHERE id = $1
+           AND COALESCE((profile->>'limit_notice_at')::timestamptz, 'epoch') < now() - interval '24 hours' RETURNING id`,
+        [user.id],
+      );
+      if (notified) {
+        await channel
+          .sendText(conversation.remote_jid, "Você chegou no limite de uso de hoje 🙏 Amanhã eu volto a responder normalmente.")
+          .catch(() => {});
+      }
+      await tracer.finish(notified ? "[limite diário: avisado]" : "[limite diário: silêncio]");
+      return { executionId: tracer.executionId, bubbles: [], outbox: new Outbox() };
+    }
+  }
   const timezone = user.timezone ?? settings.timezone;
   const lastInbound = [...pending].reverse().find((m) => m.role === "user" && m.external_id);
   const tracer = await Tracer.start({
@@ -114,6 +149,7 @@ async function processLocked(
     input: pending.map((m) => (m.role === "event" ? `[evento] ${m.content}` : m.content || `[${m.meta?.kind ?? "mídia"}]`)).join("\n"),
   });
   const outbox = new Outbox();
+  const guard = Guard.fromSettings(settings);
 
   try {
     if (lastInbound) {
@@ -127,7 +163,7 @@ async function processLocked(
     const fresh: ShortEntry[] = pending.map((m) => ({
       id: m.id,
       role: m.role,
-      text: m.role === "event" ? m.content : describeMessage(m),
+      text: m.role === "event" ? m.content : limitText(describeMessage(m), m, settings.maxMessageChars),
       ts: new Date(m.created_at).getTime(),
       ext: m.external_id,
     }));
@@ -182,6 +218,7 @@ async function processLocked(
       agent: "cto",
       room: new TeamRoom(),
       callChain: ["cto"],
+      guard,
     };
     const tools = [...(await availableTools(CTO_TOOLS)), ...team.map(delegationTool)];
     let result;
@@ -192,6 +229,13 @@ async function processLocked(
       if (ctx.room.browser) await finishBrowser(ctx).catch(() => {});
     }
 
+    if (result.timedOut || (guard.expired && !result.text)) {
+      const step = await tracer.step({ agent: "cto", type: "info", name: "trava: tempo máximo", input: { minutos: guard.minutes, acoes: guard.toolCalls } });
+      await step.ok({ stopped: true });
+      result.text =
+        `Isso passou do meu limite de ${fmtMinutes(guard.minutes)} e parei aqui pra não te deixar esperando. ` +
+        "Quer que eu tente de um jeito mais simples ou dividido em partes?";
+    }
     const silent = !result.text || /^\[\[sil[eê]ncio\]\]$/i.test(result.text.trim());
     const bubbles = silent ? [] : splitBubbles(result.text);
     // mídia que o CTO não posicionou vai depois do primeiro balão
@@ -208,11 +252,49 @@ async function processLocked(
     return { executionId: tracer.executionId, bubbles, outbox };
   } catch (err) {
     await tracer.error(err);
+    if (err instanceof GuardTimeout || guard.expired) {
+      await channel
+        .sendText(conversation.remote_jid, `Isso passou do meu limite de ${fmtMinutes(guard.minutes)} e parei aqui. Quer que eu tente de um jeito mais simples?`)
+        .catch(() => {});
+      await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
+      return { executionId: tracer.executionId, bubbles: [], outbox };
+    }
     // Não deixa a pessoa no vácuo
     await channel.sendText(conversation.remote_jid, "Tive um problema técnico aqui e não consegui terminar. Pode tentar de novo em instantes?").catch(() => {});
     await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
     throw err;
+  } finally {
+    guard.dispose();
   }
+}
+
+function fmtMinutes(min: number) {
+  return min >= 1 ? `${Number(min.toFixed(1)).toString().replace(".", ",")} min` : `${Math.round(min * 60)} s`;
+}
+
+/** Texto digitado muito longo é cortado (documentos têm limite próprio e são lidos sob demanda). */
+function limitText(text: string, m: { meta?: any }, max: number) {
+  const kind = m.meta?.kind;
+  if (kind && kind !== "text") return text;
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}\n[mensagem cortada: passou de ${max} caracteres]`;
+}
+
+/** Algum limite de 24h da pessoa estourou? Devolve qual, para o log. */
+async function usageLimitHit(userId: string, s: { dailyMessageLimit: number; dailyCostLimitUsd: number }) {
+  if (s.dailyMessageLimit > 0) {
+    const r = await one(
+      `SELECT COUNT(*)::int AS n FROM messages m JOIN conversations c ON c.id = m.conversation_id
+        WHERE c.user_id = $1 AND m.role = 'user' AND m.created_at > now() - interval '24 hours'`,
+      [userId],
+    );
+    if (r.n > s.dailyMessageLimit) return { limite: "mensagens em 24h", usado: r.n, maximo: s.dailyMessageLimit };
+  }
+  if (s.dailyCostLimitUsd > 0) {
+    const r = await one("SELECT COALESCE(SUM(cost_usd), 0)::float AS c FROM executions WHERE user_id = $1 AND started_at > now() - interval '24 hours'", [userId]);
+    if (r.c >= s.dailyCostLimitUsd) return { limite: "custo de IA em 24h (US$)", usado: Number(r.c.toFixed(4)), maximo: s.dailyCostLimitUsd };
+  }
+  return null;
 }
 
 async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: ConversationRow; outbox: Outbox; tracer: Tracer }) {
@@ -225,6 +307,7 @@ async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: C
           o.channel.setTyping(o.conversation.remote_jid, ms).catch(() => {});
           await sleep(o.channel.id === "playground" ? 0 : ms);
         }
+        b.text = redactSecrets(b.text);
         const r = await o.channel.sendText(o.conversation.remote_jid, b.text);
         await query("INSERT INTO messages (conversation_id, role, content, external_id, processed) VALUES ($1, 'assistant', $2, $3, true)", [
           o.conversation.id,

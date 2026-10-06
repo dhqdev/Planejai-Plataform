@@ -25,7 +25,8 @@ apps/server/src/
   shortmem.ts              memória curta no Redis (pj:conv:<id>:msgs, TTL = MESSAGE_RETENTION_HOURS); cai pro Postgres se o Redis sumir
   maintenance.ts           de hora em hora: resume e apaga mensagens > 24h, logs e gravações antigas
   channels/                baileys.ts (padrão), evolution.ts, cloud.ts (Meta), PlaygroundChannel; wa-message.ts parseia WAMessage
-  whatsapp/                session.ts (conexão Baileys: QR, pareamento, reconexão, advisory lock, LISTEN wa_command)
+  whatsapp/                session.ts (conexão Baileys: QR, pareamento, reconexão, LISTEN wa_command; aluguel holder/lease_until
+                           renovado a cada 15s, vence em 45s, para o worker novo assumir depois de redeploy)
                            auth-state.ts (credenciais/chaves Signal na tabela wa_auth)
   agent/
     orchestrator.ts        processConversation: mídia, contexto (Redis), memórias, CTO, entrega em balões; resumo/compactação
@@ -34,7 +35,9 @@ apps/server/src/
                            vídeo->quadros+fala (ffmpeg)
     browser.ts             "computador" dos agentes: puppeteer no browserless (ou CHROME_PATH), snapshot em texto com
                            elementos numerados (barato), ações click/type/press/scroll e gravação em MP4 (screencast + ffmpeg)
-    runner.ts              loop de tool-calling (tools em paralelo) + trace de cada passo
+    runner.ts              loop de tool-calling (tools em paralelo) + trace de cada passo; respeita o Guard
+    guard.ts               travas da execução: prazo (maxExecutionMinutes, padrão 8) e ações (maxToolCalls) para o time
+                           todo via ctx.guard; perto do fim manda responder com o que tem; redactSecrets antes do WhatsApp
     collab.ts              TeamRoom: conversa contínua CTO<->especialista (ask_*), consulta entre colegas
                            (consult_*, profundidade máx. 3, sem ciclos) e quadro do time (share_with_team)
     team.ts                SPECIALISTS e CTO_TOOLS — o "organograma" do time
@@ -132,6 +135,9 @@ Teste conversas sem WhatsApp pela tela **Playground**; cada resposta linka para 
 - O Dockerfile só roda `apk add ffmpeg` na arquitetura alvo; o resto das deps é JS puro. Não adicione dependência nativa no servidor sem ajustar isso.
 
 ## Regras do projeto
+- Travas (Configurações > Travas de segurança, chaves em settings.ts/GUARD_LIMITS): ritmo por minuto no ingest, limite de
+  mensagens e de custo em 24h por pessoa no orchestrator (dono isento), corte de texto longo. Toda trava que age vira passo
+  "trava: …" em Execuções. Ferramenta nova que demora deve aceitar ser abandonada (o runner usa guard.race).
 - PWA: ao mudar o sw.js, suba `VERSION` para limpar o cache antigo. O servidor manda `no-cache` em index/sw/manifest e
   `immutable` em /assets. Todo modal novo usa `<Modal>` (vira bottom sheet sozinho); botão de ação chama `haptic()`.
 - Integração nova: campos com `help` dizendo onde pegar o valor, `test()` que bate na API de verdade e, se for OAuth,

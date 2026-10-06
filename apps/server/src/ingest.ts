@@ -2,6 +2,7 @@ import type { InboundMessage } from "./channels/types.js";
 import { config } from "./config.js";
 import { one, query } from "./db/pool.js";
 import { QUEUES, getBoss } from "./queue/boss.js";
+import { getSettings } from "./settings.js";
 
 /** Celulares do Brasil chegam no WhatsApp com ou sem o nono dígito (55 19 9xxxx-xxxx vs 55 19 xxxx-xxxx). */
 export function phoneVariants(phone: string): string[] {
@@ -60,9 +61,27 @@ export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; re
   if (!inserted) return { queued: false, reason: "duplicada" };
   if (user.status !== "active") return { queued: false, reason: `contato ${user.status}` };
 
+  const settings = await getSettings();
+  // Ritmo: quem manda mensagem demais por minuto (spam, robô, loop) recebe no máximo uma resposta por minuto,
+  // com tudo junto. Nada se perde: as mensagens ficam guardadas e entram no próximo processamento.
+  let delay = config.MESSAGE_DEBOUNCE_SECONDS;
+  let throttled = false;
+  if (!isOwner(msg.phone)) {
+    const r = await one("SELECT COUNT(*)::int AS n FROM messages WHERE conversation_id = $1 AND role = 'user' AND created_at > now() - interval '1 minute'", [conv.id]);
+    if (r.n > settings.rateLimitPerMinute) {
+      delay = Math.max(delay, 60);
+      throttled = true;
+    }
+  }
+
   const boss = await getBoss();
   // Fila com policy "short": no máximo 1 job aguardando por conversa. Mensagens que chegam
   // dentro da janela entram no mesmo processamento, como alguém que lê tudo antes de responder.
-  await boss.send(QUEUES.process, { conversationId: conv.id }, { singletonKey: conv.id, startAfter: config.MESSAGE_DEBOUNCE_SECONDS, retryLimit: 1 });
-  return { queued: true };
+  // O job expira um pouco depois do tempo máximo de execução, para nunca ficar preso.
+  await boss.send(
+    QUEUES.process,
+    { conversationId: conv.id },
+    { singletonKey: conv.id, startAfter: delay, retryLimit: 1, expireInSeconds: Math.ceil(settings.maxExecutionMinutes * 60) + 120 },
+  );
+  return { queued: true, reason: throttled ? "ritmo alto: resposta segurada" : undefined };
 }

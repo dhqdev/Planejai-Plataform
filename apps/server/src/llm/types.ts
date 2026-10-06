@@ -28,6 +28,8 @@ export interface ChatRequest {
   /** plugins do OpenRouter, ex.: [{ id: "web" }] para busca na web */
   plugins?: Record<string, unknown>[];
   responseFormat?: Record<string, unknown>;
+  /** cancela a chamada (prazo máximo da execução) */
+  signal?: AbortSignal;
 }
 
 export interface ChatResult {

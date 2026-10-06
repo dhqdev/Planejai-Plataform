@@ -46,13 +46,13 @@ export async function chatCompletion(choice: ModelChoice, req: ChatRequest, atte
       "X-Title": "Planejai",
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(120_000),
+    signal: req.signal ? AbortSignal.any([AbortSignal.timeout(120_000), req.signal]) : AbortSignal.timeout(120_000),
   });
 
   if (!res.ok) {
     const text = await res.text();
     // 429/5xx: tenta de novo com backoff curto
-    if ((res.status === 429 || res.status >= 500) && attempt < 2) {
+    if ((res.status === 429 || res.status >= 500) && attempt < 2 && !req.signal?.aborted) {
       await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
       return chatCompletion(choice, req, attempt + 1);
     }

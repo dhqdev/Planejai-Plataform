@@ -7,11 +7,30 @@ export function SettingsPage() {
   const { data, error } = useApi<any>("/api/settings");
   const [form, setForm] = useState<any>(null);
   const [saved, setSaved] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
   useEffect(() => {
     if (data) setForm(data.settings);
   }, [data]);
   if (error) return <div className="page"><ErrorBox error={error} /></div>;
   if (!data || !form) return <Loading />;
+
+  const save = async () => {
+    setSaveErr(null);
+    try {
+      await api("/api/settings", { method: "PUT", json: form });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setSaveErr((e as Error).message);
+    }
+  };
+  const num = (key: string, label: string, help: string, step = 1) => (
+    <div className="field">
+      <label>{label}</label>
+      <input className="input" type="number" inputMode="decimal" step={step} min={0} value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value === "" ? "" : Number(e.target.value) })} />
+      <div className="help">{help}</div>
+    </div>
+  );
 
   return (
     <div className="page">
@@ -36,8 +55,24 @@ export function SettingsPage() {
             <div className="help">Quem se cadastra vira admin e vê só os próprios dados. Liberar na hora deixa o número usar o assistente (gasta sua chave do OpenRouter).</div>
           </div>
           <div className="row">
-            <button className="btn btn-primary" onClick={async () => { await api("/api/settings", { method: "PUT", json: form }); setSaved(true); setTimeout(() => setSaved(false), 2000); }}>Salvar</button>
+            <button className="btn btn-primary" onClick={save}>Salvar</button>
             {saved && <span className="badge badge-ok">Salvo</span>}
+          </div>
+        </div>
+        <div className="card card-pad">
+          <h3>🛡️ Travas de segurança</h3>
+          <p className="muted" style={{ marginTop: 0 }}>Valem para todo mundo, menos para os números de dono. Quando uma trava age, aparece em Execuções como "trava: …".</p>
+          {num("maxExecutionMinutes", "Tempo máximo por resposta (minutos)", "Perto do fim o time é avisado para responder com o que tem; no limite, tudo é cancelado e a pessoa recebe um aviso. Entre 0,5 e 30.", 0.5)}
+          {num("maxToolCalls", "Ações por resposta", "Ferramentas e consultas somando o time todo. Evita loop de pesquisa. Entre 5 e 200.")}
+          {num("rateLimitPerMinute", "Mensagens por minuto", "Acima disso o agente junta tudo e responde no máximo uma vez por minuto. Nada se perde.")}
+          {num("dailyMessageLimit", "Mensagens por pessoa em 24h", "Ao passar, avisa uma vez e para de responder até liberar. 0 = sem limite.")}
+          {num("dailyCostLimitUsd", "Gasto de IA por pessoa em 24h (US$)", "Soma o custo real do OpenRouter das respostas daquela pessoa. 0 = sem limite.", 0.05)}
+          {num("maxMessageChars", "Tamanho máximo de mensagem (caracteres)", "Texto maior é cortado antes de ir para a IA. Documentos têm limite próprio.", 100)}
+          <p className="muted" style={{ fontSize: 12 }}>Sempre ligadas: o agente ignora ordens escritas dentro de documentos, páginas e e-mails, não revela instruções nem chaves, pede "sim" antes de pagar ou enviar algo, e nenhuma chave de API sai numa mensagem.</p>
+          <div className="row">
+            <button className="btn btn-primary" onClick={save}>Salvar</button>
+            {saved && <span className="badge badge-ok">Salvo</span>}
+            {saveErr && <span className="badge badge-err">{saveErr}</span>}
           </div>
         </div>
         <div className="card card-pad">

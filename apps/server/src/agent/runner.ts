@@ -17,6 +17,8 @@ export function toSpecs(tools: Tool[]): ToolSpec[] {
 export interface LoopResult {
   text: string;
   steps: number;
+  /** parou porque estourou o tempo máximo */
+  timedOut?: boolean;
   /** conversa completa (com tool calls), para continuar depois */
   messages: ChatMessage[];
 }
@@ -40,8 +42,24 @@ export async function runToolLoop(opts: {
   const choice = await resolveModel(opts.task);
   const maxSteps = opts.maxSteps ?? 8;
 
+  const guard = ctx.guard;
+  let warned = false;
+
   for (let step = 1; step <= maxSteps; step++) {
-    const last = step === maxSteps;
+    if (guard?.expired) return { text: "", steps: step - 1, messages, timedOut: true };
+    // perto do prazo (ou do limite de ações): sem ferramentas, responde com o que já tem
+    const wrapUp = Boolean(guard?.wrapUp);
+    const last = step === maxSteps || wrapUp;
+    if (wrapUp && !warned) {
+      warned = true;
+      messages.push({
+        role: "system",
+        content:
+          guard!.toolCalls >= guard!.maxToolCalls
+            ? "Limite de ações desta tarefa atingido. Responda agora com o que já tem, dizendo o que ficou faltando."
+            : "O tempo desta tarefa está acabando. Responda agora com o que já tem, dizendo o que ficou faltando.",
+      });
+    }
     const llmStep = await ctx.tracer.step({
       agent,
       type: "llm",
@@ -52,9 +70,10 @@ export async function runToolLoop(opts: {
     });
     let res;
     try {
-      res = await chatCompletion(choice, { messages, tools: last ? undefined : specs });
+      res = await chatCompletion(choice, { messages, tools: last ? undefined : specs, signal: guard?.signal });
     } catch (err) {
-      await llmStep.fail(err);
+      await llmStep.fail(guard?.expired ? guard.signal.reason : err);
+      if (guard?.expired) return { text: "", steps: step, messages, timedOut: true };
       throw err;
     }
     await llmStep.ok(res.message, { model: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costUsd: res.costUsd });
@@ -84,12 +103,18 @@ export async function runToolLoop(opts: {
           input: args,
           parentId: ctx.parentStepId,
         });
+        if (guard && guard.toolCalls >= guard.maxToolCalls) {
+          await toolStep.fail("Limite de ações por resposta atingido");
+          return { id: call.id, content: JSON.stringify({ error: "Limite de ações desta tarefa atingido. Finalize com o que já tem." }) };
+        }
+        if (guard) guard.toolCalls++;
         if (!tool) {
           await toolStep.fail(`Tool desconhecida: ${call.function.name}`);
           return { id: call.id, content: JSON.stringify({ error: `Tool desconhecida: ${call.function.name}` }) };
         }
         try {
-          const out: any = await tool.run(args, { ...ctx, parentStepId: toolStep.id });
+          const run = tool.run(args, { ...ctx, parentStepId: toolStep.id });
+          const out: any = guard ? await guard.race(run) : await run;
           let usage;
           if (out && typeof out === "object" && "_usage" in out) {
             const u = out._usage;
@@ -100,11 +125,13 @@ export async function runToolLoop(opts: {
           return { id: call.id, content: typeof out === "string" ? out : JSON.stringify(out ?? { ok: true }) };
         } catch (err) {
           await toolStep.fail(err);
+          if (guard?.expired) return { id: call.id, content: JSON.stringify({ error: "Tempo máximo da tarefa esgotado." }) };
           return { id: call.id, content: JSON.stringify({ error: err instanceof Error ? err.message : String(err) }) };
         }
       }),
     );
     for (const r of results) messages.push({ role: "tool", tool_call_id: r.id, content: r.content.slice(0, 12_000) });
+    if (guard?.expired) return { text: "", steps: step, messages, timedOut: true };
   }
   return { text: "", steps: maxSteps, messages };
 }
