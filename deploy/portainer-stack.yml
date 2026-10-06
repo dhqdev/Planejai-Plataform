@@ -10,7 +10,7 @@ x-app-env: &app-env
   ADMIN_EMAIL: ${ADMIN_EMAIL}
   ADMIN_PASSWORD: ${ADMIN_PASSWORD}
   OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
-  WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-evolution}
+  WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-baileys}
   EVOLUTION_API_URL: ${EVOLUTION_API_URL:-}
   EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
   EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-}
@@ -47,6 +47,8 @@ services:
     #   - traefik.http.routers.planejai.tls.certresolver=letsencrypt
     #   - traefik.http.services.planejai.loadbalancer.server.port=3000
 
+  # O worker roda o time de agentes, os lembretes e a conexão própria do WhatsApp (Baileys).
+  # Mantenha 1 réplica: só um processo pode segurar a sessão do WhatsApp.
   worker:
     image: ghcr.io/dhqdev/planejai-plataform:${PLANEJAI_TAG:-latest}
     restart: unless-stopped

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { splitBubbles, toWhatsApp } from "../src/agent/orchestrator.js";
 import { CloudChannel } from "../src/channels/cloud.js";
 import { EvolutionChannel } from "../src/channels/evolution.js";
+import { parseWAMessage } from "../src/channels/wa-message.js";
 import { decryptJson, encryptJson, signSession, verifySession } from "../src/crypto.js";
 import { nextCronDate } from "../src/reminders.js";
 import { isoLocal, parseLocalDateTime } from "../src/time.js";
@@ -101,5 +102,16 @@ describe("telefones", () => {
     expect(phoneVariants("5519995378302")).toEqual(["5519995378302", "551995378302"]);
     expect(phoneVariants("551995378302")).toEqual(["5519995378302", "551995378302"]);
     expect(phoneVariants("16504682892")).toEqual(["16504682892"]);
+  });
+});
+
+describe("mensagens do Baileys", () => {
+  it("desembrulha mensagens temporárias e ignora mensagens de protocolo", () => {
+    const eph = parseWAMessage(
+      { key: { remoteJid: "5519999999999@s.whatsapp.net", id: "E1" }, message: { ephemeralMessage: { message: { conversation: "oi sumido" } } }, messageTimestamp: { toNumber: () => 1791310000 } },
+      "baileys",
+    );
+    expect(eph).toMatchObject({ channel: "baileys", text: "oi sumido", kind: "text", timestamp: new Date(1791310000 * 1000) });
+    expect(parseWAMessage({ key: { remoteJid: "5519999999999@s.whatsapp.net", id: "P1" }, message: { protocolMessage: { type: 0 } } }, "baileys")).toBeNull();
   });
 });

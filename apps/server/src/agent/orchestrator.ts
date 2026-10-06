@@ -6,40 +6,14 @@ import { chatCompletion } from "../llm/openrouter.js";
 import { resolveModel } from "../llm/router.js";
 import type { ChatMessage } from "../llm/types.js";
 import { getSettings } from "../settings.js";
-import { ctoSystemPrompt, specialistSystemPrompt } from "./prompts.js";
+import { delegationTool, TeamRoom } from "./collab.js";
+import { ctoSystemPrompt } from "./prompts.js";
 import { availableTools, runToolLoop } from "./runner.js";
-import { CTO_TOOLS, SPECIALISTS, type AgentDef } from "./team.js";
+import { CTO_TOOLS, SPECIALISTS } from "./team.js";
 import { Tracer } from "./trace.js";
-import { defineTool, obj, Outbox, type ConversationRow, type Tool, type ToolContext, type UserRow } from "./tools/types.js";
+import { Outbox, type ConversationRow, type ToolContext, type UserRow } from "./tools/types.js";
 
 const HISTORY_LIMIT = 30;
-
-/** Cria a tool ask_<especialista> que o CTO usa para delegar. */
-function delegationTool(def: AgentDef): Tool<{ task: string }> {
-  return defineTool({
-    name: `ask_${def.id}`,
-    description: `${def.emoji} ${def.name}: ${def.role} Passe a tarefa completa e autocontida.`,
-    parameters: obj({ task: { type: "string", description: "Tarefa detalhada, com todo o contexto necessário" } }, ["task"]),
-    async run(args, ctx) {
-      const settings = await getSettings();
-      const tools = await availableTools(def.tools);
-      const missing = def.tools.filter((t) => t.integration && !tools.includes(t)).map((t) => t.integration!);
-      const note = missing.length ? `\n\n(Integrações não conectadas para você: ${[...new Set(missing)].join(", ")})` : "";
-      const r = await runToolLoop({
-        agent: def.id,
-        task: `agent:${def.id}`,
-        ctx: { ...ctx, agent: def.id },
-        tools,
-        maxSteps: 6,
-        messages: [
-          { role: "system", content: specialistSystemPrompt(def, { timezone: ctx.timezone, user: ctx.user, settings }) + note },
-          { role: "user", content: args.task },
-        ],
-      });
-      return { report: r.text || "(o especialista não retornou relatório)" };
-    },
-  });
-}
 
 /** Formata texto de LLM para WhatsApp (markdown -> estilo WhatsApp) */
 export function toWhatsApp(text: string) {
@@ -251,9 +225,11 @@ async function processLocked(
       timezone,
       lastInboundId: lastInbound?.external_id,
       agent: "cto",
+      room: new TeamRoom(),
+      callChain: ["cto"],
     };
     const tools = [...(await availableTools(CTO_TOOLS)), ...SPECIALISTS.map(delegationTool)];
-    const result = await runToolLoop({ agent: "cto", task: "agent:cto", ctx, tools, messages: [{ role: "system", content: system }, ...messages], maxSteps: 8 });
+    const result = await runToolLoop({ agent: "cto", task: "agent:cto", ctx, tools, messages: [{ role: "system", content: system }, ...messages], maxSteps: 12 });
 
     const silent = !result.text || /^\[\[sil[eê]ncio\]\]$/i.test(result.text.trim());
     const bubbles = silent ? [] : splitBubbles(result.text);

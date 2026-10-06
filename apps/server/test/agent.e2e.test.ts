@@ -20,19 +20,44 @@ const completion = (content: string | null, tool_calls?: unknown[]) => ({
 function fakeOpenRouter(body: any) {
   const system: string = body.messages[0].content;
   const last = body.messages.at(-1);
+  const all = JSON.stringify(body.messages);
+  const toolNames = body.messages.flatMap((m: any) => (m.tool_calls ?? []).map((c: any) => c.function.name));
+
   if (system.includes("CTO de um time")) {
+    const userText = String(body.messages.findLast((m: any) => m.role === "user")?.content ?? "");
     if (last.role === "tool") {
-      const calls = body.messages.findLast((m: any) => m.tool_calls)?.tool_calls ?? [];
-      const delegated = calls.some((c: any) => c.function.name.startsWith("ask_"));
+      if (userText.includes("cinema")) {
+        // CTO revisa e devolve ao Financeiro uma vez antes de responder
+        const asks = toolNames.filter((n: string) => n === "ask_financeiro").length;
+        if (asks === 1) return completion(null, [call("ask_financeiro", { message: "Inclua a pipoca no orçamento." })]);
+        return completion("Dá uns R$ 50 com pipoca 🍿");
+      }
+      const delegated = toolNames.some((n: string) => n.startsWith("ask_"));
       return completion(delegated ? "Anotado! R$ 8,20 em Padaria (Alimentação) 🐷" : "[[silencio]]");
     }
-    const text = String(last.content);
-    if (text.includes("padaria")) return completion(null, [call("react_to_message", { emoji: "✅" }), call("ask_financeiro", { task: "anotar gasto de R$ 8,20 na padaria" })]);
-    if (text.includes("valeu")) return completion(null, [call("react_to_message", { emoji: "🙏" })]);
+    if (userText.includes("cinema")) return completion(null, [call("ask_financeiro", { message: "Quanto custa ir ao cinema sábado?" })]);
+    if (userText.includes("padaria")) return completion(null, [call("react_to_message", { emoji: "✅" }), call("ask_financeiro", { message: "anotar gasto de R$ 8,20 na padaria" })]);
+    if (userText.includes("valeu")) return completion(null, [call("react_to_message", { emoji: "🙏" })]);
     return completion("[[silencio]]");
   }
-  if (last.role === "tool") return completion("Gasto registrado: R$ 8,20, Alimentação.");
-  return completion(null, [call("add_transaction", { kind: "expense", amount: 8.2, category: "Alimentação", description: "Padaria" })]);
+
+  if (system.includes("Você é o Pesquisador")) {
+    if (last.role === "tool") return completion("Ingresso custa R$ 30.");
+    return completion(null, [call("share_with_team", { note: "ingresso no Kinoplex: R$ 30" })]);
+  }
+
+  if (system.includes("Você é o Financeiro")) {
+    const lastText = String(last.content ?? "");
+    if (last.role === "user" && lastText.includes("pipoca")) {
+      // a conversa continua: o Financeiro lembra do que já respondeu
+      return completion(all.includes("Orçamento: R$ 30") ? "Com pipoca (R$ 20) fica R$ 50." : "Não lembro do orçamento anterior.");
+    }
+    if (last.role === "user" && lastText.includes("cinema")) return completion(null, [call("consult_pesquisador", { question: "Preço do ingresso sábado?" })]);
+    if (last.role === "tool" && toolNames.includes("consult_pesquisador")) return completion("Orçamento: R$ 30 do ingresso.");
+    if (last.role === "tool") return completion("Gasto registrado: R$ 8,20, Alimentação.");
+    return completion(null, [call("add_transaction", { kind: "expense", amount: 8.2, category: "Alimentação", description: "Padaria" })]);
+  }
+  return completion("?");
 }
 
 describe.skipIf(!enabled)("time de agentes (e2e)", () => {
@@ -102,5 +127,25 @@ describe.skipIf(!enabled)("time de agentes (e2e)", () => {
     const channel = new channels.PlaygroundChannel();
     await mod.processConversation(convId, { trigger: "playground", channel });
     expect(channel.sent).toEqual([{ type: "reaction", emoji: "🙏", messageId: "in2" }]);
+  });
+
+  it("especialistas conversam entre si e o CTO devolve trabalho antes de responder", async () => {
+    await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'quanto gasto pra ir ao cinema?', 'in3')", [convId]);
+    const channel = new channels.PlaygroundChannel();
+    const r = await mod.processConversation(convId, { trigger: "playground", channel });
+    expect(channel.sent).toEqual([{ type: "text", text: "Dá uns R$ 50 com pipoca 🍿" }]);
+
+    const steps = await db.many("SELECT id, parent_id, agent, type, name, output FROM execution_steps WHERE execution_id = $1 ORDER BY id", [r.executionId]);
+    const names = steps.filter((s) => s.type !== "llm").map((s) => `${s.agent}:${s.name}`);
+    expect(names).toEqual([
+      "cto:ask_financeiro",
+      "financeiro:consult_pesquisador",
+      "pesquisador:share_with_team",
+      "cto:ask_financeiro",
+      "cto:enviar_texto",
+    ]);
+    // segunda conversa com o Financeiro continuou a primeira
+    const followUp = steps.filter((s) => s.name === "ask_financeiro")[1];
+    expect(followUp.output).toEqual({ report: "Com pipoca (R$ 20) fica R$ 50." });
   });
 });

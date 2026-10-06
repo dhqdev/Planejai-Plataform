@@ -6,7 +6,7 @@ description: Como trabalhar na plataforma Planejai (assistente de IA no WhatsApp
 # Planejai: guia do projeto
 
 Assistente pessoal no WhatsApp no estilo do Instinct: uma conversa só, com um **time de agentes**.
-O **CTO** conversa com a pessoa, reage às mensagens, delega para especialistas em paralelo e compõe a resposta.
+O **CTO** conversa com a pessoa, reage às mensagens e lidera o time; os especialistas conversam entre si e o CTO revisa antes de responder.
 Tudo roda em uma imagem (API + worker + dashboard) com Postgres próprio.
 
 ## Mapa do código
@@ -16,10 +16,14 @@ apps/server/src/
   index.ts                 entrada; ROLE=all|api|worker
   config.ts                variáveis de ambiente (zod) — toda env nova entra aqui e no .env.example
   ingest.ts                webhook -> usuário/conversa/mensagem -> fila (debounce por conversa)
-  channels/                evolution.ts, cloud.ts (Meta), PlaygroundChannel (dashboard)
+  channels/                baileys.ts (padrão), evolution.ts, cloud.ts (Meta), PlaygroundChannel; wa-message.ts parseia WAMessage
+  whatsapp/                session.ts (conexão Baileys: QR, pareamento, reconexão, advisory lock, LISTEN wa_command)
+                           auth-state.ts (credenciais/chaves Signal na tabela wa_auth)
   agent/
     orchestrator.ts        processConversation: mídia (áudio/foto), histórico, memórias, CTO, entrega em balões
     runner.ts              loop de tool-calling (tools em paralelo) + trace de cada passo
+    collab.ts              TeamRoom: conversa contínua CTO<->especialista (ask_*), consulta entre colegas
+                           (consult_*, profundidade máx. 3, sem ciclos) e quadro do time (share_with_team)
     team.ts                SPECIALISTS e CTO_TOOLS — o "organograma" do time
     prompts.ts             prompts do CTO e dos especialistas (pt-BR, estilo WhatsApp)
     trace.ts               executions / execution_steps (logs do dashboard)
@@ -53,7 +57,14 @@ deploy/portainer-stack.yml stack de produção (app, worker, db, browserless)
 1. Novo item em `SPECIALISTS` (`team.ts`) com `role` claro (é o que o CTO lê para decidir delegar).
 2. Nova rota `agent:<id>` em `ROUTE_DEFAULTS` (`llm/router.ts`) com o modelo mais barato que dá conta.
 3. Rótulo em `AGENT_LABEL` (`apps/dashboard/src/components.tsx`).
-O CTO ganha automaticamente a tool `ask_<id>`.
+O CTO ganha automaticamente `ask_<id>` e os outros especialistas ganham `consult_<id>`.
+
+### WhatsApp (Baileys)
+- A conexão vive no processo `worker` (ou `all`) e só um processo segura a sessão (`pg_try_advisory_lock`). O worker deve ter 1 réplica.
+- A API manda comandos (`connect`, `logout`, `restart`) por `pg_notify('wa_command')`; o status/QR fica em `wa_sessions`, que a tela WhatsApp lê a cada 2s.
+- Só reconecta sozinho se a sessão já foi pareada; QR novo só quando alguém pede no dashboard.
+- Áudio e foto são baixados na chegada (`downloadMediaMessage`) e o base64 sai do banco depois de transcrito/descrito.
+- Não copie código do tekvosoft (AGPL); a implementação aqui é própria, usando só a API pública do Baileys.
 
 ### Trocar modelos
 Padrões em `ROUTE_DEFAULTS` com o porquê de cada escolha; em produção troque pela tela **Modelos** (grava em `model_routes`, sem redeploy). Critério: entrada barata para quem lê muito histórico (CTO, Pesquisador), saída barata para quem escreve muito, modelo omni para áudio, e sempre `fallbacks`. Confira IDs e preços no catálogo ao vivo (`GET /api/models/catalog`).

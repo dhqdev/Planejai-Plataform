@@ -34,9 +34,14 @@ export function SettingsPage() {
         <div className="card card-pad">
           <h3>Canal WhatsApp</h3>
           <p>
-            Provedor: <strong>{data.channel.provider === "cloud" ? "WhatsApp Cloud API (Meta)" : data.channel.provider === "evolution" ? "Evolution API" : "nenhum"}</strong>{" "}
+            Provedor: <strong>{data.channel.provider === "baileys" ? "Conexão própria (Baileys)" : data.channel.provider === "cloud" ? "WhatsApp Cloud API (Meta)" : data.channel.provider === "evolution" ? "Evolution API" : "nenhum"}</strong>{" "}
             {data.channel.configured ? <span className="badge badge-ok">configurado</span> : <span className="badge badge-warn">faltam variáveis no .env</span>}
           </p>
+          {!data.channel.webhookUrl ? (
+            <p>
+              Conexão própria por QR code. Conecte o número na tela <a href="/whatsapp" style={{ color: "var(--accent)" }}>WhatsApp</a>.
+            </p>
+          ) : (
           <div className="field">
             <label>URL do webhook</label>
             <code className="json">{data.channel.webhookUrl}</code>
@@ -46,6 +51,7 @@ export function SettingsPage() {
                 : "Na Evolution, configure o webhook da instância com esta URL e o evento MESSAGES_UPSERT."}
             </div>
           </div>
+          )}
           <h3 style={{ marginTop: 18 }}>Acesso</h3>
           <p className="muted">
             Donos (sempre liberados): {data.ownerPhones.length ? data.ownerPhones.map((p: string) => `+${p}`).join(", ") : "nenhum (defina OWNER_PHONES)"}

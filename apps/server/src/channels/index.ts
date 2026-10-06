@@ -1,9 +1,11 @@
 import { config } from "../config.js";
+import { BaileysChannel } from "./baileys.js";
 import { CloudChannel } from "./cloud.js";
 import { EvolutionChannel } from "./evolution.js";
 import type { Channel, InboundMessage, OutboundImage } from "./types.js";
 
 export const channels: Record<string, Channel> = {
+  baileys: new BaileysChannel(),
   evolution: new EvolutionChannel(),
   cloud: new CloudChannel(),
 };

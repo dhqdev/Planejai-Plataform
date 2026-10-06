@@ -162,6 +162,8 @@ table.table { width: 100%; border-collapse: collapse; }
 }
 .canvas svg.edges { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
 .canvas .edge { fill: none; stroke: var(--muted); stroke-width: 2; opacity: 0.55; }
+.canvas .edge.peer { stroke: var(--accent); opacity: 0.8; }
+.canvas .edge-label { fill: var(--accent); font-size: 11px; font-weight: 600; }
 .canvas .edge.active { stroke: var(--accent); opacity: 1; stroke-dasharray: 6 5; animation: flow 0.8s linear infinite; }
 @keyframes flow { to { stroke-dashoffset: -11; } }
 .node {

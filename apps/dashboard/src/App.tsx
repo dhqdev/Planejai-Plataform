@@ -13,6 +13,7 @@ import { PeoplePage } from "./pages/People";
 import { PlaygroundPage } from "./pages/Playground";
 import { RemindersPage } from "./pages/Reminders";
 import { SettingsPage } from "./pages/Settings";
+import { WhatsAppPage } from "./pages/WhatsApp";
 
 const NAV = [
   { section: "Visão geral" },
@@ -21,6 +22,7 @@ const NAV = [
   { to: "/conversations", label: "Conversas", icon: "💬" },
   { to: "/playground", label: "Playground", icon: "▶" },
   { section: "Agente" },
+  { to: "/whatsapp", label: "WhatsApp", icon: "📱" },
   { to: "/agents", label: "Time de agentes", icon: "🧠" },
   { to: "/integrations", label: "Integrações", icon: "🔌" },
   { to: "/models", label: "Modelos", icon: "⚙" },
@@ -100,6 +102,7 @@ export function App() {
           <Route path="/conversations" element={<ConversationsPage />} />
           <Route path="/conversations/:id" element={<ConversationsPage />} />
           <Route path="/playground" element={<PlaygroundPage />} />
+          <Route path="/whatsapp" element={<WhatsAppPage />} />
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="/models" element={<ModelsPage />} />

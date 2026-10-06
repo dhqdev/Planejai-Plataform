@@ -13,6 +13,7 @@ import { listRoutes, resetRoute, resolveModel, saveRoute } from "../../llm/route
 import { cancelReminder, listReminders } from "../../reminders.js";
 import { getSettings, saveSettings } from "../../settings.js";
 import { upsertConversation } from "../../ingest.js";
+import { SESSION_ID, sendWaCommand } from "../../whatsapp/session.js";
 import { requireAuth } from "../server.js";
 
 const PLAYGROUND_PHONE = "playground";
@@ -60,7 +61,9 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
                COALESCE(SUM(cost_usd), 0) AS cost
           FROM execution_steps WHERE started_at > now() - interval '7 days' GROUP BY agent ORDER BY cost DESC`);
       const ch = activeChannel();
-      return { stats, counts, daily, byAgent, channel: { provider: config.WHATSAPP_PROVIDER, configured: ch?.configured() ?? false }, openrouter: Boolean(config.OPENROUTER_API_KEY) };
+      const wa = config.WHATSAPP_PROVIDER === "baileys" ? await one("SELECT status FROM wa_sessions WHERE id = $1", [SESSION_ID]) : null;
+      const configured = wa ? wa.status === "connected" : (ch?.configured() ?? false);
+      return { stats, counts, daily, byAgent, channel: { provider: config.WHATSAPP_PROVIDER, configured }, openrouter: Boolean(config.OPENROUTER_API_KEY) };
     });
 
     // ---------- Execuções (logs) ----------
@@ -251,6 +254,27 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       }
     });
 
+    // ---------- WhatsApp embutido (Baileys) ----------
+    api.get("/api/whatsapp", async () => {
+      const session = await one("SELECT status, qr, pairing_code, phone, name, last_error, updated_at FROM wa_sessions WHERE id = $1", [SESSION_ID]);
+      return { provider: config.WHATSAPP_PROVIDER, session };
+    });
+    api.post<{ Body: { phone?: string } }>("/api/whatsapp/connect", async (req, reply) => {
+      if (config.WHATSAPP_PROVIDER !== "baileys") return reply.code(400).send({ error: "WHATSAPP_PROVIDER não é baileys" });
+      const phone = req.body?.phone?.replace(/\D/g, "");
+      await query("UPDATE wa_sessions SET status = 'connecting', qr = NULL, pairing_code = NULL, last_error = NULL, updated_at = now() WHERE id = $1", [SESSION_ID]);
+      await sendWaCommand({ action: "connect", phone: phone || undefined });
+      return { ok: true };
+    });
+    api.post("/api/whatsapp/logout", async () => {
+      await sendWaCommand({ action: "logout" });
+      return { ok: true };
+    });
+    api.post("/api/whatsapp/restart", async () => {
+      await sendWaCommand({ action: "restart" });
+      return { ok: true };
+    });
+
     // ---------- Configurações ----------
     api.get("/api/settings", async () => {
       const ch = activeChannel();
@@ -261,7 +285,9 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
           provider: config.WHATSAPP_PROVIDER,
           configured: ch?.configured() ?? false,
           webhookUrl:
-            config.WHATSAPP_PROVIDER === "cloud"
+            config.WHATSAPP_PROVIDER === "baileys" || config.WHATSAPP_PROVIDER === "none"
+              ? null
+              : config.WHATSAPP_PROVIDER === "cloud"
               ? `${base}/webhooks/whatsapp`
               : `${base}/webhooks/evolution${config.WEBHOOK_SECRET ? "?secret=<WEBHOOK_SECRET>" : ""}`,
         },

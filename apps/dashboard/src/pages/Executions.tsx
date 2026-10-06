@@ -216,60 +216,98 @@ export function ExecutionDetailPage() {
   );
 }
 
-/** Desenho do fluxo da execução no estilo do canvas do n8n: gatilho → CTO → especialistas → WhatsApp */
+/**
+ * Desenho da execução no estilo do canvas do n8n: gatilho → CTO → especialistas → resposta.
+ * Setas entre especialistas mostram quando um consultou o outro; o número é quantas vezes conversaram.
+ */
 function FlowCanvas({ data, steps, onSelect, selected }: { data: any; steps: Step[]; onSelect: (id: number | null) => void; selected: Step | null }) {
-  const delegations = steps.filter((s) => s.type === "delegate");
-  const ctoTools = steps.filter((s) => s.agent === "cto" && s.type === "tool");
+  const talks = steps.filter((s) => s.type === "delegate");
+  const targetOf = (s: Step) => s.name.replace(/^(ask|consult)_/, "");
+  const agents: string[] = [];
+  for (const t of talks) for (const a of [t.agent, targetOf(t)]) if (a !== "cto" && !agents.includes(a)) agents.push(a);
   const sends = steps.filter((s) => s.type === "channel");
   const ctoLlm = steps.filter((s) => s.agent === "cto" && s.type === "llm");
   const W = 190;
   const H = 64;
-  const col = (i: number) => 30 + i * 260;
-  const rows = Math.max(1, delegations.length, ctoTools.length ? 1 : 0);
-  const height = Math.max(200, rows * 90 + 60);
+  const col = (i: number) => 30 + i * 270;
+  const rows = Math.max(1, agents.length);
+  const height = Math.max(200, rows * 92 + 50);
   const midY = height / 2 - H / 2;
 
   const statusOf = (list: Step[]) => (list.some((s) => s.status === "error") ? "err" : list.length && list.every((s) => s.status === "success") ? "ok" : "");
-  const nodes: { key: string; x: number; y: number; icon: string; title: string; sub: string; status: string; step?: Step }[] = [
+  type N = { key: string; x: number; y: number; icon: string; title: string; sub: string; status: string; step?: Step };
+  const nodes: N[] = [
     { key: "trigger", x: col(0), y: midY, icon: TRIGGER_LABEL[data.trigger]?.split(" ")[0] ?? "⚡", title: "Gatilho", sub: TRIGGER_LABEL[data.trigger]?.split(" ").slice(1).join(" ") ?? data.trigger, status: "ok" },
     { key: "cto", x: col(1), y: midY, icon: "🧠", title: "CTO", sub: `${ctoLlm.length} chamadas · ${ctoLlm[0]?.model ?? ""}`, status: statusOf(ctoLlm), step: ctoLlm[0] },
-    ...delegations.map((d, i) => {
-      const children = steps.filter((s) => s.parent_id === d.id);
-      const agent = d.name.replace(/^ask_/, "");
+    ...agents.map((a, i) => {
+      const own = steps.filter((s) => s.agent === a);
+      const tools = [...new Set(own.filter((s) => s.type === "tool").map((s) => s.name))];
+      const first = talks.find((t) => targetOf(t) === a);
       return {
-        key: `d${d.id}`,
+        key: a,
         x: col(2),
-        y: 30 + i * 90 + (rows - delegations.length) * 45,
-        icon: AGENT_LABEL[agent]?.split(" ")[0] ?? "🤖",
-        title: AGENT_LABEL[agent]?.split(" ").slice(1).join(" ") ?? agent,
-        sub: `${children.filter((c) => c.type === "tool").map((c) => c.name).join(", ") || "sem ferramentas"}`,
-        status: statusOf([d, ...children]),
-        step: d,
+        y: 25 + i * 92 + (rows - agents.length) * 46,
+        icon: AGENT_LABEL[a]?.split(" ")[0] ?? "🤖",
+        title: AGENT_LABEL[a]?.split(" ").slice(1).join(" ") ?? a,
+        sub: tools.join(", ") || "conversou",
+        status: statusOf(own),
+        step: first,
       };
     }),
-    { key: "out", x: col(delegations.length ? 3 : 2), y: midY, icon: "📤", title: "Resposta", sub: sends.length ? `${sends.length} mensagem(ns)` : data.output === "[[silencio]]" ? "silêncio (só reação)" : "–", status: statusOf(sends), step: sends[0] },
+    { key: "out", x: col(agents.length ? 3 : 2) + (agents.length ? 60 : 0), y: midY, icon: "📤", title: "Resposta", sub: sends.length ? `${sends.length} mensagem(ns)` : data.output === "[[silencio]]" ? "silêncio (só reação)" : "–", status: statusOf(sends), step: sends[0] },
   ];
   const pos = new Map(nodes.map((n) => [n.key, n]));
-  const edge = (a: string, b: string, active = false) => {
-    const p = pos.get(a)!;
-    const q = pos.get(b)!;
-    const x1 = p.x + W;
-    const y1 = p.y + H / 2;
-    const x2 = q.x;
-    const y2 = q.y + H / 2;
-    const dx = (x2 - x1) / 2;
-    return <path key={`${a}-${b}`} className={`edge ${active ? "active" : ""}`} d={`M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`} />;
-  };
   const running = data.status === "running";
-  const width = (delegations.length ? col(3) : col(2)) + W + 40;
+
+  // conversas únicas (de -> para) com contagem
+  const pairs = new Map<string, { from: string; to: string; n: number; active: boolean }>();
+  for (const t of talks) {
+    const k = `${t.agent}>${targetOf(t)}`;
+    const p = pairs.get(k) ?? { from: t.agent, to: targetOf(t), n: 0, active: false };
+    p.n++;
+    p.active ||= t.status === "running";
+    pairs.set(k, p);
+  }
+
+  const curve = (a: string, b: string, active = false, label?: string) => {
+    const p = pos.get(a);
+    const q = pos.get(b);
+    if (!p || !q) return null;
+    if (p.x === q.x) {
+      // colega -> colega: arco pela direita
+      const x = p.x + W;
+      const y1 = p.y + H / 2;
+      const y2 = q.y + H / 2;
+      const bulge = 40 + Math.abs(y2 - y1) * 0.25;
+      return (
+        <g key={`${a}-${b}`}>
+          <path className={`edge peer ${active ? "active" : ""}`} d={`M${x},${y1} C${x + bulge},${y1} ${x + bulge},${y2} ${x},${y2}`} markerEnd="url(#arrow)" />
+          {label && <text className="edge-label" x={x + bulge * 0.8} y={(y1 + y2) / 2}>{label}</text>}
+        </g>
+      );
+    }
+    const x1 = p.x + W, y1 = p.y + H / 2, x2 = q.x, y2 = q.y + H / 2, dx = (x2 - x1) / 2;
+    return (
+      <g key={`${a}-${b}`}>
+        <path className={`edge ${active ? "active" : ""}`} d={`M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`} />
+        {label && <text className="edge-label" x={x1 + dx} y={(y1 + y2) / 2 - 6}>{label}</text>}
+      </g>
+    );
+  };
+  const width = (pos.get("out")!.x) + W + 40;
 
   return (
     <div className="canvas" style={{ height }}>
       <div style={{ position: "relative", width, height }}>
         <svg className="edges" width={width} height={height}>
-          {edge("trigger", "cto", running)}
-          {delegations.map((d) => edge("cto", `d${d.id}`, running && d.status === "running"))}
-          {delegations.length ? delegations.map((d) => edge(`d${d.id}`, "out")) : edge("cto", "out")}
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)" />
+            </marker>
+          </defs>
+          {curve("trigger", "cto", running)}
+          {[...pairs.values()].map((p) => curve(p.from, p.to, running && p.active, p.n > 1 ? `${p.n}×` : undefined))}
+          {curve("cto", "out")}
         </svg>
         {nodes.map((n) => (
           <div

@@ -2,7 +2,7 @@
 
 Assistente pessoal no WhatsApp no estilo do Instinct: uma única conversa que pesquisa na internet, manda prints, agenda lembretes naturais, anota gastos, mexe no seu e-mail e agenda, gera links de pagamento e reage às suas mensagens com emoji.
 
-Por dentro é um **time de agentes de IA**: o **CTO** conversa com você, decide o que fazer, delega em paralelo para especialistas e escreve a resposta final.
+Por dentro é um **time de agentes de IA que conversam entre si**: o **CTO** fala com você e lidera o time; os especialistas trabalham em paralelo, consultam uns aos outros (`consult_*`), anotam descobertas num quadro compartilhado, e o CTO revisa e devolve trabalho incompleto antes de mandar a resposta. Cada conversa CTO ↔ especialista é contínua dentro da execução, então dá para cobrar e ajustar.
 
 | Agente | O que faz | Modelo padrão (OpenRouter) |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ Todos os modelos têm fallback e podem ser trocados na tela **Modelos** do dashb
 ## O que tem
 
 - **Backend próprio** (Node 22 + TypeScript + Fastify), fila e agendamentos com pg-boss no próprio Postgres.
-- **WhatsApp** via Evolution API (self-hosted) ou WhatsApp Cloud API oficial. Texto, áudio (transcrito), foto (descrita por visão), documentos, localização, respostas citadas e reações.
+- **WhatsApp próprio (Baileys)**: o worker conecta direto no WhatsApp Web multi-device. Você lê o QR code (ou digita um código de pareamento) na tela **WhatsApp** do dashboard; a sessão fica salva no Postgres e se reconecta sozinha. Também funciona com Evolution API ou com a Cloud API oficial da Meta. Texto, áudio (transcrito), foto (descrita por visão), documentos, localização, respostas citadas e reações.
 - **Jeito humano**: junta mensagens seguidas antes de responder, marca como lida, mostra "digitando…", divide a resposta em balões, reage com emoji e às vezes só reage sem responder.
 - **Lembretes naturais**: o lembrete guarda a intenção; na hora o CTO escreve a mensagem com contexto ("David, passaram os 15 minutos: hora de ir ao banheiro!").
 - **Integrações** com credenciais criptografadas no banco: Google Workspace (OAuth), Notion, GitHub, Linear, Slack, Tavily, Brave, Browserless, Mercado Pago, Stripe.
@@ -32,7 +32,8 @@ Todos os modelos têm fallback e podem ser trocados na tela **Modelos** do dashb
    - O pacote do GHCR nasce privado: torne-o público em *GitHub > Packages > planejai-plataform > Settings* ou cadastre o registry `ghcr.io` no Portainer com um token `read:packages`.
 2. No Portainer: *Stacks > Add stack*, cole `deploy/portainer-stack.yml` (ou aponte para este repositório) e preencha as variáveis de `.env.example`. No mínimo: `PUBLIC_URL`, `POSTGRES_PASSWORD`, `APP_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `OPENROUTER_API_KEY`, `WEBHOOK_SECRET`, `OWNER_PHONES`, `BROWSERLESS_TOKEN` e as variáveis do provedor de WhatsApp.
 3. A stack sobe `app` (API + dashboard), `worker` (agentes, lembretes), `db` (Postgres 16 próprio, volume `planejai_db`) e `browserless` (prints de páginas).
-4. Configure o webhook do WhatsApp (a URL exata aparece em *Configurações* no dashboard):
+4. Conecte o WhatsApp:
+   - **Baileys (padrão)**: abra o dashboard, vá em **WhatsApp** e leia o QR code com o celular do número do assistente (*Dispositivos conectados > Conectar um dispositivo*). Use um número dedicado ao assistente. Mantenha o `worker` com 1 réplica.
    - **Evolution**: `{PUBLIC_URL}/webhooks/evolution?secret={WEBHOOK_SECRET}`, evento `MESSAGES_UPSERT`.
    - **Cloud API**: `{PUBLIC_URL}/webhooks/whatsapp`, verify token `WHATSAPP_CLOUD_VERIFY_TOKEN`, campo `messages`.
 5. Redeploy automático (opcional): crie um webhook na stack do Portainer e salve a URL no secret `PORTAINER_WEBHOOK_URL` do repositório.

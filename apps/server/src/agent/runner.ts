@@ -17,6 +17,8 @@ export function toSpecs(tools: Tool[]): ToolSpec[] {
 export interface LoopResult {
   text: string;
   steps: number;
+  /** conversa completa (com tool calls), para continuar depois */
+  messages: ChatMessage[];
 }
 
 /**
@@ -58,7 +60,11 @@ export async function runToolLoop(opts: {
     await llmStep.ok(res.message, { model: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costUsd: res.costUsd });
 
     const calls = res.message.tool_calls ?? [];
-    if (!calls.length) return { text: (res.message.content ?? "").trim(), steps: step };
+    if (!calls.length) {
+      const text = (res.message.content ?? "").trim();
+      messages.push({ role: "assistant", content: text });
+      return { text, steps: step, messages };
+    }
 
     messages.push({ role: "assistant", content: res.message.content ?? null, tool_calls: calls });
     const results = await Promise.all(
@@ -70,7 +76,7 @@ export async function runToolLoop(opts: {
         } catch {
           return { id: call.id, content: JSON.stringify({ error: "Argumentos JSON inválidos" }) };
         }
-        const isDelegate = call.function.name.startsWith("ask_");
+        const isDelegate = call.function.name.startsWith("ask_") || call.function.name.startsWith("consult_");
         const toolStep = await ctx.tracer.step({
           agent,
           type: isDelegate ? "delegate" : "tool",
@@ -100,5 +106,5 @@ export async function runToolLoop(opts: {
     );
     for (const r of results) messages.push({ role: "tool", tool_call_id: r.id, content: r.content.slice(0, 30_000) });
   }
-  return { text: "", steps: maxSteps };
+  return { text: "", steps: maxSteps, messages };
 }

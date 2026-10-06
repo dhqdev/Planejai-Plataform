@@ -22,8 +22,9 @@ const schema = z.object({
   OPENROUTER_API_KEY: z.string().default(""),
   OPENROUTER_BASE_URL: z.string().default("https://openrouter.ai/api/v1"),
 
-  // Canal WhatsApp: "evolution" (Evolution API self-hosted) ou "cloud" (API oficial da Meta).
-  WHATSAPP_PROVIDER: z.enum(["evolution", "cloud", "none"]).default("evolution"),
+  // Canal WhatsApp: "baileys" (conexão própria por QR code, embutida), "evolution" (Evolution API)
+  // ou "cloud" (API oficial da Meta).
+  WHATSAPP_PROVIDER: z.enum(["baileys", "evolution", "cloud", "none"]).default("baileys"),
   EVOLUTION_API_URL: z.string().default(""),
   EVOLUTION_API_KEY: z.string().default(""),
   EVOLUTION_INSTANCE: z.string().default(""),

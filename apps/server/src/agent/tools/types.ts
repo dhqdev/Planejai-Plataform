@@ -1,4 +1,5 @@
 import type { Channel, OutboundImage } from "../../channels/types.js";
+import type { TeamRoom } from "../collab.js";
 import type { Tracer } from "../trace.js";
 
 export interface UserRow {
@@ -42,6 +43,10 @@ export interface ToolContext {
   lastInboundId?: string;
   parentStepId?: number;
   agent: string;
+  /** sala do time nesta execução: conversas com cada especialista e quadro compartilhado */
+  room: TeamRoom;
+  /** quem chamou quem até aqui (evita ciclos A -> B -> A) */
+  callChain: string[];
 }
 
 export interface Tool<A = any> {

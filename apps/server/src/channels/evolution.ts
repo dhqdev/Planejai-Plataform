@@ -1,5 +1,6 @@
 import { config } from "../config.js";
-import type { Channel, InboundKind, InboundMessage, OutboundImage } from "./types.js";
+import type { Channel, InboundMessage, OutboundImage } from "./types.js";
+import { parseWAMessage } from "./wa-message.js";
 
 /** Adaptador para a Evolution API v2 (WhatsApp via Baileys, self-hosted). */
 export class EvolutionChannel implements Channel {
@@ -26,69 +27,7 @@ export class EvolutionChannel implements Channel {
     const event = String(body?.event ?? "").toLowerCase().replace("_", ".");
     if (event !== "messages.upsert") return [];
     const items = Array.isArray(body.data) ? body.data : [body.data];
-    const out: InboundMessage[] = [];
-    for (const d of items) {
-      const key = d?.key;
-      if (!key || key.fromMe) continue;
-      const jid: string = key.remoteJid ?? "";
-      if (jid.endsWith("@g.us") || jid === "status@broadcast" || jid.endsWith("@newsletter")) continue;
-      // Contas com LID: o número real vem em remoteJidAlt/senderPn
-      const pnJid = [key.remoteJidAlt, key.senderPn, jid].find((j: string | undefined) => j?.endsWith("@s.whatsapp.net")) ?? jid;
-      const phone = pnJid.split("@")[0]!.replace(/\D/g, "");
-      const m = d.message ?? {};
-      let kind: InboundKind = "other";
-      let text = "";
-      let media: InboundMessage["media"];
-      let reactionTo: string | undefined;
-      const ctx = m.extendedTextMessage?.contextInfo ?? m.imageMessage?.contextInfo ?? m.audioMessage?.contextInfo;
-      if (m.conversation || m.extendedTextMessage) {
-        kind = "text";
-        text = m.conversation ?? m.extendedTextMessage?.text ?? "";
-      } else if (m.imageMessage) {
-        kind = "image";
-        text = m.imageMessage.caption ?? "";
-        media = { mimetype: m.imageMessage.mimetype ?? "image/jpeg" };
-      } else if (m.audioMessage) {
-        kind = "audio";
-        media = { mimetype: m.audioMessage.mimetype ?? "audio/ogg" };
-      } else if (m.videoMessage) {
-        kind = "video";
-        text = m.videoMessage.caption ?? "";
-        media = { mimetype: m.videoMessage.mimetype ?? "video/mp4" };
-      } else if (m.documentMessage || m.documentWithCaptionMessage) {
-        const doc = m.documentMessage ?? m.documentWithCaptionMessage?.message?.documentMessage ?? {};
-        kind = "document";
-        text = doc.caption ?? "";
-        media = { mimetype: doc.mimetype ?? "application/octet-stream", fileName: doc.fileName };
-      } else if (m.stickerMessage) {
-        kind = "sticker";
-      } else if (m.locationMessage) {
-        kind = "location";
-        text = `Localização: ${m.locationMessage.degreesLatitude}, ${m.locationMessage.degreesLongitude}${m.locationMessage.name ? ` (${m.locationMessage.name})` : ""}`;
-      } else if (m.reactionMessage) {
-        kind = "reaction";
-        text = m.reactionMessage.text ?? "";
-        reactionTo = m.reactionMessage.key?.id;
-      }
-      if (media && m.base64) media.base64 = m.base64;
-      out.push({
-        channel: this.id,
-        remoteJid: jid,
-        phone,
-        pushName: d.pushName,
-        externalId: key.id,
-        kind,
-        text,
-        media,
-        reactionTo,
-        quoted: ctx?.stanzaId
-          ? { id: ctx.stanzaId, text: ctx.quotedMessage?.conversation ?? ctx.quotedMessage?.extendedTextMessage?.text }
-          : undefined,
-        timestamp: d.messageTimestamp ? new Date(Number(d.messageTimestamp) * 1000) : new Date(),
-        raw: d,
-      });
-    }
-    return out;
+    return items.map((d: any) => parseWAMessage(d, this.id)).filter((m: InboundMessage | null): m is InboundMessage => m !== null);
   }
 
   async downloadMedia(msg: InboundMessage) {
