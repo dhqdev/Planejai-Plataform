@@ -46,19 +46,27 @@ export const notionReadPage = defineTool<{ page_id: string }>({
   },
 });
 
-export const notionCreatePage = defineTool<{ parent_page_id: string; title: string; content?: string }>({
+/** Aceita id puro ou link do Notion e devolve o id (32 hex). */
+export function notionId(v: string) {
+  const m = v.replace(/-/g, "").match(/[0-9a-f]{32}(?=[^0-9a-f]*$)/i);
+  return m ? m[0] : v;
+}
+
+export const notionCreatePage = defineTool<{ parent_page_id?: string; title: string; content?: string }>({
   name: "notion_create_page",
-  description: "Cria uma página no Notion dentro de uma página pai (use notion_search para achar o id).",
+  description: "Cria uma página no Notion dentro de uma página pai (sem parent_page_id usa a página padrão configurada; use notion_search para achar outra).",
   integration: "notion",
-  parameters: obj({ parent_page_id: { type: "string" }, title: { type: "string" }, content: { type: "string" } }, ["parent_page_id", "title"]),
+  parameters: obj({ parent_page_id: { type: "string" }, title: { type: "string" }, content: { type: "string" } }, ["title"]),
   async run(args) {
+    const parent = args.parent_page_id ?? (await getCredentials("notion"))?.default_parent_page_id;
+    if (!parent) return { error: "Diga em qual página criar (ou configure a página padrão na integração do Notion)." };
     const children = (args.content ?? "")
       .split(/\n+/)
       .filter(Boolean)
       .slice(0, 90)
       .map((line) => ({ object: "block", type: "paragraph", paragraph: { rich_text: [{ type: "text", text: { content: line.slice(0, 1900) } }] } }));
     const j = await notion("/pages", {
-      parent: { page_id: args.parent_page_id },
+      parent: { page_id: notionId(parent) },
       properties: { title: { title: [{ text: { content: args.title } }] } },
       children,
     });
@@ -89,13 +97,15 @@ export const githubSearchIssues = defineTool<{ query: string }>({
   },
 });
 
-export const githubCreateIssue = defineTool<{ repo: string; title: string; body?: string }>({
+export const githubCreateIssue = defineTool<{ repo?: string; title: string; body?: string }>({
   name: "github_create_issue",
-  description: "Cria uma issue num repositório (repo no formato dono/nome).",
+  description: "Cria uma issue num repositório (repo no formato dono/nome; sem repo usa o padrão configurado).",
   integration: "github",
-  parameters: obj({ repo: { type: "string" }, title: { type: "string" }, body: { type: "string" } }, ["repo", "title"]),
+  parameters: obj({ repo: { type: "string" }, title: { type: "string" }, body: { type: "string" } }, ["title"]),
   async run(args) {
-    const j = await github(`/repos/${args.repo}/issues`, { method: "POST", body: JSON.stringify({ title: args.title, body: args.body }) });
+    const repo = args.repo ?? (await getCredentials("github"))?.default_repo;
+    if (!repo) return { error: "Diga em qual repositório (dono/nome) ou configure o repositório padrão na integração do GitHub." };
+    const j = await github(`/repos/${repo}/issues`, { method: "POST", body: JSON.stringify({ title: args.title, body: args.body }) });
     return { ok: true, number: j.number, url: j.html_url };
   },
 });
@@ -134,7 +144,8 @@ export const linearCreateIssue = defineTool<{ title: string; description?: strin
   parameters: obj({ title: { type: "string" }, description: { type: "string" }, team_key: { type: "string" } }, ["title"]),
   async run(args) {
     const teams = (await linear(`{ teams { nodes { id key name } } }`)).teams.nodes;
-    const team = teams.find((t: any) => t.key === args.team_key) ?? teams[0];
+    const key = args.team_key ?? (await getCredentials("linear"))?.default_team_key;
+    const team = teams.find((t: any) => t.key?.toLowerCase() === key?.toLowerCase()) ?? teams[0];
     if (!team) throw new Error("Nenhum time no Linear");
     const d = await linear(
       `mutation($input: IssueCreateInput!) { issueCreate(input: $input) { issue { identifier url } } }`,

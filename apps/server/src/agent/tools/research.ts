@@ -234,3 +234,40 @@ export const browserClose = defineTool<{ send_recording?: boolean; caption?: str
     return finishBrowser(ctx, { send: args.send_recording, caption: args.caption });
   },
 });
+
+// ---------- Compras: Mercado Livre ----------
+
+export const mercadolivreSearch = defineTool<{ query: string; limit?: number; sort?: string; condition?: string }>({
+  name: "mercadolivre_search",
+  description:
+    "Busca produtos no Mercado Livre Brasil: preço, frete grátis, condição, vendedor e link. Use para comparar preços e achar onde comprar.",
+  integration: "mercadolivre",
+  parameters: obj({
+    query: { type: "string" },
+    limit: { type: "number", description: "padrão 8, máx. 20" },
+    sort: { type: "string", enum: ["relevance", "price_asc", "price_desc"] },
+    condition: { type: "string", enum: ["new", "used"] },
+  }, ["query"]),
+  async run(args) {
+    const { mercadolivreApi } = await import("../../integrations/mercadolivre.js");
+    const p = new URLSearchParams({ q: args.query, limit: String(Math.min(args.limit ?? 8, 20)) });
+    if (args.sort) p.set("sort", args.sort);
+    if (args.condition) p.set("condition", args.condition);
+    const j = await mercadolivreApi(`/sites/MLB/search?${p}`);
+    return {
+      total: j.paging?.total,
+      items: (j.results ?? []).map((r: any) => ({
+        title: r.title,
+        price: r.price,
+        original_price: r.original_price ?? undefined,
+        condition: r.condition,
+        free_shipping: r.shipping?.free_shipping ?? false,
+        installments: r.installments ? `${r.installments.quantity}x de ${r.installments.amount}${r.installments.rate === 0 ? " sem juros" : ""}` : undefined,
+        seller: r.seller?.nickname,
+        official_store: r.official_store_name ?? undefined,
+        link: r.permalink,
+        thumbnail: r.thumbnail,
+      })),
+    };
+  },
+});

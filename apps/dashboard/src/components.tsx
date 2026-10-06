@@ -81,6 +81,7 @@ const ICONS: Record<string, string> = {
   search: "🔎",
   browser: "🌐",
   payment: "💳",
+  shop: "🛒",
 };
 
 export function IntegrationIcon({ icon }: { icon: string }) {

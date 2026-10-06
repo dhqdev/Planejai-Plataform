@@ -11,7 +11,8 @@ export function IntegrationsPage() {
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
-    if (params.get("connected")) setNotice({ ok: true, text: "Google conectado!" });
+    const c = params.get("connected");
+    if (c) setNotice({ ok: true, text: `${c === "mercadolivre" ? "Mercado Livre" : "Google"} conectado!` });
     if (params.get("error")) setNotice({ ok: false, text: params.get("error")! });
     if (params.size) setParams({}, { replace: true });
   }, [params, setParams]);
@@ -50,12 +51,14 @@ export function IntegrationsPage() {
           </div>
         </div>
       ))}
-      {open && <ConnectModal integration={open} googleRedirectUri={data.googleRedirectUri} onClose={() => { setOpen(null); void reload(); }} />}
+      {open && <ConnectModal integration={open} onClose={() => { setOpen(null); void reload(); }} />}
     </div>
   );
 }
 
-function ConnectModal({ integration: i, googleRedirectUri, onClose }: { integration: any; googleRedirectUri: string; onClose: () => void }) {
+const OAUTH_NAME: Record<string, string> = { google: "Google", mercadolivre: "Mercado Livre" };
+
+function ConnectModal({ integration: i, onClose }: { integration: any; onClose: () => void }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -92,9 +95,9 @@ function ConnectModal({ integration: i, googleRedirectUri, onClose }: { integrat
             </button>
           )}
           <span className="spacer" />
-          {i.oauth === "google" && (i.connected || i.pendingOAuth) && (
-            <button className="btn" disabled={busy} onClick={() => run(async () => { const r = await api("/api/integrations/google/oauth/start"); window.location.href = r.url; })}>
-              {i.connected ? "Reconectar com Google" : "Conectar com Google"}
+          {i.oauth && (i.connected || i.pendingOAuth) && (
+            <button className="btn" disabled={busy} onClick={() => run(async () => { const r = await api(`/api/integrations/${i.id}/oauth/start`); window.location.href = r.url; })}>
+              {i.connected ? "Reconectar" : "Conectar"} com {OAUTH_NAME[i.oauth]}
             </button>
           )}
           <button className="btn btn-primary" disabled={busy} onClick={() => run(() => api(`/api/integrations/${i.id}`, { method: "PUT", json: values }))}>
@@ -104,12 +107,12 @@ function ConnectModal({ integration: i, googleRedirectUri, onClose }: { integrat
       }
     >
       <p className="muted" style={{ marginTop: 0 }}>{i.description}</p>
-      {i.oauth === "google" && (
+      {i.oauth && (
         <div className="field">
           <div className="help">
-            Crie um OAuth Client do tipo "Aplicativo da Web" no Google Cloud, ative as APIs do Gmail e do Google Agenda e cadastre este URI de redirecionamento:
+            Passo 1: salve as credenciais abaixo. Passo 2: clique em "Conectar com {OAUTH_NAME[i.oauth]}". Cadastre este endereço de redirecionamento no app do {OAUTH_NAME[i.oauth]}:
           </div>
-          <code className="json">{googleRedirectUri}</code>
+          <code className="json" style={{ userSelect: "all" }}>{i.redirectUri}</code>
         </div>
       )}
       {i.fields.map((f: any) => (

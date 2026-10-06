@@ -23,7 +23,7 @@ export const SPECIALISTS: AgentDef[] = [
     name: "Pesquisador",
     emoji: "🔎",
     role:
-      "Pesquisa qualquer coisa atual na internet: sessões de cinema, preços e lojas, restaurantes, notícias, endereços, horários, " +
+      "Pesquisa qualquer coisa atual na internet: sessões de cinema, preços e lojas (inclusive Mercado Livre), restaurantes, notícias, endereços, horários, " +
       "comparações de produtos. Abre páginas e tira print de páginas para mandar como foto.",
     instructions:
       "Comece barato: web_search e fetch_url. Prefira sites oficiais (ingresso.com, sites dos cinemas, lojas oficiais) e traga dados concretos (horários, preços, links). " +
@@ -38,6 +38,7 @@ export const SPECIALISTS: AgentDef[] = [
       research.browserAction,
       research.browserScreenshot,
       research.browserClose,
+      research.mercadolivreSearch,
       core.attachImage,
       core.readDocument,
     ],

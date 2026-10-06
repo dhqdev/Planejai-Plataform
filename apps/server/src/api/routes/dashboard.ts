@@ -7,6 +7,7 @@ import { config } from "../../config.js";
 import { signSession, verifySession } from "../../crypto.js";
 import { many, one, query } from "../../db/pool.js";
 import { googleAuthUrl, googleExchangeCode, googleRedirectUri } from "../../integrations/google.js";
+import { mercadolivreAuthUrl, mercadolivreExchangeCode } from "../../integrations/mercadolivre.js";
 import { disconnect, getDef, isConnected, listIntegrations, rawCredentials, saveCredentials, setEnabled } from "../../integrations/registry.js";
 import { listModels } from "../../llm/openrouter.js";
 import { listRoutes, resetRoute, resolveModel, saveRoute } from "../../llm/router.js";
@@ -25,10 +26,21 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
   // Callback do OAuth do Google vem do navegador sem cookie de API garantido: valida pelo state assinado.
   app.get<{ Querystring: { code?: string; state?: string; error?: string } }>("/api/integrations/google/oauth/callback", async (req, reply) => {
     if (req.query.error) return reply.redirect(`/integrations?error=${encodeURIComponent(req.query.error)}`);
-    if (!verifySession(req.query.state)) return reply.code(400).send("state inválido");
+    if (!verifySession(req.query.state)?.sub.startsWith("oauth:")) return reply.code(400).send("state inválido");
     try {
       await googleExchangeCode(req.query.code ?? "");
       return reply.redirect("/integrations?connected=google");
+    } catch (err) {
+      return reply.redirect(`/integrations?error=${encodeURIComponent((err as Error).message)}`);
+    }
+  });
+
+  app.get<{ Querystring: { code?: string; state?: string; error?: string } }>("/api/integrations/mercadolivre/oauth/callback", async (req, reply) => {
+    if (req.query.error) return reply.redirect(`/integrations?error=${encodeURIComponent(req.query.error)}`);
+    if (!verifySession(req.query.state)?.sub.startsWith("oauth:")) return reply.code(400).send("state inválido");
+    try {
+      await mercadolivreExchangeCode(req.query.code ?? "");
+      return reply.redirect("/integrations?connected=mercadolivre");
     } catch (err) {
       return reply.redirect(`/integrations?error=${encodeURIComponent((err as Error).message)}`);
     }
@@ -393,6 +405,11 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     api.delete<{ Params: { id: string } }>("/api/integrations/:id", async (req) => {
       await disconnect(req.params.id);
       return { ok: true };
+    });
+
+    api.get("/api/integrations/mercadolivre/oauth/start", async () => {
+      const state = signSession({ sub: `oauth:${randomBytes(8).toString("hex")}`, exp: Date.now() + 10 * 60_000 });
+      return { url: await mercadolivreAuthUrl(state) };
     });
 
     api.get("/api/integrations/google/oauth/start", async () => {
