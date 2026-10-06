@@ -23,8 +23,18 @@ export function useApi<T = any>(path: string | null, opts: { poll?: number } = {
     setLoading(true);
     void reload();
     if (!opts.poll) return;
-    const t = setInterval(() => void reload(), opts.poll);
-    return () => clearInterval(t);
+    // não gasta bateria/dados com a aba ou o app em segundo plano; atualiza ao voltar
+    const t = setInterval(() => {
+      if (!document.hidden) void reload();
+    }, opts.poll);
+    const onVisible = () => {
+      if (!document.hidden) void reload();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [reload, opts.poll]);
 
   return { data, error, loading, reload, setData };

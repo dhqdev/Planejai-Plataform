@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 export function PageHead({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
@@ -35,15 +35,65 @@ export function Status({ status }: { status: string }) {
   );
 }
 
+/**
+ * Modal que no celular vira "bottom sheet": sobe de baixo, tem alça, fecha arrastando para baixo,
+ * tocando fora ou com Esc, e trava a rolagem do fundo enquanto está aberto.
+ */
 export function Modal({ title, icon, onClose, children, footer }: { title: string; icon?: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+  const sheet = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ y: number; dy: number } | null>(null);
+  const [closing, setClosing] = useState(false);
+
+  const close = useCallback(() => {
+    setClosing(true);
+    setTimeout(onClose, 180);
+  }, [onClose]);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [close]);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    // só arrasta pela alça/cabeçalho ou com o conteúdo no topo
+    const body = sheet.current?.querySelector(".modal-body");
+    if (body && body.contains(e.target as Node) && body.scrollTop > 0) return;
+    drag.current = { y: e.touches[0]!.clientY, dy: 0 };
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!drag.current || !sheet.current) return;
+    const dy = Math.max(0, e.touches[0]!.clientY - drag.current.y);
+    drag.current.dy = dy;
+    sheet.current.style.transition = "none";
+    sheet.current.style.transform = `translateY(${dy}px)`;
+  };
+  const onTouchEnd = () => {
+    if (!drag.current || !sheet.current) return;
+    const { dy } = drag.current;
+    drag.current = null;
+    sheet.current.style.transition = "";
+    if (dy > 110) {
+      sheet.current.style.setProperty("--drag", `translateY(${dy}px)`);
+      close();
+    }
+    else sheet.current.style.transform = "";
+  };
+
   return (
-    <div className="modal-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="card modal">
+    <div className={`modal-bg ${closing ? "closing" : ""}`} onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div className="card modal" role="dialog" aria-modal="true" aria-label={title} ref={sheet} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+        <div className="sheet-handle" />
         <div className="modal-head">
           {icon}
           <strong>{title}</strong>
           <span className="spacer" />
-          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Fechar">
+          <button className="btn btn-ghost btn-sm" onClick={close} aria-label="Fechar">
             ✕
           </button>
         </div>

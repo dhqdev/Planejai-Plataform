@@ -3,6 +3,10 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import "./styles.css";
+import { installTouchFeedback, registerServiceWorker } from "./touch";
+
+installTouchFeedback();
+registerServiceWorker();
 
 try {
   const saved = localStorage.getItem("pj-theme");

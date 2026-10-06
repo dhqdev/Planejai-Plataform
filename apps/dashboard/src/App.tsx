@@ -1,25 +1,29 @@
-import { useEffect, useState } from "react";
-import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
-import { Loading } from "./components";
-import { useApi } from "./hooks";
-import { AccountsPage } from "./pages/Accounts";
-import { AgentsPage } from "./pages/Agents";
-import { ConversationsPage } from "./pages/Conversations";
-import { ExecutionDetailPage, ExecutionsPage } from "./pages/Executions";
-import { FinancePage } from "./pages/Finance";
-import { HomePage } from "./pages/Home";
-import { IntegrationsPage } from "./pages/Integrations";
+import { Loading, Modal } from "./components";
 import { AuthPage } from "./pages/Login";
-import { MemoriesPage } from "./pages/Memories";
-import { ModelsPage } from "./pages/Models";
-import { OverviewPage } from "./pages/Overview";
-import { PeoplePage } from "./pages/People";
-import { PlaygroundPage } from "./pages/Playground";
-import { ProfilePage } from "./pages/Profile";
-import { RemindersPage } from "./pages/Reminders";
-import { SettingsPage } from "./pages/Settings";
-import { WhatsAppPage } from "./pages/WhatsApp";
+import { canInstall, haptic, isIos, isStandalone, onInstallAvailable, promptInstall } from "./touch";
+
+// Cada tela é carregada só quando abre: o app inicia leve no celular
+const AccountsPage = lazy(() => import("./pages/Accounts").then((m) => ({ default: m.AccountsPage })));
+const AgentsPage = lazy(() => import("./pages/Agents").then((m) => ({ default: m.AgentsPage })));
+const ConversationsPage = lazy(() => import("./pages/Conversations").then((m) => ({ default: m.ConversationsPage })));
+const ExecutionDetailPage = lazy(() => import("./pages/Executions").then((m) => ({ default: m.ExecutionDetailPage })));
+const ExecutionsPage = lazy(() => import("./pages/Executions").then((m) => ({ default: m.ExecutionsPage })));
+const FinancePage = lazy(() => import("./pages/Finance").then((m) => ({ default: m.FinancePage })));
+const HomePage = lazy(() => import("./pages/Home").then((m) => ({ default: m.HomePage })));
+const IntegrationsPage = lazy(() => import("./pages/Integrations").then((m) => ({ default: m.IntegrationsPage })));
+const MemoriesPage = lazy(() => import("./pages/Memories").then((m) => ({ default: m.MemoriesPage })));
+const ModelsPage = lazy(() => import("./pages/Models").then((m) => ({ default: m.ModelsPage })));
+const OverviewPage = lazy(() => import("./pages/Overview").then((m) => ({ default: m.OverviewPage })));
+const PeoplePage = lazy(() => import("./pages/People").then((m) => ({ default: m.PeoplePage })));
+const PlaygroundPage = lazy(() => import("./pages/Playground").then((m) => ({ default: m.PlaygroundPage })));
+const ProfilePage = lazy(() => import("./pages/Profile").then((m) => ({ default: m.ProfilePage })));
+const RemindersPage = lazy(() => import("./pages/Reminders").then((m) => ({ default: m.RemindersPage })));
+const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
+const WhatsAppPage = lazy(() => import("./pages/WhatsApp").then((m) => ({ default: m.WhatsAppPage })));
+import { useApi } from "./hooks";
 
 export interface Me {
   id: string;
@@ -65,11 +69,28 @@ const ADMIN_NAV: NavItem[] = [
   { to: "/profile", label: "Minha conta", icon: "👤" },
 ];
 
+/** Abas da barra inferior no celular; o resto fica em "Mais". */
+const SUPER_TABS = [
+  { to: "/", label: "Painel", icon: "◫" },
+  { to: "/conversations", label: "Conversas", icon: "💬" },
+  { to: "/finance", label: "Finanças", icon: "💰" },
+  { to: "/playground", label: "Testar", icon: "▶" },
+];
+const ADMIN_TABS = [
+  { to: "/", label: "Início", icon: "◫" },
+  { to: "/finance", label: "Gastos", icon: "💰" },
+  { to: "/reminders", label: "Lembretes", icon: "⏰" },
+  { to: "/conversations", label: "Conversas", icon: "💬" },
+];
+
 export function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? "light");
   const [menu, setMenu] = useState(false);
+  const [installable, setInstallable] = useState(canInstall());
   const loc = useLocation();
+  const nav = useNavigate();
+  useEffect(() => onInstallAvailable(() => setInstallable(true)), []);
 
   useEffect(() => {
     api<Me>("/api/auth/me").then(setMe, () => setMe(null));
@@ -77,7 +98,6 @@ export function App() {
     window.addEventListener("pj:logout", onLogout);
     return () => window.removeEventListener("pj:logout", onLogout);
   }, []);
-  useEffect(() => setMenu(false), [loc.pathname]);
 
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -97,12 +117,12 @@ export function App() {
   return (
     <div className="layout">
       <header className="topbar">
-        <button className="btn btn-sm" onClick={() => setMenu(true)} aria-label="Menu">☰</button>
-        <div className="brand-logo" style={{ width: 28, height: 28, fontSize: 13 }}>P</div>
-        Planejai
+        <div className="brand-logo" style={{ width: 30, height: 30, fontSize: 14 }}>P</div>
+        <strong className="topbar-title">{titleFor(loc.pathname, isSuper ? SUPER_NAV : ADMIN_NAV)}</strong>
+        <span className="spacer" />
+        <button className="icon-btn" onClick={toggleTheme} aria-label="Trocar tema">{theme === "dark" ? "☀" : "☾"}</button>
       </header>
-      {menu && <div className="scrim" onClick={() => setMenu(false)} />}
-      <aside className={`sidebar ${menu ? "open" : ""}`}>
+      <aside className="sidebar">
         <div className="brand">
           <div className="brand-logo">P</div>
           <div>
@@ -136,6 +156,8 @@ export function App() {
         </div>
       </aside>
       <main className="main">
+        <Suspense fallback={<Loading />}>
+        <div className="route-fade" key={loc.pathname}>
         <Routes>
           {isSuper ? (
             <>
@@ -164,9 +186,68 @@ export function App() {
           <Route path="/conversations/:id" element={<ConversationsPage />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
+        </div>
+        </Suspense>
       </main>
+
+      <nav className="tabbar" aria-label="Navegação">
+        {(isSuper ? SUPER_TABS : ADMIN_TABS).map((t) => (
+          <NavLink key={t.to} to={t.to} end={t.to === "/"} className="tab">
+            <span className="tab-ico">{t.icon}</span>
+            <span>{t.label}</span>
+          </NavLink>
+        ))}
+        <button className={`tab ${menu ? "active" : ""}`} onClick={() => setMenu(true)}>
+          <span className="tab-ico">☰</span>
+          <span>Mais</span>
+        </button>
+      </nav>
+
+      {menu && (
+        <Modal title="Menu" onClose={() => setMenu(false)}>
+          {!isStandalone() && (installable || isIos()) && (
+            <div className="install-card">
+              <div className="brand-logo">P</div>
+              <div style={{ flex: 1 }}>
+                <strong>Instalar o Planejai</strong>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  {installable ? "Abre como app, em tela cheia." : "No Safari: toque em Compartilhar e depois em \"Adicionar à Tela de Início\"."}
+                </div>
+              </div>
+              {installable && <button className="btn btn-primary btn-sm" onClick={async () => { if (await promptInstall()) setInstallable(false); }}>Instalar</button>}
+            </div>
+          )}
+          <div className="sheet-nav">
+            {(isSuper ? SUPER_NAV : ADMIN_NAV).map((item, i) =>
+              "section" in item ? (
+                <div className="nav-section" key={i}>{item.section}</div>
+              ) : (
+                <button key={item.to} className={`sheet-item ${loc.pathname === item.to ? "active" : ""}`} onClick={() => { haptic(); setMenu(false); nav(item.to); }}>
+                  <span className="ico">{item.icon}</span>
+                  {item.label}
+                  <span className="chev">›</span>
+                </button>
+              ),
+            )}
+          </div>
+          <div className="me" style={{ marginTop: 14 }}>
+            <div className="avatar">{(me.name ?? me.email).slice(0, 1).toUpperCase()}</div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="me-name">{me.name ?? me.email}</div>
+              <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"}</div>
+            </div>
+            <button className="btn btn-sm" onClick={async () => { await api("/api/auth/logout", { method: "POST" }); setMenu(false); setMe(null); }}>Sair</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
+}
+
+function titleFor(path: string, items: NavItem[]) {
+  const base = "/" + (path.split("/")[1] ?? "");
+  const hit = items.find((i) => "to" in i && i.to === base) as { label: string } | undefined;
+  return hit?.label ?? "Planejai";
 }
 
 function Nav({ items, isSuper }: { items: NavItem[]; isSuper: boolean }) {

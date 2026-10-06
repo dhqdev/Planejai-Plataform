@@ -43,13 +43,18 @@ apps/server/src/
     tools/*.ts             ferramentas por domínio (core, research+browser_*, agenda, finance+calculate, communication, productivity)
   llm/openrouter.ts        chat completions com fallback de modelos e custo real (usage.cost)
   llm/router.ts            ROUTE_DEFAULTS: modelo por agente/tarefa; sobrescrito pela tabela model_routes
-  integrations/registry.ts INTEGRATIONS: conectores, campos, teste; credenciais AES-256-GCM no banco
+  integrations/registry.ts INTEGRATIONS: conectores, campos (com help de onde pegar e quais escopos), test() real;
+                           credenciais AES-256-GCM no banco; `oauth` marca Google/Mercado Livre (redirectUri na tela)
+  integrations/mercadolivre.ts  OAuth do ML: o refresh_token GIRA a cada uso e é salvo de novo; precisa do escopo offline_access
   reminders.ts             lembretes (pg-boss + cron-parser), o CTO escreve a mensagem na hora
   api/server.ts            login (dono ou conta), cadastro, requireAuth/requireSuper
   api/routes/              webhooks.ts e dashboard.ts (REST do painel: bloco com escopo + bloco só super admin)
   db/migrations/*.sql      migrações numeradas, aplicadas no boot
-apps/dashboard/src/        React + Vite; App.tsx monta o menu por papel (SUPER_NAV / ADMIN_NAV); pages/* (Execuções com canvas
-                           estilo n8n, Finanças, Contas, Início do admin, Login/Cadastro...)
+apps/dashboard/src/        React + Vite; App.tsx monta o menu por papel (SUPER_NAV / ADMIN_NAV) e, no celular, a barra de abas
+                           (SUPER_TABS / ADMIN_TABS) + "Mais" em bottom sheet; páginas carregadas sob demanda (lazy)
+  components.tsx           Modal = bottom sheet no celular (sobe, arrasta pra baixo pra fechar, trava o scroll do fundo)
+  touch.ts                 haptic() (navigator.vibrate; iOS não vibra), feedback de toque, service worker, prompt de instalação
+apps/dashboard/public/     manifest.webmanifest, sw.js (cache só de /assets e /icons; nunca /api) e icons/
 deploy/portainer-stack.yml stack compose (app, worker, db, redis, browserless)
 deploy/swarm-traefik-stack.yml  Swarm + Traefik (network_public), domínio autoplanejai.tekvosoft.com
 ```
@@ -127,6 +132,10 @@ Teste conversas sem WhatsApp pela tela **Playground**; cada resposta linka para 
 - O Dockerfile só roda `apk add ffmpeg` na arquitetura alvo; o resto das deps é JS puro. Não adicione dependência nativa no servidor sem ajustar isso.
 
 ## Regras do projeto
+- PWA: ao mudar o sw.js, suba `VERSION` para limpar o cache antigo. O servidor manda `no-cache` em index/sw/manifest e
+  `immutable` em /assets. Todo modal novo usa `<Modal>` (vira bottom sheet sozinho); botão de ação chama `haptic()`.
+- Integração nova: campos com `help` dizendo onde pegar o valor, `test()` que bate na API de verdade e, se for OAuth,
+  rota `/api/integrations/<id>/oauth/start|callback` com `state` assinado (`oauth:` no sub).
 - Segredos só por variável de ambiente ou pela tela de Integrações (criptografados). Nada de chave no código.
 - Textos para o usuário final em português do Brasil, tom natural de WhatsApp, sem templates fixos.
 - Toda chamada de LLM e de tool passa pelo `Tracer` para aparecer em Execuções.
