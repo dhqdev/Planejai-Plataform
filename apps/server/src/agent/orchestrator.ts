@@ -10,10 +10,17 @@ import { delegationTool, TeamRoom } from "./collab.js";
 import { ctoSystemPrompt } from "./prompts.js";
 import { availableTools, runToolLoop } from "./runner.js";
 import { CTO_TOOLS, SPECIALISTS } from "./team.js";
+import { finishBrowser } from "./tools/research.js";
+import { describeMessage, preprocessMedia } from "./media.js";
 import { Tracer } from "./trace.js";
+import { pushShort, recentShort, type ShortEntry } from "../shortmem.js";
+import { config } from "../config.js";
 import { Outbox, type ConversationRow, type ToolContext, type UserRow } from "./tools/types.js";
 
-const HISTORY_LIMIT = 30;
+/** Mensagens recentes que entram no contexto do CTO (o resto vira resumo): menos token por resposta. */
+const HISTORY_LIMIT = 16;
+/** Mensagens que disparam a compactação em resumo */
+const SUMMARY_TRIGGER = 40;
 
 /** Formata texto de LLM para WhatsApp (markdown -> estilo WhatsApp) */
 export function toWhatsApp(text: string) {
@@ -43,79 +50,12 @@ export function splitBubbles(text: string): Bubble[] {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function describeMessage(m: any): string {
-  const parts: string[] = [];
-  const meta = m.meta ?? {};
-  if (meta.kind === "audio") parts.push(`[áudio] ${meta.transcript ?? "(não consegui transcrever)"}`);
-  if (meta.kind === "image") parts.push(`[foto] ${meta.image_description ?? ""}`);
-  if (meta.kind === "document") parts.push(`[documento ${meta.fileName ?? ""}]`);
-  if (meta.kind === "sticker") parts.push("[figurinha]");
-  if (meta.kind === "video") parts.push("[vídeo]");
-  if (meta.quoted?.text) parts.push(`(respondendo a: "${String(meta.quoted.text).slice(0, 200)}")`);
-  if (m.content) parts.push(m.content);
-  return parts.join(" ").trim();
-}
-
-/** Transcreve áudios e descreve imagens das mensagens pendentes (uma vez, guardando em meta). */
-async function preprocessMedia(pending: any[], channel: Channel, tracer: Tracer, remoteJid: string) {
-  for (const m of pending) {
-    const kind = m.meta?.kind;
-    if (!m.media || (kind !== "audio" && kind !== "image")) continue;
-    if (m.meta.transcript || m.meta.image_description) continue;
-    const step = await tracer.step({ agent: "cto", type: "tool", name: kind === "audio" ? "transcrever_audio" : "descrever_imagem", input: { message: m.id } });
-    try {
-      const media = await channel.downloadMedia({ externalId: m.external_id, remoteJid, media: m.media } as any);
-      if (!media) throw new Error("Não foi possível baixar a mídia");
-      if (kind === "audio") {
-        const format = media.mimetype.includes("mpeg") ? "mp3" : media.mimetype.includes("wav") ? "wav" : media.mimetype.includes("mp4") ? "m4a" : "ogg";
-        const r = await chatCompletion(await resolveModel("transcription"), {
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: "Transcreva este áudio em português exatamente como falado. Responda só com a transcrição." },
-                { type: "input_audio", input_audio: { data: media.base64, format } },
-              ],
-            },
-          ],
-        });
-        m.meta.transcript = r.message.content?.trim();
-        await step.ok({ transcript: m.meta.transcript }, r);
-      } else {
-        const r = await chatCompletion(await resolveModel("vision"), {
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text:
-                    "Descreva esta imagem em português de forma objetiva e completa para um assistente que não pode vê-la. " +
-                    "Transcreva todo texto visível (valores, datas, nomes, códigos). Se for comprovante ou nota fiscal, extraia estabelecimento, valor total, data e itens.",
-                },
-                { type: "image_url", image_url: { url: `data:${media.mimetype};base64,${media.base64}` } },
-              ],
-            },
-          ],
-        });
-        m.meta.image_description = r.message.content?.trim();
-        await step.ok({ description: m.meta.image_description }, r);
-      }
-      // base64 só serve até aqui; não guarda mídia pesada no banco
-      const { base64: _drop, ...mediaMeta } = m.media;
-      await query("UPDATE messages SET meta = $2, media = $3 WHERE id = $1", [m.id, m.meta, mediaMeta]);
-    } catch (err) {
-      await step.fail(err);
-    }
-  }
-}
-
 async function loadMemories(userId: string, text: string) {
-  const recent = await many("SELECT id, content FROM memories WHERE user_id = $1 ORDER BY created_at DESC LIMIT 12", [userId]);
+  const recent = await many("SELECT id, content FROM memories WHERE user_id = $1 ORDER BY created_at DESC LIMIT 8", [userId]);
   const related = text
     ? await many(
         `SELECT id, content FROM memories WHERE user_id = $1 AND search @@ plainto_tsquery('portuguese', $2)
-          ORDER BY ts_rank(search, plainto_tsquery('portuguese', $2)) DESC LIMIT 6`,
+          ORDER BY ts_rank(search, plainto_tsquery('portuguese', $2)) DESC LIMIT 5`,
         [userId, text.slice(0, 500)],
       )
     : [];
@@ -182,28 +122,43 @@ async function processLocked(
     }
     await preprocessMedia(pending, channel, tracer, conversation.remote_jid);
 
-    const history = (
-      await many(
-        `SELECT * FROM (SELECT * FROM messages WHERE conversation_id = $1 AND id > $2 ORDER BY id DESC LIMIT $3) h ORDER BY id`,
-        [conversationId, conversation.summary_until, HISTORY_LIMIT],
-      )
-    ).map((m) => {
-      const pendingIds = new Set(pending.map((p) => p.id));
-      return { ...m, isNew: pendingIds.has(m.id) };
-    });
+    // Contexto: memória curta no Redis (já interpretada); sem Redis, as mensagens das últimas horas no Postgres
+    const pendingIds = new Set(pending.map((p) => p.id));
+    const fresh: ShortEntry[] = pending.map((m) => ({
+      id: m.id,
+      role: m.role,
+      text: m.role === "event" ? m.content : describeMessage(m),
+      ts: new Date(m.created_at).getTime(),
+      ext: m.external_id,
+    }));
+    let past = await recentShort(conversationId, HISTORY_LIMIT);
+    if (!past) {
+      past = (
+        await many(
+          `SELECT * FROM (SELECT * FROM messages WHERE conversation_id = $1 AND id > $2 AND processed = true
+              AND created_at > now() - make_interval(hours => $4) ORDER BY id DESC LIMIT $3) h ORDER BY id`,
+          [conversationId, conversation.summary_until, HISTORY_LIMIT, config.MESSAGE_RETENTION_HOURS],
+        )
+      ).map((m) => ({ id: m.id, role: m.role, text: m.role === "event" ? m.content : describeMessage(m), ts: new Date(m.created_at).getTime(), ext: m.external_id }));
+    }
+    const history = [...past.filter((e) => !pendingIds.has(e.id)), ...fresh];
 
     const messages: ChatMessage[] = [];
     for (const m of history) {
-      if (m.role === "assistant") messages.push({ role: "assistant", content: m.content });
-      else if (m.role === "event") messages.push({ role: "user", content: `[evento do sistema] ${m.content}` });
+      if (m.role === "assistant") messages.push({ role: "assistant", content: m.text });
+      else if (m.role === "event") messages.push({ role: "user", content: `[evento do sistema] ${m.text}` });
       else {
-        const prefix = m.isNew && m.external_id ? `(msg id ${m.external_id}) ` : "";
-        const reaction = m.meta?.reaction ? ` [você reagiu ${m.meta.reaction}]` : "";
-        messages.push({ role: "user", content: `${prefix}${describeMessage(m)}${reaction}` });
+        const isNew = pendingIds.has(m.id);
+        const prefix = isNew ? `[msg_id=${m.id}] ` : "";
+        messages.push({ role: "user", content: `${prefix}${m.text}` });
       }
     }
+    await pushShort(conversationId, fresh);
 
-    const lastText = pending.map((m) => describeMessage(m)).join(" ");
+    // Só entra no time quem tem pelo menos uma ferramenta utilizável (menos token e nada de delegação inútil)
+    const team = [];
+    for (const s of SPECIALISTS) if ((await availableTools(s.tools)).length) team.push(s);
+    const lastText = fresh.map((e) => e.text).join(" ").slice(0, 500);
     const disconnected = [];
     for (const i of INTEGRATIONS) if (!(await isConnected(i.id))) disconnected.push(i.name);
     const system = ctoSystemPrompt({
@@ -212,7 +167,7 @@ async function processLocked(
       timezone,
       memories: await loadMemories(user.id, lastText),
       summary: conversation.summary,
-      specialists: SPECIALISTS,
+      specialists: team,
       disconnected,
     });
 
@@ -228,8 +183,14 @@ async function processLocked(
       room: new TeamRoom(),
       callChain: ["cto"],
     };
-    const tools = [...(await availableTools(CTO_TOOLS)), ...SPECIALISTS.map(delegationTool)];
-    const result = await runToolLoop({ agent: "cto", task: "agent:cto", ctx, tools, messages: [{ role: "system", content: system }, ...messages], maxSteps: 12 });
+    const tools = [...(await availableTools(CTO_TOOLS)), ...team.map(delegationTool)];
+    let result;
+    try {
+      result = await runToolLoop({ agent: "cto", task: "agent:cto", ctx, tools, messages: [{ role: "system", content: system }, ...messages], maxSteps: 10 });
+    } finally {
+      // navegador esquecido aberto: fecha e, se a pessoa pediu a gravação, manda junto
+      if (ctx.room.browser) await finishBrowser(ctx).catch(() => {});
+    }
 
     const silent = !result.text || /^\[\[sil[eê]ncio\]\]$/i.test(result.text.trim());
     const bubbles = silent ? [] : splitBubbles(result.text);
@@ -241,6 +202,8 @@ async function processLocked(
     await deliver(bubbles, { channel, conversation, outbox, tracer });
     await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
     await query("UPDATE conversations SET updated_at = now() WHERE id = $1", [conversationId]);
+    const sentTexts = bubbles.filter((b): b is { type: "text"; text: string } => b.type === "text").map((b) => b.text);
+    if (sentTexts.length) await pushShort(conversationId, [{ id: Number.MAX_SAFE_INTEGER, role: "assistant", text: sentTexts.join("\n"), ts: Date.now() }]);
     await tracer.finish(silent ? "[[silencio]]" : result.text);
     return { executionId: tracer.executionId, bubbles, outbox };
   } catch (err) {
@@ -285,23 +248,37 @@ async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: C
   }
 }
 
-/** Compacta conversas longas: resume mensagens antigas e avança summary_until. */
-export async function summarizeConversation(conversationId: string) {
+/**
+ * Compacta a conversa: resume mensagens antigas e avança summary_until.
+ * Sem upTo, resume quando passa de SUMMARY_TRIGGER (mantendo as recentes); com upTo, resume tudo até esse id
+ * (usado antes de apagar mensagens com mais de 24h, para nada importante se perder).
+ */
+export async function summarizeConversation(conversationId: string, opts: { upTo?: number } = {}) {
   const conv = await one<ConversationRow>("SELECT * FROM conversations WHERE id = $1", [conversationId]);
   if (!conv) return;
-  const rows = await many("SELECT id, role, content, meta FROM messages WHERE conversation_id = $1 AND id > $2 ORDER BY id", [conversationId, conv.summary_until]);
-  if (rows.length < HISTORY_LIMIT + 20) return;
-  const old = rows.slice(0, rows.length - HISTORY_LIMIT);
-  const transcript = old.map((m) => `${m.role === "assistant" ? "Assistente" : m.role === "event" ? "Evento" : "Pessoa"}: ${describeMessage(m)}`).join("\n");
+  const rows = await many(
+    "SELECT id, role, content, meta FROM messages WHERE conversation_id = $1 AND id > $2 AND processed = true AND ($3::bigint IS NULL OR id <= $3) ORDER BY id",
+    [conversationId, conv.summary_until, opts.upTo ?? null],
+  );
+  let old;
+  if (opts.upTo != null) old = rows;
+  else {
+    if (rows.length < SUMMARY_TRIGGER) return;
+    old = rows.slice(0, rows.length - HISTORY_LIMIT);
+  }
+  if (!old.length) return;
+  const transcript = old
+    .map((m) => `${m.role === "assistant" ? "Assistente" : m.role === "event" ? "Evento" : "Pessoa"}: ${describeMessage(m).slice(0, 1500)}`)
+    .join("\n");
   const r = await chatCompletion(await resolveModel("summary"), {
     messages: [
       {
         role: "system",
         content:
           "Atualize o resumo da conversa entre uma pessoa e seu assistente. Mantenha fatos, decisões, pendências, compromissos e preferências. " +
-          "Máximo 15 linhas, em português, em tópicos curtos.",
+          "Descarte conversa fiada. Máximo 15 linhas, em português, em tópicos curtos.",
       },
-      { role: "user", content: `Resumo atual:\n${conv.summary ?? "(vazio)"}\n\nNovas mensagens:\n${transcript.slice(0, 60_000)}` },
+      { role: "user", content: `Resumo atual:\n${conv.summary ?? "(vazio)"}\n\nNovas mensagens:\n${transcript.slice(0, 40_000)}` },
     ],
   });
   if (r.message.content) {

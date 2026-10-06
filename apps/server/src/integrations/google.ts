@@ -54,9 +54,12 @@ export async function googleExchangeCode(code: string) {
 let tokenCache: { token: string; exp: number } | null = null;
 
 async function accessToken() {
-  if (tokenCache && tokenCache.exp > Date.now()) return tokenCache.token;
   const creds = await getCredentials("google");
-  if (!creds) throw new Error("Google Workspace não está conectado");
+  if (!creds) {
+    tokenCache = null; // desconectado no dashboard: não reaproveita token antigo
+    throw new Error("Google Workspace não está conectado");
+  }
+  if (tokenCache && tokenCache.exp > Date.now()) return tokenCache.token;
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -79,7 +82,12 @@ export async function googleApi(url: string, init: RequestInit = {}) {
     headers: { Authorization: `Bearer ${await accessToken()}`, "Content-Type": "application/json", ...(init.headers ?? {}) },
   });
   const text = await res.text();
-  const json = text ? JSON.parse(text) : {};
+  let json: any = {};
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = { raw: text.slice(0, 300) };
+  }
   if (!res.ok) throw new Error(`Google API ${res.status}: ${JSON.stringify(json.error ?? json).slice(0, 300)}`);
   return json;
 }

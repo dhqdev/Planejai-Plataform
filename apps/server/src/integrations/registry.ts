@@ -92,6 +92,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         }),
         "Linear",
       );
+      if (j.errors?.length) throw new Error(`Linear: ${j.errors[0].message}`);
       return `Conectado como ${j.data?.viewer?.name}`;
     },
   },

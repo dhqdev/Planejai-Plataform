@@ -115,3 +115,70 @@ describe("mensagens do Baileys", () => {
     expect(parseWAMessage({ key: { remoteJid: "5519999999999@s.whatsapp.net", id: "P1" }, message: { protocolMessage: { type: 0 } } }, "baileys")).toBeNull();
   });
 });
+
+describe("finanças: valores e contas exatas", () => {
+  it("entende valores em reais em vários formatos", async () => {
+    const { parseAmount } = await import("../src/agent/tools/finance.js");
+    expect(parseAmount("R$ 1.234,56")).toBe(1234.56);
+    expect(parseAmount("8,20")).toBe(8.2);
+    expect(parseAmount("1,234.50")).toBe(1234.5);
+    expect(parseAmount("1.500")).toBe(1500);
+    expect(parseAmount(19.999)).toBe(20);
+    expect(parseAmount(-35)).toBe(35);
+    expect(() => parseAmount("abc")).toThrow();
+  });
+
+  it("calculadora sem eval, com vírgula, porcentagem e potência", async () => {
+    const { calc } = await import("../src/agent/tools/finance.js");
+    expect(calc("(89,90 + 45,50) / 3")).toBeCloseTo(45.1333, 3);
+    expect(calc("1200 * 12%")).toBe(144);
+    expect(calc("2 x 3 + 1")).toBe(7);
+    expect(calc("1000 * (1 + 1%)^12")).toBeCloseTo(1126.83, 2);
+    expect(() => calc("process.exit()")).toThrow();
+    expect(() => calc("1/0")).toThrow();
+  });
+
+  it("parcelas não perdem centavo", async () => {
+    const { splitInstallments } = await import("../src/agent/tools/finance.js");
+    expect(splitInstallments(100, 3)).toEqual([33.34, 33.33, 33.33]);
+    expect(splitInstallments(10, 4)).toEqual([2.5, 2.5, 2.5, 2.5]);
+    const p = splitInstallments(1999.99, 12);
+    expect(Math.round(p.reduce((a, b) => a + b, 0) * 100)).toBe(199999);
+  });
+});
+
+describe("documentos", () => {
+  it("lê CSV, HTML e PDF localmente", async () => {
+    const { extractDocumentText, documentKind } = await import("../src/agent/media.js");
+    expect(documentKind("application/octet-stream", "fatura.pdf")).toBe("pdf");
+    expect(documentKind("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "a.docx")).toBe("docx");
+    expect((await extractDocumentText(Buffer.from("a,b\n1,2"), "text/csv", "x.csv")).text).toBe("a,b\n1,2");
+    expect((await extractDocumentText(Buffer.from("<p>Olá <b>mundo</b></p><script>x()</script>"), "text/html", "x.html")).text).toBe("Olá mundo");
+    const pdf = await extractDocumentText(minimalPdf("Total a pagar R$ 123,45"), "application/pdf", "boleto.pdf");
+    expect(pdf.pages).toBe(1);
+    expect(pdf.text).toContain("Total a pagar R$ 123,45");
+  });
+});
+
+/** PDF mínimo válido com uma linha de texto (para testar a extração sem arquivo binário no repo). */
+function minimalPdf(text: string) {
+  const objs = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    null,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  const stream = `BT /F1 12 Tf 20 100 Td (${text}) Tj ET`;
+  objs[3] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+  let out = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objs.forEach((o, i) => {
+    offsets.push(Buffer.byteLength(out, "latin1"));
+    out += `${i + 1} 0 obj\n${o}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(out, "latin1");
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`;
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(out, "latin1");
+}

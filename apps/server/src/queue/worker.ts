@@ -1,5 +1,6 @@
 import { processConversation, summarizeConversation } from "../agent/orchestrator.js";
 import { one } from "../db/pool.js";
+import { purgeOld } from "../maintenance.js";
 import { afterFire } from "../reminders.js";
 import { QUEUES, getBoss } from "./boss.js";
 
@@ -38,6 +39,12 @@ export async function startWorker(log: { info: (...a: any[]) => void; error: (..
   await boss.work<{ conversationId: string }>(QUEUES.summarize, { batchSize: 1, pollingIntervalSeconds: 10 }, async ([job]) => {
     if (job) await summarizeConversation(job.data.conversationId);
   });
+
+  await boss.work(QUEUES.purge, { batchSize: 1, pollingIntervalSeconds: 30 }, async () => {
+    await purgeOld(log);
+  });
+  // de hora em hora: resume e apaga mensagens com mais de 24h, logs e gravações antigas
+  await boss.schedule(QUEUES.purge, "17 * * * *");
 
   log.info("worker iniciado (filas: processamento, lembretes, resumos)");
 }

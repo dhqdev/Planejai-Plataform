@@ -5,6 +5,7 @@ export const QUEUES = {
   process: "conversation.process",
   reminder: "reminder.fire",
   summarize: "conversation.summarize",
+  purge: "maintenance.purge",
 } as const;
 
 let boss: PgBoss | null = null;
@@ -17,6 +18,7 @@ export async function getBoss(): Promise<PgBoss> {
   await b.createQueue(QUEUES.process, { name: QUEUES.process, policy: "short" });
   await b.createQueue(QUEUES.reminder, { name: QUEUES.reminder, policy: "standard" });
   await b.createQueue(QUEUES.summarize, { name: QUEUES.summarize, policy: "short" });
+  await b.createQueue(QUEUES.purge, { name: QUEUES.purge, policy: "singleton" });
   boss = b;
   return b;
 }

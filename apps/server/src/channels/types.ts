@@ -26,6 +26,8 @@ export interface InboundMessage {
 }
 
 export interface OutboundImage {
+  /** padrão "image" */
+  kind?: "image" | "video";
   base64?: string;
   url?: string;
   mimetype?: string;

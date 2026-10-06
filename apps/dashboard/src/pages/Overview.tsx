@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { ago, ms, usd } from "../api";
-import { AGENT_LABEL, ErrorBox, Loading, PageHead, Status } from "../components";
+import { AGENT_LABEL, ErrorBox, Loading, PageHead, Stat, Status } from "../components";
 import { useApi } from "../hooks";
 
 export function OverviewPage() {
@@ -24,10 +24,17 @@ export function OverviewPage() {
       )}
 
       <div className="grid grid-4" style={{ marginBottom: 14 }}>
-        <Stat label="Execuções (24h)" value={data.stats.executions_24h} sub={`${data.stats.errors_24h} com erro`} />
-        <Stat label="Tempo médio de resposta" value={ms(Math.round(data.stats.avg_ms_24h))} sub="últimas 24h" />
-        <Stat label="Custo (24h)" value={usd(data.stats.cost_24h)} sub={`${usd(data.stats.cost_month)} no mês`} />
-        <Stat label="Mensagens (24h)" value={data.counts.messages_24h} sub={`${data.counts.people} pessoas · ${data.counts.reminders} lembretes`} />
+        <Stat icon="⚡" label="Execuções (24h)" value={data.stats.executions_24h} sub={`${data.stats.errors_24h} com erro`} />
+        <Stat icon="⏱" tone="info" label="Tempo médio de resposta" value={ms(Math.round(data.stats.avg_ms_24h))} sub="últimas 24h" />
+        <Stat icon="💲" tone="warn" label="Custo OpenRouter (24h)" value={usd(data.stats.cost_24h)} sub={`${usd(data.stats.cost_month)} no mês`} />
+        <Stat icon="💬" tone="ok" label="Mensagens (24h)" value={data.counts.messages_24h} sub={`${data.counts.people} pessoas · ${data.counts.reminders} lembretes`} />
+      </div>
+
+      <div className="row row-wrap" style={{ marginBottom: 14 }}>
+        <span className="chip">{data.redis?.ok ? "🟢" : data.redis?.enabled ? "🔴" : "⚪"} Redis {data.redis?.ok ? `· ${data.redis.keys} conversas na memória curta · ${data.redis.memory}` : data.redis?.enabled ? "fora do ar" : "não configurado"}</span>
+        <span className="chip">🧹 mensagens guardadas por {data.retentionHours}h, depois viram resumo</span>
+        {Number(data.counts.pending_people) > 0 && <Link className="chip" to="/people">👥 {data.counts.pending_people} número(s) aguardando aprovação</Link>}
+        {Number(data.counts.pending_accounts) > 0 && <Link className="chip" to="/accounts">🔐 {data.counts.pending_accounts} cadastro(s) para aprovar</Link>}
       </div>
 
       <div className="grid grid-2" style={{ marginBottom: 14 }}>
@@ -81,16 +88,6 @@ export function OverviewPage() {
           </tbody>
         </table>
       </div>
-    </div>
-  );
-}
-
-function Stat({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
-  return (
-    <div className="card card-pad stat">
-      <div className="label">{label}</div>
-      <div className="value">{value}</div>
-      {sub && <div className="sub">{sub}</div>}
     </div>
   );
 }

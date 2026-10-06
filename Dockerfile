@@ -2,6 +2,7 @@
 # Imagem única (API + worker + dashboard). Multi-arch: todo o build roda na arquitetura
 # do runner ($BUILDPLATFORM) e as dependências de produção são JS puro, então o estágio final
 # só copia arquivos para a base node:22-alpine da arquitetura alvo (amd64, arm64, arm/v7).
+# A única coisa instalada na arquitetura alvo é o ffmpeg (gravação do navegador e leitura de vídeo).
 
 FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 WORKDIR /app
@@ -20,6 +21,7 @@ COPY apps/dashboard/package.json apps/dashboard/
 RUN npm ci --omit=dev --workspace apps/server --include-workspace-root=false --ignore-scripts
 
 FROM node:22-alpine
+RUN apk add --no-cache ffmpeg
 ENV NODE_ENV=production \
     PORT=3000
 WORKDIR /app

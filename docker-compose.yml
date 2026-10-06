@@ -8,6 +8,7 @@ services:
       DATABASE_URL: postgres://planejai:planejai@db:5432/planejai
       ROLE: all
       BROWSERLESS_URL: http://browserless:3000
+      REDIS_URL: redis://redis:6379
     ports:
       - "3000:3000"
     depends_on:
@@ -28,6 +29,12 @@ services:
       test: ["CMD-SHELL", "pg_isready -U planejai -d planejai"]
       interval: 5s
       retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", ""]
+    ports:
+      - "6379:6379"
 
   browserless:
     image: ghcr.io/browserless/chromium:latest

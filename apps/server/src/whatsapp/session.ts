@@ -219,8 +219,8 @@ class WhatsAppSession {
   private async handleIncoming(sock: WASocket, raw: WAMessage) {
     const msg = parseWAMessage(raw, "baileys");
     if (!msg) return;
-    // Baixa áudio e foto já na chegada (a mídia do WhatsApp expira e o socket só existe aqui)
-    if (msg.media && (msg.kind === "audio" || msg.kind === "image")) {
+    // Baixa a mídia já na chegada (a mídia do WhatsApp expira e o socket só existe aqui)
+    if (msg.media && ["audio", "image", "document", "video"].includes(msg.kind)) {
       try {
         const buf = await downloadMediaMessage(raw, "buffer", {}, { logger: pino({ level: "silent" }), reuploadRequest: sock.updateMediaMessage });
         if (buf.length <= MEDIA_MAX_BYTES) msg.media.base64 = buf.toString("base64");

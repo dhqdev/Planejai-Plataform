@@ -1,5 +1,5 @@
 # Stack do Planejai para Portainer em Docker Swarm com Traefik (rede externa network_public),
-# no mesmo padrão do n8n. Banco Postgres PRÓPRIO (serviço "db"), sem usar o Postgres existente.
+# no mesmo padrão do n8n. Postgres e Redis PRÓPRIOS (serviços "db" e "redis"), sem usar os que já existem.
 # Troque os valores marcados com TROQUE antes de subir.
 version: "3.7"
 
@@ -21,7 +21,10 @@ x-env: &env
   WHATSAPP_PROVIDER: baileys
   OWNER_PHONES: "5519995378302"
   ALLOW_UNKNOWN_CONTACTS: "false"
-  # --- Navegador para prints de páginas ---
+  # --- Redis próprio: memória curta das conversas (24h) ---
+  REDIS_URL: redis://redis:6379
+  MESSAGE_RETENTION_HOURS: "24"
+  # --- Navegador dos agentes (prints e pesquisa gravada em vídeo) ---
   BROWSERLESS_URL: http://browserless:3000
   BROWSERLESS_TOKEN: TROQUE_BROWSERLESS_TOKEN
   LOG_LEVEL: info
@@ -93,12 +96,27 @@ services:
       restart_policy:
         condition: any
 
+  # Redis PRÓPRIO da stack (não usa o redis que já existe no servidor). Sem disco: é só memória curta.
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    networks:
+      - planejai_internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      resources:
+        limits:
+          memory: 192M
+      restart_policy:
+        condition: any
+
   browserless:
     image: ghcr.io/browserless/chromium:latest
     environment:
       TOKEN: TROQUE_BROWSERLESS_TOKEN
       CONCURRENT: "2"
-      TIMEOUT: "60000"
+      TIMEOUT: "300000"
     networks:
       - planejai_internal
     deploy:

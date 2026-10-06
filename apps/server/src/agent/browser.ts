@@ -1,0 +1,223 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import type { Browser, CDPSession, Page } from "puppeteer-core";
+import { config } from "../config.js";
+import { getCredentials } from "../integrations/registry.js";
+
+const run = promisify(execFile);
+const MAX_FRAMES = 900;
+const SNAPSHOT_TEXT = 2500;
+const MAX_ELEMENTS = 40;
+
+export interface Snapshot {
+  url: string;
+  title: string;
+  text: string;
+  elements: string;
+}
+
+/**
+ * "Computador" dos agentes: um navegador de verdade (browserless da stack, ou Chrome local em dev)
+ * que o Pesquisador controla passo a passo (abrir, clicar, digitar, rolar) enquanto tudo é gravado
+ * em vídeo. Para economizar tokens, o agente recebe só o texto da página e a lista numerada de
+ * elementos clicáveis, nunca a imagem.
+ */
+export class BrowserSession {
+  private frames: { data: Buffer; ts: number }[] = [];
+  private cdp: CDPSession | null = null;
+  recording = false;
+  /** a pessoa pediu para receber a gravação */
+  sendRecording = false;
+  actions: string[] = [];
+
+  private constructor(private browser: Browser, readonly page: Page) {}
+
+  static async open(record: boolean): Promise<BrowserSession> {
+    const puppeteer = (await import("puppeteer-core")).default;
+    const b = await getCredentials("browserless");
+    let browser: Browser;
+    if (b?.url) {
+      const ws = b.url.replace(/^http/, "ws").replace(/\/$/, "");
+      const qs = new URLSearchParams({ timeout: "300000" });
+      if (b.token) qs.set("token", b.token);
+      browser = await puppeteer.connect({ browserWSEndpoint: `${ws}?${qs}`, defaultViewport: { width: 1280, height: 800 } });
+    } else if (config.CHROME_PATH) {
+      browser = await puppeteer.launch({
+        executablePath: config.CHROME_PATH,
+        headless: true,
+        args: ["--no-sandbox", "--disable-dev-shm-usage"],
+        defaultViewport: { width: 1280, height: 800 },
+      });
+    } else {
+      throw new Error("Navegador não configurado: conecte o Browserless (já vem na stack) ou defina CHROME_PATH.");
+    }
+    const page = await browser.newPage();
+    await page.setExtraHTTPHeaders({ "Accept-Language": "pt-BR,pt;q=0.9" });
+    const s = new BrowserSession(browser, page);
+    if (record) await s.startRecording();
+    return s;
+  }
+
+  private async startRecording() {
+    this.cdp = await this.page.createCDPSession();
+    this.cdp.on("Page.screencastFrame", (f: { data: string; sessionId: number; metadata: { timestamp?: number } }) => {
+      if (this.frames.length < MAX_FRAMES) this.frames.push({ data: Buffer.from(f.data, "base64"), ts: (f.metadata.timestamp ?? Date.now() / 1000) * 1000 });
+      void this.cdp?.send("Page.screencastFrameAck", { sessionId: f.sessionId }).catch(() => {});
+    });
+    await this.cdp.send("Page.startScreencast", { format: "jpeg", quality: 60, maxWidth: 1280, maxHeight: 800, everyNthFrame: 1 });
+    this.recording = true;
+  }
+
+  get frameCount() {
+    return this.frames.length;
+  }
+
+  async snapshot(): Promise<Snapshot> {
+    await this.page.waitForNetworkIdle({ idleTime: 500, timeout: 8000 }).catch(() => {});
+    const data = await this.page.evaluate(
+      (maxEls: number, maxText: number) => {
+        document.querySelectorAll("[data-pj-ref]").forEach((el) => el.removeAttribute("data-pj-ref"));
+        const sel = 'a[href], button, input:not([type="hidden"]), select, textarea, [role="button"], [role="link"], [role="tab"], [onclick]';
+        const out: string[] = [];
+        let n = 0;
+        for (const el of Array.from(document.querySelectorAll<HTMLElement>(sel))) {
+          if (n >= maxEls) break;
+          const r = el.getBoundingClientRect();
+          if (r.width < 4 || r.height < 4 || r.bottom < 0 || r.top > window.innerHeight * 2.5) continue;
+          const st = getComputedStyle(el);
+          if (st.visibility === "hidden" || st.display === "none") continue;
+          const label = (el.getAttribute("aria-label") || el.innerText || (el as HTMLInputElement).placeholder || (el as HTMLInputElement).value || el.getAttribute("title") || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 70);
+          const tag = el.tagName.toLowerCase();
+          const type = tag === "a" ? "link" : tag === "input" ? `campo ${(el as HTMLInputElement).type}` : tag === "select" ? "lista" : tag === "textarea" ? "campo texto" : "botão";
+          if (!label && tag !== "input" && tag !== "textarea") continue;
+          n++;
+          el.setAttribute("data-pj-ref", String(n));
+          out.push(`[${n}] ${type}: ${label || "(sem rótulo)"}`);
+        }
+        const text = (document.body?.innerText ?? "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim().slice(0, maxText);
+        return { title: document.title, text, elements: out.join("\n") };
+      },
+      MAX_ELEMENTS,
+      SNAPSHOT_TEXT,
+    );
+    return { url: this.page.url(), ...data };
+  }
+
+  private async highlight(ref: string) {
+    // destaca o que vai ser clicado, para a gravação mostrar o "mouse" do agente
+    await this.page
+      .evaluate((r: string) => {
+        const el = document.querySelector<HTMLElement>(`[data-pj-ref="${r}"]`);
+        if (!el) return;
+        el.scrollIntoView({ block: "center" });
+        el.style.outline = "3px solid #ff6d5a";
+        el.style.outlineOffset = "2px";
+      }, ref)
+      .catch(() => {});
+    await new Promise((r) => setTimeout(r, 350));
+  }
+
+  async goto(url: string) {
+    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+    this.actions.push(`abrir ${url}`);
+    await this.page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 });
+  }
+
+  async act(a: { action: string; ref?: number; text?: string; url?: string; key?: string; direction?: string }) {
+    const target = a.ref != null ? `[data-pj-ref="${a.ref}"]` : null;
+    const nav = () => this.page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 8000 }).catch(() => {});
+    switch (a.action) {
+      case "goto":
+        if (!a.url) throw new Error("url obrigatória");
+        await this.goto(a.url);
+        break;
+      case "click": {
+        if (!target) throw new Error("ref obrigatório");
+        await this.highlight(String(a.ref));
+        this.actions.push(`clicar [${a.ref}]`);
+        await Promise.all([nav(), this.page.click(target)]);
+        break;
+      }
+      case "type": {
+        if (!target) throw new Error("ref obrigatório");
+        await this.highlight(String(a.ref));
+        this.actions.push(`digitar "${a.text ?? ""}" em [${a.ref}]`);
+        await this.page.click(target, { count: 3 } as any).catch(() => {});
+        await this.page.type(target, a.text ?? "", { delay: 40 });
+        break;
+      }
+      case "press":
+        this.actions.push(`tecla ${a.key ?? "Enter"}`);
+        await Promise.all([nav(), this.page.keyboard.press((a.key ?? "Enter") as any)]);
+        break;
+      case "scroll":
+        this.actions.push(`rolar ${a.direction ?? "down"}`);
+        await this.page.evaluate((d: string) => window.scrollBy({ top: d === "up" ? -700 : 700, behavior: "smooth" }), a.direction ?? "down");
+        await new Promise((r) => setTimeout(r, 700));
+        break;
+      case "back":
+        this.actions.push("voltar");
+        await this.page.goBack({ waitUntil: "domcontentloaded", timeout: 15_000 }).catch(() => {});
+        break;
+      case "wait":
+        await new Promise((r) => setTimeout(r, Math.min(Number(a.text ?? 2000) || 2000, 10_000)));
+        break;
+      default:
+        throw new Error(`ação desconhecida: ${a.action}`);
+    }
+  }
+
+  async screenshot(): Promise<string> {
+    return Buffer.from(await this.page.screenshot({ type: "jpeg", quality: 70 })).toString("base64");
+  }
+
+  /** Para a gravação e devolve um MP4 (H.264) pronto para o WhatsApp, ou null se não houver quadros/ffmpeg. */
+  async stopRecording(): Promise<Buffer | null> {
+    if (!this.recording) return null;
+    this.recording = false;
+    await this.cdp?.send("Page.stopScreencast").catch(() => {});
+    // segura o último quadro na tela por um instante
+    if (this.frames.length) this.frames.push({ data: this.frames.at(-1)!.data, ts: this.frames.at(-1)!.ts + 1200 });
+    if (this.frames.length < 2) return null;
+    return encodeMp4(this.frames);
+  }
+
+  async close() {
+    await this.stopRecording().catch(() => null);
+    await this.browser.close().catch(() => {});
+  }
+}
+
+/** Junta quadros com horário (screencast do Chrome só manda quadro quando a tela muda) num MP4. */
+export async function encodeMp4(frames: { data: Buffer; ts: number }[]): Promise<Buffer | null> {
+  const dir = await mkdtemp(join(tmpdir(), "pj-rec-"));
+  try {
+    const lines: string[] = [];
+    for (let i = 0; i < frames.length; i++) {
+      const file = join(dir, `f${String(i).padStart(4, "0")}.jpg`);
+      await writeFile(file, frames[i]!.data);
+      const next = frames[i + 1];
+      const dur = next ? Math.min(Math.max((next.ts - frames[i]!.ts) / 1000, 0.04), 4) : 0.5;
+      lines.push(`file '${file}'`, `duration ${dur.toFixed(3)}`);
+    }
+    lines.push(`file '${join(dir, `f${String(frames.length - 1).padStart(4, "0")}.jpg`)}'`);
+    await writeFile(join(dir, "list.txt"), lines.join("\n"));
+    const out = join(dir, "out.mp4");
+    await run(
+      "ffmpeg",
+      ["-v", "error", "-f", "concat", "-safe", "0", "-i", join(dir, "list.txt"), "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,fps=12,format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-movflags", "+faststart", out],
+      { timeout: 120_000 },
+    );
+    return await readFile(out);
+  } catch {
+    return null;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}

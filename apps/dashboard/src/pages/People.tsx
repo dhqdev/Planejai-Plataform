@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ago, api, when } from "../api";
+import { ago, api, brl, when } from "../api";
 import { ErrorBox, Modal, PageHead, Status } from "../components";
 import { useApi } from "../hooks";
 
@@ -63,8 +63,8 @@ function AddPerson({ onClose }: { onClose: () => void }) {
 }
 
 function PersonDetail({ person, onClose }: { person: any; onClose: () => void }) {
-  const memories = useApi<any[]>(`/api/people/${person.id}/memories`);
-  const finance = useApi<any>(`/api/people/${person.id}/finance`);
+  const memories = useApi<any[]>(`/api/memories?user=${person.id}`);
+  const finance = useApi<any>(`/api/finance?user=${person.id}`);
   const [tz, setTz] = useState(person.timezone ?? "");
   return (
     <Modal title={person.name ?? `+${person.phone}`} onClose={onClose}>
@@ -85,14 +85,14 @@ function PersonDetail({ person, onClose }: { person: any; onClose: () => void })
       {memories.data && !memories.data.length && <p className="muted">Nada guardado ainda.</p>}
       <h3 style={{ marginTop: 16 }}>Gastos do mês</h3>
       {(finance.data?.byCategory ?? []).map((c: any) => (
-        <div key={c.category} className="row"><span style={{ flex: 1 }}>{c.category}</span><strong>R$ {Number(c.total).toFixed(2)}</strong></div>
+        <div key={c.category} className="row"><span style={{ flex: 1 }}>{c.category}</span><strong>{brl(c.total)}</strong></div>
       ))}
       <details style={{ marginTop: 8 }}>
         <summary className="muted">Últimos lançamentos</summary>
         {(finance.data?.transactions ?? []).map((t: any) => (
           <div key={t.id} className="row muted" style={{ fontSize: 12 }}>
             <span>{when(t.occurred_at)}</span><span style={{ flex: 1 }}>{t.description ?? t.category}</span>
-            <span style={{ color: t.kind === "income" ? "var(--ok)" : undefined }}>{t.kind === "income" ? "+" : "-"}R$ {Number(t.amount).toFixed(2)}</span>
+            <span style={{ color: t.kind === "income" ? "var(--ok)" : undefined }}>{t.kind === "income" ? "+" : "-"}{brl(t.amount)}</span>
           </div>
         ))}
       </details>

@@ -17,6 +17,8 @@ export interface RouteDefault extends ModelChoice {
  * - xiaomi/mimo-v2.6-flash        0,14  / 0,28  texto+imagem+áudio, saída muito barata
  * - qwen/qwen3.8-omni-flash       0,15  / 0,47  omni (áudio/vídeo), bom para transcrição
  * - google/gemini-3.8-flash       0,75  / 3,75  fallback mais forte para raciocínio e multimodal
+ *
+ * maxTokens limita a saída de cada chamada (respostas de WhatsApp são curtas) para o custo não escapar.
  */
 export const ROUTE_DEFAULTS: RouteDefault[] = [
   {
@@ -26,6 +28,7 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     model: "deepseek/deepseek-v4.1-flash",
     fallbacks: ["google/gemini-3.8-flash"],
     temperature: 0.6,
+    maxTokens: 1200,
   },
   {
     task: "agent:pesquisador",
@@ -34,6 +37,7 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     model: "xiaomi/mimo-v2.6-flash",
     fallbacks: ["deepseek/deepseek-v4.1-flash"],
     temperature: 0.2,
+    maxTokens: 1500,
   },
   {
     task: "agent:agenda",
@@ -42,6 +46,7 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     model: "deepseek/deepseek-v4.1-flash",
     fallbacks: ["google/gemini-3.8-flash"],
     temperature: 0.1,
+    maxTokens: 1000,
   },
   {
     task: "agent:financeiro",
@@ -50,6 +55,7 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     model: "deepseek/deepseek-v4.1-flash",
     fallbacks: ["google/gemini-3.8-flash"],
     temperature: 0.1,
+    maxTokens: 1200,
   },
   {
     task: "agent:comunicacao",
@@ -58,6 +64,7 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     model: "deepseek/deepseek-v4.1-flash",
     fallbacks: ["xiaomi/mimo-v2.6-flash"],
     temperature: 0.4,
+    maxTokens: 1500,
   },
   {
     task: "agent:produtividade",
@@ -66,6 +73,7 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     model: "deepseek/deepseek-v4.1-flash",
     fallbacks: ["xiaomi/mimo-v2.6-flash"],
     temperature: 0.2,
+    maxTokens: 1200,
   },
   {
     task: "vision",
@@ -74,6 +82,7 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     model: "xiaomi/mimo-v2.6-flash",
     fallbacks: ["qwen/qwen3.8-omni-flash", "google/gemini-3.8-flash"],
     temperature: 0,
+    maxTokens: 900,
   },
   {
     task: "transcription",
@@ -82,6 +91,7 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     model: "qwen/qwen3.8-omni-flash",
     fallbacks: ["google/gemini-3.8-flash"],
     temperature: 0,
+    maxTokens: 1500,
   },
   {
     task: "summary",
@@ -90,6 +100,7 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     model: "xiaomi/mimo-v2.6-flash",
     fallbacks: ["deepseek/deepseek-v4.1-flash"],
     temperature: 0.2,
+    maxTokens: 700,
   },
   {
     task: "web_search",

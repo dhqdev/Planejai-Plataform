@@ -26,6 +26,15 @@ export function SettingsPage() {
             <textarea className="textarea" placeholder="Ex.: me chame de Dav, seja mais informal, sempre sugira opções baratas primeiro…" value={form.persona} onChange={(e) => setForm({ ...form, persona: e.target.value })} />
             <div className="help">Somadas ao prompt do CTO em toda conversa.</div>
           </div>
+          <div className="field">
+            <label>Cadastro no painel</label>
+            <select className="select" value={form.signupMode} onChange={(e) => setForm({ ...form, signupMode: e.target.value })}>
+              <option value="approval">Aberto, mas eu aprovo cada conta</option>
+              <option value="open">Aberto: libera na hora (painel e WhatsApp)</option>
+              <option value="closed">Fechado: só eu crio contas</option>
+            </select>
+            <div className="help">Quem se cadastra vira admin e vê só os próprios dados. Liberar na hora deixa o número usar o assistente (gasta sua chave do OpenRouter).</div>
+          </div>
           <div className="row">
             <button className="btn btn-primary" onClick={async () => { await api("/api/settings", { method: "PUT", json: form }); setSaved(true); setTimeout(() => setSaved(false), 2000); }}>Salvar</button>
             {saved && <span className="badge badge-ok">Salvo</span>}

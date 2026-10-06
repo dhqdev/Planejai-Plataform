@@ -1,7 +1,9 @@
 import { chatCompletion } from "../../llm/openrouter.js";
 import { resolveModel } from "../../llm/router.js";
 import { getCredentials } from "../../integrations/registry.js";
-import { defineTool, obj } from "./types.js";
+import { one } from "../../db/pool.js";
+import { BrowserSession, type Snapshot } from "../browser.js";
+import { defineTool, obj, type ToolContext } from "./types.js";
 
 export function htmlToText(html: string): string {
   return html
@@ -54,7 +56,7 @@ export const webSearch = defineTool<{ query: string; max_results?: number }>({
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${tavily.api_key}` },
         body: JSON.stringify({ query: args.query, max_results: max, include_answer: true, include_images: true }),
       });
-      const j: any = await res.json();
+      const j: any = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(`Tavily: ${JSON.stringify(j).slice(0, 200)}`);
       return {
         provider: "tavily",
@@ -68,7 +70,7 @@ export const webSearch = defineTool<{ query: string; max_results?: number }>({
       const res = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(args.query)}&count=${max}&country=BR&search_lang=pt-br`, {
         headers: { "X-Subscription-Token": brave.api_key!, Accept: "application/json" },
       });
-      const j: any = await res.json();
+      const j: any = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(`Brave: ${JSON.stringify(j).slice(0, 200)}`);
       return {
         provider: "brave",
@@ -131,5 +133,104 @@ export const screenshotUrl = defineTool<{ url: string; full_page?: boolean; capt
     const base64 = Buffer.from(await res.arrayBuffer()).toString("base64");
     const id = ctx.outbox.addMedia({ base64, mimetype: "image/jpeg", caption: args.caption, fileName: "print.jpg" });
     return { media_id: id, how_to_send: `Coloque [[media:${id}]] na resposta final onde a imagem deve aparecer.` };
+  },
+});
+
+// ---------- Computador (navegador controlado pelo agente, com gravação) ----------
+
+async function saveMediaFile(ctx: ToolContext, kind: string, mimetype: string, data: Buffer, fileName: string) {
+  const row = await one<{ id: string }>(
+    `INSERT INTO media_files (execution_id, user_id, kind, mimetype, file_name, size, data) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    [ctx.tracer.executionId, ctx.user.id, kind, mimetype, fileName, data.length, data],
+  );
+  return row!.id;
+}
+
+function snapshotText(s: Snapshot) {
+  return { url: s.url, title: s.title, page_text: s.text, clickable: s.elements || "(nenhum elemento clicável visível)" };
+}
+
+/** Fecha o navegador da execução; se a gravação foi pedida, prepara o vídeo para enviar. */
+export async function finishBrowser(ctx: ToolContext, opts: { send?: boolean; caption?: string } = {}) {
+  const b = ctx.room.browser;
+  if (!b) return { ok: false, error: "Nenhum navegador aberto" };
+  ctx.room.browser = undefined;
+  const video = await b.stopRecording().catch(() => null);
+  await b.close();
+  if (!video) return { ok: true, recording: null, actions: b.actions };
+  const fileId = await saveMediaFile(ctx, "recording", "video/mp4", video, "gravacao.mp4");
+  const send = opts.send ?? b.sendRecording;
+  const media_id = send
+    ? ctx.outbox.addMedia({ kind: "video", base64: video.toString("base64"), mimetype: "video/mp4", caption: opts.caption, fileName: "gravacao.mp4" })
+    : null;
+  return {
+    ok: true,
+    recording: { file: `/api/media/${fileId}`, seconds_aprox: Math.round(b.frameCount / 8), size_kb: Math.round(video.length / 1024) },
+    media_id,
+    actions: b.actions,
+    ...(media_id ? { how_to_send: `Coloque [[media:${media_id}]] na resposta final para mandar o vídeo.` } : {}),
+  };
+}
+
+export const browserOpen = defineTool<{ url: string; record?: boolean; send_recording?: boolean }>({
+  name: "browser_open",
+  description:
+    "Abre um navegador de verdade (computador) numa URL para navegar como uma pessoa: clicar, preencher, rolar. " +
+    "Use quando a pesquisa precisa interagir com o site (filtros, formulários, login público, vários cliques) ou quando a pessoa pede para ver/gravar. " +
+    "record=true grava a tela em vídeo; send_recording=true manda o vídeo para a pessoa no fim. Retorna o texto da página e os elementos clicáveis numerados.",
+  parameters: obj({ url: { type: "string" }, record: { type: "boolean" }, send_recording: { type: "boolean" } }, ["url"]),
+  async run(args, ctx) {
+    if (ctx.room.browser) await finishBrowser(ctx, { send: false });
+    const b = await BrowserSession.open(Boolean(args.record || args.send_recording));
+    b.sendRecording = Boolean(args.send_recording);
+    ctx.room.browser = b;
+    await b.goto(args.url);
+    return snapshotText(await b.snapshot());
+  },
+});
+
+export const browserAction = defineTool<{ action: string; ref?: number; text?: string; url?: string; key?: string; direction?: string }>({
+  name: "browser_action",
+  description:
+    "Age no navegador aberto: click (ref), type (ref + text), press (key, ex. Enter), scroll (direction up/down), back, goto (url), wait. " +
+    "Retorna a página atualizada com novos números de elementos.",
+  parameters: obj(
+    {
+      action: { type: "string", enum: ["click", "type", "press", "scroll", "back", "goto", "wait"] },
+      ref: { type: "number", description: "número do elemento na última lista" },
+      text: { type: "string" },
+      url: { type: "string" },
+      key: { type: "string" },
+      direction: { type: "string", enum: ["up", "down"] },
+    },
+    ["action"],
+  ),
+  async run(args, ctx) {
+    const b = ctx.room.browser;
+    if (!b) return { error: "Abra o navegador primeiro com browser_open" };
+    await b.act(args);
+    return snapshotText(await b.snapshot());
+  },
+});
+
+export const browserScreenshot = defineTool<{ caption?: string }>({
+  name: "browser_screenshot",
+  description: "Tira um print da tela atual do navegador aberto para mandar como foto. Retorna media_id.",
+  parameters: obj({ caption: { type: "string" } }),
+  async run(args, ctx) {
+    const b = ctx.room.browser;
+    if (!b) return { error: "Abra o navegador primeiro com browser_open" };
+    const base64 = await b.screenshot();
+    const id = ctx.outbox.addMedia({ base64, mimetype: "image/jpeg", caption: args.caption, fileName: "tela.jpg" });
+    return { media_id: id, how_to_send: `Coloque [[media:${id}]] na resposta final onde a imagem deve aparecer.` };
+  },
+});
+
+export const browserClose = defineTool<{ send_recording?: boolean; caption?: string }>({
+  name: "browser_close",
+  description: "Fecha o navegador. Se estava gravando, gera o vídeo (MP4); send_recording=true prepara para mandar à pessoa (retorna media_id).",
+  parameters: obj({ send_recording: { type: "boolean" }, caption: { type: "string" } }),
+  async run(args, ctx) {
+    return finishBrowser(ctx, { send: args.send_recording, caption: args.caption });
   },
 });

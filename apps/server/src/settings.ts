@@ -7,6 +7,8 @@ export interface AgentSettings {
   persona: string;
   timezone: string;
   language: string;
+  /** Cadastro no painel: "approval" (dono aprova), "open" (libera na hora) ou "closed" */
+  signupMode: "approval" | "open" | "closed";
 }
 
 const defaults = (): AgentSettings => ({
@@ -14,6 +16,7 @@ const defaults = (): AgentSettings => ({
   persona: "",
   timezone: config.DEFAULT_TIMEZONE,
   language: "pt-BR",
+  signupMode: "approval",
 });
 
 let cache: { at: number; value: AgentSettings } | null = null;

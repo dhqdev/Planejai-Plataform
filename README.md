@@ -22,6 +22,12 @@ Todos os modelos têm fallback e podem ser trocados na tela **Modelos** do dashb
 - **WhatsApp próprio (Baileys)**: o worker conecta direto no WhatsApp Web multi-device. Você lê o QR code (ou digita um código de pareamento) na tela **WhatsApp** do dashboard; a sessão fica salva no Postgres e se reconecta sozinha. Também funciona com Evolution API ou com a Cloud API oficial da Meta. Texto, áudio (transcrito), foto (descrita por visão), documentos, localização, respostas citadas e reações.
 - **Jeito humano**: junta mensagens seguidas antes de responder, marca como lida, mostra "digitando…", divide a resposta em balões, reage com emoji e às vezes só reage sem responder.
 - **Lembretes naturais**: o lembrete guarda a intenção; na hora o CTO escreve a mensagem com contexto ("David, passaram os 15 minutos: hora de ir ao banheiro!").
+- **Entende tudo que chega**: texto, áudio (transcrito), foto (descrita, com extração de comprovantes), vídeo (quadros + fala) e documentos (PDF, Word, Excel, CSV, TXT lidos localmente, sem gastar token; PDF escaneado vai para OCR).
+- **Gastos automáticos**: contou que gastou ou mandou comprovante, Pix, nota ou fatura paga, o lançamento é feito na hora, sem duplicar. Contas com calculadora exata, parcelas que fecham no centavo e resumos por categoria.
+- **Pesquisa com computador gravada**: o Pesquisador abre um navegador de verdade, clica, preenche e rola; se você pedir, manda o vídeo da tela (MP4) no WhatsApp.
+- **Memória curta no Redis próprio**: as mensagens ficam 24h já interpretadas; depois viram resumo e são apagadas (gastos, memórias e lembretes ficam).
+- **Pouco token**: o CTO resolve o simples sozinho, especialistas sem integração saem do time, contexto curto, saída limitada por rota e raciocínio leve.
+- **Painel super admin e admin**: o dono da stack vê e configura tudo; quem se cadastra vira admin e vê só os próprios gastos, lembretes, conversas e memórias.
 - **Integrações** com credenciais criptografadas no banco: Google Workspace (OAuth), Notion, GitHub, Linear, Slack, Tavily, Brave, Browserless, Mercado Pago, Stripe.
 - **Dashboard estilo n8n**: execuções com canvas do fluxo e entrada/saída de cada passo, conversas, time de agentes, integrações, modelos, lembretes, pessoas (aprovar números), playground para testar sem WhatsApp, tema claro e escuro.
 - **Segurança**: compras, pagamentos e mensagens para terceiros exigem confirmação explícita; números desconhecidos ficam aguardando aprovação.
@@ -31,7 +37,7 @@ Todos os modelos têm fallback e podem ser trocados na tela **Modelos** do dashb
 1. Faça push na `main`. O GitHub Actions publica `ghcr.io/dhqdev/planejai-plataform:latest` para **amd64, arm64 e arm/v7**.
    - O pacote do GHCR nasce privado: torne-o público em *GitHub > Packages > planejai-plataform > Settings* ou cadastre o registry `ghcr.io` no Portainer com um token `read:packages`.
 2. No Portainer: *Stacks > Add stack*, cole `deploy/portainer-stack.yml` (ou aponte para este repositório) e preencha as variáveis de `.env.example`. No mínimo: `PUBLIC_URL`, `POSTGRES_PASSWORD`, `APP_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `OPENROUTER_API_KEY`, `WEBHOOK_SECRET`, `OWNER_PHONES`, `BROWSERLESS_TOKEN` e as variáveis do provedor de WhatsApp.
-3. A stack sobe `app` (API + dashboard), `worker` (agentes, lembretes), `db` (Postgres 16 próprio, volume `planejai_db`) e `browserless` (prints de páginas).
+3. A stack sobe `app` (API + dashboard), `worker` (agentes, lembretes), `db` (Postgres 16 próprio, volume `planejai_db`), `redis` (memória curta, próprio) e `browserless` (navegador dos agentes).
 4. Conecte o WhatsApp:
    - **Baileys (padrão)**: abra o dashboard, vá em **WhatsApp** e leia o QR code com o celular do número do assistente (*Dispositivos conectados > Conectar um dispositivo*). Use um número dedicado ao assistente. Mantenha o `worker` com 1 réplica.
    - **Evolution**: `{PUBLIC_URL}/webhooks/evolution?secret={WEBHOOK_SECRET}`, evento `MESSAGES_UPSERT`.
@@ -43,7 +49,7 @@ Todos os modelos têm fallback e podem ser trocados na tela **Modelos** do dashb
 ```bash
 npm ci
 cp .env.example .env
-docker compose up db -d
+docker compose up db redis -d
 npm run dev             # API + worker em http://localhost:3000
 npm run dev:dashboard   # dashboard em http://localhost:5173
 npm run typecheck && npm test

@@ -1,4 +1,5 @@
 import type { ChatMessage } from "../llm/types.js";
+import type { BrowserSession } from "./browser.js";
 import { getSettings } from "../settings.js";
 import { specialistSystemPrompt } from "./prompts.js";
 import { availableTools, runToolLoop } from "./runner.js";
@@ -22,6 +23,8 @@ export class TeamRoom {
   board: { from: string; note: string }[] = [];
   /** quem conversou com quem, para o log/canvas */
   edges: { from: string; to: string }[] = [];
+  /** navegador ("computador") aberto nesta execução, compartilhado pelo time */
+  browser?: BrowserSession;
   private locks = new Map<string, Promise<unknown>>();
 
   /** Serializa as conversas do CTO com um mesmo especialista (pedidos em paralelo entram na fila). */
@@ -80,7 +83,7 @@ export function delegationTool(def: AgentDef): Tool<{ message: string }> {
         const thread = ctx.room.threads.get(def.id) ?? [{ role: "system", content: await systemFor(def, ctx, own) } as ChatMessage];
         thread.push({ role: "user", content: `[CTO] ${args.message}${ctx.room.boardText()}` });
         ctx.room.edges.push({ from: ctx.agent, to: def.id });
-        const r = await runToolLoop({ agent: def.id, task: `agent:${def.id}`, ctx: { ...ctx, agent: def.id, callChain: chain }, tools: all, maxSteps: 8, messages: thread });
+        const r = await runToolLoop({ agent: def.id, task: `agent:${def.id}`, ctx: { ...ctx, agent: def.id, callChain: chain }, tools: all, maxSteps: 7, messages: thread });
         ctx.room.threads.set(def.id, r.messages);
         return { report: r.text || "(o especialista não retornou relatório)" };
       });
@@ -107,7 +110,7 @@ export function consultTool(def: AgentDef): Tool<{ question: string }> {
         task: `agent:${def.id}`,
         ctx: { ...ctx, agent: def.id, callChain: chain },
         tools: all,
-        maxSteps: 6,
+        maxSteps: 5,
         messages: [
           { role: "system", content: await systemFor(def, ctx, own) },
           { role: "user", content: `[${NAMES[ctx.agent] ?? ctx.agent}, seu colega de time, pergunta] ${args.question}${ctx.room.boardText()}` },

@@ -123,10 +123,11 @@ export class CloudChannel implements Channel {
   }
 
   async sendImage(to: string, image: OutboundImage) {
+    const type = image.kind ?? "image";
     const img: Record<string, unknown> = { caption: image.caption };
-    if (image.base64) img.id = await this.upload(image.base64, image.mimetype ?? "image/png", image.fileName ?? "imagem.png");
+    if (image.base64) img.id = await this.upload(image.base64, image.mimetype ?? (type === "video" ? "video/mp4" : "image/png"), image.fileName ?? (type === "video" ? "gravacao.mp4" : "imagem.png"));
     else img.link = image.url;
-    const r = await this.send({ to, type: "image", image: img });
+    const r = await this.send({ to, type, [type]: img });
     return { id: r?.messages?.[0]?.id };
   }
 

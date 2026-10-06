@@ -104,7 +104,7 @@ export async function runToolLoop(opts: {
         }
       }),
     );
-    for (const r of results) messages.push({ role: "tool", tool_call_id: r.id, content: r.content.slice(0, 30_000) });
+    for (const r of results) messages.push({ role: "tool", tool_call_id: r.id, content: r.content.slice(0, 12_000) });
   }
   return { text: "", steps: maxSteps, messages };
 }

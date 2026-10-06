@@ -48,6 +48,14 @@ const schema = z.object({
   // Serviço opcional de navegador headless (browserless) para screenshots de páginas.
   BROWSERLESS_URL: z.string().default(""),
   BROWSERLESS_TOKEN: z.string().default(""),
+  // Chrome local (só desenvolvimento): usado pelo navegador dos agentes quando não há browserless
+  CHROME_PATH: z.string().default(""),
+
+  // Redis próprio da stack: memória curta das conversas (some sozinha depois de MESSAGE_RETENTION_HOURS)
+  REDIS_URL: z.string().default(""),
+  // Mensagens brutas ficam esse tempo (Redis e Postgres); depois viram resumo e são apagadas
+  MESSAGE_RETENTION_HOURS: z.coerce.number().default(24),
+  EXECUTION_RETENTION_DAYS: z.coerce.number().default(7),
 });
 
 export type Config = z.infer<typeof schema>;

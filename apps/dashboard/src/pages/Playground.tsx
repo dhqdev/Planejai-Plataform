@@ -7,6 +7,8 @@ interface Item {
   role: "user" | "assistant" | "event";
   text?: string;
   img?: string;
+  video?: string;
+  file?: string;
   reaction?: string;
   executionId?: string;
 }
@@ -14,7 +16,7 @@ interface Item {
 export function PlaygroundPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [text, setText] = useState("");
-  const [image, setImage] = useState<{ base64: string; mimetype: string; preview: string } | null>(null);
+  const [image, setImage] = useState<{ base64: string; mimetype: string; preview: string; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
@@ -28,14 +30,15 @@ export function PlaygroundPage() {
 
   const send = async () => {
     if (!text.trim() && !image) return;
-    const mine: Item = { role: "user", text, img: image?.preview };
+    const isImg = image?.mimetype.startsWith("image/");
+    const mine: Item = { role: "user", text, img: isImg ? image?.preview : undefined, file: image && !isImg ? image.name : undefined };
     setItems((p) => [...p, mine]);
     setText("");
     setImage(null);
     setBusy(true);
     setError(null);
     try {
-      const r = await api("/api/playground", { method: "POST", json: { text: mine.text, image: image ? { base64: image.base64, mimetype: image.mimetype } : undefined } });
+      const r = await api("/api/playground", { method: "POST", json: { text: mine.text, file: image ? { base64: image.base64, mimetype: image.mimetype, fileName: image.name } : undefined } });
       setItems((p) => {
         const next = [...p];
         const userIdx = next.lastIndexOf(mine);
@@ -43,7 +46,7 @@ export function PlaygroundPage() {
         if (reaction && userIdx >= 0) next[userIdx] = { ...mine, reaction: reaction.emoji };
         for (const s of r.sent) {
           if (s.type === "text") next.push({ role: "assistant", text: s.text, executionId: r.executionId });
-          if (s.type === "image") next.push({ role: "assistant", img: s.src, text: s.caption, executionId: r.executionId });
+          if (s.type === "image") next.push({ role: "assistant", [s.kind === "video" ? "video" : "img"]: s.src, text: s.caption, executionId: r.executionId });
         }
         if (!r.sent.some((s: any) => s.type !== "reaction")) next.push({ role: "event", text: "(o agente escolheu não responder)", executionId: r.executionId });
         return next;
@@ -77,6 +80,8 @@ export function PlaygroundPage() {
           {items.map((m, i) => (
             <div key={i} className={`bubble ${m.role}`}>
               {m.img && <img src={m.img} alt="" />}
+              {m.video && <video src={m.video} controls style={{ maxWidth: "100%", borderRadius: 6 }} />}
+              {m.file && <div className="chip" style={{ marginBottom: 4 }}>📄 {m.file}</div>}
               {m.text}
               {m.executionId && (
                 <div className="time">
@@ -91,11 +96,11 @@ export function PlaygroundPage() {
         </div>
         <ErrorBox error={error} />
         <div className="row" style={{ marginTop: 12 }}>
-          <label className="btn" title="Anexar foto">
+          <label className="btn" title="Anexar foto, áudio, vídeo ou documento">
             📎
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,audio/*,video/*,.pdf,.docx,.xlsx,.csv,.txt,.json,.md"
               hidden
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -103,13 +108,13 @@ export function PlaygroundPage() {
                 const reader = new FileReader();
                 reader.onload = () => {
                   const url = String(reader.result);
-                  setImage({ base64: url.split(",")[1]!, mimetype: f.type, preview: url });
+                  setImage({ base64: url.split(",")[1]!, mimetype: f.type || "application/octet-stream", preview: url, name: f.name });
                 };
                 reader.readAsDataURL(f);
               }}
             />
           </label>
-          {image && <span className="badge badge-accent">foto anexada <button className="btn btn-ghost btn-sm" onClick={() => setImage(null)}>✕</button></span>}
+          {image && <span className="badge badge-accent">{image.name} <button className="btn btn-ghost btn-sm" onClick={() => setImage(null)}>✕</button></span>}
           <input
             className="input"
             placeholder="Mensagem"

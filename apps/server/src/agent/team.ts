@@ -26,10 +26,21 @@ export const SPECIALISTS: AgentDef[] = [
       "Pesquisa qualquer coisa atual na internet: sessões de cinema, preços e lojas, restaurantes, notícias, endereços, horários, " +
       "comparações de produtos. Abre páginas e tira print de páginas para mandar como foto.",
     instructions:
-      "Pesquise em mais de uma fonte quando a resposta depender de dados atuais. Prefira sites oficiais (ex.: ingresso.com e sites dos cinemas, " +
-      "lojas oficiais). Traga dados concretos (horários, preços, links). Se um print ajudar a pessoa (grade de sessões, cardápio, tabela), " +
-      "use screenshot_url na página mais útil e informe o media_id no relatório. Diga claramente o que não conseguiu confirmar.",
-    tools: [research.webSearch, research.fetchUrl, research.screenshotUrl, core.attachImage],
+      "Comece barato: web_search e fetch_url. Prefira sites oficiais (ingresso.com, sites dos cinemas, lojas oficiais) e traga dados concretos (horários, preços, links). " +
+      "Use o computador (browser_open/browser_action) quando precisar interagir com o site (filtros, busca interna, formulário, vários cliques) " +
+      "ou quando o CTO pedir para gravar/mostrar a navegação: nesse caso abra com record=true e send_recording=true e termine com browser_close. " +
+      "Se um print ajudar (grade de sessões, cardápio, tabela), use screenshot_url ou browser_screenshot e informe o media_id. Diga o que não conseguiu confirmar.",
+    tools: [
+      research.webSearch,
+      research.fetchUrl,
+      research.screenshotUrl,
+      research.browserOpen,
+      research.browserAction,
+      research.browserScreenshot,
+      research.browserClose,
+      core.attachImage,
+      core.readDocument,
+    ],
   },
   {
     id: "agenda",
@@ -53,12 +64,21 @@ export const SPECIALISTS: AgentDef[] = [
     name: "Financeiro",
     emoji: "💰",
     role:
-      "Finanças pessoais (o Planejai original): anotar gastos e receitas, resumos do mês, categorias, apagar lançamentos " +
-      "e gerar links de pagamento (Mercado Pago/Stripe).",
+      "Finanças pessoais: gastos e receitas (inclusive de comprovantes, notas, faturas e extratos), parcelas, resumos e comparações do mês, " +
+      "contas, divisão de despesas e links de pagamento (Mercado Pago/Stripe).",
     instructions:
-      "Valores em reais. Escolha a categoria mais adequada. Ao anotar, devolva o valor, a categoria e o total do mês naquela categoria. " +
-      "Links de pagamento só com confirmed_by_user=true quando o CTO informar que a pessoa confirmou.",
-    tools: [finance.addTransaction, finance.listTransactions, finance.financeSummary, finance.deleteTransaction, finance.createPaymentLink],
+      "Valores em reais. Nunca faça conta de cabeça: use calculate para qualquer soma, divisão, parcela, juros ou porcentagem, e use os totais " +
+      "que as ferramentas devolvem. Para extratos/faturas em documento, leia com read_document e lance cada item com message_id para não duplicar. " +
+      "Ao anotar, devolva o valor, a categoria e o total do mês na categoria. Links de pagamento só com confirmed_by_user=true quando o CTO informar que a pessoa confirmou.",
+    tools: [
+      finance.addTransaction,
+      finance.listTransactions,
+      finance.financeSummary,
+      finance.deleteTransaction,
+      finance.calculate,
+      finance.createPaymentLink,
+      core.readDocument,
+    ],
   },
   {
     id: "comunicacao",
@@ -87,7 +107,20 @@ export const SPECIALISTS: AgentDef[] = [
   },
 ];
 
-export const CTO_TOOLS: Tool[] = [core.reactToMessage, core.saveMemory, core.searchMemories, core.forgetMemory, core.getDatetime];
+/**
+ * Ferramentas do CTO. Além do núcleo da conversa, ele tem atalhos para o que é simples e frequente
+ * (anotar um gasto, um lembrete, uma conta), que resolve sem acionar o time e gasta menos token.
+ */
+export const CTO_TOOLS: Tool[] = [
+  core.reactToMessage,
+  core.saveMemory,
+  core.searchMemories,
+  core.forgetMemory,
+  core.readDocument,
+  finance.addTransaction,
+  finance.calculate,
+  agenda.scheduleReminder,
+];
 
 export const CTO: Omit<AgentDef, "tools"> = {
   id: "cto",

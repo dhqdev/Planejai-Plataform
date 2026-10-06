@@ -10,12 +10,16 @@ export const reactToMessage = defineTool<{ emoji: string; message_id?: string }>
   parameters: obj(
     {
       emoji: { type: "string", description: "Um único emoji" },
-      message_id: { type: "string", description: "id da mensagem (opcional)" },
+      message_id: { type: "string", description: "msg_id da mensagem (opcional; padrão: a última)" },
     },
     ["emoji"],
   ),
   async run(args, ctx) {
-    const id = args.message_id ?? ctx.lastInboundId;
+    let id = args.message_id ?? ctx.lastInboundId;
+    if (args.message_id && /^\d+$/.test(String(args.message_id))) {
+      const rows = await many("SELECT external_id FROM messages WHERE id = $1 AND conversation_id = $2", [Number(args.message_id), ctx.conversation.id]);
+      id = rows[0]?.external_id ?? ctx.lastInboundId;
+    }
     if (!id) return { ok: false, error: "Nenhuma mensagem para reagir" };
     await ctx.channel.react(ctx.conversation.remote_jid, id, args.emoji);
     ctx.outbox.reactions.push({ messageId: id, emoji: args.emoji });
@@ -90,5 +94,27 @@ export const attachImage = defineTool<{ url: string; caption?: string }>({
   async run(args, ctx) {
     const id = ctx.outbox.addMedia({ url: args.url, caption: args.caption });
     return { media_id: id, how_to_send: `Coloque [[media:${id}]] na resposta final onde a imagem deve aparecer.` };
+  },
+});
+
+export const readDocument = defineTool<{ message_id: number | string; offset?: number; query?: string }>({
+  name: "read_document",
+  description:
+    "Lê o texto de um documento que a pessoa mandou (PDF, Word, planilha, texto). Use offset para continuar lendo, " +
+    "ou query para trazer só os trechos que falam de algo (mais barato).",
+  parameters: obj({ message_id: { type: "number" }, offset: { type: "number" }, query: { type: "string" } }, ["message_id"]),
+  async run(args, ctx) {
+    const rows = await many(`SELECT meta FROM messages WHERE id = $1 AND conversation_id = $2`, [Number(args.message_id), ctx.conversation.id]);
+    const text: string | undefined = rows[0]?.meta?.doc_text;
+    if (!text) return { error: "Documento não encontrado (mensagens brutas ficam guardadas por 24h)." };
+    if (args.query) {
+      const terms = args.query.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
+      const paras = text.split(/\n+/);
+      const hits = paras.filter((p) => terms.some((t) => p.toLowerCase().includes(t)));
+      return { matches: hits.slice(0, 40).join("\n").slice(0, 6000), total_matches: hits.length };
+    }
+    const offset = Math.max(0, args.offset ?? 0);
+    const chunk = text.slice(offset, offset + 6000);
+    return { text: chunk, offset, next_offset: offset + 6000 < text.length ? offset + 6000 : null, total_chars: text.length };
   },
 });

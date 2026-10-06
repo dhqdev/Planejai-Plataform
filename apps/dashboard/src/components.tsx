@@ -95,3 +95,44 @@ export const AGENT_LABEL: Record<string, string> = {
   comunicacao: "✉️ Comunicação",
   produtividade: "🗂️ Produtividade",
 };
+
+export function Stat({ label, value, sub, icon, tone }: { label: string; value: ReactNode; sub?: ReactNode; icon?: string; tone?: "ok" | "info" | "warn" }) {
+  return (
+    <div className={`card card-pad stat ${tone ?? ""}`}>
+      {icon && <div className="stat-ico">{icon}</div>}
+      <div className="label">{label}</div>
+      <div className="value">{value}</div>
+      {sub && <div className="sub">{sub}</div>}
+    </div>
+  );
+}
+
+export const CATEGORY_COLORS = ["#ff6d5a", "#5b6cff", "#24a148", "#f5a524", "#9b5bff", "#00a3c4", "#e5484d", "#ff8ac2", "#7c8b2e", "#8d6e63", "#3fb68b", "#c27c0e", "#6e6e7d", "#2b6cb0"];
+
+/** Rosca SVG simples (sem biblioteca) para gastos por categoria. */
+export function Donut({ items, size = 150, center }: { items: { label: string; value: number }[]; size?: number; center?: ReactNode }) {
+  const total = items.reduce((a, i) => a + i.value, 0);
+  const r = size / 2 - 12;
+  const c = 2 * Math.PI * r;
+  let offset = 0;
+  return (
+    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--panel-2)" strokeWidth={18} />
+        {total > 0 &&
+          items.map((it, i) => {
+            const len = (it.value / total) * c;
+            const el = (
+              <circle key={it.label} cx={size / 2} cy={size / 2} r={r} fill="none" stroke={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} strokeWidth={18}
+                strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-offset}>
+                <title>{it.label}</title>
+              </circle>
+            );
+            offset += len;
+            return el;
+          })}
+      </svg>
+      {center && <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", textAlign: "center", fontSize: 12 }}>{center}</div>}
+    </div>
+  );
+}
