@@ -87,7 +87,7 @@ Teste conversas sem WhatsApp pela tela **Playground**; cada resposta linka para 
 
 ## Publicar
 - Push na `main` dispara `.github/workflows/docker.yml`: imagem `ghcr.io/dhqdev/planejai-plataform` para amd64, arm64 e arm/v7, e redeploy no Portainer se o secret `PORTAINER_WEBHOOK_URL` existir.
-- Stack: `deploy/portainer-stack.yml`, variáveis no Portainer conforme `.env.example`.
+- Stack: `deploy/portainer-stack.yml` (compose comum) ou `deploy/swarm-traefik-stack.yml` (Swarm + Traefik em network_public, domínio autoplanejai.tekvosoft.com).
 - O Dockerfile não executa nada na arquitetura alvo (deps são JS puro). Não adicione dependência nativa no servidor sem ajustar isso.
 
 ## Regras do projeto

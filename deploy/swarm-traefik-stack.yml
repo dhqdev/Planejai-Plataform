@@ -1,0 +1,123 @@
+# Stack do Planejai para Portainer em Docker Swarm com Traefik (rede externa network_public),
+# no mesmo padrão do n8n. Banco Postgres PRÓPRIO (serviço "db"), sem usar o Postgres existente.
+# Troque os valores marcados com TROQUE antes de subir.
+version: "3.7"
+
+x-env: &env
+  # --- Banco próprio da stack ---
+  DATABASE_URL: postgres://planejai:TROQUE_SENHA_DO_BANCO@db:5432/planejai
+  # --- Endereço público ---
+  PUBLIC_URL: https://autoplanejai.tekvosoft.com
+  TZ: America/Sao_Paulo
+  DEFAULT_TIMEZONE: America/Sao_Paulo
+  # --- Segurança ---
+  APP_SECRET: TROQUE_APP_SECRET_64_CARACTERES
+  ADMIN_EMAIL: TROQUE_SEU_EMAIL
+  ADMIN_PASSWORD: TROQUE_SENHA_DO_PAINEL
+  WEBHOOK_SECRET: TROQUE_WEBHOOK_SECRET
+  # --- IA ---
+  OPENROUTER_API_KEY: TROQUE_CHAVE_OPENROUTER
+  # --- WhatsApp: conexão própria por QR code (tela WhatsApp do painel) ---
+  WHATSAPP_PROVIDER: baileys
+  OWNER_PHONES: "5519995378302"
+  ALLOW_UNKNOWN_CONTACTS: "false"
+  # --- Navegador para prints de páginas ---
+  BROWSERLESS_URL: http://browserless:3000
+  BROWSERLESS_TOKEN: TROQUE_BROWSERLESS_TOKEN
+  LOG_LEVEL: info
+
+services:
+  app:
+    image: ghcr.io/dhqdev/planejai-plataform:latest
+    environment:
+      <<: *env
+      ROLE: api
+      PORT: "3000"
+    networks:
+      - network_public
+      - planejai_internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=network_public"
+        - "traefik.http.routers.autoplanejai.rule=Host(`autoplanejai.tekvosoft.com`)"
+        - "traefik.http.routers.autoplanejai.entrypoints=websecure"
+        - "traefik.http.routers.autoplanejai.service=autoplanejai-service"
+        - "traefik.http.routers.autoplanejai.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.autoplanejai-service.loadbalancer.server.port=3000"
+
+  # Time de agentes, lembretes e a conexão do WhatsApp. Sempre 1 réplica.
+  worker:
+    image: ghcr.io/dhqdev/planejai-plataform:latest
+    environment:
+      <<: *env
+      ROLE: worker
+    healthcheck:
+      disable: true
+    networks:
+      - planejai_internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: planejai
+      POSTGRES_USER: planejai
+      POSTGRES_PASSWORD: TROQUE_SENHA_DO_BANCO
+      TZ: America/Sao_Paulo
+    volumes:
+      - planejai_db:/var/lib/postgresql/data
+    networks:
+      - planejai_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planejai -d planejai"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: any
+
+  browserless:
+    image: ghcr.io/browserless/chromium:latest
+    environment:
+      TOKEN: TROQUE_BROWSERLESS_TOKEN
+      CONCURRENT: "2"
+      TIMEOUT: "60000"
+    networks:
+      - planejai_internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      resources:
+        limits:
+          memory: 1536M
+      restart_policy:
+        condition: any
+
+volumes:
+  planejai_db:
+    name: planejai_db
+
+networks:
+  network_public:
+    external: true
+    name: network_public
+  planejai_internal:
+    driver: overlay
+    attachable: true
