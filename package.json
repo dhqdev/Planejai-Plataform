@@ -1,0 +1,21 @@
+{
+  "name": "planejai-plataform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Planejai: assistente pessoal no WhatsApp com time de agentes de IA (CTO + especialistas), integrações e dashboard.",
+  "workspaces": [
+    "apps/server",
+    "apps/dashboard"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w apps/server",
+    "dev:dashboard": "npm run dev -w apps/dashboard",
+    "build": "npm run build -w apps/dashboard && npm run build -w apps/server",
+    "typecheck": "npm run typecheck -w apps/server && npm run typecheck -w apps/dashboard",
+    "test": "npm run test -w apps/server",
+    "migrate": "npm run migrate -w apps/server"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

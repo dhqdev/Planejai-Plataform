@@ -1,0 +1,94 @@
+# Stack do Planejai para o Portainer (Stacks > Add stack > Web editor ou Repository).
+# Preencha as variáveis em "Environment variables" do Portainer (veja .env.example).
+# Tem banco Postgres PRÓPRIO (serviço "db"), separado de qualquer Postgres que já exista no servidor.
+# Imagens multi-arch: linux/amd64, linux/arm64 e linux/arm/v7.
+
+x-app-env: &app-env
+  DATABASE_URL: postgres://planejai:${POSTGRES_PASSWORD}@db:5432/planejai
+  PUBLIC_URL: ${PUBLIC_URL}
+  APP_SECRET: ${APP_SECRET}
+  ADMIN_EMAIL: ${ADMIN_EMAIL}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+  WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-evolution}
+  EVOLUTION_API_URL: ${EVOLUTION_API_URL:-}
+  EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
+  EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-}
+  WHATSAPP_CLOUD_TOKEN: ${WHATSAPP_CLOUD_TOKEN:-}
+  WHATSAPP_CLOUD_PHONE_NUMBER_ID: ${WHATSAPP_CLOUD_PHONE_NUMBER_ID:-}
+  WHATSAPP_CLOUD_VERIFY_TOKEN: ${WHATSAPP_CLOUD_VERIFY_TOKEN:-}
+  WHATSAPP_CLOUD_APP_SECRET: ${WHATSAPP_CLOUD_APP_SECRET:-}
+  WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+  OWNER_PHONES: ${OWNER_PHONES}
+  ALLOW_UNKNOWN_CONTACTS: ${ALLOW_UNKNOWN_CONTACTS:-false}
+  DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-America/Sao_Paulo}
+  BROWSERLESS_URL: http://browserless:3000
+  BROWSERLESS_TOKEN: ${BROWSERLESS_TOKEN}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+services:
+  app:
+    image: ghcr.io/dhqdev/planejai-plataform:${PLANEJAI_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      ROLE: api
+    ports:
+      - "${PLANEJAI_PORT:-3080}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [planejai]
+    # Usando Traefik? Remova "ports" e adicione labels, ex.:
+    # labels:
+    #   - traefik.enable=true
+    #   - traefik.http.routers.planejai.rule=Host(`planejai.seudominio.com`)
+    #   - traefik.http.routers.planejai.entrypoints=websecure
+    #   - traefik.http.routers.planejai.tls.certresolver=letsencrypt
+    #   - traefik.http.services.planejai.loadbalancer.server.port=3000
+
+  worker:
+    image: ghcr.io/dhqdev/planejai-plataform:${PLANEJAI_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      ROLE: worker
+    healthcheck:
+      disable: true
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [planejai]
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: planejai
+      POSTGRES_USER: planejai
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - planejai_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planejai -d planejai"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [planejai]
+
+  # Navegador headless para prints de páginas (sessões de cinema, cardápios...).
+  # Disponível para amd64 e arm64. Em arm/v7 remova este serviço.
+  browserless:
+    image: ghcr.io/browserless/chromium:latest
+    restart: unless-stopped
+    environment:
+      TOKEN: ${BROWSERLESS_TOKEN}
+      CONCURRENT: "2"
+      TIMEOUT: "60000"
+    networks: [planejai]
+
+volumes:
+  planejai_db:
+
+networks:
+  planejai:

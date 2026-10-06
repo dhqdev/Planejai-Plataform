@@ -1,0 +1,38 @@
+# Desenvolvimento local: docker compose up --build
+# Copie .env.example para .env e preencha antes.
+services:
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://planejai:planejai@db:5432/planejai
+      ROLE: all
+      BROWSERLESS_URL: http://browserless:3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: planejai
+      POSTGRES_USER: planejai
+      POSTGRES_PASSWORD: planejai
+    ports:
+      - "5432:5432"
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planejai -d planejai"]
+      interval: 5s
+      retries: 10
+
+  browserless:
+    image: ghcr.io/browserless/chromium:latest
+    environment:
+      TOKEN: ${BROWSERLESS_TOKEN:-local}
+
+volumes:
+  db:
