@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { AgentFace, CORE_FACES } from "./faces";
 import { Icon } from "./icons";
 
 export function PageHead({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
@@ -213,8 +214,8 @@ export const AGENT_ICON: Record<string, string> = {
 export function AgentTag({ id, name }: { id: string; name?: string }) {
   return (
     <span className="row" style={{ gap: 6, display: "inline-flex" }}>
-      <Icon name={AGENT_ICON[id] ?? (id.startsWith("c_") ? "sparkle" : "circle")} size={14} />
-      {name ?? AGENT_LABEL[id] ?? id.replace(/^c_/, "")}
+      {CORE_FACES[id] ? <AgentFace face={CORE_FACES[id]!.face} size={18} /> : <Icon name={id.startsWith("c_") ? "sparkle" : "circle"} size={14} />}
+      {name ?? (CORE_FACES[id] ? `${CORE_FACES[id]!.persona} · ${AGENT_LABEL[id]}` : id.replace(/^c_/, ""))}
     </span>
   );
 }
@@ -259,8 +260,8 @@ export function Stat({ label, value, sub, icon, tone }: { label: string; value: 
   );
 }
 
-/** Tons de cinza (visual monocromático), do mais forte ao mais claro. */
-export const CATEGORY_COLORS = ["var(--text)", "#6b6b6b", "#9a9a9a", "#c4c4c4", "#4a4a4a", "#808080", "#b0b0b0", "#2e2e2e", "#d6d6d6", "#5a5a5a", "#8c8c8c", "#a8a8a8", "#3c3c3c", "#bcbcbc"];
+/** Paleta da marca para categorias (a mesma dos gráficos do WhatsApp), do laranja ao azul e depois cinzas. */
+export const CATEGORY_COLORS = ["#FF7A1A", "#FF4458", "#E23382", "#B830C8", "#8B2BE2", "#5B45E8", "#2F7BEA", "#16A3A3", "#9AA0A6", "#C9CCD1", "#7d7d78", "#b5b5af", "#5f5f5a", "#dcdcd6"];
 
 /** Rosca SVG simples (sem biblioteca) para gastos por categoria. */
 export function Donut({ items, size = 150, center }: { items: { label: string; value: number }[]; size?: number; center?: ReactNode }) {

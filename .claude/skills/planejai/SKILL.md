@@ -81,6 +81,7 @@ deploy/swarm-traefik-stack.yml  Swarm + Traefik (network_public), domínio autop
 1. Novo item em `SPECIALISTS` (`team.ts`) com `role` claro (é o que o CTO lê para decidir delegar).
 2. Nova rota `agent:<id>` em `ROUTE_DEFAULTS` (`llm/router.ts`) com o modelo mais barato que dá conta.
 3. Rótulo em `AGENT_LABEL` (`apps/dashboard/src/components.tsx`).
+4. Apelido e carinha: `persona` e `face` (cor 0-7 da paleta, olhos, boca, acessório) no `team.ts`, e a mesma entrada em `CORE_FACES` (`apps/dashboard/src/faces.tsx`).
 O CTO ganha automaticamente `ask_<id>` e os outros especialistas ganham `consult_<id>`.
 
 ### WhatsApp (Baileys)
@@ -91,12 +92,14 @@ O CTO ganha automaticamente `ask_<id>` e os outros especialistas ganham `consult
 - Não copie código do tekvosoft (AGPL); a implementação aqui é própria, usando só a API pública do Baileys.
 
 ### Painéis e permissões
-- Dono da stack = `ADMIN_EMAIL`/`ADMIN_PASSWORD` do .env, sempre super admin (id "owner", não fica na tabela).
+- Dono da stack = `ADMIN_EMAIL`/`ADMIN_PASSWORD` do .env, sempre super admin (id "owner", não fica na tabela). É o ÚNICO super admin: `toAccount` sempre devolve "admin" para conta do banco e as rotas de contas não aceitam `role`. Não reabra isso.
 - Entrada só por convite (`signupMode` padrão `invite`; também `approval`, `open`, `closed`). Convite (`social.ts`, fila `invite.send`) chega no WhatsApp; SIM/NÃO é tratado no ingest sem LLM e o aceite cria contatos nos dois sentidos. O link `/convite/CODIGO` abre o cadastro do painel já preenchido; convite vale como aprovação.
 - Super admin cadastra cliente completo (nome e sobrenome, e-mail, telefone) em **Clientes** (`POST /api/clients`), que devolve o link para a pessoa criar a senha.
 - Contatos: `send_to_contact` ("manda esse look pro Giovani") só envia para quem aceitou o convite.
 - Rota nova no `dashboard.ts`: se mostra dados de pessoas, vai no bloco com escopo e filtra com `scopeUserId(req.account)` (null = tudo); se é configuração/custo/sistema, vai no bloco `requireSuper`.
-- Página nova no dashboard: rota em `App.tsx` dentro do ramo certo (`isSuper` ou admin) e item no menu com ícone de `icons.tsx` (nada de emoji; visual monocromático). Widget novo do Painel: entrada em `WIDGETS` de `pages/Dashboard.tsx` (tamanhos s/m/l/xl; o layout de cada conta fica em `/api/me/dashboard`). O teste `features.e2e.test.ts` confere que admin leva 403 nas rotas de super admin; acrescente as novas lá.
+- Abas do cliente (`tabs.ts`, `GET /api/me/tabs`): todo mundo começa só com Início, Agenda, Finanças e De olho. Módulos (`OPTIONAL`: convites, memorias, meu_time) e até 3 abas sob medida (`/aba/:slug`, feitas de widgets do Painel) são liberados pela reunião noturna ou pelo super admin em Clientes. Rota de módulo no `App.tsx` só existe se `has(modulo)`.
+- Visual: neutro; o degradê da marca (`--grad`: #FF7A1A, #FF4458, #E23382, #8B2BE2) só em pontos de destaque (mascote, item ativo do menu e da barra, topo do card de Finanças, barras de limite, borda do Téo). Categorias usam a paleta (`CATEGORY_COLORS`, igual à dos gráficos). Não pinte o resto.
+- Página nova no dashboard: rota em `App.tsx` dentro do ramo certo (`isSuper` ou admin) e item no menu com ícone de `icons.tsx` (nada de emoji). Widget novo do Painel: entrada em `WIDGETS` de `pages/Dashboard.tsx` (tamanhos s/m/l/xl; o layout de cada conta fica em `/api/me/dashboard`). O teste `features.e2e.test.ts` confere que admin leva 403 nas rotas de super admin; acrescente as novas lá.
 
 ### Memória curta, retenção e mídia
 - Contexto do CTO = últimas `HISTORY_LIMIT` entradas do Redis (texto já interpretado) + resumo da conversa + memórias. Não volte a mandar mídia crua ou documento inteiro para o LLM: documento entra com prévia de 2.500 caracteres e o resto via `read_document`.
@@ -112,18 +115,26 @@ O CTO ganha automaticamente `ask_<id>` e os outros especialistas ganham `consult
 - Todo texto que sai (balões, avisos, notifyUser) passa por `humanize()` (`agent/humanize.ts`): sem "-", "•" ou travessão, para soar como gente. Não reintroduza listas com marcador no prompt.
 - Dashboard: `/agenda` (pages/Calendar.tsx, mês/semana/lista, arrastar lembrete único chama PATCH /api/reminders/:id, Google Agenda aparece só para o dono); Finanças por categoria com comparação do mês anterior (prevByCategory); "Mais" no celular é grade de quadrados; no celular o Painel troca os botões de canto por uma linha Ajustes/Editar/Convidar.
 
-### Melhoria diária e proatividade
-- `improve.ts` (fila `improve.daily`, 19h no `DEFAULT_TIMEZONE`): uma chamada barata em JSON por pessoa ativa; assuntos somam em `user_topics` e viram agente do cliente (`client_agents`, até 3, ferramentas só da lista `CLIENT_AGENT_TOOLS`) quando aparecem em 2 dias diferentes. Botão "Melhorar agora" em Agentes.
+### Reunião noturna do time e proatividade
+- `improve.ts` (fila `improve.daily`, 19h no `DEFAULT_TIMEZONE`): a "reunião" do Téo (CTO) é UMA chamada barata em JSON por pessoa ativa. Ela devolve: `style` (vai para `users.style_notes` e entra no prompt do CTO), `agent_notes` (uma dica por especialista em `agent_notes`, entra no prompt dele via `collab.ts`), `tabs` (libera módulos e no máximo 1 aba nova por noite) e `create` (agente do cliente com `persona`; a carinha sai de `faceFor(userId:slug)`). Assuntos somam em `user_topics` e viram agente (`client_agents`, até 3, ferramentas só de `CLIENT_AGENT_TOOLS`) quando aparecem em 2 dias diferentes. Botão "Reunião agora" em Agentes.
+- Uso por cliente (super admin, Clientes > pessoa): `GET /api/clients/:id/usage` traz execuções, custo, mensagens por dia, quem trabalhou (por agente), agentes criados, o que o time aprendeu e as abas (`PUT /api/clients/:id/tabs`).
 - `watches.ts` (fila `watch.check`, a cada 15 min): preço (Mercado Livre) e notícias (busca) são conferidos sem LLM; só quando algo melhora o modelo `proactive` escreve o aviso.
 
 ### Gastos automáticos
 - Foto/documento de comprovante: a visão escreve `FINANCEIRO: tipo=...; valor_total=...; data=...; estabelecimento=...`; o CTO chama `add_transaction` direto com `message_id` (vira `external_ref`, então reprocessar não duplica).
 - Parcelado: `installments` com o valor TOTAL; `splitInstallments` distribui os centavos.
 - Respostas das tools financeiras já vêm formatadas (`brl`) para o modelo não errar conta.
+- Categoria é opcional em `add_transaction`: `autoCategory` usa o histórico da pessoa (mesmo lugar/descrição), depois `CATEGORY_RULES` (regex sem acento), depois "Outros". Regra nova = linha em `CATEGORY_RULES`.
+- Limites (`budgets`, categoria NULL = total do mês): `set_budget`/`budget_status`; `add_transaction` devolve `budget_alert` uma vez ao passar de 80% e uma vez ao estourar (por mês). No painel: Finanças > Limites do mês (`PUT /api/budgets`, valor 0 remove).
+- Gráficos (`charts.ts`, `make_chart`: categorias, meses, dias, limites): números do SQL, SVG próprio com a paleta, PNG pelo browserless da stack (ou `CHROME_PATH` em dev). Sem LLM; sai como mídia `[[media:ID]]`.
 
 ### Navegador (pesquisa gravada)
 - Ferramentas do Pesquisador: `browser_open` (record/send_recording), `browser_action`, `browser_screenshot`, `browser_close`. A sessão fica em `ctx.room.browser`; o orquestrador fecha o que ficou aberto e manda a gravação se ela foi pedida.
 - Precisa de ffmpeg (já na imagem) e do browserless da stack (`TIMEOUT` 300000). Em dev: `CHROME_PATH=/caminho/do/chrome`.
+
+### Filas (como o modo fila do n8n)
+- Tudo passa pelo pg-boss (`queue/boss.ts`): mensagem vira job `conversation.process` (prioridade 10), lembretes, resumos, convites, De olho e reunião noturna têm fila própria com retry. `WORKER_CONCURRENCY` (padrão 4) = jobs em paralelo por réplica do worker; para escalar, aumente isso ou suba réplicas (a conexão do WhatsApp continua em um só processo pelo lock).
+- Tela **Filas** (super admin, `GET /api/queues`): na fila, rodando, feitos e falhas em 24h, tempo médio e de espera; falha pode ser reprocessada (`POST /api/queues/:name/:id/retry`).
 
 ### Trocar modelos
 Padrões em `ROUTE_DEFAULTS` com o porquê de cada escolha e `maxTokens` por rota; em produção troque pela tela **Modelos** (grava em `model_routes`, sem redeploy). Critério: entrada barata para quem lê muito histórico (CTO, Pesquisador), saída barata para quem escreve muito, modelo omni para áudio, e sempre `fallbacks`. Confira IDs e preços no catálogo ao vivo (`GET /api/models/catalog`).

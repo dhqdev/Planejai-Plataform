@@ -8,9 +8,32 @@ import * as social from "./tools/social.js";
 import { many } from "../db/pool.js";
 import type { Tool } from "./tools/types.js";
 
+/** Carinha de desenho de cada agente (desenhada no painel). */
+export interface Face {
+  /** índice na paleta (0 laranja, 1 coral, 2 magenta, 3 roxo-rosa, 4 roxo, 5 índigo, 6 azul, 7 verde-água) */
+  color: number;
+  eyes: "dot" | "happy" | "wide" | "wink" | "glasses" | "sleepy";
+  mouth: "smile" | "open" | "cat" | "grin" | "o" | "flat";
+  extra: "none" | "antenna" | "cap" | "bow" | "headset" | "leaf" | "crown";
+}
+
+const EYES: Face["eyes"][] = ["dot", "happy", "wide", "wink", "glasses", "sleepy"];
+const MOUTHS: Face["mouth"][] = ["smile", "open", "cat", "grin", "o", "flat"];
+const EXTRAS: Face["extra"][] = ["none", "antenna", "cap", "bow", "headset", "leaf", "crown"];
+
+/** Carinha estável a partir de um texto (o mesmo agente sempre tem a mesma cara). */
+export function faceFor(seed: string): Face {
+  let h = 2166136261;
+  for (const c of seed) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+  return { color: h % 8, eyes: EYES[(h >>> 3) % EYES.length]!, mouth: MOUTHS[(h >>> 7) % MOUTHS.length]!, extra: EXTRAS[(h >>> 11) % EXTRAS.length]! };
+}
+
 export interface AgentDef {
   id: string;
   name: string;
+  /** apelido de personagem (ex.: "Nico") e carinha no painel */
+  persona?: string;
+  face?: Face;
   /** ícone no painel (nome do conjunto de ícones do dashboard) */
   icon: string;
   /** rota de modelo; padrão agent:<id> */
@@ -27,6 +50,8 @@ export interface AgentDef {
 export const SPECIALISTS: AgentDef[] = [
   {
     id: "pesquisador",
+    persona: "Pipo",
+    face: { color: 6, eyes: "glasses", mouth: "open", extra: "antenna" },
     name: "Pesquisador",
     icon: "search",
     role:
@@ -53,6 +78,8 @@ export const SPECIALISTS: AgentDef[] = [
   },
   {
     id: "agenda",
+    persona: "Lia",
+    face: { color: 2, eyes: "happy", mouth: "smile", extra: "bow" },
     name: "Agenda",
     icon: "calendar",
     role: "Lembretes (únicos ou recorrentes), compromissos e Google Agenda: criar, listar, cancelar, ver o que tem no dia.",
@@ -70,6 +97,8 @@ export const SPECIALISTS: AgentDef[] = [
   },
   {
     id: "financeiro",
+    persona: "Nico",
+    face: { color: 7, eyes: "dot", mouth: "grin", extra: "cap" },
     name: "Financeiro",
     icon: "wallet",
     role:
@@ -86,11 +115,16 @@ export const SPECIALISTS: AgentDef[] = [
       finance.deleteTransaction,
       finance.calculate,
       finance.createPaymentLink,
+      finance.setBudget,
+      finance.budgetStatusTool,
+      finance.makeChart,
       core.readDocument,
     ],
   },
   {
     id: "comunicacao",
+    persona: "Bia",
+    face: { color: 1, eyes: "wink", mouth: "cat", extra: "headset" },
     name: "Comunicação",
     icon: "mail",
     role: "E-mail (Gmail) e Slack: buscar, ler, resumir, redigir e enviar mensagens.",
@@ -100,6 +134,8 @@ export const SPECIALISTS: AgentDef[] = [
   },
   {
     id: "produtividade",
+    persona: "Duda",
+    face: { color: 0, eyes: "wide", mouth: "smile", extra: "leaf" },
     name: "Produtividade",
     icon: "folder",
     role: "Notion (páginas, notas, bancos), Linear e GitHub (issues, PRs).",
@@ -128,6 +164,8 @@ export const CTO_TOOLS: Tool[] = [
   core.readDocument,
   finance.addTransaction,
   finance.calculate,
+  finance.setBudget,
+  finance.makeChart,
   agenda.scheduleReminder,
   social.sendToContact,
   social.listContactsTool,
@@ -140,6 +178,8 @@ export const CTO_TOOLS: Tool[] = [
 export const CTO: Omit<AgentDef, "tools"> = {
   id: "cto",
   name: "CTO",
+  persona: "Téo",
+  face: { color: 4, eyes: "happy", mouth: "smile", extra: "crown" },
   icon: "brain",
   role: "Orquestrador: conversa com a pessoa, decide, delega aos especialistas e compõe a resposta final.",
   instructions: "",
@@ -174,6 +214,8 @@ export async function clientAgents(userId: string): Promise<AgentDef[]> {
   return rows.map((r) => ({
     id: `c_${r.slug}`,
     name: r.name,
+    persona: r.persona ?? undefined,
+    face: r.face ?? faceFor(r.slug),
     icon: "sparkle",
     task: "agent:cliente",
     clientAgentId: r.id,

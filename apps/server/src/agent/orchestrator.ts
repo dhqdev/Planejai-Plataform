@@ -235,6 +235,7 @@ async function processLocked(
       specialists: team,
       disconnected,
       autoReaction,
+      styleNotes: (user as any).style_notes ?? null,
     });
 
     const ctx: ToolContext = {

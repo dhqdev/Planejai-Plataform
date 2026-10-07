@@ -1,0 +1,61 @@
+import { useState } from "react";
+import { ago } from "../api";
+import { Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
+import { AgentFace, type Face } from "../faces";
+import { useApi } from "../hooks";
+
+interface Member {
+  id: string;
+  name: string;
+  persona?: string;
+  face?: Face;
+  role?: string;
+  focus?: string;
+  uses?: number;
+  created_at?: string;
+  kind?: string;
+}
+
+/** Meu time: o Téo (CTO), os especialistas e os agentes criados só para esta pessoa, cada um com nome e carinha. */
+export function TeamPage() {
+  const { data, error } = useApi<{ core: Member[]; mine: Member[]; notes?: { agent: string; note: string }[] }>("/api/me/team");
+  const [sel, setSel] = useState<Member | null>(null);
+  if (error) return <div className="page"><ErrorBox error={error} /></div>;
+  if (!data) return <Loading />;
+  const note = (id: string) => data.notes?.find((n) => n.agent === id)?.note;
+
+  const Card = ({ m, lead }: { m: Member; lead?: boolean }) => (
+    <button className={`team-card ${lead ? "lead" : ""}`} onClick={() => setSel(m)}>
+      <span className="face-tile"><AgentFace face={m.face} size={lead ? 62 : 54} /></span>
+      <strong>{m.persona ?? m.name}</strong>
+      <small>{m.focus ?? m.name}</small>
+    </button>
+  );
+
+  return (
+    <div className="page">
+      <PageHead title="Meu time" subtitle="Quem cuida de você no WhatsApp. Toda noite o Téo reúne o time e ajusta cada um ao seu jeito." />
+      <div className="team-grid" style={{ marginBottom: 22 }}>
+        {data.core.map((m) => <Card key={m.id} m={m} lead={m.id === "cto"} />)}
+      </div>
+      <h3>Criados para você</h3>
+      {data.mine.length ? (
+        <div className="team-grid">{data.mine.map((m) => <Card key={m.id} m={m} />)}</div>
+      ) : (
+        <div className="card"><Empty>Quando um assunto aparece bastante nas suas conversas, o time cria um agente só para ele.</Empty></div>
+      )}
+      {sel && (
+        <Modal title={sel.persona ?? sel.name} icon={<AgentFace face={sel.face} size={26} />} onClose={() => setSel(null)}>
+          <p style={{ marginTop: 0 }}>{sel.role ?? sel.focus}</p>
+          <dl className="kv">
+            <dt>Função</dt>
+            <dd>{sel.name}</dd>
+            {sel.uses != null && (<><dt>Usado</dt><dd>{sel.uses} vezes</dd></>)}
+            {sel.created_at && (<><dt>Criado</dt><dd>{ago(sel.created_at)}</dd></>)}
+            {note(sel.id) && (<><dt>Aprendeu</dt><dd>{note(sel.id)}</dd></>)}
+          </dl>
+        </Modal>
+      )}
+    </div>
+  );
+}

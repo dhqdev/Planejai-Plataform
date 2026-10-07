@@ -44,6 +44,8 @@ const schema = z.object({
 
   // Tempo (s) esperando mensagens seguidas antes de responder, como uma pessoa lendo tudo.
   MESSAGE_DEBOUNCE_SECONDS: z.coerce.number().default(2),
+  // conversas processadas ao mesmo tempo por worker (como o --concurrency do n8n em modo fila)
+  WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(4),
 
   // Serviço opcional de navegador headless (browserless) para screenshots de páginas.
   BROWSERLESS_URL: z.string().default(""),

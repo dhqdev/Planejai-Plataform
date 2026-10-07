@@ -21,11 +21,14 @@ function fakeOpenRouter(body: any) {
   if (Array.isArray(first.content)) return completion("Foto de uma jaqueta jeans azul num cabide.");
   const system: string = first.content;
   const last = body.messages.at(-1);
-  if (system.includes("Você melhora o time")) {
+  if (system.includes("reunião noturna")) {
     return completion(
       JSON.stringify({
         topics: [{ topic: "cinema", weight: 4 }],
-        create: [{ topic: "cinema", name: "Cinema", focus: "sessões e estreias em Campinas", instructions: "Busque no ingresso.com. Ele prefere sessões depois das 19h.", tools: ["web_search", "fetch_url", "apagar_tudo"] }],
+        style: "Respostas curtas, com emoji de cinema. Chama ele de Davi.",
+        agent_notes: [{ agent: "pesquisador", note: "Mora em Campinas, prefere o Iguatemi." }, { agent: "hacker", note: "x" }],
+        tabs: { enable: ["meu_time", "admin"], custom: [{ title: "Cinema", icon: "ticket", widgets: ["reminders", "categories", "apagar"] }] },
+        create: [{ topic: "cinema", name: "Cinema", persona: "Pipoca", focus: "sessões e estreias em Campinas", instructions: "Busque no ingresso.com. Ele prefere sessões depois das 19h.", tools: ["web_search", "fetch_url", "apagar_tudo"] }],
         update: [],
         retire: [],
       }),
@@ -190,8 +193,14 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     // no dia seguinte o assunto volta: agora vira agente (com só as ferramentas permitidas)
     await db.query("UPDATE user_topics SET last_at = now() - interval '1 day' WHERE user_id = $1", [david.id]);
     expect(await improveUser(david.id)).toEqual({ created: 1, updated: 0, retired: 0 });
-    const agent = await db.one("SELECT slug, name, tools FROM client_agents WHERE user_id = $1", [david.id]);
-    expect(agent).toEqual({ slug: "cinema", name: "Cinema", tools: ["web_search", "fetch_url"] });
+    const agent = await db.one("SELECT slug, name, tools, persona, face IS NOT NULL AS has_face FROM client_agents WHERE user_id = $1", [david.id]);
+    expect(agent).toEqual({ slug: "cinema", name: "Cinema", tools: ["web_search", "fetch_url"], persona: "Pipoca", has_face: true });
+    // reunião noturna: jeito de falar, notas só de agentes que existem, abas só do catálogo
+    const u = await db.one("SELECT style_notes, app_tabs FROM users WHERE id = $1", [david.id]);
+    expect(u.style_notes).toContain("Davi");
+    expect(u.app_tabs).toEqual({ modules: ["meu_time"], custom: [{ slug: "cinema", title: "Cinema", icon: "ticket", widgets: ["reminders", "categories"] }] });
+    const notes = await db.many("SELECT agent FROM agent_notes WHERE user_id = $1", [david.id]);
+    expect(notes).toEqual([{ agent: "pesquisador" }]);
     const { clientAgents } = await import("../src/agent/team.js");
     const defs = await clientAgents(david.id);
     expect(defs.map((d) => [d.id, d.task, d.tools.map((t) => t.name)])).toEqual([["c_cinema", "agent:cliente", ["web_search", "fetch_url"]]]);

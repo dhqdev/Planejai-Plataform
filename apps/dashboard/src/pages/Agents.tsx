@@ -5,6 +5,7 @@ import { Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { TeamMap } from "../TeamMap";
+import { AgentFace } from "../faces";
 
 /** Time de agentes: mapa, ferramentas de cada um e os agentes que a melhoria diária criou para cada cliente. */
 export function AgentsPage() {
@@ -40,12 +41,12 @@ export function AgentsPage() {
     <div className="page page-wide">
       <PageHead
         title="Agentes"
-        subtitle="O CTO conversa com a pessoa e chama os especialistas. Todo dia às 19h o Planejai cria agentes novos para os assuntos que cada cliente mais pede."
+        subtitle="O CTO conversa com a pessoa e chama os especialistas. Toda noite às 19h o Téo (CTO) faz a reunião do time: ajusta o jeito de falar com cada pessoa, passa dicas para cada agente e cria agentes novos, cada um com nome e carinha."
         actions={
           <>
             <Link className="btn" to="/models"><Icon name="cpu" size={16} /> Modelos</Link>
             <button className="btn btn-primary" disabled={running} onClick={runNow}>
-              <Icon name="sparkle" size={16} /> {running ? "Analisando…" : "Melhorar agora"}
+              <Icon name="sparkle" size={16} /> {running ? "Reunindo o time…" : "Reunião agora"}
             </button>
           </>
         }
@@ -61,9 +62,9 @@ export function AgentsPage() {
           <div className="card-pad"><h3 style={{ margin: 0 }}>Time fixo</h3></div>
           {data.map((a) => (
             <div key={a.id} className="line-item clickable" style={{ padding: "12px 16px" }} onClick={() => setSel(a)}>
-              <Icon name={a.icon} />
+              <span className="face-tile"><AgentFace face={a.face} size={36} /></span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <strong>{a.name}</strong>
+                <strong>{a.persona ?? a.name}</strong> <span className="muted">· {a.name}</span>
                 <div className="muted ellipsis" style={{ fontSize: 12 }}>{a.model}</div>
               </div>
               <span className="muted" style={{ fontSize: 12 }}>{a.tools.length} ferramentas</span>
@@ -76,9 +77,9 @@ export function AgentsPage() {
           <div className="card-pad"><h3 style={{ margin: 0 }}>Criados para clientes</h3></div>
           {(clients.data ?? []).map((a) => (
             <div key={a.id} className="line-item" style={{ padding: "12px 16px", opacity: a.active ? 1 : 0.5 }}>
-              <Icon name="sparkle" />
+              <span className="face-tile"><AgentFace face={a.face} size={36} /></span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <strong>{a.name}</strong> <span className="muted">· {a.owner}</span>
+                <strong>{a.persona ?? a.name}</strong> <span className="muted">· {a.persona && a.persona !== a.name ? `${a.name} · ` : ""}{a.owner}</span>
                 <div className="muted ellipsis" style={{ fontSize: 12 }}>{a.focus} · {a.uses} usos · {(a.tools ?? []).length} ferramentas</div>
               </div>
               <button className="btn btn-sm" onClick={() => toggle(a)}>{a.active ? "Pausar" : "Reativar"}</button>
@@ -100,7 +101,7 @@ export function AgentsPage() {
       </div>
 
       {sel && (
-        <Modal title={sel.name} icon={<Icon name={sel.icon} />} onClose={() => setSel(null)} wide>
+        <Modal title={sel.persona ? `${sel.persona} · ${sel.name}` : sel.name} icon={<AgentFace face={sel.face} size={26} />} onClose={() => setSel(null)} wide>
           <p className="muted" style={{ marginTop: 0 }}>{sel.role}</p>
           <span className="chip">{sel.model}</span>
           {sel.tools.map((t: any) => (

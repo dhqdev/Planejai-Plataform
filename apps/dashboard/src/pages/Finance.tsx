@@ -48,6 +48,7 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
   const [adding, setAdding] = useState(false);
   const [cat, setCat] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
+  const [budget, setBudget] = useState<{ category: string | null; amount?: number } | null>(null);
   const people = useApi<any[]>(isSuper ? "/api/people" : null);
   const { data, error, reload } = useApi<any>(`/api/finance?month=${month}${user ? `&user=${user}` : ""}`, { poll: 20000 });
 
@@ -69,6 +70,9 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
     else groups.push([k, [t]]);
   }
   const isCurrent = month === thisMonth();
+  const budgets: { id: string; category: string | null; limit: number; spent: number }[] = data?.budgets ?? [];
+  const budgetOf = new Map(budgets.filter((b) => b.category).map((b) => [b.category!, b]));
+  const canBudget = !isSuper || !!user;
   const go = (n: number) => { haptic(6); setCat(null); setMonth(shift(month, n)); };
 
   return (
@@ -116,6 +120,34 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
             </div>
           </div>
 
+          {canBudget && (
+            <>
+              <div className="fin-section-head">
+                <h3>Limites do mês</h3>
+                <button className="btn btn-sm" onClick={() => setBudget({ category: budgets.some((b) => !b.category) ? (cats[0]?.label ?? "Alimentação") : null })}>
+                  <Icon name="plus" size={14} /> Limite
+                </button>
+              </div>
+              <div className="card card-pad" style={{ marginBottom: 18, paddingTop: 6, paddingBottom: 6 }}>
+                {budgets.map((b) => {
+                  const pct = b.limit ? b.spent / b.limit : 0;
+                  return (
+                    <div key={b.id} className="budget-row" onClick={() => setBudget({ category: b.category, amount: b.limit })}>
+                      <span>{b.category ?? "Total do mês"}</span>
+                      <small>{brl(b.spent)} de {brl(b.limit)} · {Math.round(pct * 100)}%</small>
+                      <span className={`budget-bar ${pct >= 1 ? "over" : pct >= 0.8 ? "warn" : ""}`}><i style={{ width: `${Math.min(100, pct * 100)}%` }} /></span>
+                    </div>
+                  );
+                })}
+                {!budgets.length && (
+                  <p className="muted" style={{ margin: "8px 0" }}>
+                    Sem limites. Crie aqui ou diga no WhatsApp "meu limite de mercado é 800". Ele avisa ao chegar em 80% e quando estourar.
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+
           <div className="fin-section-head">
             <h3>Por categoria</h3>
             {cat && <button className="btn btn-sm btn-ghost" onClick={() => setCat(null)}><Icon name="x" size={14} /> {cat}</button>}
@@ -131,6 +163,11 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                     <span className="fin-cat-name">{c.label}</span>
                     <strong className="fin-cat-value">{brl(c.value)}</strong>
                     <span className="fin-cat-bar"><i style={{ width: `${expenses ? (c.value / expenses) * 100 : 0}%` }} /></span>
+                    {budgetOf.get(c.label) && (
+                      <span className={`fin-cat-limit ${c.value >= budgetOf.get(c.label)!.limit ? "over" : ""}`}>
+                        {Math.round((c.value / budgetOf.get(c.label)!.limit) * 100)}% do limite de {brl(budgetOf.get(c.label)!.limit)}
+                      </span>
+                    )}
                     <small className="muted">
                       {expenses ? Math.round((c.value / expenses) * 100) : 0}% · {c.count} {c.count === 1 ? "gasto" : "gastos"}
                       {d != null && Math.abs(d) >= 1 && <span className={d > 0 ? "trend-up" : "trend-down"}> · {d > 0 ? "+" : "−"}{brl(Math.abs(d))}</span>}
@@ -188,6 +225,7 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
           </div>
         </>
       )}
+      {budget && <BudgetModal user={user} initial={budget} onClose={() => { setBudget(null); void reload(); }} />}
       {adding && <AddTransaction user={user} onClose={() => { setAdding(false); void reload(); }} />}
       {detail && (
         <Modal
@@ -223,7 +261,7 @@ function shift(month: string, delta: number) {
 
 function AddTransaction({ user, onClose }: { user: string; onClose: () => void }) {
   const cats = useApi<string[]>("/api/finance/categories");
-  const [f, setF] = useState({ kind: "expense", amount: "", category: "Alimentação", description: "", date: new Date().toISOString().slice(0, 10) });
+  const [f, setF] = useState({ kind: "expense", amount: "", category: "", description: "", date: new Date().toISOString().slice(0, 10) });
   const [error, setError] = useState<string | null>(null);
   return (
     <Modal
@@ -246,10 +284,52 @@ function AddTransaction({ user, onClose }: { user: string; onClose: () => void }
       </div>
       <div className="field"><label>Valor (R$)</label><input className="input" inputMode="decimal" placeholder="89,90" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} autoFocus /></div>
       <div className="field"><label>Categoria</label>
-        <select className="select" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>{(cats.data ?? []).map((c) => <option key={c}>{c}</option>)}</select>
+        <select className="select" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>
+          <option value="">Automática (pela descrição)</option>
+          {(cats.data ?? []).map((c) => <option key={c}>{c}</option>)}
+        </select>
       </div>
       <div className="field"><label>Descrição</label><input className="input" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
       <div className="field"><label>Data</label><input className="input" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></div>
+      <ErrorBox error={error} />
+    </Modal>
+  );
+}
+
+function BudgetModal({ user, initial, onClose }: { user: string; initial: { category: string | null; amount?: number }; onClose: () => void }) {
+  const cats = useApi<string[]>("/api/finance/categories");
+  const [category, setCategory] = useState(initial.category ?? "");
+  const [amount, setAmount] = useState(initial.amount ? String(initial.amount).replace(".", ",") : "");
+  const [error, setError] = useState<string | null>(null);
+  const save = async (value: string) => {
+    try {
+      await api("/api/budgets", { method: "PUT", json: { category: category || null, amount: value, user: user || undefined } });
+      haptic(8);
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <Modal
+      title={initial.amount ? "Editar limite" : "Novo limite"}
+      icon={<Icon name="target" />}
+      onClose={onClose}
+      footer={
+        <>
+          {initial.amount != null && <button className="btn btn-danger" onClick={() => save("0")}><Icon name="trash" size={16} /> Remover</button>}
+          <button className="btn btn-primary" onClick={() => save(amount)}>Salvar</button>
+        </>
+      }
+    >
+      <div className="field"><label>Para</label>
+        <select className="select" value={category} disabled={initial.amount != null} onChange={(e) => setCategory(e.target.value)}>
+          <option value="">Total do mês</option>
+          {(cats.data ?? []).filter((c) => c !== "Salário" && c !== "Investimentos").map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+      <div className="field"><label>Limite por mês (R$)</label><input className="input" inputMode="decimal" placeholder="800" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus /></div>
+      <p className="muted" style={{ fontSize: 12, margin: 0 }}>O assistente avisa no WhatsApp quando chegar em 80% e quando passar do limite.</p>
       <ErrorBox error={error} />
     </Modal>
   );

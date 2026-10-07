@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useApi } from "./hooks";
-import { Icon } from "./icons";
 import { Modal } from "./components";
+import { AgentFace, type Face } from "./faces";
 
 interface GraphNode {
   id: string;
@@ -9,6 +9,8 @@ interface GraphNode {
   icon: string;
   role: string;
   kind: "cto" | "specialist" | "client";
+  persona?: string;
+  face?: Face;
 }
 interface Graph {
   nodes: GraphNode[];
@@ -73,17 +75,17 @@ export function TeamMap() {
           return (
             <button key={n.id} className={`agent ${n.kind}`} style={{ left: `${p.x}%`, top: `${p.y}%` }} onClick={() => setOpen(n)}>
               <span className="bubble-ico" style={{ position: "relative" }}>
-                <Icon name={n.icon} size={n.kind === "cto" ? 28 : 20} />
+                <AgentFace face={n.face} size={n.kind === "cto" ? 56 : n.kind === "client" ? 34 : 42} title={n.persona ?? n.name} />
                 {act > 0 && <span className="pulse" />}
               </span>
-              <span className="agent-name">{n.name}</span>
-              <span className="agent-sub">{act ? `${act} chamadas` : n.kind === "client" ? "do cliente" : "parado"}</span>
+              <span className="agent-name">{n.persona ?? n.name}</span>
+              <span className="agent-sub">{[n.persona && n.persona !== n.name ? n.name : "", act ? `${act} chamadas` : n.kind === "client" ? "do cliente" : ""].filter(Boolean).join(" · ")}</span>
             </button>
           );
         })}
       </div>
       {open && (
-        <Modal title={open.name} icon={<Icon name={open.icon} />} onClose={() => setOpen(null)}>
+        <Modal title={open.persona && open.persona !== open.name ? `${open.persona} · ${open.name}` : open.name} icon={<AgentFace face={open.face} size={26} />} onClose={() => setOpen(null)}>
           <p style={{ marginTop: 0 }}>{open.role}</p>
           <dl className="kv">
             <dt>Tipo</dt>

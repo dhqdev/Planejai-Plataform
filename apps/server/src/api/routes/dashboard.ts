@@ -17,11 +17,14 @@ import { getSettings, saveSettings } from "../../settings.js";
 import { SESSION_ID, sendWaCommand } from "../../whatsapp/session.js";
 import { hashPassword, normalizePhone, scopeUserId, verifyPassword } from "../../accounts.js";
 import { phoneVariants } from "../../ingest.js";
-import { CATEGORIES, parseAmount } from "../../agent/tools/finance.js";
+import { budgetStatus, CATEGORIES, guessCategory, parseAmount } from "../../agent/tools/finance.js";
 import { cacheStats, redisInfo } from "../../shortmem.js";
 import { createInvite, inviteLink, inviteStats, listContacts } from "../../social.js";
 import { cancelWatch, listWatches } from "../../watches.js";
 import { improveUser, dailyImprovement } from "../../improve.js";
+import { queueOverview, retryJob } from "../../queue/boss.js";
+import { ESSENTIAL, getTabs, OPTIONAL, saveTabs } from "../../tabs.js";
+import { faceFor } from "../../agent/team.js";
 import { requireAuth, requireSuper } from "../server.js";
 
 const PLAYGROUND_PHONE = "playground";
@@ -142,7 +145,8 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
         `SELECT category, SUM(amount) AS total FROM transactions t WHERE ${where} AND kind = 'expense' GROUP BY category`,
         [uid, tz, prevMonth],
       );
-      return { month, totals, byCategory, prevByCategory, daily, months, transactions };
+      const budgets = uid ? await budgetStatus(uid, tz, month) : [];
+      return { month, totals, byCategory, prevByCategory, daily, months, transactions, budgets };
     });
 
     base.post<{ Body: { kind: "expense" | "income"; amount: number | string; category: string; description?: string; date?: string; user?: string } }>("/api/finance", async (req, reply) => {
@@ -158,8 +162,31 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       const when = req.body.date ? new Date(`${req.body.date}T12:00:00`) : new Date();
       return one(
         `INSERT INTO transactions (user_id, kind, amount, category, description, occurred_at, source) VALUES ($1,$2,$3,$4,$5,$6,'painel') RETURNING *`,
-        [uid, req.body.kind === "income" ? "income" : "expense", amount, CATEGORIES.includes(req.body.category) ? req.body.category : "Outros", req.body.description ?? null, when],
+        [uid, req.body.kind === "income" ? "income" : "expense", amount, CATEGORIES.includes(req.body.category) ? req.body.category : (guessCategory(req.body.description ?? "") ?? (req.body.kind === "income" ? "Salário" : "Outros")), req.body.description ?? null, when],
       );
+    });
+
+    // limites de gastos (category vazia = total do mês)
+    base.put<{ Body: { category?: string | null; amount?: number | string; user?: string } }>("/api/budgets", async (req, reply) => {
+      const uid = scopeUserId(req.account) ?? req.body.user;
+      if (!uid) return reply.code(400).send({ error: "Escolha a pessoa" });
+      const category = req.body.category && CATEGORIES.includes(req.body.category) ? req.body.category : null;
+      let amount: number;
+      try {
+        amount = parseAmount(req.body.amount);
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+      if (amount <= 0) {
+        await query("DELETE FROM budgets WHERE user_id = $1 AND COALESCE(category, '*') = COALESCE($2::text, '*')", [uid, category]);
+        return { ok: true, removed: true };
+      }
+      await query(
+        `INSERT INTO budgets (user_id, category, amount) VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, COALESCE(category, '*')) DO UPDATE SET amount = $3, alerted_level = 0, alerted_month = NULL`,
+        [uid, category, amount],
+      );
+      return { ok: true };
     });
 
     base.delete<{ Params: { id: string } }>("/api/finance/:id", async (req) => {
@@ -237,19 +264,39 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       return { ok: true };
     });
 
+    // ---------- Abas do app: essencial para todo mundo, o resto liberado pela reunião noturna ----------
+    base.get("/api/me/tabs", async (req) => {
+      if (req.account.role === "superadmin") return { all: true, essential: ESSENTIAL, modules: Object.keys(OPTIONAL), custom: [], catalog: OPTIONAL };
+      const tabs = req.account.userId ? await getTabs(req.account.userId) : { modules: [], custom: [] };
+      return { all: false, essential: ESSENTIAL, ...tabs, catalog: OPTIONAL };
+    });
+    base.get("/api/me/team", async (req) => {
+      const uid = req.account.userId;
+      const core = [CTO, ...SPECIALISTS].map((a) => ({ id: a.id, name: a.name, persona: a.persona, face: a.face, role: a.role, kind: a.id === "cto" ? "cto" : "specialist" }));
+      if (!uid) return { core, mine: [] };
+      const mine = (await many("SELECT id, slug, name, persona, face, focus, uses, created_at FROM client_agents WHERE user_id = $1 AND active ORDER BY created_at", [uid])).map((a) => ({
+        ...a,
+        persona: a.persona ?? a.name,
+        face: a.face ?? faceFor(`${uid}:${a.slug}`),
+      }));
+      const notes = await many("SELECT agent, note FROM agent_notes WHERE user_id = $1", [uid]);
+      return { core, mine, notes };
+    });
+
     // ---------- Mapa do time: agentes e com que frequência conversam ----------
     base.get("/api/graph", async (req) => {
       const uid = scopeUserId(req.account);
       const nodes = [
-        { id: "cto", name: CTO.name, icon: CTO.icon, role: CTO.role, kind: "cto" },
-        ...SPECIALISTS.map((s) => ({ id: s.id, name: s.name, icon: s.icon, role: s.role, kind: "specialist" })),
-      ];
+        { id: "cto", name: CTO.name, persona: CTO.persona, face: CTO.face, icon: CTO.icon, role: CTO.role, kind: "cto" },
+        ...SPECIALISTS.map((s) => ({ id: s.id, name: s.name, persona: s.persona, face: s.face, icon: s.icon, role: s.role, kind: "specialist" })),
+      ] as any[];
       const clients = await many(
-        `SELECT ca.id, ca.slug, ca.name, ca.focus, ca.uses, COALESCE(u.full_name, u.name) AS owner FROM client_agents ca JOIN users u ON u.id = ca.user_id
+        `SELECT ca.id, ca.slug, ca.name, ca.persona, ca.face, ca.user_id, ca.focus, ca.uses, COALESCE(u.full_name, u.name) AS owner FROM client_agents ca JOIN users u ON u.id = ca.user_id
           WHERE ca.active AND ($1::uuid IS NULL OR ca.user_id = $1) ORDER BY ca.uses DESC LIMIT 12`,
         [uid],
       );
-      for (const c of clients) nodes.push({ id: `c_${c.slug}`, name: c.name, icon: "sparkle", role: `${c.focus}${uid ? "" : ` (de ${c.owner})`}`, kind: "client" } as any);
+      for (const c of clients)
+        nodes.push({ id: `c_${c.slug}`, name: c.name, persona: c.persona ?? c.name, face: c.face ?? faceFor(`${c.user_id}:${c.slug}`), icon: "sparkle", role: `${c.focus}${uid ? "" : ` (de ${c.owner})`}`, kind: "client" });
       const edges = await many(
         `SELECT p.agent AS "from", s.agent AS "to", COUNT(*)::int AS n FROM execution_steps s
            JOIN execution_steps p ON p.id = s.parent_id JOIN executions e ON e.id = s.execution_id
@@ -367,13 +414,13 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
 
     // ---------- Contas do painel ----------
     api.get("/api/accounts", async () =>
-      many(`SELECT a.id, a.email, a.name, a.role, a.status, a.phone, a.created_at, a.last_login_at, u.status AS whatsapp_status
+      many(`SELECT a.id, a.email, a.name, 'admin' AS role, a.status, a.phone, a.created_at, a.last_login_at, u.status AS whatsapp_status
               FROM accounts a LEFT JOIN users u ON u.id = a.user_id ORDER BY a.status = 'pending' DESC, a.created_at DESC`),
     );
     api.patch<{ Params: { id: string }; Body: { status?: string; role?: string } }>("/api/accounts/:id", async (req, reply) => {
       const status = req.body.status && ["active", "pending", "disabled"].includes(req.body.status) ? req.body.status : null;
-      const role = req.body.role && ["superadmin", "admin"].includes(req.body.role) ? req.body.role : null;
-      const row = await one("UPDATE accounts SET status = COALESCE($2, status), role = COALESCE($3, role) WHERE id = $1 RETURNING *", [req.params.id, status, role]);
+      // papel não muda pelo painel: super admin é só o dono da stack
+      const row = await one("UPDATE accounts SET status = COALESCE($2, status) WHERE id = $1 RETURNING *", [req.params.id, status]);
       if (!row) return reply.code(404).send({ error: "não encontrada" });
       // aprovar a conta libera o número no WhatsApp; desativar bloqueia
       if (row.user_id && status === "active") await query("UPDATE users SET status = 'active' WHERE id = $1 AND status = 'pending'", [row.user_id]);
@@ -399,8 +446,19 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       }
       return one(
         `INSERT INTO accounts (email, name, password_hash, role, status, user_id, phone) VALUES ($1,$2,$3,$4,'active',$5,$6) RETURNING id, email, name, role, status`,
-        [email, req.body.name ?? null, hashPassword(req.body.password), req.body.role === "superadmin" ? "superadmin" : "admin", userId, phone],
+        [email, req.body.name ?? null, hashPassword(req.body.password), "admin", userId, phone],
       );
+    });
+
+    // ---------- Filas de execução (modo fila, como no n8n) ----------
+    api.get("/api/queues", async () => ({ ...(await queueOverview()), concurrency: config.WORKER_CONCURRENCY }));
+    api.post<{ Params: { name: string; id: string } }>("/api/queues/:name/:id/retry", async (req, reply) => {
+      try {
+        await retryJob(req.params.name, req.params.id);
+        return { ok: true };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
     });
 
     api.get("/api/overview", async () => {
@@ -533,8 +591,64 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
 
     // ---------- Agentes de cada cliente (melhoria diária) ----------
     api.get("/api/client-agents", async () =>
-      many(`SELECT ca.*, COALESCE(u.full_name, u.name, '+' || u.phone) AS owner FROM client_agents ca JOIN users u ON u.id = ca.user_id ORDER BY ca.active DESC, ca.uses DESC`),
+      many(`SELECT ca.*, COALESCE(u.full_name, u.name, '+' || u.phone) AS owner FROM client_agents ca JOIN users u ON u.id = ca.user_id ORDER BY ca.active DESC, ca.uses DESC`).then((rows) =>
+        rows.map((r) => ({ ...r, persona: r.persona ?? r.name, face: r.face ?? faceFor(`${r.user_id}:${r.slug}`) })),
+      ),
     );
+
+    // ---------- Acompanhamento de uso de cada cliente ----------
+    api.get<{ Params: { id: string } }>("/api/clients/:id/usage", async (req, reply) => {
+      const id = req.params.id;
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return reply.code(404).send({ error: "não encontrado" });
+      const totals = await one(
+        `SELECT COUNT(*) FILTER (WHERE started_at > now() - interval '24 hours')::int AS executions_24h,
+                COUNT(*) FILTER (WHERE started_at > now() - interval '7 days')::int AS executions_7d,
+                COALESCE(SUM(cost_usd) FILTER (WHERE started_at > now() - interval '24 hours'), 0)::float AS cost_24h,
+                COALESCE(SUM(cost_usd) FILTER (WHERE started_at > now() - interval '7 days'), 0)::float AS cost_7d,
+                COALESCE(SUM(cost_usd), 0)::float AS cost_total,
+                COUNT(*) FILTER (WHERE status = 'error' AND started_at > now() - interval '7 days')::int AS errors_7d,
+                MAX(started_at) AS last_at
+           FROM executions WHERE user_id = $1`,
+        [id],
+      );
+      const daily = await many(
+        `SELECT to_char(d, 'YYYY-MM-DD') AS day, COALESCE(u.messages, 0)::int AS messages,
+                COALESCE((SELECT SUM(e.cost_usd) FROM executions e WHERE e.user_id = $1 AND e.started_at::date = d::date), 0)::float AS cost
+           FROM generate_series(current_date - 13, current_date, interval '1 day') d LEFT JOIN usage_daily u ON u.user_id = $1 AND u.day = d::date ORDER BY d`,
+        [id],
+      ).catch(() => []);
+      const byAgent = await many(
+        `SELECT s.agent, COUNT(*)::int AS calls, COALESCE(SUM(s.cost_usd), 0)::float AS cost, COALESCE(SUM(s.tokens_in + s.tokens_out), 0)::int AS tokens
+           FROM execution_steps s JOIN executions e ON e.id = s.execution_id
+          WHERE e.user_id = $1 AND s.type = 'llm' AND s.started_at > now() - interval '7 days' GROUP BY 1 ORDER BY calls DESC`,
+        [id],
+      ).catch(() => []);
+      const tools = await many(
+        `SELECT s.name, COUNT(*)::int AS n FROM execution_steps s JOIN executions e ON e.id = s.execution_id
+          WHERE e.user_id = $1 AND s.type = 'tool' AND s.started_at > now() - interval '7 days' GROUP BY 1 ORDER BY n DESC LIMIT 8`,
+        [id],
+      ).catch(() => []);
+      const agents = (await many("SELECT id, slug, name, persona, face, focus, uses, active, created_at FROM client_agents WHERE user_id = $1 ORDER BY created_at", [id])).map(
+        (a) => ({ ...a, persona: a.persona ?? a.name, face: a.face ?? faceFor(`${id}:${a.slug}`) }),
+      );
+      const topics = await many("SELECT topic, round(score::numeric, 1)::float AS score, days FROM user_topics WHERE user_id = $1 ORDER BY score DESC LIMIT 10", [id]);
+      const person = await one("SELECT style_notes FROM users WHERE id = $1", [id]);
+      const notes = await many("SELECT agent, note, updated_at FROM agent_notes WHERE user_id = $1 ORDER BY agent", [id]);
+      const money = await one(
+        `SELECT COUNT(*)::int AS transactions, (SELECT COUNT(*)::int FROM budgets WHERE user_id = $1) AS budgets,
+                (SELECT COUNT(*)::int FROM reminders WHERE user_id = $1 AND status = 'scheduled') AS reminders,
+                (SELECT COUNT(*)::int FROM watches WHERE user_id = $1 AND status = 'active') AS watches,
+                (SELECT COUNT(*)::int FROM memories WHERE user_id = $1) AS memories
+           FROM transactions WHERE user_id = $1`,
+        [id],
+      ).catch(() => null);
+      return { totals, daily, byAgent, tools, agents, topics, styleNotes: person?.style_notes ?? null, notes, counts: money, tabs: await getTabs(id) };
+    });
+    api.put<{ Params: { id: string }; Body: { modules?: string[]; custom?: unknown[] } }>("/api/clients/:id/tabs", async (req) => {
+      const cur = await getTabs(req.params.id);
+      await saveTabs(req.params.id, { modules: req.body.modules ?? cur.modules, custom: (req.body.custom as any) ?? cur.custom });
+      return getTabs(req.params.id);
+    });
     api.patch<{ Params: { id: string }; Body: { active?: boolean; instructions?: string } }>("/api/client-agents/:id", async (req) =>
       one("UPDATE client_agents SET active = COALESCE($2, active), instructions = COALESCE($3, instructions), updated_at = now() WHERE id = $1 RETURNING *", [
         req.params.id,
@@ -631,9 +745,11 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
 
     // ---------- Time de agentes e modelos ----------
     api.get("/api/agents", async () => {
-      const describe = async (id: string, name: string, icon: string, role: string, tools: typeof CTO_TOOLS) => ({
+      const describe = async (id: string, name: string, icon: string, role: string, tools: typeof CTO_TOOLS, persona?: string, face?: unknown) => ({
         id,
         name,
+        persona,
+        face,
         icon,
         role,
         model: (await resolveModel(`agent:${id}`)).model,
@@ -642,8 +758,8 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
         ),
       });
       return [
-        await describe(CTO.id, CTO.name, CTO.icon, CTO.role, CTO_TOOLS),
-        ...(await Promise.all(SPECIALISTS.map((s) => describe(s.id, s.name, s.icon, s.role, s.tools)))),
+        await describe(CTO.id, CTO.name, CTO.icon, CTO.role, CTO_TOOLS, CTO.persona, CTO.face),
+        ...(await Promise.all(SPECIALISTS.map((s) => describe(s.id, s.name, s.icon, s.role, s.tools, s.persona, s.face)))),
       ];
     });
 

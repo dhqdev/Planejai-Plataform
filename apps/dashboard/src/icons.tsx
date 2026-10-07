@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useId, type CSSProperties } from "react";
 
 /** Ícones de traço fino (sem emoji), desenhados em 24x24. */
 const P: Record<string, string> = {
@@ -78,17 +78,26 @@ export function Icon({ name, size = 18, style, className }: { name: string; size
   );
 }
 
-/** Logo do Planejai (robô minimalista). */
+/** Mascote do Planejai: robozinho com o degradê da marca (laranja, coral, magenta, roxo) e visor branco. */
 export function Logo({ size = 28 }: { size?: number }) {
+  const id = useId().replace(/:/g, "");
   return (
-    <svg width={size} height={size} viewBox="0 0 512 512" fill="none" aria-label="Planejai" role="img">
-      <line x1="256" y1="86" x2="256" y2="132" stroke="currentColor" strokeWidth="28" strokeLinecap="round" />
-      <circle cx="256" cy="74" r="26" fill="currentColor" />
-      <rect x="104" y="136" width="304" height="230" rx="90" stroke="currentColor" strokeWidth="30" />
-      <circle cx="200" cy="244" r="24" fill="currentColor" />
-      <circle cx="312" cy="244" r="24" fill="currentColor" />
-      <path d="M220 302 Q256 326 292 302" stroke="currentColor" strokeWidth="22" strokeLinecap="round" />
-      <path d="M176 450 v-4 a24 24 0 0 1 24 -24 h112 a24 24 0 0 1 24 24 v4" stroke="currentColor" strokeWidth="28" strokeLinecap="round" />
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-label="Planejai" role="img">
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#FF7A1A" />
+          <stop offset=".4" stopColor="#FF4458" />
+          <stop offset=".7" stopColor="#E23382" />
+          <stop offset="1" stopColor="#8B2BE2" />
+        </linearGradient>
+      </defs>
+      <path d="M32 15 v-6" stroke="#FF7A1A" strokeWidth={3.4} strokeLinecap="round" />
+      <circle cx={32} cy={7} r={4.4} fill="#FF7A1A" />
+      <rect x={6} y={15} width={52} height={45} rx={19} fill={`url(#${id})`} />
+      <rect x={13} y={25} width={38} height={26} rx={13} fill="#fff" />
+      <circle cx={25} cy={37} r={3.8} fill="#18181B" />
+      <circle cx={39} cy={37} r={3.8} fill="#18181B" />
+      <path d="M27.5 44 q4.5 4 9 0" stroke="#18181B" strokeWidth={2.6} strokeLinecap="round" />
     </svg>
   );
 }

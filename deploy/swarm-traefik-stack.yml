@@ -24,6 +24,7 @@ x-env: &env
   # --- Redis próprio: memória curta das conversas (24h) ---
   REDIS_URL: redis://redis:6379
   MESSAGE_RETENTION_HOURS: "24"
+  WORKER_CONCURRENCY: "4"
   # --- Navegador dos agentes (prints e pesquisa gravada em vídeo) ---
   BROWSERLESS_URL: http://browserless:3000
   BROWSERLESS_TOKEN: TROQUE_BROWSERLESS_TOKEN

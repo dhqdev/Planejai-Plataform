@@ -1,5 +1,5 @@
 import type { ChatMessage } from "../llm/types.js";
-import { query } from "../db/pool.js";
+import { one, query } from "../db/pool.js";
 import type { BrowserSession } from "./browser.js";
 import { getSettings } from "../settings.js";
 import { specialistSystemPrompt } from "./prompts.js";
@@ -64,7 +64,12 @@ async function systemFor(def: AgentDef, ctx: ToolContext, own: Tool[]) {
   const settings = await getSettings();
   const missing = [...new Set(def.tools.filter((t) => t.integration && !own.includes(t)).map((t) => t.integration!))];
   return (
-    specialistSystemPrompt(def, { timezone: ctx.timezone, user: ctx.user, settings }) +
+    specialistSystemPrompt(def, {
+      timezone: ctx.timezone,
+      user: ctx.user,
+      settings,
+      note: (await one("SELECT note FROM agent_notes WHERE user_id = $1 AND agent = $2", [ctx.user.id, def.id]).catch(() => null))?.note,
+    }) +
     (missing.length ? `\n\n(Integrações não conectadas para você: ${missing.join(", ")})` : "")
   );
 }

@@ -115,8 +115,8 @@ const WIDGETS: Record<string, WidgetDef> = {
     desc: "Os agentes e quem conversa com quem",
     icon: "graph",
     sizes: ["l", "xl"],
-    render: () => (
-      <Box title="Mapa do time" icon="graph" to="/agents">
+    render: ({ isSuper }) => (
+      <Box title="Mapa do time" icon="graph" to={isSuper ? "/agents" : undefined}>
         <TeamMap />
       </Box>
     ),
@@ -384,7 +384,6 @@ const DEFAULT_ADMIN = (): Widget[] => [
   w("messages", "s"),
   w("watchCount", "s"),
   w("team", "xl"),
-  w("invites", "m"),
   w("categories", "l"),
   w("reminders", "l"),
   w("recentTx", "l"),
@@ -607,6 +606,31 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+/** Aba sob medida criada pela reunião noturna: só os widgets que fazem sentido para a pessoa. */
+export function CustomTabPage({ me, tab }: { me: Me; tab: { title: string; widgets: string[] } }) {
+  const isSuper = me.role === "superadmin";
+  const mine = useApi<any>("/api/me/overview", { poll: 30000 });
+  const ctx: Ctx = { sys: null, mine: mine.data, isSuper };
+  const list = tab.widgets.filter((t) => WIDGETS[t] && allowed(WIDGETS[t]!, isSuper));
+  return (
+    <div className="page page-wide">
+      <PageHead title={tab.title} subtitle="Aba criada pelo seu time para o que você mais usa." />
+      <div className="board">
+        {list.map((t) => {
+          const def = WIDGETS[t]!;
+          const size = def.sizes.includes("l") ? "l" : def.sizes[def.sizes.length - 1]!;
+          return (
+            <div key={t} className={`widget ${size}`}>
+              {def.render(ctx)}
+            </div>
+          );
+        })}
+        {!list.length && <div className="widget xl"><Empty>Nada por aqui ainda.</Empty></div>}
+      </div>
     </div>
   );
 }

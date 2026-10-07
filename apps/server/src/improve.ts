@@ -1,12 +1,14 @@
-import { CLIENT_AGENT_TOOLS } from "./agent/team.js";
+import { CLIENT_AGENT_TOOLS, faceFor, SPECIALISTS } from "./agent/team.js";
+import { getTabs, OPTIONAL, saveTabs, TAB_ICONS, TAB_WIDGETS } from "./tabs.js";
 import { Tracer } from "./agent/trace.js";
 import { many, one, query } from "./db/pool.js";
 import { chatCompletion } from "./llm/openrouter.js";
 import { resolveModel } from "./llm/router.js";
 
 /**
- * Melhoria diária (19h): o sistema aprende com o uso de cada cliente e monta agentes sob medida.
- * Uma única chamada barata por cliente que usou o assistente no dia, com um resumo curto do que ele pediu.
+ * Reunião noturna (19h): o CTO revisa o dia de cada cliente com o time e todo mundo melhora para ele.
+ * Uma única chamada barata por cliente que usou o assistente no dia decide: como falar com a pessoa,
+ * o que cada agente aprendeu sobre ela, quais abas liberar no app e se nasce um agente sob medida.
  * Assuntos se acumulam dia a dia; um agente só nasce quando o assunto se repete em dias diferentes.
  */
 
@@ -53,29 +55,48 @@ export async function improveUser(userId: string) {
   );
   if (asks.length < MIN_EXECUTIONS) return { created: 0, updated: 0, retired: 0 };
   const topics = await many("SELECT topic, round(score::numeric, 1) AS score, days FROM user_topics WHERE user_id = $1 ORDER BY score DESC LIMIT 15", [userId]);
-  const agents = await many("SELECT slug, name, focus, uses, created_at FROM client_agents WHERE user_id = $1 AND active", [userId]);
+  const agents = await many("SELECT slug, name, persona, focus, uses, created_at FROM client_agents WHERE user_id = $1 AND active", [userId]);
   const tools = Object.keys(CLIENT_AGENT_TOOLS).join(", ");
+  const person = await one("SELECT style_notes FROM users WHERE id = $1", [userId]);
+  const notes = await many("SELECT agent, note FROM agent_notes WHERE user_id = $1", [userId]);
+  const usedAgents = await many(
+    `SELECT s.agent, COUNT(*)::int AS n FROM execution_steps s JOIN executions e ON e.id = s.execution_id
+      WHERE e.user_id = $1 AND s.type = 'llm' AND s.started_at > now() - interval '24 hours' GROUP BY 1`,
+    [userId],
+  );
+  const tabs = await getTabs(userId);
 
   const tracer = await Tracer.start({ trigger: "improve", userId, input: `${asks.length} pedidos nas últimas 24h` });
-  const step = await tracer.step({ agent: "melhoria", type: "llm", name: "analisar o dia do cliente" });
+  const step = await tracer.step({ agent: "cto", type: "llm", name: "reunião noturna do time" });
   const prompt =
     `Pedidos do cliente nas últimas 24h (um por linha):\n${asks.map((a) => `- ${a.t}`).join("\n")}\n\n` +
     `Assuntos acumulados (assunto, pontuação, dias em que apareceu): ${topics.length ? topics.map((t) => `${t.topic} (${t.score}, ${t.days}d)`).join("; ") : "nenhum"}\n` +
-    `Agentes que ele já tem: ${agents.length ? agents.map((a) => `${a.slug}: ${a.focus} (usado ${a.uses}x)`).join("; ") : "nenhum"}\n` +
-    `Ferramentas que um agente pode ter: ${tools}`;
+    `Agentes do time que trabalharam hoje: ${usedAgents.map((a) => `${a.agent} (${a.n}x)`).join(", ") || "só o CTO"}\n` +
+    `Agentes sob medida que ele já tem: ${agents.length ? agents.map((a) => `${a.slug}: ${a.focus} (usado ${a.uses}x)`).join("; ") : "nenhum"}\n` +
+    `Jeito de falar com ele hoje: ${person?.style_notes ?? "nada anotado"}\n` +
+    `Notas atuais dos agentes: ${notes.map((n) => `${n.agent}: ${n.note}`).join(" | ") || "nenhuma"}\n` +
+    `Abas extras já liberadas no app: ${[...tabs.modules, ...tabs.custom.map((c) => `aba "${c.title}"`)].join(", ") || "nenhuma (só o essencial)"}\n` +
+    `Ferramentas que um agente sob medida pode ter: ${tools}`;
   const r = await chatCompletion(await resolveModel("improve"), {
     responseFormat: { type: "json_object" },
     messages: [
       {
         role: "system",
         content:
-          "Você melhora o time de agentes de um assistente pessoal para UM cliente. Responda só JSON:\n" +
-          '{"topics":[{"topic":"cinema","weight":1-5}],"create":[{"topic":"cinema","name":"Cinema","focus":"sessões, estreias e ingressos na cidade dele","instructions":"...","tools":["web_search"]}],' +
+          "Você é o CTO de um time de agentes de um assistente pessoal no WhatsApp, na reunião noturna sobre UM cliente. " +
+          "Todos melhoram para ele, gastando pouco. Responda só JSON:\n" +
+          '{"topics":[{"topic":"cinema","weight":1-5}],"style":"...","agent_notes":[{"agent":"financeiro","note":"..."}],' +
+          '"tabs":{"enable":["convites"],"custom":[{"title":"Academia","icon":"heart","widgets":["categories","reminders"]}]},' +
+          '"create":[{"topic":"cinema","name":"Cinema","persona":"Pipoca","focus":"sessões, estreias e ingressos na cidade dele","instructions":"...","tools":["web_search"]}],' +
           '"update":[{"slug":"...","instructions":"..."}],"retire":["slug"]}\n' +
-          "Regras: topics = assuntos concretos do dia (1 a 3 palavras, minúsculas, ex.: cinema, celulares, academia), no máximo 6. " +
+          "Regras: topics = assuntos concretos do dia (1 a 3 palavras, minúsculas), no máximo 6. " +
+          "style = como falar com ele (tamanho das respostas, emojis, formalidade, apelidos), até 250 caracteres; repita o atual se nada mudou. " +
+          `agent_notes = só para agentes que trabalharam hoje (ids: ${SPECIALISTS.map((s) => s.id).join(", ")}), o que ele aprendeu sobre o cliente (preferências, cidade, marcas, onde buscar), até 300 caracteres; lista vazia se nada novo. ` +
+          `tabs.enable só se o uso pede (${Object.entries(OPTIONAL).map(([k, v]) => `${k}: ${v.desc}`).join("; ")}). ` +
+          `tabs.custom só para um assunto que se repete muito e merece uma tela (máximo 1 por noite e 3 no total): ícone em ${TAB_ICONS.join(", ")}; widgets em ${TAB_WIDGETS.join(", ")}. ` +
           `create só para assunto que já aparece em ${MIN_DAYS}+ dias nos acumulados e é recorrente hoje, e que um especialista atenderia melhor que o time geral; ` +
-          `no máximo 1 por dia e ${MAX_AGENTS} no total. instructions: 3 a 5 frases práticas com o que esse cliente costuma querer (cidade, marcas, faixa de preço, horários) e onde buscar. ` +
-          "update só se aprendeu algo novo e útil sobre o gosto dele. retire agentes sem uso há muito tempo. Na dúvida, não crie nada: listas vazias são a resposta normal.",
+          `no máximo 1 por dia e ${MAX_AGENTS} no total. persona = apelido curto e simpático de personagem (ex.: Pipoca, Fit, Zé Viagem). instructions: 3 a 5 frases práticas com o que esse cliente costuma querer (cidade, marcas, faixa de preço, horários) e onde buscar. ` +
+          "update só se aprendeu algo novo e útil sobre o gosto dele. retire agentes sem uso há muito tempo. Na dúvida, não mude: listas vazias são a resposta normal.",
       },
       { role: "user", content: prompt },
     ],
@@ -117,9 +138,18 @@ export async function improveUser(userId: string) {
     const toolNames = (Array.isArray(c.tools) ? c.tools : []).filter((n: string) => n in CLIENT_AGENT_TOOLS).slice(0, 6);
     if (!slug || !toolNames.length || !c.instructions) continue;
     await query(
-      `INSERT INTO client_agents (user_id, slug, name, focus, instructions, tools) VALUES ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT (user_id, slug) DO UPDATE SET active = true, focus = $4, instructions = $5, tools = $6, updated_at = now()`,
-      [userId, slug, String(c.name).slice(0, 40), String(c.focus ?? c.topic).slice(0, 200), String(c.instructions).slice(0, 1500), toolNames],
+      `INSERT INTO client_agents (user_id, slug, name, focus, instructions, tools, persona, face) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (user_id, slug) DO UPDATE SET active = true, focus = $4, instructions = $5, tools = $6, persona = COALESCE(client_agents.persona, $7), updated_at = now()`,
+      [
+        userId,
+        slug,
+        String(c.name).slice(0, 40),
+        String(c.focus ?? c.topic).slice(0, 200),
+        String(c.instructions).slice(0, 1500),
+        toolNames,
+        String(c.persona ?? c.name).slice(0, 24),
+        JSON.stringify(faceFor(`${userId}:${slug}`)),
+      ],
     );
     created++;
   }
@@ -137,6 +167,25 @@ export async function improveUser(userId: string) {
     const res = await query("UPDATE client_agents SET active = false WHERE user_id = $1 AND slug = $2 AND created_at < now() - interval '7 days'", [userId, String(slug)]);
     retired += res.rowCount ?? 0;
   }
-  await tracer.finish(JSON.stringify({ created, updated, retired, topics: (plan.topics ?? []).map((t: any) => t.topic) }));
+  // como falar com a pessoa e o que cada agente aprendeu
+  if (typeof plan.style === "string" && plan.style.trim()) await query("UPDATE users SET style_notes = $2 WHERE id = $1", [userId, plan.style.trim().slice(0, 300)]);
+  const validAgents = new Set(SPECIALISTS.map((s) => s.id));
+  for (const n of (Array.isArray(plan.agent_notes) ? plan.agent_notes : []).slice(0, 5)) {
+    if (!validAgents.has(n?.agent) || !n?.note) continue;
+    await query(
+      `INSERT INTO agent_notes (user_id, agent, note) VALUES ($1, $2, $3) ON CONFLICT (user_id, agent) DO UPDATE SET note = $3, updated_at = now()`,
+      [userId, n.agent, String(n.note).slice(0, 400)],
+    );
+  }
+  // abas do app: libera módulos e no máximo uma aba sob medida por noite
+  const enable = (plan.tabs?.enable ?? []).filter((m: string) => m in OPTIONAL);
+  const custom = (plan.tabs?.custom ?? []).slice(0, 1);
+  if (enable.length || custom.length) {
+    await saveTabs(userId, {
+      modules: [...tabs.modules, ...enable],
+      custom: [...tabs.custom, ...custom].slice(0, 3),
+    });
+  }
+  await tracer.finish(JSON.stringify({ created, updated, retired, topics: (plan.topics ?? []).map((t: any) => t.topic), tabs: enable, custom: custom.map((c: any) => c.title) }));
   return { created, updated, retired };
 }

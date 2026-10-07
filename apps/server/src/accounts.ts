@@ -42,7 +42,8 @@ export function toAccount(row: any): Account {
     id: row.id,
     email: row.email,
     name: row.name,
-    role: row.role,
+    // só o dono da stack (ADMIN_EMAIL) é super admin: conta do banco nunca vira super admin, mesmo se o papel tiver sido gravado assim
+    role: "admin",
     status: row.status,
     userId: row.user_id,
     phone: row.phone,

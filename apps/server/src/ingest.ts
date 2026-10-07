@@ -99,7 +99,7 @@ export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; re
   await boss.send(
     QUEUES.process,
     { conversationId: conv.id },
-    { singletonKey: conv.id, startAfter: delay, retryLimit: 1, expireInSeconds: Math.ceil(settings.maxExecutionMinutes * 60) + 120 },
+    { singletonKey: conv.id, startAfter: delay, retryLimit: 1, priority: 10, expireInSeconds: Math.ceil(settings.maxExecutionMinutes * 60) + 120 },
   );
   return { queued: true, reason: throttled ? "ritmo alto: resposta segurada" : undefined };
 }

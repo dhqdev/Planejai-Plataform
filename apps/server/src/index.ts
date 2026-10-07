@@ -16,7 +16,7 @@ async function main() {
   if (!config.WEBHOOK_SECRET) log.warn("WEBHOOK_SECRET vazio: qualquer um que souber a URL pode enviar mensagens falsas ao webhook");
 
   if (config.ROLE === "all" || config.ROLE === "worker") {
-    await startWorker(log);
+    await startWorker(log, config.WORKER_CONCURRENCY);
     // A conexão do WhatsApp (Baileys) mora no worker, junto de quem envia as respostas
     if (config.WHATSAPP_PROVIDER === "baileys") await whatsapp.start(log);
   }

@@ -20,6 +20,9 @@ const ProfilePage = lazy(() => import("./pages/Profile").then((m) => ({ default:
 const CalendarPage = lazy(() => import("./pages/Calendar").then((m) => ({ default: m.CalendarPage })));
 const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
 const WatchesPage = lazy(() => import("./pages/Watches").then((m) => ({ default: m.WatchesPage })));
+const QueuesPage = lazy(() => import("./pages/Queues").then((m) => ({ default: m.QueuesPage })));
+const TeamPage = lazy(() => import("./pages/Team").then((m) => ({ default: m.TeamPage })));
+const CustomTabPage = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.CustomTabPage })));
 const WhatsAppPage = lazy(() => import("./pages/WhatsApp").then((m) => ({ default: m.WhatsAppPage })));
 import { useApi } from "./hooks";
 import { Icon, Logo } from "./icons";
@@ -40,6 +43,7 @@ const SUPER_NAV: NavItem[] = [
   { section: "Visão geral" },
   { to: "/", label: "Painel", icon: "home" },
   { to: "/executions", label: "Execuções", icon: "activity" },
+  { to: "/queues", label: "Filas", icon: "list" },
   { section: "Pessoas" },
   { to: "/clients", label: "Clientes", icon: "users", badge: "clients" },
   { to: "/invites", label: "Convites", icon: "user-plus" },
@@ -57,17 +61,33 @@ const SUPER_NAV: NavItem[] = [
   { to: "/settings", label: "Configurações", icon: "settings" },
 ];
 
-const ADMIN_NAV: NavItem[] = [
-  { section: "Meu Planejai" },
-  { to: "/", label: "Início", icon: "home" },
-  { to: "/finance", label: "Gastos", icon: "wallet" },
-  { to: "/agenda", label: "Agenda", icon: "calendar" },
-  { to: "/watches", label: "Acompanhamentos", icon: "eye", short: "De olho" },
-  { to: "/invites", label: "Convites", icon: "user-plus" },
-  { to: "/memories", label: "O que ele sabe", icon: "bookmark" },
-  { section: "Conta" },
-  { to: "/profile", label: "Minha conta", icon: "user" },
-];
+interface AppTabs {
+  all: boolean;
+  modules: string[];
+  custom: { slug: string; title: string; icon: string; widgets: string[] }[];
+  catalog: Record<string, { label: string; icon: string; to: string }>;
+}
+
+/**
+ * Cliente começa só com o essencial (Início, Agenda, Finanças e De olho). Módulos e abas sob medida
+ * aparecem quando a reunião noturna do time libera para a pessoa.
+ */
+function adminNav(tabs: AppTabs | null): NavItem[] {
+  const extra: NavItem[] = [
+    ...(tabs?.modules ?? []).map((m) => tabs!.catalog[m]).filter(Boolean).map((m) => ({ to: m!.to, label: m!.label, icon: m!.icon })),
+    ...(tabs?.custom ?? []).map((t) => ({ to: `/aba/${t.slug}`, label: t.title, icon: t.icon })),
+  ];
+  return [
+    { section: "Meu Planejai" },
+    { to: "/", label: "Início", icon: "home" },
+    { to: "/agenda", label: "Agenda", icon: "calendar" },
+    { to: "/finance", label: "Finanças", icon: "wallet" },
+    { to: "/watches", label: "Acompanhamentos", icon: "eye", short: "De olho" },
+    ...(extra.length ? [{ section: "Feito para você" }, ...extra] : []),
+    { section: "Conta" },
+    { to: "/profile", label: "Minha conta", icon: "user" },
+  ];
+}
 
 /** Abas da barra inferior no celular; o resto fica em "Mais". */
 const SUPER_TABS = [
@@ -78,9 +98,9 @@ const SUPER_TABS = [
 ];
 const ADMIN_TABS = [
   { to: "/", label: "Início", icon: "home" },
-  { to: "/finance", label: "Gastos", icon: "wallet" },
   { to: "/agenda", label: "Agenda", icon: "calendar" },
-  { to: "/invites", label: "Convites", icon: "user-plus" },
+  { to: "/finance", label: "Finanças", icon: "wallet" },
+  { to: "/watches", label: "De olho", icon: "eye" },
 ];
 
 export function App() {
@@ -91,6 +111,7 @@ export function App() {
   const loc = useLocation();
   const nav = useNavigate();
   useEffect(() => onInstallAvailable(() => setInstallable(true)), []);
+  const tabs = useApi<AppTabs>(me ? `/api/me/tabs?for=${me.id}` : null);
 
   useEffect(() => {
     api<Me>("/api/auth/me").then(setMe, () => setMe(null));
@@ -114,11 +135,13 @@ export function App() {
   if (!me) return <AuthPage onLogin={setMe} />;
 
   const isSuper = me.role === "superadmin";
+  const NAV = isSuper ? SUPER_NAV : adminNav(tabs.data ?? null);
+  const has = (m: string) => isSuper || (tabs.data?.modules ?? []).includes(m);
   return (
     <div className="layout">
       <header className="topbar">
         <Logo size={28} />
-        <strong className="topbar-title">{titleFor(loc.pathname, isSuper ? SUPER_NAV : ADMIN_NAV)}</strong>
+        <strong className="topbar-title">{titleFor(loc.pathname, NAV)}</strong>
         <span className="spacer" />
         <button className="icon-btn" onClick={toggleTheme} aria-label="Trocar tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button>
       </header>
@@ -130,7 +153,7 @@ export function App() {
             <small>{isSuper ? "Super admin" : "Painel"}</small>
           </div>
         </div>
-        <Nav items={isSuper ? SUPER_NAV : ADMIN_NAV} isSuper={isSuper} />
+        <Nav items={NAV} isSuper={isSuper} />
         <div className="sidebar-foot">
           <div className="me">
             <div className="avatar">{(me.name ?? me.email).slice(0, 1).toUpperCase()}</div>
@@ -164,6 +187,7 @@ export function App() {
             <>
               <Route path="/executions" element={<ExecutionsPage />} />
               <Route path="/executions/:id" element={<ExecutionDetailPage />} />
+              <Route path="/queues" element={<QueuesPage />} />
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/whatsapp" element={<WhatsAppPage />} />
               <Route path="/agents" element={<AgentsPage />} />
@@ -175,13 +199,17 @@ export function App() {
             <Route path="/profile" element={<ProfilePage me={me} />} />
           )}
           <Route path="/" element={<DashboardPage me={me} theme={theme} onTheme={toggleTheme} />} />
-          <Route path="/invites" element={<InvitesPage isSuper={isSuper} />} />
+          {has("convites") && <Route path="/invites" element={<InvitesPage isSuper={isSuper} />} />}
+          {has("meu_time") && <Route path="/time" element={<TeamPage />} />}
+          {(tabs.data?.custom ?? []).map((t) => (
+            <Route key={t.slug} path={`/aba/${t.slug}`} element={<CustomTabPage me={me} tab={t} />} />
+          ))}
           <Route path="/watches" element={<WatchesPage isSuper={isSuper} />} />
           <Route path="/finance" element={<FinancePage isSuper={isSuper} />} />
           <Route path="/agenda" element={<CalendarPage isSuper={isSuper} />} />
           <Route path="/reminders" element={<Navigate to="/agenda" replace />} />
-          <Route path="/memories" element={<MemoriesPage isSuper={isSuper} />} />
-          <Route path="*" element={<Navigate to="/" />} />
+          {has("memorias") && <Route path="/memories" element={<MemoriesPage isSuper={isSuper} />} />}
+          <Route path="*" element={tabs.loading && !isSuper ? <Loading /> : <Navigate to="/" />} />
         </Routes>
         </div>
         </Suspense>
@@ -222,7 +250,7 @@ export function App() {
             </div>
           </div>
           <div className="more-grid">
-            {(isSuper ? SUPER_NAV : ADMIN_NAV).filter((i): i is Exclude<NavItem, { section: string }> => "to" in i).map((item) => (
+            {NAV.filter((i): i is Exclude<NavItem, { section: string }> => "to" in i).map((item) => (
               <button key={item.to} className={`more-tile ${loc.pathname === item.to ? "active" : ""}`} onClick={() => { setMenu(false); nav(item.to); }}>
                 <Icon name={item.icon} size={26} />
                 <span>{item.short ?? item.label}</span>
@@ -245,7 +273,7 @@ export function App() {
 
 function titleFor(path: string, items: NavItem[]) {
   const base = "/" + (path.split("/")[1] ?? "");
-  const hit = items.find((i) => "to" in i && i.to === base) as { label: string } | undefined;
+  const hit = (items.find((i) => "to" in i && i.to === path) ?? items.find((i) => "to" in i && i.to === base)) as { label: string } | undefined;
   return hit?.label ?? "Planejai";
 }
 

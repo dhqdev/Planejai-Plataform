@@ -178,6 +178,35 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(tx.n).toBe(1);
   });
 
+  it("categoriza sozinho, avisa limite de gastos e desenha gráfico sem IA", async () => {
+    const fin = await import("../src/agent/tools/finance.js");
+    const { Outbox } = await import("../src/agent/tools/types.js");
+    const rita = await db.one("INSERT INTO users (phone, name, status) VALUES ('5519933334444', 'Rita', 'active') RETURNING *");
+    const ctx: any = { user: rita, timezone: "America/Sao_Paulo", outbox: new Outbox() };
+    // regra por palavra
+    const a: any = await fin.addTransaction.run({ kind: "expense", amount: 38, description: "uber pro trabalho" }, ctx);
+    expect(a.category).toBe("Transporte");
+    // aprende com o que a pessoa já usou: mesmo lugar, mesma categoria
+    await db.query("UPDATE transactions SET category = 'Lazer' WHERE id = $1", [a.ids[0]]);
+    const b: any = await fin.addTransaction.run({ kind: "expense", amount: 20, description: "uber pro trabalho" }, ctx);
+    expect(b.category).toBe("Lazer");
+    // limite: avisa uma vez em 80% e uma vez ao estourar
+    await fin.setBudget.run({ category: "Alimentação", amount: 100 }, ctx);
+    const c1: any = await fin.addTransaction.run({ kind: "expense", amount: 85, description: "almoço no restaurante" }, ctx);
+    expect(c1.category).toBe("Alimentação");
+    expect(c1.budget_alert).toMatch(/85% do limite de Alimentação/);
+    const c2: any = await fin.addTransaction.run({ kind: "expense", amount: 5, description: "café" }, ctx);
+    expect(c2.budget_alert).toBeUndefined();
+    const c3: any = await fin.addTransaction.run({ kind: "expense", amount: 20, description: "lanche" }, ctx);
+    expect(c3.budget_alert).toMatch(/Estourou o limite de Alimentação/);
+    // gráfico: PNG de verdade, pronto para o WhatsApp
+    const g: any = await fin.makeChart.run({ kind: "categorias" }, ctx);
+    const img = ctx.outbox.media.get(g.media_id);
+    expect(Buffer.from(img.base64, "base64").subarray(1, 4).toString()).toBe("PNG");
+    const l: any = await fin.makeChart.run({ kind: "limites" }, ctx);
+    expect(l.media_id).toBeTruthy();
+  }, 60_000);
+
   it("lembrete que passou some junto com a memória sobre ele; recorrente continua", async () => {
     const r = await db.one(
       "INSERT INTO reminders (user_id, conversation_id, intent, due_at) VALUES ($1, $2, 'lembrar o David de ligar para o dentista', now()) RETURNING id",
@@ -224,7 +253,12 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(fin.transactions.map((t: any) => t.user_name)).toEqual(["Ana"]);
     const all = (await app.inject({ method: "GET", url: "/api/finance?month=2026-03", headers: { cookie: adm } })).json();
     expect(all.transactions).toEqual([]); // os de março são da Bia
-    for (const url of ["/api/integrations", "/api/settings", "/api/executions", "/api/people", "/api/accounts", "/api/overview"]) {
+    // nem papel gravado no banco nem pedido pelo painel vira super admin: só o dono (ADMIN_EMAIL)
+    await db.query("UPDATE accounts SET role = 'superadmin' WHERE email = 'ana@x.com'");
+    await app.inject({ method: "PATCH", url: `/api/accounts/${ana.id}`, headers: { cookie: sup }, payload: { role: "superadmin" } });
+    expect((await app.inject({ method: "GET", url: "/api/auth/me", headers: { cookie: adm } })).json()).toMatchObject({ role: "admin" });
+    expect((await app.inject({ method: "GET", url: "/api/me/tabs", headers: { cookie: adm } })).json()).toMatchObject({ all: false, modules: [] });
+    for (const url of ["/api/integrations", "/api/settings", "/api/executions", "/api/people", "/api/accounts", "/api/overview", "/api/queues", `/api/clients/${ana.user_id ?? ana.id}/usage`]) {
       expect((await app.inject({ method: "GET", url, headers: { cookie: adm } })).statusCode).toBe(403);
     }
     const supFin = (await app.inject({ method: "GET", url: "/api/finance?month=2026-03", headers: { cookie: sup } })).json();
