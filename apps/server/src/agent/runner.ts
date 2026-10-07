@@ -6,6 +6,11 @@ import { cacheGet, cacheSet } from "../shortmem.js";
 import { toolCacheKey } from "./cache.js";
 import type { Tool, ToolContext } from "./tools/types.js";
 
+/** Ferramentas que não mudam a resposta: se o CTO já escreveu o texto junto, não precisa de outra rodada. */
+const QUICK_TOOLS = new Set(["react_to_message", "save_memory"]);
+/** Chamadas demoradas: delegação ao time e navegador. Ligam os avisos de andamento. */
+const SLOW_TOOL = /^(ask_|browser_|screenshot_url)/;
+
 export async function availableTools(tools: Tool[]) {
   const out: Tool[] = [];
   for (const t of tools) if (!t.integration || (await isConnected(t.integration))) out.push(t);
@@ -87,6 +92,20 @@ export async function runToolLoop(opts: {
       return { text, steps: step, messages };
     }
 
+    // Ritmo da conversa (só o CTO fala com a pessoa)
+    const said = (res.message.content ?? "").trim();
+    const names = calls.map((c) => c.function.name);
+    const slow = names.some((n) => SLOW_TOOL.test(n));
+    if (ctx.progress && agent === "cto") {
+      if (slow) {
+        ctx.progress.busy();
+        // a frase que o CTO escreveu junto da delegação ("já vou ver!") sai na hora
+        if (said) await ctx.progress.say(said);
+      }
+    }
+    // Só reagiu/anotou na memória e já escreveu a resposta: entrega sem gastar outra rodada do modelo
+    const quickOnly = agent === "cto" && said && names.every((n) => QUICK_TOOLS.has(n));
+
     messages.push({ role: "assistant", content: res.message.content ?? null, tool_calls: calls });
     const results = await Promise.all(
       calls.map(async (call) => {
@@ -144,6 +163,10 @@ export async function runToolLoop(opts: {
     );
     for (const r of results) messages.push({ role: "tool", tool_call_id: r.id, content: r.content.slice(0, 12_000) });
     if (guard?.expired) return { text: "", steps: step, messages, timedOut: true };
+    if (quickOnly && results.every((r) => !r.content.includes('"error"'))) {
+      messages.push({ role: "assistant", content: said });
+      return { text: said, steps: step, messages };
+    }
   }
   return { text: "", steps: maxSteps, messages };
 }

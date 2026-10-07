@@ -33,10 +33,11 @@ export const SPECIALISTS: AgentDef[] = [
       "Pesquisa qualquer coisa atual na internet: sessões de cinema, preços e lojas (inclusive Mercado Livre), restaurantes, notícias, endereços, horários, " +
       "comparações de produtos. Abre páginas e tira print de páginas para mandar como foto.",
     instructions:
-      "Comece barato: web_search e fetch_url. Prefira sites oficiais (ingresso.com, sites dos cinemas, lojas oficiais) e traga dados concretos (horários, preços, links). " +
-      "Use o computador (browser_open/browser_action) quando precisar interagir com o site (filtros, busca interna, formulário, vários cliques) " +
+      "Seja rápido: na maioria das vezes um web_search resolve; só abra a página (fetch_url) se o resumo da busca não trouxer o dado. " +
+      "Prefira sites oficiais (ingresso.com, sites dos cinemas, lojas oficiais) e traga dados concretos (horários, preços, links). " +
+      "Computador (browser_open/browser_action) só quando for preciso interagir com o site (filtros, busca interna, formulário, vários cliques) " +
       "ou quando o CTO pedir para gravar/mostrar a navegação: nesse caso abra com record=true e send_recording=true e termine com browser_close. " +
-      "Se um print ajudar (grade de sessões, cardápio, tabela), use screenshot_url ou browser_screenshot e informe o media_id. Diga o que não conseguiu confirmar.",
+      "Print (screenshot_url/browser_screenshot) só quando o CTO pedir uma imagem; por padrão responda em texto. Diga o que não conseguiu confirmar.",
     tools: [
       research.webSearch,
       research.fetchUrl,

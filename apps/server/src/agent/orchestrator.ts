@@ -14,6 +14,7 @@ import { finishBrowser } from "./tools/research.js";
 import { Guard, GuardTimeout, redactSecrets } from "./guard.js";
 import { isOwner } from "../ingest.js";
 import { describeMessage, preprocessMedia } from "./media.js";
+import { Progress } from "./progress.js";
 import { Tracer } from "./trace.js";
 import { allShort, pushShort, recentShort, redisAlive, type ShortEntry } from "../shortmem.js";
 import { config } from "../config.js";
@@ -152,12 +153,11 @@ async function processLocked(
   });
   const outbox = new Outbox();
   const guard = Guard.fromSettings(settings);
+  const progress = new Progress({ channel, jid: conversation.remote_jid, tracer });
 
   try {
-    if (lastInbound) {
-      channel.markRead(conversation.remote_jid, lastInbound.external_id).catch(() => {});
-      channel.setTyping(conversation.remote_jid, 4000).catch(() => {});
-    }
+    if (lastInbound) channel.markRead(conversation.remote_jid, lastInbound.external_id).catch(() => {});
+    if (opts.trigger !== "reminder") progress.start();
     await preprocessMedia(pending, channel, tracer, conversation.remote_jid);
 
     // Contexto: memória curta no Redis (já interpretada); sem Redis, as mensagens das últimas horas no Postgres
@@ -223,6 +223,8 @@ async function processLocked(
       callChain: ["cto"],
       guard,
       inboundImages: pending.map((m) => m.inboundImage).filter(Boolean),
+      // lembrete agendado não ganha "já vou ver": a pessoa não perguntou nada agora
+      progress: opts.trigger === "reminder" ? undefined : progress,
     };
     const tools = [...(await availableTools(CTO_TOOLS)), ...team.map(delegationTool)];
     let result;
@@ -247,13 +249,14 @@ async function processLocked(
     const unplaced = [...outbox.media.keys()].filter((id) => !placed.has(id)).map((id) => ({ type: "media", id }) as Bubble);
     if (unplaced.length) bubbles.splice(Math.min(1, bubbles.length), 0, ...unplaced);
 
+    progress.stop();
     const keepInDb = !(await redisAlive());
     await deliver(bubbles, { channel, conversation, outbox, tracer, keepInDb });
     // A conversa já está no WhatsApp e na memória curta (Redis): com o Redis no ar, a mensagem sai do banco
     if (keepInDb) await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
     else await query("DELETE FROM messages WHERE id = ANY($1)", [pending.map((m) => m.id)]);
     await query("UPDATE conversations SET updated_at = now() WHERE id = $1", [conversationId]);
-    const sentTexts = bubbles.filter((b): b is { type: "text"; text: string } => b.type === "text").map((b) => b.text);
+    const sentTexts = [...progress.sent, ...bubbles.filter((b): b is { type: "text"; text: string } => b.type === "text").map((b) => b.text)];
     if (sentTexts.length) await pushShort(conversationId, [{ id: Date.now(), role: "assistant", text: sentTexts.join("\n"), ts: Date.now() }]);
     await tracer.finish(silent ? "[[silencio]]" : result.text);
     return { executionId: tracer.executionId, bubbles, outbox };
@@ -271,6 +274,7 @@ async function processLocked(
     await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
     throw err;
   } finally {
+    progress.stop();
     guard.dispose();
   }
 }

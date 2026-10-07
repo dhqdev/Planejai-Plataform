@@ -118,7 +118,7 @@ export const fetchUrl = defineTool<{ url: string; max_chars?: number }>({
 export const screenshotUrl = defineTool<{ url: string; full_page?: boolean; caption?: string }>({
   name: "screenshot_url",
   description:
-    "Tira um print de uma página (ex.: grade de sessões do cinema, cardápio, tabela de preços) para mandar como foto. " +
+    "Tira um print de uma página para mandar como foto. Só use quando o CTO pedir uma imagem (é mais lento que responder em texto). " +
     "Retorna um media_id que o CTO posiciona com [[media:ID]].",
   integration: "browserless",
   parameters: obj({ url: { type: "string" }, full_page: { type: "boolean" }, caption: { type: "string" } }, ["url"]),

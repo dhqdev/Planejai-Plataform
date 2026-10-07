@@ -45,10 +45,19 @@ export class BaileysChannel implements Channel {
     await this.sock().sendMessage(jid, { react: { text: emoji, key: { remoteJid: jid, id: messageId, fromMe: false } } });
   }
 
+  /** um "paused" pendente por conversa: chamar de novo renova o "digitando..." em vez de piscar */
+  private pauseTimers = new Map<string, NodeJS.Timeout>();
+
   async setTyping(jid: string, ms: number) {
     const s = this.sock();
+    clearTimeout(this.pauseTimers.get(jid));
     await s.sendPresenceUpdate("composing", jid);
-    setTimeout(() => void s.sendPresenceUpdate("paused", jid).catch(() => {}), ms).unref();
+    const t = setTimeout(() => {
+      this.pauseTimers.delete(jid);
+      void s.sendPresenceUpdate("paused", jid).catch(() => {});
+    }, ms);
+    t.unref();
+    this.pauseTimers.set(jid, t);
   }
 
   async markRead(jid: string, messageId: string) {

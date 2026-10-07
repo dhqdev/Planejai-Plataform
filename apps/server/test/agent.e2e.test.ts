@@ -25,6 +25,14 @@ function fakeOpenRouter(body: any) {
 
   if (system.includes("CTO de um time")) {
     const userText = String(body.messages.findLast((m: any) => m.role === "user")?.content ?? "");
+    if (userText.includes("tudo bem")) {
+      if (last.role === "tool") return completion("rodada extra (não deveria acontecer)");
+      return completion("Tudo ótimo por aqui! 😄 E você?", [call("react_to_message", { emoji: "👋" })]);
+    }
+    if (userText.includes("previsão")) {
+      if (last.role === "tool") return completion("Amanhã faz 25° e sol ☀️");
+      return completion("Opa, deixa eu ver aqui rapidinho 🔎", [call("ask_pesquisador", { message: "previsão do tempo amanhã em Campinas" })]);
+    }
     if (last.role === "tool") {
       if (userText.includes("cinema")) {
         // CTO revisa e devolve ao Financeiro uma vez antes de responder
@@ -127,6 +135,31 @@ describe.skipIf(!enabled)("time de agentes (e2e)", () => {
     const channel = new channels.PlaygroundChannel();
     await mod.processConversation(convId, { trigger: "playground", channel });
     expect(channel.sent).toEqual([{ type: "reaction", emoji: "🙏", messageId: "in2" }]);
+  });
+
+  it("pergunta simples: responde junto da reação, numa rodada só do modelo", async () => {
+    await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'oi, tudo bem?', 'in4')", [convId]);
+    const channel = new channels.PlaygroundChannel();
+    const r = await mod.processConversation(convId, { trigger: "playground", channel });
+    expect(channel.sent).toEqual([
+      { type: "reaction", emoji: "👋", messageId: "in4" },
+      { type: "text", text: "Tudo ótimo por aqui! 😄 E você?" },
+    ]);
+    const llm = await db.one("SELECT COUNT(*)::int AS n FROM execution_steps WHERE execution_id = $1 AND type = 'llm'", [r.executionId]);
+    expect(llm.n).toBe(1);
+  });
+
+  it("pesquisa: avisa na hora que vai ver e depois manda o resultado", async () => {
+    await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'qual a previsão pra amanhã?', 'in5')", [convId]);
+    const channel = new channels.PlaygroundChannel();
+    const r = await mod.processConversation(convId, { trigger: "playground", channel });
+    expect(channel.sent).toEqual([
+      { type: "text", text: "Opa, deixa eu ver aqui rapidinho 🔎" },
+      { type: "text", text: "Amanhã faz 25° e sol ☀️" },
+    ]);
+    const names = (await db.many("SELECT name FROM execution_steps WHERE execution_id = $1 AND type <> 'llm' ORDER BY id", [r.executionId])).map((s) => s.name);
+    expect(names[0]).toBe("aviso_andamento");
+    expect(names.at(-1)).toBe("enviar_texto");
   });
 
   it("especialistas conversam entre si e o CTO devolve trabalho antes de responder", async () => {

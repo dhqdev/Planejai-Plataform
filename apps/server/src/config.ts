@@ -43,7 +43,7 @@ const schema = z.object({
   DEFAULT_TIMEZONE: z.string().default("America/Sao_Paulo"),
 
   // Tempo (s) esperando mensagens seguidas antes de responder, como uma pessoa lendo tudo.
-  MESSAGE_DEBOUNCE_SECONDS: z.coerce.number().default(3),
+  MESSAGE_DEBOUNCE_SECONDS: z.coerce.number().default(2),
 
   // Serviço opcional de navegador headless (browserless) para screenshots de páginas.
   BROWSERLESS_URL: z.string().default(""),
