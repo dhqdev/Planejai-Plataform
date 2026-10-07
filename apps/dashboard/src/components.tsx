@@ -42,7 +42,7 @@ export function Status({ status }: { status: string }) {
  * No celular vira "bottom sheet": sobe de baixo, tem alça e fecha arrastando para baixo.
  * Fecha também tocando fora ou com Esc, e trava a rolagem do fundo enquanto está aberto.
  */
-export function Modal({ title, icon, onClose, children, footer, wide }: { title: string; icon?: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
+export function Modal({ title, icon, onClose, children, footer, wide, className }: { title: string; icon?: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean; className?: string }) {
   const sheet = useRef<HTMLDivElement>(null);
   const drag = useRef<{ y: number; dy: number } | null>(null);
   const move = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
@@ -65,6 +65,24 @@ export function Modal({ title, icon, onClose, children, footer, wide }: { title:
       window.removeEventListener("keydown", onKey);
     };
   }, [close]);
+
+  // celular: com o teclado aberto, a folha sobe junto e o campo não fica escondido
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const fit = () => {
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      sheet.current?.parentElement?.style.setProperty("--kb", `${kb}px`);
+      sheet.current?.parentElement?.style.setProperty("--vvh", `${vv.height}px`);
+    };
+    fit();
+    vv.addEventListener("resize", fit);
+    vv.addEventListener("scroll", fit);
+    return () => {
+      vv.removeEventListener("resize", fit);
+      vv.removeEventListener("scroll", fit);
+    };
+  }, []);
 
   // mover a janela pelo cabeçalho (fora do celular)
   const onHeadDown = (e: React.PointerEvent) => {
@@ -90,6 +108,8 @@ export function Modal({ title, icon, onClose, children, footer, wide }: { title:
   // celular: arrastar para baixo fecha
   const onTouchStart = (e: React.TouchEvent) => {
     if (!isPhone()) return;
+    // tocar em campo, botão ou link não arrasta a folha
+    if ((e.target as Element).closest("input, textarea, select, button, a, label, [data-drop]")) return;
     const body = sheet.current?.querySelector(".modal-body");
     if (body && body.contains(e.target as Node) && body.scrollTop > 0) return;
     drag.current = { y: e.touches[0]!.clientY, dy: 0 };
@@ -115,7 +135,7 @@ export function Modal({ title, icon, onClose, children, footer, wide }: { title:
   // vai direto no <body>: nada da página (animações, transform) muda a posição do modal
   return createPortal(
     <div className={`modal-bg ${closing ? "closing" : ""}`} onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div className={`card modal ${wide ? "wide" : ""}`} role="dialog" aria-modal="true" aria-label={title} ref={sheet} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+      <div className={`card modal ${wide ? "wide" : ""} ${className ?? ""}`} role="dialog" aria-modal="true" aria-label={title} ref={sheet} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
         <div className="sheet-handle" />
         <div className="modal-head" onPointerDown={onHeadDown} onPointerMove={onHeadMove} onPointerUp={onHeadUp} onPointerCancel={onHeadUp}>
           {icon}

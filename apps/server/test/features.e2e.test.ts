@@ -229,6 +229,20 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     }
     const supFin = (await app.inject({ method: "GET", url: "/api/finance?month=2026-03", headers: { cookie: sup } })).json();
     expect(supFin.transactions.length).toBe(4);
+    // agenda: a admin cria um lembrete pelo painel, arrasta para outro horário e vê no calendário
+    const at = new Date(Date.now() + 2 * 86400_000);
+    const local = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" }).format(at).replace(" ", "T");
+    const created = await app.inject({ method: "POST", url: "/api/reminders", headers: { cookie: adm }, payload: { intent: "Levar o cachorro no veterinário", at: local } });
+    expect(created.statusCode).toBe(200);
+    const later = new Date(at.getTime() + 3600_000);
+    const moved = await app.inject({ method: "PATCH", url: `/api/reminders/${created.json().id}`, headers: { cookie: adm }, payload: { at: later.toISOString() } });
+    expect(moved.json()).toEqual({ ok: true });
+    const range = `from=${new Date().toISOString()}&to=${new Date(Date.now() + 7 * 86400_000).toISOString()}`;
+    const cal = (await app.inject({ method: "GET", url: `/api/calendar?${range}`, headers: { cookie: adm } })).json();
+    const ev = cal.events.find((e: any) => e.title.startsWith("Levar o cachorro"));
+    expect(Math.abs(new Date(ev.start).getTime() - later.getTime())).toBeLessThan(60_000);
+    expect(cal.events.every((e: any) => e.person === "Ana")).toBe(true);
+
     // aprovar a conta liberou o número no WhatsApp
     const wa = await db.one("SELECT status FROM users WHERE id = $1", [user.id]);
     expect(wa.status).toBe("active");

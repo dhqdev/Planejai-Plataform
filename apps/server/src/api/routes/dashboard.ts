@@ -10,7 +10,9 @@ import { mercadolivreAuthUrl, mercadolivreExchangeCode } from "../../integration
 import { disconnect, getDef, isConnected, listIntegrations, rawCredentials, saveCredentials, setEnabled } from "../../integrations/registry.js";
 import { listModels } from "../../llm/openrouter.js";
 import { listRoutes, resetRoute, resolveModel, saveRoute } from "../../llm/router.js";
-import { cancelReminder, listReminders } from "../../reminders.js";
+import { cancelReminder, createReminder, listReminders, reminderOccurrences, rescheduleReminder } from "../../reminders.js";
+import { parseLocalDateTime } from "../../time.js";
+import { googleApi } from "../../integrations/google.js";
 import { getSettings, saveSettings } from "../../settings.js";
 import { SESSION_ID, sendWaCommand } from "../../whatsapp/session.js";
 import { hashPassword, normalizePhone, scopeUserId, verifyPassword } from "../../accounts.js";
@@ -134,7 +136,13 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
            FROM transactions t JOIN users u ON u.id = t.user_id WHERE ${where} ORDER BY t.occurred_at DESC LIMIT 300`,
         [uid, tz, month],
       );
-      return { month, totals, byCategory, daily, months, transactions };
+      const [py, pm] = month.split("-").map(Number) as [number, number];
+      const prevMonth = new Date(Date.UTC(py, pm - 2, 1)).toISOString().slice(0, 7);
+      const prevByCategory = await many(
+        `SELECT category, SUM(amount) AS total FROM transactions t WHERE ${where} AND kind = 'expense' GROUP BY category`,
+        [uid, tz, prevMonth],
+      );
+      return { month, totals, byCategory, prevByCategory, daily, months, transactions };
     });
 
     base.post<{ Body: { kind: "expense" | "income"; amount: number | string; category: string; description?: string; date?: string; user?: string } }>("/api/finance", async (req, reply) => {
@@ -274,6 +282,66 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     // ---------- Lembretes ----------
     base.get("/api/reminders", async (req) => listReminders(scopeUserId(req.account) ?? undefined));
     base.delete<{ Params: { id: string } }>("/api/reminders/:id", async (req) => ({ ok: await cancelReminder(req.params.id, scopeUserId(req.account) ?? undefined) }));
+
+    // novo lembrete pelo painel (calendário): vai para a conversa mais recente da pessoa
+    base.post<{ Body: { intent?: string; at?: string; user?: string } }>("/api/reminders", async (req, reply) => {
+      const uid = scopeUserId(req.account) ?? req.body.user ?? req.account.userId;
+      const intent = String(req.body.intent ?? "").trim();
+      if (!uid) return reply.code(400).send({ error: "Escolha a pessoa" });
+      if (!intent) return reply.code(400).send({ error: "Diga o que lembrar" });
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(req.body.at ?? "")) return reply.code(400).send({ error: "Data e hora inválidas" });
+      const u = await one("SELECT id, timezone FROM users WHERE id = $1", [uid]);
+      const conv = u && (await one("SELECT id FROM conversations WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1", [uid]));
+      if (!conv) return reply.code(400).send({ error: "Essa pessoa ainda não conversou no WhatsApp" });
+      const tz = u.timezone ?? config.DEFAULT_TIMEZONE;
+      try {
+        return await createReminder({ userId: uid, conversationId: conv.id, intent: `${intent} (criado pelo painel)`, dueAt: parseLocalDateTime(req.body.at!, tz), timezone: tz });
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
+
+    base.patch<{ Params: { id: string }; Body: { at?: string } }>("/api/reminders/:id", async (req, reply) => {
+      const at = req.body.at ? new Date(req.body.at) : null;
+      if (!at || Number.isNaN(at.getTime())) return reply.code(400).send({ error: "Data inválida" });
+      try {
+        return { ok: await rescheduleReminder(req.params.id, at, scopeUserId(req.account) ?? undefined) };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
+
+    // ---------- Agenda (calendário): lembretes + Google Agenda conectado (só o dono vê) ----------
+    base.get<{ Querystring: { from?: string; to?: string; user?: string } }>("/api/calendar", async (req, reply) => {
+      const from = new Date(req.query.from ?? "");
+      const to = new Date(req.query.to ?? "");
+      if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to <= from || to.getTime() - from.getTime() > 100 * 86400_000)
+        return reply.code(400).send({ error: "Período inválido" });
+      const uid = scopeUserId(req.account) ?? (req.query.user || null);
+      const events: any[] = (await reminderOccurrences(from, to, uid)).map((e) => ({ ...e, kind: "reminder" }));
+      if (req.account.role === "superadmin" && !req.query.user && (await isConnected("google").catch(() => false))) {
+        try {
+          const params = new URLSearchParams({ timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "250" });
+          const j = await googleApi(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`);
+          for (const e of j.items ?? []) {
+            const allDay = !e.start?.dateTime;
+            events.push({
+              id: `g:${e.id}`,
+              kind: "google",
+              title: e.summary ?? "(sem título)",
+              start: allDay ? `${e.start.date}T00:00:00` : e.start.dateTime,
+              end: allDay ? null : e.end?.dateTime ?? null,
+              allDay,
+              location: e.location ?? null,
+              link: e.htmlLink ?? null,
+            });
+          }
+        } catch {
+          /* Google fora do ar: mostra só os lembretes */
+        }
+      }
+      return { events };
+    });
 
     // ---------- Arquivos gerados (gravações do navegador, prints) ----------
     base.get<{ Params: { id: string } }>("/api/media/:id", async (req, reply) => {

@@ -45,3 +45,21 @@ export function pickReaction(text: string, kind?: string): string {
   if (t.includes("?")) return "👀";
   return "👍";
 }
+
+/**
+ * Mensagem que só agradece/confirma ("valeu", "ok", "kkk", "👍"): a reação já responde e nem chama a IA.
+ * "ok"/"sim"/"pode" só contam como agradecimento se o assistente não acabou de perguntar algo.
+ */
+const THANKS = /^(valeu+|vlw+|obrigad[oa]s?|obg|brigad[oa]|tmj|show( de bola)?|top|massa|perfeito|otimo|blz|beleza|kk+|k{3,}|ha(ha)+|rs(rs)*|boa|show demais|muito obrigad[oa]|valeu mesmo|fechou|tranquilo|de nada)$/;
+const CONFIRM = /^(ok+|okay|certo|ta|ta bom|entendi|sim|pode|isso|combinado|fechado|blz|beleza)$/;
+export function isAckOnly(texts: string[], assistantAsked: boolean) {
+  if (!texts.length) return false;
+  return texts.every((raw) => {
+    const t = strip(raw).replace(/[!.,~]+/g, " ").replace(/\s+/g, " ").trim();
+    const noEmoji = t.replace(/[\p{Extended_Pictographic}\u200d\ufe0f\u{1F3FB}-\u{1F3FF}]/gu, "").trim();
+    if (!noEmoji) return t.length > 0; // só emoji
+    if (t.length > 40) return false;
+    const words = noEmoji.replace(/ (a?mig[oa]|cara|mano|demais|viu|ai|hein|entao)$/g, "");
+    return THANKS.test(words) || (!assistantAsked && CONFIRM.test(words));
+  });
+}

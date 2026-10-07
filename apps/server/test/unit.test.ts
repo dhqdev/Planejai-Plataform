@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { splitBubbles, toWhatsApp } from "../src/agent/orchestrator.js";
+import { isAckOnly } from "../src/agent/reaction.js";
 import { CloudChannel } from "../src/channels/cloud.js";
 import { EvolutionChannel } from "../src/channels/evolution.js";
 import { parseWAMessage } from "../src/channels/wa-message.js";
@@ -13,6 +14,16 @@ describe("formatação para WhatsApp", () => {
     expect(toWhatsApp("**Kinoplex** e [ingresso](https://ingresso.com)\n- 14h30\n### Sessões")).toBe(
       "*Kinoplex* e ingresso: https://ingresso.com\n14h30\n*Sessões*",
     );
+  });
+
+  it("reconhece mensagem que só agradece ou confirma (sem chamar a IA)", () => {
+    expect(isAckOnly(["valeu!"], false)).toBe(true);
+    expect(isAckOnly(["kkkkk", "👍"], false)).toBe(true);
+    expect(isAckOnly(["Obrigado amigo 🙏"], true)).toBe(true);
+    expect(isAckOnly(["ok"], false)).toBe(true);
+    expect(isAckOnly(["sim"], true)).toBe(false);
+    expect(isAckOnly(["valeu, e o cinema amanhã?"], false)).toBe(false);
+    expect(isAckOnly([""], false)).toBe(false);
   });
 
   it("tira traços e travessões para soar como gente", () => {

@@ -202,7 +202,7 @@ const WIDGETS: Record<string, WidgetDef> = {
     icon: "bell",
     sizes: ["m", "l"],
     render: ({ mine }) => (
-      <Box title="Próximos lembretes" icon="bell" to="/reminders">
+      <Box title="Próximos lembretes" icon="bell" to="/agenda">
         {(mine?.nextReminders ?? []).map((r: any) => (
           <div key={r.id} className="line-item">
             <span className="ellipsis" style={{ flex: 1 }}>{r.intent}</span>
@@ -483,9 +483,17 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
               </button>
             </>
           ) : (
-            <button className="btn" onClick={() => setEditing(true)}>
-              <Icon name="layout" size={16} /> Editar painel
-            </button>
+            <div className="dash-actions">
+              <button className="btn phone-only" onClick={() => setModal("quick")}>
+                <Icon name="settings" size={16} /> Ajustes
+              </button>
+              <button className="btn" onClick={() => setEditing(true)}>
+                <Icon name="layout" size={16} /> Editar<span className="hide-phone"> painel</span>
+              </button>
+              <button className="btn btn-primary phone-only" onClick={() => setModal("invite")}>
+                <Icon name="user-plus" size={16} /> Convidar
+              </button>
+            </div>
           )
         }
       />
@@ -575,27 +583,28 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
               <button className={theme === "dark" ? "active" : ""} onClick={() => theme !== "dark" && onTheme()}>Escuro</button>
             </div>
           </div>
+          <div className="more-grid" style={{ marginTop: 14 }}>
           {(isSuper
             ? [
                 ["/whatsapp", "phone", "WhatsApp", sys.data?.channel?.configured ? "conectado" : "desconectado"],
                 ["/integrations", "plug", "Integrações", ""],
-                ["/models", "cpu", "Modelos por tarefa", ""],
-                ["/agents", "brain", "Agentes e melhoria diária", ""],
-                ["/settings", "settings", "Configurações gerais", ""],
+                ["/models", "cpu", "Modelos", ""],
+                ["/agents", "brain", "Agentes", ""],
+                ["/settings", "settings", "Configurações", ""],
               ]
             : [
                 ["/profile", "user", "Minha conta", ""],
-                ["/invites", "user-plus", "Convites e contatos", ""],
-                ["/watches", "eye", "Acompanhamentos", ""],
+                ["/invites", "user-plus", "Convites", ""],
+                ["/watches", "eye", "De olho", ""],
               ]
           ).map(([to, icon, label, sub]) => (
-            <Link key={to} to={to!} className="line-item" style={{ color: "inherit", textDecoration: "none" }} onClick={() => setModal(null)}>
-              <Icon name={icon!} />
-              <span style={{ flex: 1 }}>{label}</span>
-              {sub && <span className="muted" style={{ fontSize: 12 }}>{sub}</span>}
-              <Icon name="chevron-right" size={16} />
+            <Link key={to} to={to!} className="more-tile" onClick={() => setModal(null)}>
+              <Icon name={icon!} size={26} />
+              <span>{label}</span>
+              {sub && <small className="muted">{sub}</small>}
             </Link>
           ))}
+          </div>
         </Modal>
       )}
     </div>

@@ -16,7 +16,7 @@ import { isOwner } from "../ingest.js";
 import { describeMessage, preprocessMedia } from "./media.js";
 import { Progress } from "./progress.js";
 import { humanize } from "./humanize.js";
-import { pickReaction } from "./reaction.js";
+import { isAckOnly, pickReaction } from "./reaction.js";
 import { Tracer } from "./trace.js";
 import { allShort, pushShort, recentShort, redisAlive, type ShortEntry } from "../shortmem.js";
 import { config } from "../config.js";
@@ -167,6 +167,22 @@ async function processLocked(
       channel.react(conversation.remote_jid, lastInbound.external_id, autoReaction).catch(() => {});
       outbox.reactions.push({ messageId: lastInbound.external_id, emoji: autoReaction });
     }
+
+    // Só um "valeu", "ok" ou emoji: a reação já respondeu, então nem chama a IA (economia de tokens)
+    const userMsgs = pending.filter((m) => m.role === "user");
+    if (opts.trigger !== "reminder" && userMsgs.length === pending.length && userMsgs.every((m) => !m.media && (!m.meta?.kind || m.meta.kind === "text"))) {
+      const last = (await recentShort(conversationId, 3))?.filter((e) => e.role === "assistant").at(-1);
+      if (isAckOnly(userMsgs.map((m) => m.content ?? ""), Boolean(last && /\?\s*\S{0,3}\s*$/.test(last.text)))) {
+        const step = await tracer.step({ agent: "cto", type: "info", name: "só reação, sem IA", input: { reacao: autoReaction } });
+        await step.ok({ economizou: "uma chamada do CTO" });
+        await pushShort(conversationId, userMsgs.map((m) => ({ id: m.id, role: "user" as const, text: m.content ?? "", ts: new Date(m.created_at).getTime(), ext: m.external_id })));
+        if (await redisAlive()) await query("DELETE FROM messages WHERE id = ANY($1)", [pending.map((m) => m.id)]);
+        else await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
+        await tracer.finish("[[silencio]]");
+        return { executionId: tracer.executionId, bubbles: [], outbox };
+      }
+    }
+
     if (opts.trigger !== "reminder") progress.start();
     await preprocessMedia(pending, channel, tracer, conversation.remote_jid);
 

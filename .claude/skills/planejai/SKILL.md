@@ -49,7 +49,7 @@ apps/server/src/
   integrations/registry.ts INTEGRATIONS: conectores, campos (com help de onde pegar e quais escopos), test() real;
                            credenciais AES-256-GCM no banco; `oauth` marca Google/Mercado Livre (redirectUri na tela)
   integrations/mercadolivre.ts  OAuth do ML: o refresh_token GIRA a cada uso e é salvo de novo; precisa do escopo offline_access
-  reminders.ts             lembretes (pg-boss + cron-parser), o CTO escreve a mensagem na hora
+  reminders.ts             lembretes (pg-boss + cron-parser), o CTO escreve a mensagem na hora; o único que disparou é apagado com as memórias criadas junto; reminderOccurrences() expande o cron para a Agenda
   api/server.ts            login (dono ou conta), cadastro, requireAuth/requireSuper
   api/routes/              webhooks.ts e dashboard.ts (REST do painel: bloco com escopo + bloco só super admin)
   db/migrations/*.sql      migrações numeradas, aplicadas no boot
@@ -108,6 +108,9 @@ O CTO ganha automaticamente `ask_<id>` e os outros especialistas ganham `consult
 - `agent/progress.ts`: mantém o "digitando..." ligado e manda avisos curtos. A frase que o CTO escreve junto de um `ask_*` sai na hora ("deixa eu ver aqui 🔎"); se ele não escrever nada, um aviso de reserva sai após 7s e outro aos 45s (máx. 3 por execução, sem LLM).
 - Resposta junto de `react_to_message`/`save_memory` é entregue sem outra rodada do modelo (pergunta simples = 1 chamada). Não quebre isso ao mexer no runner.
 - A primeira coisa de toda execução é a reação temática instantânea (`agent/reaction.ts`, regex, sem IA): cinema 🍿, gasto 💸, viagem ✈️... O CTO não reage de novo; só troca por ✅ quando conclui uma tarefa. Tema novo = linha nova em THEMES (a ordem importa).
+- "valeu", "ok", "kkk" ou só emoji (isAckOnly em `agent/reaction.ts`): a reação responde e o CTO nem é chamado. "ok"/"sim" contam como pergunta respondida se a última fala do assistente terminou com "?".
+- Todo texto que sai (balões, avisos, notifyUser) passa por `humanize()` (`agent/humanize.ts`): sem "-", "•" ou travessão, para soar como gente. Não reintroduza listas com marcador no prompt.
+- Dashboard: `/agenda` (pages/Calendar.tsx, mês/semana/lista, arrastar lembrete único chama PATCH /api/reminders/:id, Google Agenda aparece só para o dono); Finanças por categoria com comparação do mês anterior (prevByCategory); "Mais" no celular é grade de quadrados; no celular o Painel troca os botões de canto por uma linha Ajustes/Editar/Convidar.
 
 ### Melhoria diária e proatividade
 - `improve.ts` (fila `improve.daily`, 19h no `DEFAULT_TIMEZONE`): uma chamada barata em JSON por pessoa ativa; assuntos somam em `user_topics` e viram agente do cliente (`client_agents`, até 3, ferramentas só da lista `CLIENT_AGENT_TOOLS`) quando aparecem em 2 dias diferentes. Botão "Melhorar agora" em Agentes.

@@ -137,6 +137,8 @@ describe.skipIf(!enabled)("time de agentes (e2e)", () => {
     await mod.processConversation(convId, { trigger: "playground", channel });
     // a reação do tema sai sozinha, sem IA; o CTO fica em silêncio
     expect(channel.sent).toEqual([{ type: "reaction", emoji: "🙏", messageId: "in2" }]);
+    const llm = await db.one("SELECT COUNT(*)::int AS n FROM execution_steps WHERE execution_id = (SELECT id FROM executions ORDER BY started_at DESC LIMIT 1) AND type = 'llm'");
+    expect(llm.n).toBe(0);
   });
 
   it("pergunta simples: responde junto da reação, numa rodada só do modelo", async () => {

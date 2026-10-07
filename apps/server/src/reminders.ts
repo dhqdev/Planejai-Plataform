@@ -42,6 +42,51 @@ export async function cancelReminder(id: string, userId?: string) {
   return true;
 }
 
+/** Muda o horário de um lembrete único (arrastar no calendário). */
+export async function rescheduleReminder(id: string, dueAt: Date, userId?: string) {
+  if (dueAt.getTime() < Date.now() - 60_000) throw new Error("Esse horário já passou");
+  const r = await one(
+    `SELECT job_id, cron FROM reminders WHERE id = $1 AND status = 'scheduled' ${userId ? "AND user_id = $2" : ""}`,
+    userId ? [id, userId] : [id],
+  );
+  if (!r) return false;
+  if (r.cron) throw new Error("Lembrete recorrente: peça a mudança no WhatsApp");
+  if (r.job_id) await (await getBoss()).cancel(QUEUES.reminder, r.job_id).catch(() => {});
+  await enqueue(id, dueAt);
+  return true;
+}
+
+/**
+ * Ocorrências dos lembretes agendados entre duas datas, para o calendário.
+ * Recorrentes são expandidos pelo cron (no máximo 400 no período).
+ */
+export async function reminderOccurrences(from: Date, to: Date, userId?: string | null) {
+  const rows = await many(
+    `SELECT r.id, r.intent, r.due_at, r.cron, r.timezone, u.name AS user_name, u.phone
+       FROM reminders r JOIN users u ON u.id = r.user_id
+      WHERE r.status = 'scheduled' AND ($1::uuid IS NULL OR r.user_id = $1) AND (r.cron IS NOT NULL OR r.due_at BETWEEN $2 AND $3)`,
+    [userId ?? null, from, to],
+  );
+  const out: { id: string; reminderId: string; title: string; start: string; recurring: boolean; person: string | null }[] = [];
+  for (const r of rows) {
+    const base = { reminderId: r.id, title: r.intent, recurring: Boolean(r.cron), person: r.user_name ?? (r.phone ? `+${r.phone}` : null) };
+    if (!r.cron) {
+      out.push({ ...base, id: r.id, start: new Date(r.due_at).toISOString() });
+      continue;
+    }
+    try {
+      const it = cronParser.parseExpression(r.cron, { tz: r.timezone, currentDate: new Date(Math.max(from.getTime(), Date.now()) - 1000), endDate: to });
+      for (let n = 0; n < 400 && it.hasNext(); n++) {
+        const d = it.next().toDate();
+        out.push({ ...base, id: `${r.id}:${d.getTime()}`, start: d.toISOString() });
+      }
+    } catch {
+      /* cron inválido: ignora */
+    }
+  }
+  return out.sort((a, b) => a.start.localeCompare(b.start));
+}
+
 export async function listReminders(userId?: string) {
   return many(
     `SELECT r.id, r.intent, r.due_at, r.cron, r.timezone, r.status, r.last_fired_at, r.created_at, u.name AS user_name, u.phone

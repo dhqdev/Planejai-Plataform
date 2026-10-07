@@ -17,7 +17,7 @@ const InvitesPage = lazy(() => import("./pages/Invites").then((m) => ({ default:
 const MemoriesPage = lazy(() => import("./pages/Memories").then((m) => ({ default: m.MemoriesPage })));
 const ModelsPage = lazy(() => import("./pages/Models").then((m) => ({ default: m.ModelsPage })));
 const ProfilePage = lazy(() => import("./pages/Profile").then((m) => ({ default: m.ProfilePage })));
-const RemindersPage = lazy(() => import("./pages/Reminders").then((m) => ({ default: m.RemindersPage })));
+const CalendarPage = lazy(() => import("./pages/Calendar").then((m) => ({ default: m.CalendarPage })));
 const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
 const WatchesPage = lazy(() => import("./pages/Watches").then((m) => ({ default: m.WatchesPage })));
 const WhatsAppPage = lazy(() => import("./pages/WhatsApp").then((m) => ({ default: m.WhatsAppPage })));
@@ -33,7 +33,7 @@ export interface Me {
   linked: boolean;
 }
 
-type NavItem = { section: string } | { to: string; label: string; icon: string; badge?: string };
+type NavItem = { section: string } | { to: string; label: string; icon: string; badge?: string; short?: string };
 
 /** Super admin (dono da stack): tudo. Admin (cliente com acesso ao painel): só os próprios dados. */
 const SUPER_NAV: NavItem[] = [
@@ -50,8 +50,8 @@ const SUPER_NAV: NavItem[] = [
   { to: "/models", label: "Modelos", icon: "cpu" },
   { section: "Dados" },
   { to: "/finance", label: "Finanças", icon: "wallet" },
-  { to: "/reminders", label: "Lembretes", icon: "bell" },
-  { to: "/watches", label: "Acompanhamentos", icon: "eye" },
+  { to: "/agenda", label: "Agenda", icon: "calendar" },
+  { to: "/watches", label: "Acompanhamentos", icon: "eye", short: "De olho" },
   { to: "/memories", label: "Memórias", icon: "bookmark" },
   { section: "Sistema" },
   { to: "/settings", label: "Configurações", icon: "settings" },
@@ -61,8 +61,8 @@ const ADMIN_NAV: NavItem[] = [
   { section: "Meu Planejai" },
   { to: "/", label: "Início", icon: "home" },
   { to: "/finance", label: "Gastos", icon: "wallet" },
-  { to: "/reminders", label: "Lembretes", icon: "bell" },
-  { to: "/watches", label: "Acompanhamentos", icon: "eye" },
+  { to: "/agenda", label: "Agenda", icon: "calendar" },
+  { to: "/watches", label: "Acompanhamentos", icon: "eye", short: "De olho" },
   { to: "/invites", label: "Convites", icon: "user-plus" },
   { to: "/memories", label: "O que ele sabe", icon: "bookmark" },
   { section: "Conta" },
@@ -79,7 +79,7 @@ const SUPER_TABS = [
 const ADMIN_TABS = [
   { to: "/", label: "Início", icon: "home" },
   { to: "/finance", label: "Gastos", icon: "wallet" },
-  { to: "/reminders", label: "Lembretes", icon: "bell" },
+  { to: "/agenda", label: "Agenda", icon: "calendar" },
   { to: "/invites", label: "Convites", icon: "user-plus" },
 ];
 
@@ -178,7 +178,8 @@ export function App() {
           <Route path="/invites" element={<InvitesPage isSuper={isSuper} />} />
           <Route path="/watches" element={<WatchesPage isSuper={isSuper} />} />
           <Route path="/finance" element={<FinancePage isSuper={isSuper} />} />
-          <Route path="/reminders" element={<RemindersPage isSuper={isSuper} />} />
+          <Route path="/agenda" element={<CalendarPage isSuper={isSuper} />} />
+          <Route path="/reminders" element={<Navigate to="/agenda" replace />} />
           <Route path="/memories" element={<MemoriesPage isSuper={isSuper} />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
@@ -200,7 +201,7 @@ export function App() {
       </nav>
 
       {menu && (
-        <Modal title="Menu" onClose={() => setMenu(false)}>
+        <Modal title="Menu" onClose={() => setMenu(false)} className="more-sheet">
           {!isStandalone() && (installable || isIos()) && (
             <div className="install-card">
               <div className="brand-logo"><Logo size={26} /></div>
@@ -213,26 +214,28 @@ export function App() {
               {installable && <button className="btn btn-primary btn-sm" onClick={async () => { if (await promptInstall()) setInstallable(false); }}>Instalar</button>}
             </div>
           )}
-          <div className="sheet-nav">
-            {(isSuper ? SUPER_NAV : ADMIN_NAV).map((item, i) =>
-              "section" in item ? (
-                <div className="nav-section" key={i}>{item.section}</div>
-              ) : (
-                <button key={item.to} className={`sheet-item ${loc.pathname === item.to ? "active" : ""}`} onClick={() => { haptic(); setMenu(false); nav(item.to); }}>
-                  <Icon name={item.icon} />
-                  {item.label}
-                  <span className="chev"><Icon name="chevron-right" size={16} /></span>
-                </button>
-              ),
-            )}
-          </div>
-          <div className="me" style={{ marginTop: 14 }}>
+          <div className="me more-me">
             <div className="avatar">{(me.name ?? me.email).slice(0, 1).toUpperCase()}</div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className="me-name">{me.name ?? me.email}</div>
               <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"}</div>
             </div>
-            <button className="btn btn-sm" onClick={async () => { await api("/api/auth/logout", { method: "POST" }); setMenu(false); setMe(null); }}>Sair</button>
+          </div>
+          <div className="more-grid">
+            {(isSuper ? SUPER_NAV : ADMIN_NAV).filter((i): i is Exclude<NavItem, { section: string }> => "to" in i).map((item) => (
+              <button key={item.to} className={`more-tile ${loc.pathname === item.to ? "active" : ""}`} onClick={() => { setMenu(false); nav(item.to); }}>
+                <Icon name={item.icon} size={26} />
+                <span>{item.short ?? item.label}</span>
+              </button>
+            ))}
+            <button className="more-tile" onClick={toggleTheme}>
+              <Icon name={theme === "dark" ? "sun" : "moon"} size={26} />
+              <span>{theme === "dark" ? "Tema claro" : "Tema escuro"}</span>
+            </button>
+            <button className="more-tile" onClick={async () => { await api("/api/auth/logout", { method: "POST" }); setMenu(false); setMe(null); }}>
+              <Icon name="logout" size={26} />
+              <span>Sair</span>
+            </button>
           </div>
         </Modal>
       )}

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { api, brl, day } from "../api";
-import { CATEGORY_COLORS, Donut, Empty, ErrorBox, Loading, Modal, PageHead, Stat } from "../components";
+import { CATEGORY_COLORS, Empty, ErrorBox, Loading, Modal } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
+import { haptic } from "../touch";
 
 const SOURCE: Record<string, string> = { conversa: "conversa", audio: "áudio", comprovante: "comprovante", documento: "documento", painel: "painel" };
 
@@ -11,113 +12,205 @@ function thisMonth() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+const CAT_ICON: Record<string, string> = {
+  Alimentação: "food",
+  Mercado: "cart",
+  Transporte: "car",
+  Moradia: "home",
+  Saúde: "heart",
+  Educação: "book",
+  Lazer: "ticket",
+  Compras: "shop",
+  Assinaturas: "repeat",
+  Contas: "receipt",
+  Viagem: "plane",
+  Salário: "briefcase",
+  Investimentos: "trend",
+  Outros: "hash",
+};
+const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+const monthName = (m: string) => MONTHS[Number(m.slice(5)) - 1] ?? m;
+
+function dayLabel(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  const y = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  const same = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  if (same(d, today)) return "Hoje";
+  if (same(d, y)) return "Ontem";
+  const s = d.toLocaleDateString("pt-BR", { weekday: "short", day: "numeric", month: "short" }).replace(/\./g, "");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 export function FinancePage({ isSuper }: { isSuper: boolean }) {
   const [month, setMonth] = useState(thisMonth());
   const [user, setUser] = useState("");
   const [adding, setAdding] = useState(false);
+  const [cat, setCat] = useState<string | null>(null);
+  const [detail, setDetail] = useState<any | null>(null);
   const people = useApi<any[]>(isSuper ? "/api/people" : null);
   const { data, error, reload } = useApi<any>(`/api/finance?month=${month}${user ? `&user=${user}` : ""}`, { poll: 20000 });
 
   const months = data?.months ?? [];
-  const prev = months.find((m: any) => m.month < month && m.month === shift(month, -1));
   const expenses = Number(data?.totals?.expenses ?? 0);
   const income = Number(data?.totals?.income ?? 0);
-  const diff = prev ? expenses - Number(prev.expenses) : null;
-  const cats = (data?.byCategory ?? []).map((c: any) => ({ label: c.category, value: Number(c.total), count: Number(c.count) }));
+  const prevTotal = Number(months.find((m: any) => m.month === shift(month, -1))?.expenses ?? NaN);
+  const diff = Number.isFinite(prevTotal) ? expenses - prevTotal : null;
+  const prevCat = new Map<string, number>((data?.prevByCategory ?? []).map((c: any) => [c.category, Number(c.total)]));
+  const cats = (data?.byCategory ?? []).map((c: any) => ({ label: c.category as string, value: Number(c.total), count: Number(c.count) }));
+  const maxMonth = Math.max(1, ...months.map((m: any) => Number(m.expenses)));
   const maxDay = Math.max(1, ...(data?.daily ?? []).map((d: any) => Number(d.expenses ?? 0)));
-  const maxMonth = Math.max(1, ...months.map((m: any) => Math.max(Number(m.expenses), Number(m.income))));
+  const list = (data?.transactions ?? []).filter((t: any) => !cat || t.category === cat);
+  const groups: [string, any[]][] = [];
+  for (const t of list) {
+    const k = new Date(t.occurred_at).toDateString();
+    const g = groups.find(([gk]) => gk === k);
+    if (g) g[1].push(t);
+    else groups.push([k, [t]]);
+  }
+  const isCurrent = month === thisMonth();
+  const go = (n: number) => { haptic(6); setCat(null); setMonth(shift(month, n)); };
 
   return (
-    <div className="page">
-      <PageHead
-        title={isSuper ? "Finanças" : "Meus gastos"}
-        subtitle="Tudo que a pessoa contou, mandou de comprovante ou documento vira lançamento sozinho."
-        actions={
-          <>
-            {isSuper && (
-              <select className="select" style={{ width: 200 }} value={user} onChange={(e) => setUser(e.target.value)}>
-                <option value="">Todas as pessoas</option>
-                {(people.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name ?? `+${p.phone}`}</option>)}
-              </select>
-            )}
-            <input className="input" type="month" style={{ width: 160 }} value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} />
-            <button className="btn btn-primary" onClick={() => setAdding(true)} disabled={isSuper && !user}>+ Lançamento</button>
-          </>
-        }
-      />
+    <div className="page fin-page">
+      <div className="fin-top">
+        <div className="fin-month">
+          <button className="icon-btn" aria-label="Mês anterior" onClick={() => go(-1)}><Icon name="chevron-left" size={18} /></button>
+          <strong>{monthName(month).replace(/^./, (c) => c.toUpperCase())} <span className="muted">{month.slice(0, 4)}</span></strong>
+          <button className="icon-btn" aria-label="Próximo mês" disabled={isCurrent} onClick={() => go(1)}><Icon name="chevron-right" size={18} /></button>
+        </div>
+        <span className="spacer" />
+        {isSuper && (
+          <select className="select fin-person" value={user} onChange={(e) => setUser(e.target.value)}>
+            <option value="">Todas as pessoas</option>
+            {(people.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name ?? `+${p.phone}`}</option>)}
+          </select>
+        )}
+        <button className="btn btn-primary" onClick={() => setAdding(true)} disabled={isSuper && !user} title={isSuper && !user ? "Escolha a pessoa primeiro" : undefined}>
+          <Icon name="plus" size={16} /> <span className="hide-phone">Lançamento</span>
+        </button>
+      </div>
       <ErrorBox error={error} />
       {!data ? <Loading /> : (
         <>
-          <div className="grid grid-4" style={{ marginBottom: 14 }}>
-            <Stat label="Gastos no mês" value={brl(expenses)} icon="wallet" sub={diff == null ? `${data.totals.count} lançamentos` : (
-              <span className={diff > 0 ? "trend-up" : "trend-down"}>{diff > 0 ? "+" : "-"}{brl(Math.abs(diff))} vs mês anterior</span>
-            )} />
-            <Stat label="Receitas" value={brl(income)} icon="arrow" tone="ok" />
-            <Stat label="Saldo" value={<span style={{ color: income - expenses < 0 ? "var(--err)" : "var(--ok)" }}>{brl(income - expenses)}</span>} icon="target" tone="info" />
-            <Stat label="Maior categoria" value={cats[0]?.label ?? "–"} icon="hash" tone="warn" sub={cats[0] ? `${brl(cats[0].value)} · ${expenses ? Math.round((cats[0].value / expenses) * 100) : 0}%` : undefined} />
+          <div className="card fin-hero">
+            <div className="muted">Gastos em {monthName(month)}</div>
+            <div className="fin-total">{brl(expenses)}</div>
+            {diff != null && (
+              <div className={`fin-diff ${diff > 0 ? "up" : "down"}`}>
+                <Icon name={diff > 0 ? "arrow-up" : "arrow-down"} size={14} />
+                {brl(Math.abs(diff))} {diff > 0 ? "a mais" : "a menos"} que em {monthName(shift(month, -1))}
+              </div>
+            )}
+            {cats.length > 0 && (
+              <div className="fin-stack" aria-hidden="true">
+                {cats.map((c: any, i: number) => (
+                  <span key={c.label} style={{ flex: c.value, background: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} title={`${c.label}: ${brl(c.value)}`} />
+                ))}
+              </div>
+            )}
+            <div className="fin-mini">
+              <div><small className="muted">Receitas</small><strong className="amount-in">{brl(income)}</strong></div>
+              <div><small className="muted">Saldo</small><strong style={{ color: income - expenses < 0 ? "var(--err)" : "var(--ok)" }}>{brl(income - expenses)}</strong></div>
+              <div><small className="muted">Lançamentos</small><strong>{data.totals.count}</strong></div>
+            </div>
           </div>
 
-          <div className="grid grid-2" style={{ marginBottom: 14 }}>
-            <div className="card card-pad">
-              <h3>Por categoria</h3>
-              {cats.length ? (
-                <div className="donut-wrap">
-                  <Donut items={cats} center={<div><div className="muted">total</div><strong>{brl(expenses)}</strong></div>} />
-                  <div className="legend">
-                    {cats.map((c: any, i: number) => (
-                      <div className="item" key={c.label}>
-                        <span className="sw" style={{ background: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} />
-                        {c.label} <span className="muted">({c.count})</span>
-                        <strong>{brl(c.value)}</strong>
-                      </div>
-                    ))}
-                  </div>
+          <div className="fin-section-head">
+            <h3>Por categoria</h3>
+            {cat && <button className="btn btn-sm btn-ghost" onClick={() => setCat(null)}><Icon name="x" size={14} /> {cat}</button>}
+          </div>
+          {cats.length ? (
+            <div className="fin-cats">
+              {cats.map((c: any, i: number) => {
+                const prev = prevCat.get(c.label);
+                const d = prev != null ? c.value - prev : null;
+                return (
+                  <button key={c.label} className={`card fin-cat ${cat === c.label ? "active" : ""} ${cat && cat !== c.label ? "dim" : ""}`} onClick={() => { haptic(5); setCat(cat === c.label ? null : c.label); }}>
+                    <span className="fin-cat-ico" style={{ ["--c" as any]: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}><Icon name={CAT_ICON[c.label] ?? "hash"} size={18} /></span>
+                    <span className="fin-cat-name">{c.label}</span>
+                    <strong className="fin-cat-value">{brl(c.value)}</strong>
+                    <span className="fin-cat-bar"><i style={{ width: `${expenses ? (c.value / expenses) * 100 : 0}%` }} /></span>
+                    <small className="muted">
+                      {expenses ? Math.round((c.value / expenses) * 100) : 0}% · {c.count} {c.count === 1 ? "gasto" : "gastos"}
+                      {d != null && Math.abs(d) >= 1 && <span className={d > 0 ? "trend-up" : "trend-down"}> · {d > 0 ? "+" : "−"}{brl(Math.abs(d))}</span>}
+                    </small>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="card"><Empty>Sem gastos em {monthName(month)}. No WhatsApp é só dizer "gastei 32 no almoço" ou mandar a foto do comprovante.</Empty></div>
+          )}
+
+          <div className="fin-grid">
+            <div>
+              <div className="fin-section-head"><h3>{cat ? `Lançamentos em ${cat}` : "Lançamentos"}</h3></div>
+              <div className="card fin-list">
+                {groups.map(([k, items]) => {
+                  const total = items.filter((t) => t.kind === "expense").reduce((a, t) => a + Number(t.amount), 0);
+                  return (
+                    <div key={k}>
+                      <div className="fin-day"><span>{dayLabel(items[0].occurred_at)}</span>{total > 0 && <span>{brl(total)}</span>}</div>
+                      {items.map((t: any) => (
+                        <button key={t.id} className="fin-tx" onClick={() => setDetail(t)}>
+                          <span className="fin-tx-ico"><Icon name={t.kind === "income" ? "arrow-down" : CAT_ICON[t.category] ?? "hash"} size={16} /></span>
+                          <span className="fin-tx-text">
+                            <span className="ellipsis">{t.description ?? t.merchant ?? t.category}</span>
+                            <small className="muted ellipsis">{t.category}{t.merchant && t.description ? ` · ${t.merchant}` : ""}{isSuper ? ` · ${t.user_name ?? `+${t.phone}`}` : ""}</small>
+                          </span>
+                          <strong className={t.kind === "income" ? "amount-in" : ""}>{t.kind === "income" ? "+" : "−"}{brl(t.amount)}</strong>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
+                {!list.length && <Empty>Nada lançado {cat ? `em ${cat} ` : ""}neste mês.</Empty>}
+              </div>
+            </div>
+            <div>
+              <div className="fin-section-head"><h3>Últimos meses</h3></div>
+              <div className="card card-pad">
+                <div className="fin-months">
+                  {months.map((m: any) => (
+                    <button key={m.month} className={m.month === month ? "active" : ""} onClick={() => { haptic(5); setCat(null); setMonth(m.month); }} title={`${m.month}: ${brl(m.expenses)}`}>
+                      <span className="fin-month-bar"><i style={{ height: `${(Number(m.expenses) / maxMonth) * 100}%` }} /></span>
+                      <small>{monthName(m.month).slice(0, 3)}</small>
+                    </button>
+                  ))}
                 </div>
-              ) : <Empty>Sem gastos neste mês.</Empty>}
-            </div>
-            <div className="card card-pad">
-              <h3>Últimos 6 meses</h3>
-              <div className="bars" style={{ height: 150 }}>
-                {months.map((m: any) => (
-                  <div key={m.month} style={{ flex: 1, display: "flex", gap: 3, alignItems: "flex-end", height: "100%" }} title={`${m.month}: gastos ${brl(m.expenses)}, receitas ${brl(m.income)}`}>
-                    <div className="bar" style={{ height: `${(Number(m.expenses) / maxMonth) * 100}%` }} />
-                    <div className="bar" style={{ height: `${(Number(m.income) / maxMonth) * 100}%`, background: "var(--ok)" }} />
-                  </div>
-                ))}
-              </div>
-              <div className="bars-labels">{months.map((m: any) => <span key={m.month}>{m.month.slice(5)}/{m.month.slice(2, 4)}</span>)}</div>
-              <div className="row muted" style={{ fontSize: 12, marginTop: 8 }}>
-                <span className="legend"><span className="item"><span className="sw" style={{ background: "var(--accent)" }} /> gastos <span className="sw" style={{ background: "var(--ok)", marginLeft: 10 }} /> receitas</span></span>
-              </div>
-              <h3 style={{ marginTop: 16 }}>Gastos por dia</h3>
-              <div className="bars" style={{ height: 60 }}>
-                {(data.daily ?? []).map((d: any) => <div key={d.day} className="bar" title={`dia ${d.day}: ${brl(d.expenses)}`} style={{ height: `${(Number(d.expenses ?? 0) / maxDay) * 100}%` }} />)}
+                <h3 style={{ marginTop: 18 }}>Dia a dia</h3>
+                <div className="bars" style={{ height: 56 }}>
+                  {(data.daily ?? []).map((d: any) => <div key={d.day} className="bar" title={`dia ${d.day}: ${brl(d.expenses)}`} style={{ height: `${(Number(d.expenses ?? 0) / maxDay) * 100}%` }} />)}
+                </div>
               </div>
             </div>
-          </div>
-
-          <div className="card">
-            <table className="table">
-              <thead><tr><th>Quando</th><th>Descrição</th><th>Categoria</th>{isSuper && <th>Pessoa</th>}<th>Origem</th><th style={{ textAlign: "right" }}>Valor</th><th /></tr></thead>
-              <tbody>
-                {data.transactions.map((t: any) => (
-                  <tr key={t.id}>
-                    <td className="muted" style={{ whiteSpace: "nowrap" }}>{day(t.occurred_at)}</td>
-                    <td>{t.description ?? t.merchant ?? "–"}{t.merchant && t.description ? <span className="muted"> · {t.merchant}</span> : null}</td>
-                    <td><span className="chip">{t.category}</span></td>
-                    {isSuper && <td>{t.user_name ?? `+${t.phone}`}</td>}
-                    <td className="muted">{SOURCE[t.source] ?? t.source}</td>
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }} className={t.kind === "income" ? "amount-in" : "amount-out"}>{t.kind === "income" ? "+ " : "− "}{brl(t.amount)}</td>
-                    <td><button className="btn btn-sm btn-ghost" title="Apagar" onClick={async () => { if (confirm("Apagar este lançamento?")) { await api(`/api/finance/${t.id}`, { method: "DELETE" }); void reload(); } }}><Icon name="trash" size={14} /></button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {!data.transactions.length && <Empty>Nada lançado neste mês. No WhatsApp é só dizer "gastei 32 no almoço" ou mandar a foto do comprovante.</Empty>}
           </div>
         </>
       )}
       {adding && <AddTransaction user={user} onClose={() => { setAdding(false); void reload(); }} />}
+      {detail && (
+        <Modal
+          title={detail.kind === "income" ? "Receita" : "Gasto"}
+          icon={<Icon name={CAT_ICON[detail.category] ?? "wallet"} />}
+          onClose={() => setDetail(null)}
+          footer={
+            <button className="btn btn-danger" onClick={async () => { if (confirm("Apagar este lançamento?")) { await api(`/api/finance/${detail.id}`, { method: "DELETE" }); setDetail(null); void reload(); } }}>
+              <Icon name="trash" size={16} /> Apagar
+            </button>
+          }
+        >
+          <div className="fin-total" style={{ marginBottom: 12 }}>{detail.kind === "income" ? "+" : "−"}{brl(detail.amount)}</div>
+          <dl className="kv">
+            <dt>Descrição</dt><dd>{detail.description ?? "–"}</dd>
+            {detail.merchant && (<><dt>Onde</dt><dd>{detail.merchant}</dd></>)}
+            <dt>Categoria</dt><dd>{detail.category}</dd>
+            <dt>Quando</dt><dd>{day(detail.occurred_at)}</dd>
+            <dt>Origem</dt><dd>{SOURCE[detail.source] ?? detail.source}</dd>
+            {isSuper && (<><dt>Pessoa</dt><dd>{detail.user_name ?? `+${detail.phone}`}</dd></>)}
+          </dl>
+        </Modal>
+      )}
     </div>
   );
 }
