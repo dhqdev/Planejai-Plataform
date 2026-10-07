@@ -53,10 +53,21 @@ function Wardrobe({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="Mochi" onClose={onClose} wide>
       <div className="mochi-stage">
-        <Mochi mood={preview} outfit={outfit} size={190} follow />
+        <div
+          role="button"
+          aria-label="Cutucar o Mochi"
+          style={{ cursor: "pointer" }}
+          onClick={() => {
+            haptic(14);
+            const pokes: Mood[] = ["slap", "dizzy", "surprised", "love", "annoyed", "dancing"];
+            setPreview(pokes[Math.floor(Math.random() * pokes.length)]);
+          }}
+        >
+          <Mochi mood={preview} outfit={outfit} size={190} follow />
+        </div>
         <div className="mochi-stage-label">
           {label}
-          <small>{wearing.length ? wearing.join(" · ") : "sem roupinha"}</small>
+          <small>{wearing.length ? wearing.join(" · ") : "sem roupinha"} · toque nele</small>
         </div>
       </div>
 

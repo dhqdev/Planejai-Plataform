@@ -2,6 +2,7 @@
 .mochi { display: block; overflow: visible; color: var(--muted, #888); flex-shrink: 0; }
 .mochi * { transform-box: fill-box; transform-origin: center; }
 .mochi .m-move, .mochi .m-pop, .mochi .m-squish { transform-box: view-box; transform-origin: 60px 106px; }
+.mochi .m-wear { transition: transform 0.35s cubic-bezier(.3, 1.4, .5, 1); }
 .mochi .m-look { transition: transform 0.18s ease-out; }
 .mochi .m-eyes { transition: transform 0.4s ease; }
 .mochi .m-tint-stop { transition: stop-color 0.5s ease; }
@@ -114,6 +115,16 @@
 .mochi.m-dancing .m-nub-l { animation: m-wave 0.5s ease-in-out infinite alternate; transform-box: view-box; transform-origin: 26px 92px; }
 .mochi.m-dancing .m-nub-r { animation: m-wave 0.5s ease-in-out infinite alternate-reverse; }
 @keyframes m-dance { 0%, 100% { transform: rotate(-8deg) translateX(-3px); } 25% { transform: rotate(0) translateY(-4px); } 50% { transform: rotate(8deg) translateX(3px); } 75% { transform: rotate(0) translateY(-4px); } }
+
+/* brilho de cada humor */
+.mochi .m-glow { opacity: 0.32; animation: m-glow 2.6s ease-in-out infinite; }
+@keyframes m-glow { 0%, 100% { opacity: 0.22; transform: scale(0.94); } 50% { opacity: 0.4; transform: scale(1.04); } }
+
+/* tapa: amassa de lado e treme */
+.mochi.m-slap .m-move { animation: m-slap 1.6s cubic-bezier(.2, .9, .3, 1) infinite; }
+@keyframes m-slap { 0% { transform: translateX(0); } 6% { transform: translateX(-7px) scale(0.9, 1.06) rotate(-8deg); } 18% { transform: translateX(2px) rotate(3deg); } 28%, 100% { transform: none; } }
+.mochi .m-impact { animation: m-impact 1.6s ease-out infinite; }
+@keyframes m-impact { 0%, 4% { opacity: 0; transform: scale(0.6); } 10% { opacity: 1; transform: scale(1); } 45%, 100% { opacity: 0; } }
 
 /* miniaturas paradas */
 .mochi.m-still *, .mochi.m-still { animation: none !important; }

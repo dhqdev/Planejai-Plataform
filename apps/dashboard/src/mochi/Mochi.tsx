@@ -26,7 +26,8 @@ export type Mood =
   | "yawn"
   | "annoyed"
   | "upload"
-  | "dancing";
+  | "dancing"
+  | "slap";
 
 export const MOODS: { id: Mood; label: string }[] = [
   { id: "idle", label: "parado" },
@@ -49,6 +50,7 @@ export const MOODS: { id: Mood; label: string }[] = [
   { id: "annoyed", label: "bravinho" },
   { id: "upload", label: "enviando" },
   { id: "dancing", label: "dançando" },
+  { id: "slap", label: "tapa" },
 ];
 
 export type Slot = "head" | "eyes" | "neck" | "costume";
@@ -87,6 +89,25 @@ const TINT: Partial<Record<Mood, string>> = {
   dizzy: "#f6c4e4",
   love: "#c9dcfb",
   proud: "#d2eec8",
+  slap: "#f9cdd2",
+};
+
+/** Brilho atrás dele em cada humor (o "efeito" de cada sentimento). */
+const GLOW: Partial<Record<Mood, string>> = {
+  working: "#4f72f0",
+  thinking: "#8b5cf0",
+  searching: "#6a63ee",
+  approval: "#f29a1f",
+  question: "#2bb3cf",
+  error: "#ef4b5f",
+  finished: "#2fbf7f",
+  ratelimit: "#f2862b",
+  dizzy: "#e05bb0",
+  love: "#ec4f73",
+  proud: "#f4c542",
+  slap: "#ef4b5f",
+  greeting: "#ffffff",
+  dancing: "#8b5cf0",
 };
 
 const BADGE: Partial<Record<Mood, { kind: "dots" | "!" | "?" | "dot"; color: string }>> = {
@@ -108,7 +129,7 @@ const RX = 75;
 const EY = 80;
 const BODY = "M60 49 C85 49 101 51 101 73 C101 95 88 105 60 105 C32 105 19 95 19 73 C19 51 35 49 60 49 Z";
 
-type EyeKind = "dot" | "big" | "happy" | "sleepy" | "line" | "spiral" | "heart" | "star" | "annoyedL" | "annoyedR";
+type EyeKind = "dot" | "big" | "happy" | "sleepy" | "line" | "spiral" | "heart" | "star" | "annoyedL" | "annoyedR" | "squintL" | "squintR";
 
 const EYES: Record<Mood, [EyeKind, EyeKind]> = {
   idle: ["dot", "dot"],
@@ -131,6 +152,7 @@ const EYES: Record<Mood, [EyeKind, EyeKind]> = {
   annoyed: ["annoyedL", "annoyedR"],
   upload: ["dot", "dot"],
   dancing: ["happy", "happy"],
+  slap: ["squintL", "squintR"],
 };
 
 function Eye({ kind, x, y = EY }: { kind: EyeKind; x: number; y?: number }) {
@@ -155,6 +177,10 @@ function Eye({ kind, x, y = EY }: { kind: EyeKind; x: number; y?: number }) {
       return <path className="m-eye" d={`M${x - 5} ${y - 1.5} L${x + 4.5} ${y + 1}`} {...s} />;
     case "annoyedR":
       return <path className="m-eye" d={`M${x - 4.5} ${y + 1} L${x + 5} ${y - 1.5}`} {...s} />;
+    case "squintL":
+      return <path className="m-eye" d={`M${x - 4.5} ${y - 4} L${x + 4} ${y} L${x - 4.5} ${y + 4}`} {...s} strokeLinejoin="round" />;
+    case "squintR":
+      return <path className="m-eye" d={`M${x + 4.5} ${y - 4} L${x - 4} ${y} L${x + 4.5} ${y + 4}`} {...s} strokeLinejoin="round" />;
     case "spiral":
       return (
         <g className="m-eye m-spin">
@@ -398,6 +424,9 @@ function Defs({ u, tint }: { u: string; tint: string }) {
       <filter id={`${u}-blur`} x="-50%" y="-50%" width="200%" height="200%">
         <feGaussianBlur stdDeviation="2.2" />
       </filter>
+      <filter id={`${u}-glow`} x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="12" />
+      </filter>
       <filter id={`${u}-soft`} x="-20%" y="-20%" width="140%" height="140%">
         <feGaussianBlur stdDeviation="1.4" />
       </filter>
@@ -475,6 +504,7 @@ export function Mochi({
       style={style}
     >
       <Defs u={u} tint={tint} />
+      {GLOW[mood] && !still && <ellipse key={`g-${mood}`} className="m-glow" cx={60} cy={78} rx={52} ry={42} fill={GLOW[mood]} filter={`url(#${u}-glow)`} />}
       <ellipse className="m-shadow" cx={60} cy={113} rx={30} ry={4} fill="#000" opacity={0.22} filter={`url(#${u}-blur)`} />
       <g className="m-move">
         <g className="m-pop" key={mood}>
@@ -516,7 +546,12 @@ export function Mochi({
               )}
               {mood === "yawn" && <ellipse className="m-yawn" cx={60} cy={92} rx={3} ry={3.8} fill="#3a2a2e" />}
               {mood === "surprised" && <ellipse cx={60} cy={93} rx={2.2} ry={2.6} fill={INK} />}
-              {outfit.eyes && <EyeWear id={outfit.eyes} />}
+              {outfit.eyes && (
+                // óculos escuros sobem para a testa quando a carinha precisa aparecer
+                <g className="m-wear" style={outfit.eyes === "sunglasses" && (le !== "dot" || re !== "dot") ? { transform: "translateY(-13px) scale(0.92)" } : undefined}>
+                  <EyeWear id={outfit.eyes} />
+                </g>
+              )}
             </g>
 
             {outfit.head && <Hat id={outfit.head} u={u} />}
@@ -536,6 +571,12 @@ export function Mochi({
               <text x={92} y={44} fontSize={8}>z</text>
               <text x={99} y={34} fontSize={10}>z</text>
               {mood === "sleeping" && <text x={106} y={22} fontSize={12}>z</text>}
+            </g>
+          )}
+          {mood === "slap" && (
+            <g className="m-impact" stroke="#ef4b5f" strokeWidth={2.4} strokeLinecap="round">
+              <path d="M106 66 L114 62 M108 76 L117 76 M106 86 L114 90" />
+              <ellipse cx={86} cy={88} rx={6} ry={3.4} fill="#ff6f82" stroke="none" opacity={0.7} />
             </g>
           )}
           {mood === "love" && (
