@@ -37,6 +37,26 @@ function redis(): Redis | null {
   return client;
 }
 
+let cacheClient: Redis | null = null;
+let cacheFailedAt = 0;
+
+/**
+ * Cache descartável (buscas, páginas, mídia interpretada) num Redis separado (REDIS_CACHE_URL), com despejo LRU.
+ * Assim, quando a memória enche, sai cache, nunca a conversa curta nem a marca de "mensagem já vista".
+ * Sem REDIS_CACHE_URL usa o Redis principal.
+ */
+function cacheRedis(): Redis | null {
+  if (!config.REDIS_CACHE_URL) return redis();
+  if (cacheFailedAt && Date.now() - cacheFailedAt < 30_000) return null;
+  if (!cacheClient) {
+    cacheClient = new Redis(config.REDIS_CACHE_URL, { maxRetriesPerRequest: 1, connectTimeout: 3000 });
+    cacheClient.on("error", () => {
+      cacheFailedAt = Date.now();
+    });
+  }
+  return cacheClient;
+}
+
 /** Redis respondendo agora? (decide se dá para não guardar a mensagem no Postgres) */
 export async function redisAlive(): Promise<boolean> {
   const r = redis();
@@ -96,7 +116,7 @@ export async function allShort(conversationId: string): Promise<ShortEntry[] | n
 const CACHE_PREFIX = "pj:cache:";
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
-  const r = redis();
+  const r = cacheRedis();
   if (!r) return null;
   try {
     const raw = await r.get(CACHE_PREFIX + key);
@@ -109,7 +129,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 }
 
 export async function cacheSet(key: string, value: unknown, ttlSeconds: number) {
-  const r = redis();
+  const r = cacheRedis();
   if (!r) return;
   try {
     const raw = JSON.stringify(value);
@@ -154,8 +174,19 @@ export async function countInWindow(key: string, windowSeconds: number): Promise
   }
 }
 
-export async function cacheStats() {
+/** Lê a contagem atual da janela sem somar (null = Redis indisponível). */
+export async function peekCount(key: string): Promise<number | null> {
   const r = redis();
+  if (!r) return null;
+  try {
+    return Number((await r.get(`pj:rate:${key}`)) ?? 0);
+  } catch {
+    return null;
+  }
+}
+
+export async function cacheStats() {
+  const r = cacheRedis();
   if (!r) return null;
   try {
     const [hits, writes] = await r.mget("pj:stats:cache_hits", "pj:stats:cache_writes");
@@ -192,5 +223,7 @@ export async function redisInfo(): Promise<{ enabled: boolean; ok: boolean; keys
 
 export async function closeShort() {
   await client?.quit().catch(() => {});
+  await cacheClient?.quit().catch(() => {});
   client = null;
+  cacheClient = null;
 }

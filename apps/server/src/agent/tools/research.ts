@@ -2,6 +2,7 @@ import { chatCompletion } from "../../llm/openrouter.js";
 import { resolveModel } from "../../llm/router.js";
 import { getCredentials } from "../../integrations/registry.js";
 import { one } from "../../db/pool.js";
+import { checkedUrl, safeFetch } from "../../net.js";
 import { BrowserSession, type Snapshot } from "../browser.js";
 import { defineTool, obj, type ToolContext } from "./types.js";
 
@@ -95,23 +96,23 @@ export const fetchUrl = defineTool<{ url: string; max_chars?: number }>({
   parameters: obj({ url: { type: "string" }, max_chars: { type: "number" } }, ["url"]),
   async run(args) {
     const max = Math.min(args.max_chars ?? 12_000, 40_000);
+    const url = await checkedUrl(args.url);
     let html: string | null = null;
     try {
-      const res = await browserless("/chromium/content", { url: args.url, gotoOptions: { waitUntil: "networkidle2", timeout: 30_000 } });
+      const res = await browserless("/chromium/content", { url, gotoOptions: { waitUntil: "networkidle2", timeout: 30_000 } });
       if (res) html = await res.text();
     } catch {
       html = null;
     }
     if (html == null) {
-      const res = await fetch(args.url, {
+      const res = await safeFetch(url, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; PlanejaiBot/1.0)", "Accept-Language": "pt-BR,pt;q=0.9" },
         signal: AbortSignal.timeout(20_000),
-        redirect: "follow",
       });
       html = await res.text();
     }
     const text = htmlToText(html);
-    return { url: args.url, text: text.slice(0, max), truncated: text.length > max };
+    return { url, text: text.slice(0, max), truncated: text.length > max };
   },
 });
 
@@ -124,7 +125,7 @@ export const screenshotUrl = defineTool<{ url: string; full_page?: boolean; capt
   parameters: obj({ url: { type: "string" }, full_page: { type: "boolean" }, caption: { type: "string" } }, ["url"]),
   async run(args, ctx) {
     const res = await browserless("/chromium/screenshot", {
-      url: args.url,
+      url: await checkedUrl(args.url),
       options: { type: "jpeg", quality: 75, fullPage: Boolean(args.full_page) },
       viewport: { width: 1280, height: 900 },
       gotoOptions: { waitUntil: "networkidle2", timeout: 30_000 },

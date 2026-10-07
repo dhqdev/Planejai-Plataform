@@ -1,3 +1,4 @@
+import { checkedUrl, isPublicHost } from "../net.js";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -56,6 +57,23 @@ export class BrowserSession {
     }
     const page = await browser.newPage();
     await page.setExtraHTTPHeaders({ "Accept-Language": "pt-BR,pt;q=0.9" });
+    // nenhum pedido da página (link, redirecionamento, script, imagem) pode ir para a rede interna da stack
+    await page.setRequestInterception(true);
+    page.on("request", (req) => {
+      if (req.isInterceptResolutionHandled()) return;
+      let u: URL;
+      try {
+        u = new URL(req.url());
+      } catch {
+        return void req.abort("blockedbyclient").catch(() => {});
+      }
+      if (u.protocol === "data:" || u.protocol === "blob:" || u.protocol === "about:") return void req.continue().catch(() => {});
+      if (u.protocol !== "http:" && u.protocol !== "https:") return void req.abort("blockedbyclient").catch(() => {});
+      void isPublicHost(u.hostname).then(
+        (ok) => (ok ? req.continue() : req.abort("blockedbyclient")).catch(() => {}),
+        () => req.abort("blockedbyclient").catch(() => {}),
+      );
+    });
     const s = new BrowserSession(browser, page);
     if (record) await s.startRecording();
     return s;
@@ -124,7 +142,7 @@ export class BrowserSession {
   }
 
   async goto(url: string) {
-    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+    url = await checkedUrl(url);
     this.actions.push(`abrir ${url}`);
     await this.page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 });
   }

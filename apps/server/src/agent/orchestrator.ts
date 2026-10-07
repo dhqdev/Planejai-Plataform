@@ -2,13 +2,13 @@ import { getChannel } from "../channels/index.js";
 import type { Channel } from "../channels/types.js";
 import { many, one, pool, query } from "../db/pool.js";
 import { INTEGRATIONS, isConnected } from "../integrations/registry.js";
-import { chatCompletion } from "../llm/openrouter.js";
+import { chatCompletion, LlmError } from "../llm/openrouter.js";
 import { resolveModel } from "../llm/router.js";
 import type { ChatMessage } from "../llm/types.js";
 import { getSettings } from "../settings.js";
 import { delegationTool, TeamRoom } from "./collab.js";
 import { ctoSystemPrompt } from "./prompts.js";
-import { availableTools, runToolLoop } from "./runner.js";
+import { availableTools, OWNER_INTEGRATIONS, runToolLoop } from "./runner.js";
 import { clientAgents, CTO_TOOLS, SPECIALISTS } from "./team.js";
 import { finishBrowser } from "./tools/research.js";
 import { Guard, GuardTimeout, redactSecrets } from "./guard.js";
@@ -84,7 +84,7 @@ export interface ProcessResult {
  */
 export async function processConversation(
   conversationId: string,
-  opts: { trigger: "message" | "reminder" | "playground"; event?: string; channel?: Channel } = { trigger: "message" },
+  opts: ProcessOpts = { trigger: "message" },
 ): Promise<ProcessResult> {
   // Um processamento por conversa por vez
   const lock = await pool.connect();
@@ -97,10 +97,24 @@ export async function processConversation(
   }
 }
 
-async function processLocked(
-  conversationId: string,
-  opts: { trigger: "message" | "reminder" | "playground"; event?: string; channel?: Channel },
-): Promise<ProcessResult> {
+export interface ProcessOpts {
+  trigger: "message" | "reminder" | "playground";
+  event?: string;
+  channel?: Channel;
+  /** a fila ainda vai tentar de novo: erro passageiro deixa as mensagens pendentes em vez de perder */
+  retryable?: boolean;
+}
+
+/** OpenRouter fora do ar, limite de taxa, rede caída ou tempo de rede esgotado: vale tentar de novo. */
+export function isTransientError(err: unknown) {
+  if (err instanceof LlmError) return err.status === 429 || (err.status ?? 0) >= 500;
+  const e = err as { name?: string; code?: string; message?: string; cause?: { code?: string } };
+  if (e?.name === "TimeoutError" || e?.name === "AbortError") return true;
+  const code = e?.code ?? e?.cause?.code ?? "";
+  return /^(ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|UND_ERR_\w+)$/.test(code) || /fetch failed/i.test(e?.message ?? "");
+}
+
+async function processLocked(conversationId: string, opts: ProcessOpts): Promise<ProcessResult> {
   const conversation = await one<ConversationRow>("SELECT * FROM conversations WHERE id = $1", [conversationId]);
   if (!conversation) throw new Error(`Conversa ${conversationId} não existe`);
   const user = await one<UserRow>("SELECT * FROM users WHERE id = $1", [conversation.user_id]);
@@ -156,6 +170,8 @@ async function processLocked(
   const outbox = new Outbox();
   const guard = Guard.fromSettings(settings);
   const progress = new Progress({ channel, jid: conversation.remote_jid, tracer });
+  // mensagens desta rodada já interpretadas (vão para a memória curta no fim, ou no erro definitivo)
+  let fresh: ShortEntry[] = [];
 
   try {
     if (lastInbound) channel.markRead(conversation.remote_jid, lastInbound.external_id).catch(() => {});
@@ -188,7 +204,7 @@ async function processLocked(
 
     // Contexto: memória curta no Redis (já interpretada); sem Redis, as mensagens das últimas horas no Postgres
     const pendingIds = new Set(pending.map((p) => p.id));
-    const fresh: ShortEntry[] = pending.map((m) => ({
+    fresh = pending.map((m) => ({
       id: m.id,
       role: m.role,
       text: m.role === "event" ? m.content : limitText(describeMessage(m), m, settings.maxMessageChars),
@@ -218,14 +234,14 @@ async function processLocked(
         messages.push({ role: "user", content: `${prefix}${m.text}` });
       }
     }
-    await pushShort(conversationId, fresh);
-
     // Só entra no time quem tem pelo menos uma ferramenta utilizável (menos token e nada de delegação inútil)
     const team = [];
-    for (const s of [...SPECIALISTS, ...(await clientAgents(user.id))]) if ((await availableTools(s.tools)).length) team.push(s);
+    for (const s of [...SPECIALISTS, ...(await clientAgents(user.id))]) if ((await availableTools(s.tools, user)).length) team.push(s);
     const lastText = fresh.map((e) => e.text).join(" ").slice(0, 500);
     const disconnected = [];
-    for (const i of INTEGRATIONS) if (!(await isConnected(i.id))) disconnected.push(i.name);
+    // para convidados, as contas do dono nem existem: não adianta dizer "conecte no painel"
+    const owner = isOwner(user.phone);
+    for (const i of INTEGRATIONS) if ((owner || !OWNER_INTEGRATIONS.has(i.id)) && !(await isConnected(i.id))) disconnected.push(i.name);
     const system = ctoSystemPrompt({
       settings,
       user,
@@ -254,7 +270,7 @@ async function processLocked(
       // lembrete agendado não ganha "já vou ver": a pessoa não perguntou nada agora
       progress: opts.trigger === "reminder" ? undefined : progress,
     };
-    const tools = [...(await availableTools(CTO_TOOLS)), ...team.map(delegationTool)];
+    const tools = [...(await availableTools(CTO_TOOLS, user)), ...team.map(delegationTool)];
     let result;
     try {
       result = await runToolLoop({ agent: "cto", task: "agent:cto", ctx, tools, messages: [{ role: "system", content: system }, ...messages], maxSteps: 10 });
@@ -281,6 +297,8 @@ async function processLocked(
     const keepInDb = !(await redisAlive());
     await deliver(bubbles, { channel, conversation, outbox, tracer, keepInDb });
     // A conversa já está no WhatsApp e na memória curta (Redis): com o Redis no ar, a mensagem sai do banco
+    // só agora a rodada entra na memória curta: se der erro passageiro e a fila tentar de novo, nada fica duplicado
+    await pushShort(conversationId, fresh);
     if (keepInDb) await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
     else await query("DELETE FROM messages WHERE id = ANY($1)", [pending.map((m) => m.id)]);
     await query("UPDATE conversations SET updated_at = now() WHERE id = $1", [conversationId]);
@@ -291,12 +309,16 @@ async function processLocked(
   } catch (err) {
     await tracer.error(err);
     if (err instanceof GuardTimeout || guard.expired) {
+      await pushShort(conversationId, fresh).catch(() => {});
       await channel
         .sendText(conversation.remote_jid, `Isso passou do meu limite de ${fmtMinutes(guard.minutes)} e parei aqui. Quer que eu tente de um jeito mais simples?`)
         .catch(() => {});
       await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
       return { executionId: tracer.executionId, bubbles: [], outbox };
     }
+    // Erro passageiro com nova tentativa na fila: as mensagens ficam pendentes e a próxima rodada responde tudo
+    if (opts.retryable && isTransientError(err)) throw err;
+    await pushShort(conversationId, fresh).catch(() => {});
     // Não deixa a pessoa no vácuo
     await channel.sendText(conversation.remote_jid, "Tive um problema técnico aqui e não consegui terminar. Pode tentar de novo em instantes?").catch(() => {});
     await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);

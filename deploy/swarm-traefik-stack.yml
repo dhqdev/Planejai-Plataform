@@ -1,6 +1,6 @@
 # Stack do Planejai para Portainer em Docker Swarm com Traefik (rede externa network_public),
-# no mesmo padrão do n8n. Postgres e Redis PRÓPRIOS (serviços "db" e "redis"), sem usar os que já existem.
-# Troque os valores marcados com TROQUE antes de subir.
+# no mesmo padrão do n8n. Postgres e Redis PRÓPRIOS (serviços "db", "redis" e "redis-cache"), sem usar os que já existem.
+# Troque os valores marcados com TROQUE antes de subir. Gere segredos com: openssl rand -hex 32
 version: "3.7"
 
 x-env: &env
@@ -10,8 +10,11 @@ x-env: &env
   PUBLIC_URL: https://autoplanejai.tekvosoft.com
   TZ: America/Sao_Paulo
   DEFAULT_TIMEZONE: America/Sao_Paulo
-  # --- Segurança ---
-  APP_SECRET: TROQUE_APP_SECRET_64_CARACTERES
+  # --- Segurança: um segredo para cada coisa ---
+  SESSION_SECRET: TROQUE_SESSION_SECRET_64_CARACTERES     # login do painel (trocar = todo mundo entra de novo)
+  ENCRYPTION_KEY: TROQUE_ENCRYPTION_KEY_64_CARACTERES     # credenciais das integrações (para trocar, mova a atual para ENCRYPTION_KEY_OLD)
+  INTERNAL_API_KEY: TROQUE_INTERNAL_API_KEY               # API interna do n8n (vazia = desligada)
+  # APP_SECRET: só se você já tinha um. Ele abre as credenciais antigas e, no boot, elas são recriptografadas com a ENCRYPTION_KEY.
   ADMIN_EMAIL: TROQUE_SEU_EMAIL
   ADMIN_PASSWORD: TROQUE_SENHA_DO_PAINEL
   WEBHOOK_SECRET: TROQUE_WEBHOOK_SECRET
@@ -21,9 +24,13 @@ x-env: &env
   WHATSAPP_PROVIDER: baileys
   OWNER_PHONES: "5519995378302"
   ALLOW_UNKNOWN_CONTACTS: "false"
-  # --- Redis próprio: memória curta das conversas (24h) ---
+  INVITES_PER_DAY: "40"
+  # --- Redis próprios: memória curta das conversas (24h) e cache descartável ---
   REDIS_URL: redis://redis:6379
+  REDIS_CACHE_URL: redis://redis-cache:6379
   MESSAGE_RETENTION_HOURS: "24"
+  # texto das conversas nos logs some depois disso; ficam só custo, tempo e modelo
+  LOG_CONTENT_HOURS: "24"
   WORKER_CONCURRENCY: "4"
   # --- Navegador dos agentes (prints e pesquisa gravada em vídeo) ---
   BROWSERLESS_URL: http://browserless:3000
@@ -32,6 +39,7 @@ x-env: &env
 
 services:
   app:
+    # Cada build ganha a tag sha-XXXXXXX: para voltar uma versão, troque "latest" por ela e atualize a stack.
     image: ghcr.io/dhqdev/planejai-plataform:latest
     environment:
       <<: *env
@@ -40,6 +48,7 @@ services:
     networks:
       - network_public
       - planejai_internal
+      - planejai_browser
     deploy:
       mode: replicated
       replicas: 1
@@ -56,15 +65,15 @@ services:
         - "traefik.http.services.autoplanejai-service.loadbalancer.server.port=3000"
 
   # Time de agentes, lembretes e a conexão do WhatsApp. Sempre 1 réplica.
+  # O healthcheck da imagem confere se o processo e a conexão do WhatsApp não travaram (o Swarm reinicia se travar).
   worker:
     image: ghcr.io/dhqdev/planejai-plataform:latest
     environment:
       <<: *env
       ROLE: worker
-    healthcheck:
-      disable: true
     networks:
       - planejai_internal
+      - planejai_browser
     deploy:
       mode: replicated
       replicas: 1
@@ -101,8 +110,79 @@ services:
       restart_policy:
         condition: any
 
-  # Redis PRÓPRIO da stack (não usa o redis que já existe no servidor). Sem disco: é só memória curta.
+  # Backup diário do banco (pg_dump), guardado 14 dias no volume planejai_backups.
+  # Para mandar uma cópia para fora do servidor (recomendado), configure um remoto do rclone, ex. Cloudflare R2:
+  #   BACKUP_REMOTE: r2:planejai-backups
+  #   RCLONE_CONFIG_R2_TYPE: s3
+  #   RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+  #   RCLONE_CONFIG_R2_ACCESS_KEY_ID: ...
+  #   RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ...
+  #   RCLONE_CONFIG_R2_ENDPOINT: https://<conta>.r2.cloudflarestorage.com
+  # Restaurar: veja docs/operacao.md.
+  backup:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: db
+      PGUSER: planejai
+      PGPASSWORD: TROQUE_SENHA_DO_BANCO
+      PGDATABASE: planejai
+      TZ: America/Sao_Paulo
+      BACKUP_KEEP_DAYS: "14"
+      BACKUP_REMOTE: ""
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -n "$$BACKUP_REMOTE" ]; then apk add --no-cache rclone >/dev/null 2>&1 || echo "rclone não instalou: backup só local"; fi
+        sleep 60
+        while true; do
+          f="/backups/planejai-$$(date +%Y%m%d-%H%M).dump"
+          if pg_dump -Fc -f "$$f.tmp"; then
+            mv "$$f.tmp" "$$f"; echo "backup ok: $$f ($$(du -h "$$f" | cut -f1))"
+            if [ -n "$$BACKUP_REMOTE" ] && command -v rclone >/dev/null; then
+              rclone copy "$$f" "$$BACKUP_REMOTE" && echo "copiado para $$BACKUP_REMOTE"
+              rclone delete --min-age "$${BACKUP_KEEP_DAYS}d" "$$BACKUP_REMOTE" >/dev/null 2>&1
+            fi
+          else
+            rm -f "$$f.tmp"; echo "BACKUP FALHOU"
+          fi
+          find /backups -name 'planejai-*.dump' -mtime +"$$BACKUP_KEEP_DAYS" -delete
+          sleep 86400
+        done
+    volumes:
+      - planejai_backups:/backups
+    networks:
+      - planejai_internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: any
+
+  # Memória curta das conversas: não pode perder nada, então grava em disco e nunca despeja chave.
   redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - planejai_redis:/data
+    networks:
+      - planejai_internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 320M
+      restart_policy:
+        condition: any
+
+  # Cache descartável (buscas, páginas, mídia interpretada): sem disco, quando enche apaga o mais antigo.
+  redis-cache:
     image: redis:7-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
     networks:
@@ -112,18 +192,19 @@ services:
       replicas: 1
       resources:
         limits:
-          memory: 192M
+          memory: 160M
       restart_policy:
         condition: any
 
+  # Navegador dos agentes numa rede só dele (com app e worker): abre páginas da internet, mas não enxerga db nem redis.
   browserless:
-    image: ghcr.io/browserless/chromium:latest
+    image: ghcr.io/browserless/chromium:v2.57.0
     environment:
       TOKEN: TROQUE_BROWSERLESS_TOKEN
       CONCURRENT: "2"
       TIMEOUT: "300000"
     networks:
-      - planejai_internal
+      - planejai_browser
     deploy:
       mode: replicated
       replicas: 1
@@ -136,6 +217,10 @@ services:
 volumes:
   planejai_db:
     name: planejai_db
+  planejai_redis:
+    name: planejai_redis
+  planejai_backups:
+    name: planejai_backups
 
 networks:
   network_public:
@@ -144,3 +229,5 @@ networks:
   planejai_internal:
     driver: overlay
     attachable: true
+  planejai_browser:
+    driver: overlay

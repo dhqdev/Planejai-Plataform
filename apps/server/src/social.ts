@@ -5,7 +5,7 @@ import { activeChannel, channels, playground } from "./channels/index.js";
 import type { Channel } from "./channels/types.js";
 import { config } from "./config.js";
 import { many, one, query } from "./db/pool.js";
-import { phoneVariants, upsertConversation } from "./ingest.js";
+import { isOwner, phoneVariants, upsertConversation } from "./ingest.js";
 import { QUEUES, getBoss } from "./queue/boss.js";
 import { pushShort } from "./shortmem.js";
 import { whatsapp } from "./whatsapp/session.js";
@@ -73,11 +73,19 @@ export interface InviteInput {
   email?: string | null;
 }
 
+/** Convites que cada pessoa (fora o dono) pode mandar por dia. */
+const INVITES_PER_PERSON_DAY = 10;
+
 export async function createInvite(input: InviteInput) {
   const phone = normalizePhone(input.phone);
   if (phone.length < 12 || phone.length > 15) throw new Error("Telefone inválido: use DDD e número (ex.: 19 99999-9999)");
   const variants = phoneVariants(phone);
   if (input.inviterUserId) {
+    const me0 = await one("SELECT phone FROM users WHERE id = $1", [input.inviterUserId]);
+    if (me0 && !isOwner(me0.phone)) {
+      const today = await one("SELECT COUNT(*)::int AS n FROM invites WHERE inviter_user_id = $1 AND created_at > now() - interval '24 hours'", [input.inviterUserId]);
+      if (today.n >= INVITES_PER_PERSON_DAY) throw new Error(`Limite de ${INVITES_PER_PERSON_DAY} convites por dia atingido. Amanhã dá para mandar mais.`);
+    }
     const me = await one("SELECT phone FROM users WHERE id = $1", [input.inviterUserId]);
     if (me && variants.includes(me.phone)) throw new Error("Esse é o seu próprio número.");
     const already = await one(
@@ -112,12 +120,23 @@ export async function sendInvite(inviteId: string) {
     [inviteId],
   );
   if (!inv || inv.status !== "pending" || inv.sent_at) return;
+  // Proteção do número: convite vai para quem ainda não salvou o contato, o tipo de mensagem que mais leva a
+  // denúncia e banimento. Espaça os envios e respeita um teto diário; o que passar espera a próxima hora.
+  const pace = await one(
+    `SELECT COUNT(*) FILTER (WHERE sent_at > now() - interval '24 hours')::int AS day,
+            COALESCE(EXTRACT(EPOCH FROM now() - MAX(sent_at)), 1e9)::float AS since_last FROM invites`,
+  );
+  const later = async (seconds: number) =>
+    (await getBoss()).send(QUEUES.invite, { inviteId }, { startAfter: Math.round(seconds), retryLimit: 3, retryDelay: 60 });
+  if (pace.day >= config.INVITES_PER_DAY) return void (await later(3600));
+  if (pace.since_last < config.INVITE_GAP_SECONDS) return void (await later(config.INVITE_GAP_SECONDS - pace.since_last + Math.random() * 30));
   const inviter = inv.inviter_user_id ? displayName({ full_name: inv.inviter_full_name, name: inv.inviter_name, phone: inv.inviter_phone }) : inv.account_name || "A equipe do Planejai";
   const hello = inv.name ? `Oi, ${String(inv.name).split(" ")[0]}! ` : "Oi! ";
   const text =
     `${hello}${inviter} te convidou para o *Planejai*, um assistente aqui no WhatsApp que organiza gastos, lembretes e pesquisas` +
     (inv.inviter_user_id ? `, e deixa vocês mandarem coisas um pro outro por aqui.` : ".") +
-    `\n\nResponda *SIM* para aceitar ou *NÃO* para recusar.` +
+    `\n\nResponda *SIM* para aceitar ou *NÃO* para recusar. Ao aceitar, você concorda com os termos e a política de privacidade: ` +
+    `${config.PUBLIC_URL.replace(/\/$/, "")}/privacidade` +
     `\n\nSe quiser acessar o painel: ${inviteLink(inv.code)}`;
   const channel = outboundChannel();
   const jid = await jidFor(inv.phone, channel);
@@ -153,7 +172,7 @@ export async function handleInviteReply(opts: { user: any; text: string; channel
   if (yes) {
     await query(
       `UPDATE users SET status = 'active', full_name = COALESCE(full_name, $2), email = COALESCE(email, $3),
-         invited_by = COALESCE(invited_by, $4) WHERE id = $1`,
+         invited_by = COALESCE(invited_by, $4), terms_accepted_at = COALESCE(terms_accepted_at, now()) WHERE id = $1`,
       [user.id, first.name, first.email, first.inviter_user_id],
     );
   }

@@ -2,6 +2,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { normalizePhone } from "./accounts.js";
 import { telegram } from "./channels/index.js";
 import { config } from "./config.js";
+import { sessionSecret } from "./crypto.js";
 import { many, one, query } from "./db/pool.js";
 import { emitEvent } from "./events.js";
 import { ingest, isOwner, phoneVariants, upsertConversation } from "./ingest.js";
@@ -13,7 +14,7 @@ import { rawCredentials, saveCredentials } from "./integrations/registry.js";
  * que confere o número com o cadastro. Sem ligação, o bot só explica como conectar (nada de IA, nada de custo).
  */
 
-const webhookSecret = () => createHmac("sha256", config.APP_SECRET).update("telegram-webhook").digest("hex").slice(0, 48);
+const webhookSecret = () => createHmac("sha256", sessionSecret()).update("telegram-webhook").digest("hex").slice(0, 48);
 const useWebhook = () => config.PUBLIC_URL.startsWith("https://");
 
 export function telegramSecretOk(header: unknown) {
@@ -157,7 +158,14 @@ export async function handleTelegramUpdate(update: any) {
  * Com https, o Telegram chama /webhooks/telegram e isto fica parado.
  */
 export function startTelegramPolling(log: { info: (...a: any[]) => void; error: (...a: any[]) => void }) {
-  if (useWebhook()) return;
+  if (useWebhook()) {
+    // o segredo do webhook vem do SESSION_SECRET: registra de novo no boot para valer o segredo atual
+    void telegram
+      .ready()
+      .then((ok) => (ok ? setupTelegram() : null))
+      .catch((err) => log.error({ err: (err as Error).message }, "Telegram: falha ao registrar o webhook"));
+    return;
+  }
   let offset = 0;
   let stopped = false;
   const loop = async () => {

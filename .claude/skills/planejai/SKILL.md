@@ -150,7 +150,7 @@ Nova migração = novo arquivo `db/migrations/00N_descricao.sql` (nunca edite um
 
 ```bash
 npm ci
-cp .env.example .env            # preencha APP_SECRET, ADMIN_PASSWORD, OPENROUTER_API_KEY, DATABASE_URL
+cp .env.example .env            # preencha SESSION_SECRET, ENCRYPTION_KEY, ADMIN_PASSWORD, OPENROUTER_API_KEY, DATABASE_URL
 docker compose up db redis -d   # ou Postgres/Redis locais
 npm run dev                     # API + worker em :3000 (migra no boot)
 npm run dev:dashboard           # dashboard em :5173 com proxy para :3000
@@ -160,7 +160,10 @@ npm run build                   # dashboard vai para apps/server/public
 Sem WhatsApp, teste pelos e2e (canal playground) e veja os passos em **Execuções**.
 
 ## Publicar
-- Push na `main` dispara `.github/workflows/docker.yml`: imagem `ghcr.io/dhqdev/planejai-plataform` para amd64, arm64 e arm/v7, e redeploy no Portainer se o secret `PORTAINER_WEBHOOK_URL` existir.
+- Push na `main` roda `.github/workflows/ci.yml`: o job `image` só sai depois do `test` verde e publica `ghcr.io/dhqdev/planejai-plataform` (amd64, arm64, arm/v7) com as tags `latest` e `sha-<curto>`, depois chama o webhook do Portainer (`PORTAINER_WEBHOOK_URL`). Rollback = trocar a tag na stack para um `sha-…` antigo. Não recrie um workflow de deploy separado do teste.
+- Operação (segredos, backup/restore, rollback, saúde, plano do número): `docs/operacao.md`.
+- Stacks: `redis` guarda memória curta (appendonly, noeviction) e `redis-cache` (`REDIS_CACHE_URL`, allkeys-lru) guarda cache; `backup` faz `pg_dump` diário em `planejai_backups` (14 dias, `BACKUP_REMOTE` opcional via rclone); browserless fica fixo numa versão e na rede `planejai_browser`. Imagem de terceiros sempre com versão fixa.
+- Healthcheck da imagem: `node apps/server/dist/healthcheck.js` (API olha `/health`; worker olha o arquivo de vida de `alive.ts` e, se tiver o aluguel do WhatsApp, o `heartbeat_at`).
 - Stack: `deploy/portainer-stack.yml` (compose comum) ou `deploy/swarm-traefik-stack.yml` (Swarm + Traefik em network_public, domínio autoplanejai.tekvosoft.com). Postgres e Redis são da própria stack; nunca aponte para os que já existem no servidor.
 - O Dockerfile só roda `apk add ffmpeg` na arquitetura alvo; o resto das deps é JS puro. Não adicione dependência nativa no servidor sem ajustar isso.
 
@@ -172,15 +175,22 @@ Sem WhatsApp, teste pelos e2e (canal playground) e veja os passos em **Execuçõ
   `immutable` em /assets. Todo modal novo usa `<Modal>` (vira bottom sheet sozinho); botão de ação chama `haptic()`.
 - Integração nova: campos com `help` dizendo onde pegar o valor, `test()` que bate na API de verdade e, se for OAuth,
   rota `/api/integrations/<id>/oauth/start|callback` com `state` assinado (`oauth:` no sub).
-- Segredos só por variável de ambiente ou pela tela de Integrações (criptografados). Nada de chave no código.
+- Segredos só por variável de ambiente ou pela tela de Integrações (criptografados). Nada de chave no código. `SESSION_SECRET` assina sessões, `ENCRYPTION_KEY` (+ `ENCRYPTION_KEY_OLD` na troca) cifra credenciais, `INTERNAL_API_KEY` é sempre explícita (vazia = API interna e eventos desligados). `APP_SECRET` é só legado/fallback; no boot `reencryptStale` regrava o que estava na chave antiga.
+- Integrações da stack são do dono: ferramenta de integração em `OWNER_INTEGRATIONS` (runner.ts) ou com `ownerOnly: true` some do time de quem não é dono e é recusada de novo na execução. Integração nova da stack entra nessa lista.
+- Toda URL que vem do usuário, do modelo ou de página passa por `net.ts` (`checkedUrl`/`assertPublicUrl`/`safeFetch`): bloqueia IP privado, loopback, metadata e nomes internos, inclusive em redirecionamento. Nunca use `fetch(url)` cru com URL externa. Em teste, `ALLOW_PRIVATE_URLS=true`.
+- Webhooks: o do canal que não é o `WHATSAPP_PROVIDER` responde 404; Evolution exige `WEBHOOK_SECRET` e Cloud exige `WHATSAPP_CLOUD_APP_SECRET` (comparação em tempo constante).
+- Sessão: o token leva `v` = `accounts.session_version` (dono: settings + hash da senha); trocar senha, desativar ou "Sair de todos" sobe a versão. Login tem limite por IP e por e-mail (`ratelimit.ts`); cadastro e convite também.
+- Privacidade: Execuções mascaram CPF, cartão, chave e senha (`maskPersonal` em trace.ts) e o texto some após `LOG_CONTENT_HOURS` (`content_purged`). "apague meus dados" no WhatsApp pede "APAGAR TUDO" e roda `eraseUserData` (`privacy.ts`, sem LLM); no painel `DELETE /api/me` e, para o super admin, `DELETE /api/clients/:id`. Cadastro exige `accept_terms`; texto em `/privacidade` (pages/Privacy.tsx).
+- Custo: `usage_daily` soma execuções, tokens e custo por pessoa por dia (o Tracer atualiza). Clientes mostra o gráfico (`GET /api/costs?days=`, super admin).
+- Erro transitório do LLM (429/5xx/timeout/rede) não marca a mensagem como processada: o job do pg-boss tenta de novo. Convites têm ritmo (`INVITES_PER_DAY`, `INVITE_GAP_SECONDS`) para não queimar o número.
 - Textos para o usuário final em português do Brasil, tom natural de WhatsApp, sem templates fixos.
 - Toda chamada de LLM e de tool passa pelo `Tracer` para aparecer em Execuções.
 - Push direto na `main` (sem PR), a pedido do dono.
 
 ## Telegram e n8n
 
-- **Telegram** (`channels/telegram.ts`, `telegram.ts`): um bot do dono (token em Integrações > Telegram; ao salvar, `setupTelegram` pega o @ e liga o webhook `/webhooks/telegram` com segredo derivado do APP_SECRET; sem https público o worker faz long polling). A pessoa liga a conta em Minha conta > Conexões (link `t.me/bot?start=CODIGO`, uso único, 15 min, tabela `link_codes`) ou mandando o próprio contato no bot (confere o número com `users`). Ligação em `channel_links`; uma conta do Telegram por pessoa. Sem ligação o bot só explica como conectar (sem IA). `conversationOf` usa a conversa mais recente, então lembretes e avisos saem no canal onde a pessoa está falando. Texto estilo WhatsApp vira HTML (`toTelegramHtml`).
-- **API interna** (`api/routes/internal.ts`, cabeçalho `X-Planejai-Key` = `internalKey()` em events.ts, ou `INTERNAL_API_KEY`): `GET/POST/PATCH /api/internal/users`, `POST /api/internal/send` (texto, imagem, vídeo, PDF; fila `outbound.send` no worker), `POST /api/internal/agent` (o assistente escreve do jeito dele), `POST /api/internal/transactions`, `GET /api/internal/finance`. A lista aparece no modal Integrações > n8n.
+- **Telegram** (`channels/telegram.ts`, `telegram.ts`): um bot do dono (token em Integrações > Telegram; ao salvar, `setupTelegram` pega o @ e liga o webhook `/webhooks/telegram` com segredo derivado do SESSION_SECRET e re-registrado no boot; sem https público o worker faz long polling). A pessoa liga a conta em Minha conta > Conexões (link `t.me/bot?start=CODIGO`, uso único, 15 min, tabela `link_codes`) ou mandando o próprio contato no bot (confere o número com `users`). Ligação em `channel_links`; uma conta do Telegram por pessoa. Sem ligação o bot só explica como conectar (sem IA). `conversationOf` usa a conversa mais recente, então lembretes e avisos saem no canal onde a pessoa está falando. Texto estilo WhatsApp vira HTML (`toTelegramHtml`).
+- **API interna** (`api/routes/internal.ts`, cabeçalho `X-Planejai-Key` = `INTERNAL_API_KEY`; sem ela a API responde 503): `GET/POST/PATCH /api/internal/users`, `POST /api/internal/send` (texto, imagem, vídeo, PDF; fila `outbound.send` no worker), `POST /api/internal/agent` (o assistente escreve do jeito dele), `POST /api/internal/transactions`, `GET /api/internal/finance`. A lista aparece no modal Integrações > n8n.
 - **Eventos** (`events.ts`): `emitEvent` faz POST no "Webhook de eventos" da integração n8n com `X-Planejai-Signature` (HMAC do corpo com a chave interna): user.created, user.activated, transaction.created, budget.alert, reminder.fired, telegram.linked.
 - **Ferramentas do assistente** (`agent/tools/n8n.ts`, com o especialista Produtividade): `n8n_workflows`, `n8n_executions`, `n8n_trigger` (pede confirmação; Basic Auth opcional dos webhooks). Só o dono (OWNER_PHONES) pode usar.
 - Fluxos prontos para importar no n8n: `/mnt/project-files/planejai-deploy/n8n/` (auxiliares convertidos da Evolution para a API interna e fluxo de eventos).

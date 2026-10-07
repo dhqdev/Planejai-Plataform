@@ -1,3 +1,4 @@
+import { safeFetch } from "../../net.js";
 import { cacheGet } from "../../shortmem.js";
 import { many, query } from "../../db/pool.js";
 import { formatLocal, isoLocal } from "../../time.js";
@@ -93,7 +94,14 @@ export const attachImage = defineTool<{ url: string; caption?: string }>({
     "o CTO posiciona na resposta com [[media:ID]].",
   parameters: obj({ url: { type: "string" }, caption: { type: "string" } }, ["url"]),
   async run(args, ctx) {
-    const id = ctx.outbox.addMedia({ url: args.url, caption: args.caption });
+    // baixa aqui (só internet pública) em vez de deixar o canal buscar a URL sozinho
+    const res = await safeFetch(args.url, { signal: AbortSignal.timeout(20_000), headers: { "User-Agent": "Mozilla/5.0 (compatible; PlanejaiBot/1.0)" } });
+    if (!res.ok) throw new Error(`Imagem não abriu (${res.status})`);
+    const mimetype = (res.headers.get("content-type") ?? "").split(";")[0]!.trim();
+    if (!mimetype.startsWith("image/")) throw new Error(`Isso não é uma imagem (${mimetype || "tipo desconhecido"})`);
+    const data = Buffer.from(await res.arrayBuffer());
+    if (data.length > 8 * 1024 * 1024) throw new Error("Imagem grande demais (máx. 8 MB)");
+    const id = ctx.outbox.addMedia({ base64: data.toString("base64"), mimetype, caption: args.caption });
     return { media_id: id, how_to_send: `Coloque [[media:${id}]] na resposta final onde a imagem deve aparecer.` };
   },
 });

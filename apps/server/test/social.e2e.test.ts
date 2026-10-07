@@ -152,7 +152,7 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     const code = link.split("/").at(-1)!;
     const info = await app.inject({ method: "GET", url: `/api/invite/${code}` });
     expect(info.json()).toMatchObject({ name: "Maria Souza", email: "maria@x.com", used: false });
-    const reg = await app.inject({ method: "POST", url: "/api/auth/register", payload: { code, email: "maria@x.com", password: "senha-forte" } });
+    const reg = await app.inject({ method: "POST", url: "/api/auth/register", payload: { code, email: "maria@x.com", password: "senha-forte", accept_terms: true } });
     expect(reg.json()).toMatchObject({ role: "admin", pending: false });
     expect((await app.inject({ method: "GET", url: "/api/invite/NAOEXISTE" })).statusCode).toBe(404);
 

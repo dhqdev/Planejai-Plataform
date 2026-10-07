@@ -70,7 +70,7 @@ export function ExecutionsPage() {
               <tr key={e.id} className="clickable" onClick={() => nav(`/executions/${e.id}`)}>
                 <td><Status status={e.status} /></td>
                 <td>{TRIGGER_LABEL[e.trigger] ?? e.trigger}</td>
-                <td className="ellipsis" title={e.input}>{e.input}</td>
+                <td className="ellipsis" title={e.input ?? ""}>{e.content_purged ? <span className="muted">texto apagado (privacidade)</span> : e.input}</td>
                 <td className="muted">{(e.agents ?? []).map((a: string) => AGENT_LABEL[a] ?? a.replace(/^c_/, "")).join(", ")}</td>
                 <td>{e.user_name ?? e.phone}</td>
                 <td className="muted">{when(e.started_at)}</td>

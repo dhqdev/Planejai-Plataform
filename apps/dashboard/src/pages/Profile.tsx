@@ -49,7 +49,58 @@ export function ProfilePage({ me }: { me: Me }) {
         <button className="btn" onClick={() => save(pw)}>Trocar senha</button>
       </div>
       <Connections />
+      <Security me={me} />
       </div>
+    </div>
+  );
+}
+
+/** Sair de todos os aparelhos e, para quem não é o dono, apagar a conta e todos os dados (LGPD). */
+function Security({ me }: { me: Me }) {
+  const [erase, setErase] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const leaveAll = async () => {
+    if (!confirm("Sair de todos os aparelhos, inclusive deste?")) return;
+    await api("/api/auth/logout-all", { method: "POST" });
+    location.href = "/";
+  };
+  const eraseAll = async () => {
+    setError(null);
+    try {
+      await api("/api/me", { method: "DELETE", json: { password } });
+      location.href = "/";
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <div className="card card-pad danger-zone">
+      <h3>Segurança e privacidade</h3>
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+        Esqueceu o painel aberto em outro lugar? Saia de todos os aparelhos. Trocar a senha também derruba os outros logins.
+      </p>
+      <button className="btn" onClick={leaveAll}>Sair de todos os aparelhos</button>
+      {!me.owner && (
+        <>
+          <p className="muted" style={{ fontSize: 13, marginTop: 18 }}>
+            Apagar a conta remove gastos, limites, lembretes, memórias, contatos e o login, sem volta.{" "}
+            <a href="/privacidade" target="_blank" rel="noreferrer">Política de privacidade</a>
+          </p>
+          {!erase ? (
+            <button className="btn btn-danger" onClick={() => setErase(true)}>Apagar minha conta e meus dados</button>
+          ) : (
+            <>
+              <div className="field"><label>Confirme com sua senha</label><input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus /></div>
+              <ErrorBox error={error} />
+              <div className="row" style={{ gap: 8 }}>
+                <button className="btn btn-danger" disabled={!password} onClick={eraseAll}>Apagar tudo</button>
+                <button className="btn btn-ghost" onClick={() => setErase(false)}>Cancelar</button>
+              </div>
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }

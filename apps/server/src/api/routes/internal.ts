@@ -20,7 +20,7 @@ import { connections } from "../../telegram.js";
 
 function keyOk(req: FastifyRequest) {
   const h = String(req.headers["x-planejai-key"] ?? "") || String(req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
-  return Boolean(h) && safeEqual(h, internalKey());
+  return Boolean(h) && Boolean(internalKey()) && safeEqual(h, internalKey());
 }
 
 async function findUser(q: { phone?: string; user_id?: string; email?: string }) {
@@ -51,6 +51,7 @@ export interface OutboundJob {
 export async function registerInternalRoutes(app: FastifyInstance) {
   await app.register(async (api) => {
     api.addHook("preHandler", async (req, reply) => {
+      if (!internalKey()) return reply.code(503).send({ ok: false, error: "API interna desligada: defina INTERNAL_API_KEY na stack" });
       if (!keyOk(req)) return reply.code(401).send({ ok: false, error: "chave inválida (X-Planejai-Key)" });
     });
 
@@ -83,7 +84,8 @@ export async function registerInternalRoutes(app: FastifyInstance) {
         if (String(req.body.password).length < 8) return bad(reply, "password precisa de 8+ caracteres");
         const acc = await one(
           `INSERT INTO accounts (email, name, password_hash, role, status, user_id, phone) VALUES ($1, $2, $3, 'admin', 'active', $4, $5)
-           ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, status = 'active', user_id = EXCLUDED.user_id, phone = EXCLUDED.phone
+           ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, status = 'active', user_id = EXCLUDED.user_id, phone = EXCLUDED.phone,
+             session_version = accounts.session_version + 1
            RETURNING id`,
           [email, name, hashPassword(String(req.body.password)), user.id, user.phone],
         );
@@ -113,12 +115,16 @@ export async function registerInternalRoutes(app: FastifyInstance) {
       if (!u && !acc) return bad(reply, "pessoa não encontrada", 404);
       if (b.password) {
         if (!acc) return bad(reply, "essa pessoa ainda não tem login no painel (crie com POST /api/internal/users com email e password)", 404);
-        await query("UPDATE accounts SET password_hash = $2 WHERE id = $1", [acc.id, hashPassword(String(b.password))]);
+        await query("UPDATE accounts SET password_hash = $2, session_version = session_version + 1 WHERE id = $1", [acc.id, hashPassword(String(b.password))]);
       }
       if (u && (b.name || b.status)) {
         await query("UPDATE users SET full_name = COALESCE($2, full_name), status = COALESCE($3, status) WHERE id = $1", [u.id, b.name ?? null, b.status ?? null]);
       }
-      if (acc && b.status) await query("UPDATE accounts SET status = $2 WHERE id = $1", [acc.id, b.status === "blocked" ? "disabled" : "active"]);
+      if (acc && b.status)
+        await query("UPDATE accounts SET status = $2, session_version = session_version + CASE WHEN $2 = 'disabled' THEN 1 ELSE 0 END WHERE id = $1", [
+          acc.id,
+          b.status === "blocked" ? "disabled" : "active",
+        ]);
       return { ok: true, user_id: u?.id ?? acc?.user_id ?? null, account_id: acc?.id ?? null };
     });
 

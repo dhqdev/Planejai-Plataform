@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { decryptJson, encryptJson } from "../crypto.js";
+import { decryptJson, decryptJsonWithInfo, encryptJson } from "../crypto.js";
 import { many, one, query } from "../db/pool.js";
 
 export interface IntegrationField {
@@ -431,4 +431,25 @@ export async function listIntegrations() {
       };
     }),
   );
+}
+
+/**
+ * Troca de chave sem perder integrações: no boot, credenciais que só abrem com a chave antiga
+ * (ENCRYPTION_KEY_OLD ou o APP_SECRET legado) são gravadas de novo com a ENCRYPTION_KEY atual.
+ */
+export async function reencryptStale(log?: (msg: string) => void) {
+  const rows = await many("SELECT id, credentials_enc FROM integrations WHERE credentials_enc IS NOT NULL");
+  let n = 0;
+  for (const r of rows) {
+    try {
+      const { value, stale } = decryptJsonWithInfo(r.credentials_enc);
+      if (!stale) continue;
+      await query("UPDATE integrations SET credentials_enc = $2 WHERE id = $1", [r.id, encryptJson(value)]);
+      n++;
+    } catch (err) {
+      log?.(`credencial de ${r.id} não abriu com nenhuma chave: ${(err as Error).message}`);
+    }
+  }
+  if (n) log?.(`${n} credencial(is) recriptografada(s) com a ENCRYPTION_KEY nova`);
+  cache.clear();
 }

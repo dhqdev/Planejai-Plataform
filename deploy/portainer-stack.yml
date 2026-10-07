@@ -6,7 +6,11 @@
 x-app-env: &app-env
   DATABASE_URL: postgres://planejai:${POSTGRES_PASSWORD}@db:5432/planejai
   PUBLIC_URL: ${PUBLIC_URL}
-  APP_SECRET: ${APP_SECRET}
+  SESSION_SECRET: ${SESSION_SECRET}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+  ENCRYPTION_KEY_OLD: ${ENCRYPTION_KEY_OLD:-}
+  APP_SECRET: ${APP_SECRET:-}
+  INTERNAL_API_KEY: ${INTERNAL_API_KEY:-}
   ADMIN_EMAIL: ${ADMIN_EMAIL}
   ADMIN_PASSWORD: ${ADMIN_PASSWORD}
   OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
@@ -23,6 +27,9 @@ x-app-env: &app-env
   ALLOW_UNKNOWN_CONTACTS: ${ALLOW_UNKNOWN_CONTACTS:-false}
   DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-America/Sao_Paulo}
   REDIS_URL: redis://redis:6379
+  REDIS_CACHE_URL: redis://redis-cache:6379
+  LOG_CONTENT_HOURS: ${LOG_CONTENT_HOURS:-24}
+  INVITES_PER_DAY: ${INVITES_PER_DAY:-40}
   MESSAGE_RETENTION_HOURS: ${MESSAGE_RETENTION_HOURS:-24}
   WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
   BROWSERLESS_URL: http://browserless:3000
@@ -41,7 +48,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    networks: [planejai]
+    networks: [planejai, planejai_browser]
     # Usando Traefik? Remova "ports" e adicione labels, ex.:
     # labels:
     #   - traefik.enable=true
@@ -52,18 +59,17 @@ services:
 
   # O worker roda o time de agentes, os lembretes e a conexão própria do WhatsApp (Baileys).
   # Mantenha 1 réplica: só um processo pode segurar a sessão do WhatsApp.
+  # O healthcheck da imagem acusa worker travado ou WhatsApp preso em "conectando".
   worker:
     image: ghcr.io/dhqdev/planejai-plataform:${PLANEJAI_TAG:-latest}
     restart: unless-stopped
     environment:
       <<: *app-env
       ROLE: worker
-    healthcheck:
-      disable: true
     depends_on:
       db:
         condition: service_healthy
-    networks: [planejai]
+    networks: [planejai, planejai_browser]
 
   db:
     image: postgres:16-alpine
@@ -81,26 +87,72 @@ services:
       retries: 10
     networks: [planejai]
 
-  # Redis próprio: memória curta das conversas (cada conversa expira em 24h). Sem disco.
+  # Backup diário do banco (pg_dump) no volume planejai_backups, 14 dias. Cópia para fora: veja docs/operacao.md.
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: planejai
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: planejai
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_REMOTE: ${BACKUP_REMOTE:-}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -n "$$BACKUP_REMOTE" ]; then apk add --no-cache rclone >/dev/null 2>&1 || echo "rclone não instalou: backup só local"; fi
+        sleep 60
+        while true; do
+          f="/backups/planejai-$$(date +%Y%m%d-%H%M).dump"
+          if pg_dump -Fc -f "$$f.tmp"; then
+            mv "$$f.tmp" "$$f"; echo "backup ok: $$f"
+            if [ -n "$$BACKUP_REMOTE" ] && command -v rclone >/dev/null; then rclone copy "$$f" "$$BACKUP_REMOTE" && echo "copiado para $$BACKUP_REMOTE"; fi
+          else
+            rm -f "$$f.tmp"; echo "BACKUP FALHOU"
+          fi
+          find /backups -name 'planejai-*.dump' -mtime +"$$BACKUP_KEEP_DAYS" -delete
+          sleep 86400
+        done
+    volumes:
+      - planejai_backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [planejai]
+
+  # Redis próprio: memória curta das conversas. Grava em disco e nunca despeja chave (a conversa não pode sumir).
   redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - planejai_redis:/data
+    networks: [planejai]
+
+  # Cache descartável (buscas, páginas, mídia interpretada): quando enche, apaga o mais antigo.
+  redis-cache:
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
     networks: [planejai]
 
-  # Navegador headless para prints de páginas (sessões de cinema, cardápios...).
-  # Disponível para amd64 e arm64. Em arm/v7 remova este serviço.
+  # Navegador headless para prints de páginas (sessões de cinema, cardápios...), numa rede só com app e worker:
+  # abre a internet, mas não enxerga o banco nem o Redis. Disponível para amd64 e arm64. Em arm/v7 remova este serviço.
   browserless:
-    image: ghcr.io/browserless/chromium:latest
+    image: ghcr.io/browserless/chromium:v2.57.0
     restart: unless-stopped
     environment:
       TOKEN: ${BROWSERLESS_TOKEN}
       CONCURRENT: "2"
       TIMEOUT: "300000"
-    networks: [planejai]
+    networks: [planejai_browser]
 
 volumes:
   planejai_db:
+  planejai_redis:
+  planejai_backups:
 
 networks:
   planejai:
+  planejai_browser:

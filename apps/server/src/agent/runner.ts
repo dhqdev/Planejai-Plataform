@@ -2,6 +2,7 @@ import { chatCompletion } from "../llm/openrouter.js";
 import { resolveModel } from "../llm/router.js";
 import type { ChatMessage, ToolSpec } from "../llm/types.js";
 import { isConnected } from "../integrations/registry.js";
+import { isOwner } from "../ingest.js";
 import { cacheGet, cacheSet } from "../shortmem.js";
 import { toolCacheKey } from "./cache.js";
 import type { Tool, ToolContext } from "./tools/types.js";
@@ -11,9 +12,25 @@ const QUICK_TOOLS = new Set(["react_to_message", "save_memory"]);
 /** Chamadas demoradas: delegação ao time e navegador. Ligam os avisos de andamento. */
 const SLOW_TOOL = /^(ask_|browser_|screenshot_url)/;
 
-export async function availableTools(tools: Tool[]) {
+/**
+ * Integrações que são contas pessoais do dono da stack (o e-mail, a agenda, o Notion, o caixa dele).
+ * As credenciais são uma só para a plataforma inteira, então só o dono pode usar essas ferramentas:
+ * um convidado pedindo "lê meus e-mails" não pode cair no Gmail do dono.
+ */
+export const OWNER_INTEGRATIONS = new Set(["google", "slack", "notion", "github", "linear", "n8n", "mercadopago", "stripe"]);
+
+export function isOwnerOnly(t: Pick<Tool, "integration" | "ownerOnly">) {
+  return Boolean(t.ownerOnly || (t.integration && OWNER_INTEGRATIONS.has(t.integration)));
+}
+
+/** Ferramentas que esta pessoa pode usar agora: integração conectada e, se for do dono, só para o dono. */
+export async function availableTools(tools: Tool[], user?: { phone: string } | null) {
+  const owner = user ? isOwner(user.phone) : false;
   const out: Tool[] = [];
-  for (const t of tools) if (!t.integration || (await isConnected(t.integration))) out.push(t);
+  for (const t of tools) {
+    if (isOwnerOnly(t) && !owner) continue;
+    if (!t.integration || (await isConnected(t.integration))) out.push(t);
+  }
   return out;
 }
 
@@ -132,6 +149,11 @@ export async function runToolLoop(opts: {
         if (!tool) {
           await toolStep.fail(`Tool desconhecida: ${call.function.name}`);
           return { id: call.id, content: JSON.stringify({ error: `Tool desconhecida: ${call.function.name}` }) };
+        }
+        // segunda trava: mesmo que a ferramenta tenha escapado da lista, conta do dono só roda para o dono
+        if (isOwnerOnly(tool) && !isOwner(ctx.user.phone)) {
+          await toolStep.fail("Ferramenta só do dono da plataforma");
+          return { id: call.id, content: JSON.stringify({ error: "Essa integração é só do dono da plataforma; não está disponível para esta pessoa." }) };
         }
         try {
           const ck = toolCacheKey(tool.name, args);

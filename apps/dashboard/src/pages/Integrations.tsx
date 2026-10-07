@@ -151,7 +151,11 @@ function N8nInfo() {
       <h4>Para o n8n falar com o Planejai</h4>
       <p className="help">Nos nós HTTP Request, use este endereço e mande a chave no cabeçalho <code>X-Planejai-Key</code>.</p>
       <div className="field"><label>Endereço</label><CopyField value={data.base_url} /></div>
-      <div className="field"><label>Chave{data.key_from_env ? " (INTERNAL_API_KEY)" : ""}</label><CopyField value={data.key} /></div>
+      {data.disabled ? (
+        <div className="error-box">API interna desligada. Defina <code>INTERNAL_API_KEY</code> na stack (gere com <code>openssl rand -hex 24</code>) e atualize.</div>
+      ) : (
+        <div className="field"><label>Chave (INTERNAL_API_KEY)</label><CopyField value={data.key} /></div>
+      )}
       <div className="n8n-endpoints">
         {data.endpoints.map(([m, path, desc]: string[]) => (
           <div key={m + path}><span className={`method m-${m.toLowerCase()}`}>{m}</span><code>{path}</code><small className="muted">{desc}</small></div>

@@ -64,6 +64,11 @@ export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; re
     if (await handleInviteReply({ user, text: msg.text, channel, remoteJid: msg.remoteJid })) return { queued: false, reason: "convite" };
   }
   if (user.status !== "active") return { queued: false, reason: `contato ${user.status}` };
+  // "apague todos os meus dados" (LGPD): tratado aqui, sem IA
+  if (msg.kind === "text") {
+    const { handleEraseRequest } = await import("./privacy.js");
+    if (await handleEraseRequest({ user, text: msg.text, channel: getChannel(msg.channel), remoteJid: msg.remoteJid })) return { queued: false, reason: "exclusão de dados" };
+  }
 
   const inserted = await one(
     `INSERT INTO messages (conversation_id, role, content, external_id, media, meta, created_at)
@@ -99,7 +104,7 @@ export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; re
   await boss.send(
     QUEUES.process,
     { conversationId: conv.id },
-    { singletonKey: conv.id, startAfter: delay, retryLimit: 1, priority: 10, expireInSeconds: Math.ceil(settings.maxExecutionMinutes * 60) + 120 },
+    { singletonKey: conv.id, startAfter: delay, retryLimit: 1, retryDelay: 15, priority: 10, expireInSeconds: Math.ceil(settings.maxExecutionMinutes * 60) + 120 },
   );
   return { queued: true, reason: throttled ? "ritmo alto: resposta segurada" : undefined };
 }

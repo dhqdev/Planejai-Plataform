@@ -3,7 +3,8 @@ import { one, query } from "../db/pool.js";
 import type { BrowserSession } from "./browser.js";
 import { getSettings } from "../settings.js";
 import { specialistSystemPrompt } from "./prompts.js";
-import { availableTools, runToolLoop } from "./runner.js";
+import { availableTools, isOwnerOnly, runToolLoop } from "./runner.js";
+import { isOwner } from "../ingest.js";
 import { SPECIALISTS, type AgentDef } from "./team.js";
 import { defineTool, obj, type Tool, type ToolContext } from "./tools/types.js";
 
@@ -54,15 +55,16 @@ function shareTool(): Tool<{ note: string }> {
   });
 }
 
-async function toolsFor(def: AgentDef, chain: string[]) {
-  const own = await availableTools(def.tools);
+async function toolsFor(def: AgentDef, chain: string[], user: ToolContext["user"]) {
+  const own = await availableTools(def.tools, user);
   const peers = chain.length < MAX_CHAIN ? SPECIALISTS.filter((s) => s.id !== def.id && !chain.includes(s.id)).map(consultTool) : [];
   return { own, all: [...own, ...peers, shareTool()] };
 }
 
 async function systemFor(def: AgentDef, ctx: ToolContext, own: Tool[]) {
   const settings = await getSettings();
-  const missing = [...new Set(def.tools.filter((t) => t.integration && !own.includes(t)).map((t) => t.integration!))];
+  const owner = isOwner(ctx.user.phone);
+  const missing = [...new Set(def.tools.filter((t) => t.integration && !own.includes(t) && (owner || !isOwnerOnly(t))).map((t) => t.integration!))];
   return (
     specialistSystemPrompt(def, {
       timezone: ctx.timezone,
@@ -85,7 +87,7 @@ export function delegationTool(def: AgentDef): Tool<{ message: string }> {
     async run(args, ctx) {
       return ctx.room.withLock(def.id, async () => {
         const chain = [...ctx.callChain, def.id];
-        const { own, all } = await toolsFor(def, chain);
+        const { own, all } = await toolsFor(def, chain, ctx.user);
         const thread = ctx.room.threads.get(def.id) ?? [{ role: "system", content: await systemFor(def, ctx, own) } as ChatMessage];
         thread.push({ role: "user", content: `[CTO] ${args.message}${ctx.room.boardText()}` });
         ctx.room.edges.push({ from: ctx.agent, to: def.id });
@@ -109,7 +111,7 @@ export function consultTool(def: AgentDef): Tool<{ question: string }> {
       if (ctx.callChain.includes(def.id) || chain.length > MAX_CHAIN) {
         return { error: `Não dá para consultar ${def.name} agora (já está nesta cadeia de conversa). Resolva com o que tem ou devolva ao CTO.` };
       }
-      const { own, all } = await toolsFor(def, chain);
+      const { own, all } = await toolsFor(def, chain, ctx.user);
       ctx.room.edges.push({ from: ctx.agent, to: def.id });
       // Consulta entre colegas usa uma conversa própria (não trava a conversa do CTO com o mesmo agente)
       const r = await runToolLoop({

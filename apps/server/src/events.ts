@@ -15,14 +15,16 @@ export type PlanejaiEvent =
   | "reminder.fired"
   | "telegram.linked";
 
+/** Chave da API interna. Vazia = API interna desligada (nada derivado de outro segredo). */
 export function internalKey() {
-  return config.INTERNAL_API_KEY || createHmac("sha256", config.APP_SECRET).update("planejai-internal-api").digest("hex").slice(0, 40);
+  return config.INTERNAL_API_KEY;
 }
 
 export async function emitEvent(event: PlanejaiEvent, data: Record<string, unknown>) {
   try {
     const url = (await getCredentials("n8n"))?.events_url;
-    if (!url) return;
+    // sem chave não dá para assinar: o n8n não teria como saber que veio daqui
+    if (!url || !internalKey()) return;
     const body = JSON.stringify({ event, at: new Date().toISOString(), data });
     await fetch(url, {
       method: "POST",

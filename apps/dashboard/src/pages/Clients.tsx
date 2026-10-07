@@ -26,6 +26,7 @@ export function ClientsPage() {
         }
       />
       <ErrorBox error={error} />
+      <CostsCard onOpen={(id) => setDetail((data ?? []).find((c) => c.id === id) ?? null)} />
       <div className="field" style={{ maxWidth: 360 }}>
         <input className="input" placeholder="Buscar por nome, telefone ou e-mail" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
@@ -147,6 +148,17 @@ function ClientDetail({ client, onClose }: { client: any; onClose: () => void })
         <span className="spacer" />
         {status !== "active" && <button className="btn btn-sm btn-primary" onClick={() => patch({ status: "active" })}>Liberar</button>}
         {status !== "blocked" && <button className="btn btn-sm btn-danger" onClick={() => patch({ status: "blocked" })}>Bloquear</button>}
+        <button
+          className="btn btn-sm btn-danger"
+          title="Pedido de exclusão (LGPD): apaga a pessoa e tudo dela"
+          onClick={async () => {
+            if (!confirm(`Apagar ${client.full_name ?? client.name ?? "esta pessoa"} e todos os dados dela? Não tem volta.`)) return;
+            await api(`/api/clients/${client.id}`, { method: "DELETE" });
+            onClose();
+          }}
+        >
+          Apagar dados
+        </button>
       </div>
 
       <ClientUsage id={client.id} />
@@ -168,6 +180,54 @@ function ClientDetail({ client, onClose }: { client: any; onClose: () => void })
       ))}
       {finance.data && !finance.data.byCategory?.length && <p className="muted">Sem gastos no mês.</p>}
     </Modal>
+  );
+}
+
+/** Custo de IA por cliente: total por dia (barras) e ranking de quem mais gasta, para decidir limites e preço. */
+function CostsCard({ onOpen }: { onOpen: (id: string) => void }) {
+  const [days, setDays] = useState(30);
+  const { data } = useApi<any>(`/api/costs?days=${days}`);
+  const [hover, setHover] = useState<any | null>(null);
+  if (!data) return null;
+  const max = Math.max(1e-9, ...data.daily.map((d: any) => d.cost));
+  const top = Math.max(1e-9, ...data.clients.map((c: any) => c.cost));
+  const shown = hover ?? data.daily[data.daily.length - 1];
+  const fmtDay = (d: string) => d.split("-").reverse().slice(0, 2).join("/");
+  return (
+    <div className="card card-pad costs-card">
+      <div className="row" style={{ alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <div className="costs-label">Custo de IA</div>
+          <div className="costs-total">{usd(data.total)}</div>
+          <div className="muted" style={{ fontSize: 12 }}>
+            {hover ? `${fmtDay(shown.day)}: ${usd(shown.cost)} · ${shown.executions} respostas` : `últimos ${days} dias · ${data.clients.length} clientes`}
+          </div>
+        </div>
+        <div className="seg" role="tablist" aria-label="Período">
+          {[7, 30, 90].map((d) => (
+            <button key={d} className={days === d ? "active" : ""} onClick={() => setDays(d)}>{d} dias</button>
+          ))}
+        </div>
+      </div>
+      <div className="costs-bars" onMouseLeave={() => setHover(null)} aria-label="Custo por dia">
+        {data.daily.map((d: any) => (
+          <span key={d.day} className={hover?.day === d.day ? "on" : ""} onMouseEnter={() => setHover(d)} onClick={() => setHover(d)} title={`${fmtDay(d.day)}: ${usd(d.cost)}`}>
+            <i style={{ height: `${Math.max(d.cost > 0 ? 3 : 0, (d.cost / max) * 100)}%` }} />
+          </span>
+        ))}
+      </div>
+      <div className="costs-axis muted"><span>{fmtDay(data.daily[0].day)}</span><span>hoje</span></div>
+      <div className="costs-label" style={{ marginTop: 14 }}>Por cliente</div>
+      {data.clients.slice(0, 8).map((c: any) => (
+        <button key={c.id} className="costs-row" onClick={() => onOpen(c.id)}>
+          <span className="ellipsis costs-name">{c.name}</span>
+          <span className="costs-track"><i style={{ width: `${(c.cost / top) * 100}%` }} /></span>
+          <span className="costs-val">{usd(c.cost)}</span>
+          <span className="costs-sub muted hide-phone">{c.executions} resp. · {usd(c.executions ? c.cost / c.executions : 0)}/resp.</span>
+        </button>
+      ))}
+      {!data.clients.length && <p className="muted" style={{ fontSize: 13 }}>Ainda sem uso no período.</p>}
+    </div>
   );
 }
 

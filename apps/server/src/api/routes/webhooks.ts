@@ -5,17 +5,30 @@ import { config } from "../../config.js";
 import { ingest } from "../../ingest.js";
 import { handleTelegramUpdate, telegramSecretOk } from "../../telegram.js";
 
-function secretOk(req: FastifyRequest) {
-  if (!config.WEBHOOK_SECRET) return true;
-  const q = (req.query as any)?.secret;
-  const h = req.headers["x-webhook-secret"];
-  return q === config.WEBHOOK_SECRET || h === config.WEBHOOK_SECRET;
+/** Comparação em tempo constante; segredo vazio nunca confere. */
+function sameSecret(got: unknown, expected: string) {
+  if (!expected || typeof got !== "string" || !got) return false;
+  const a = Buffer.from(got);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
+
+/** Evolution: exige WEBHOOK_SECRET (sem segredo, qualquer um que soubesse a URL mandava mensagem falsa). */
+function secretOk(req: FastifyRequest) {
+  return sameSecret((req.query as any)?.secret, config.WEBHOOK_SECRET) || sameSecret(req.headers["x-webhook-secret"], config.WEBHOOK_SECRET);
+}
+
+/**
+ * Webhook de canal que não está em uso fica fechado: com o Baileys ligado, um POST no formato da Meta
+ * ou da Evolution com o número do dono não pode virar mensagem "do dono".
+ */
+const off = (provider: string) => config.WHATSAPP_PROVIDER !== provider;
 
 export async function registerWebhookRoutes(app: FastifyInstance) {
   // Evolution API: configure o webhook da instância para {PUBLIC_URL}/webhooks/evolution?secret=WEBHOOK_SECRET
   // com o evento MESSAGES_UPSERT (e, opcionalmente, "webhook base64" ligado).
   app.post("/webhooks/evolution", async (req, reply) => {
+    if (off("evolution")) return reply.code(404).send({ error: "canal desligado" });
     if (!secretOk(req)) return reply.code(401).send({ error: "secret inválido" });
     const msgs = channels.evolution!.parseWebhook(req.body);
     const results = [];
@@ -39,21 +52,20 @@ export async function registerWebhookRoutes(app: FastifyInstance) {
 
   // WhatsApp Cloud API (Meta): verificação do webhook
   app.get("/webhooks/whatsapp", async (req, reply) => {
+    if (off("cloud")) return reply.code(404).send("canal desligado");
     const q = req.query as Record<string, string>;
-    if (q["hub.mode"] === "subscribe" && q["hub.verify_token"] === config.WHATSAPP_CLOUD_VERIFY_TOKEN) {
+    if (q["hub.mode"] === "subscribe" && sameSecret(q["hub.verify_token"], config.WHATSAPP_CLOUD_VERIFY_TOKEN)) {
       return reply.type("text/plain").send(q["hub.challenge"]);
     }
     return reply.code(403).send("forbidden");
   });
 
   app.post("/webhooks/whatsapp", async (req, reply) => {
-    if (config.WHATSAPP_CLOUD_APP_SECRET) {
-      const sig = String(req.headers["x-hub-signature-256"] ?? "");
-      const expected = "sha256=" + createHmac("sha256", config.WHATSAPP_CLOUD_APP_SECRET).update((req as any).rawBody ?? "").digest("hex");
-      if (sig.length !== expected.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
-        return reply.code(401).send({ error: "assinatura inválida" });
-      }
-    }
+    if (off("cloud")) return reply.code(404).send({ error: "canal desligado" });
+    // sem o App Secret não dá para provar que veio da Meta: recusa em vez de aceitar sem assinatura
+    if (!config.WHATSAPP_CLOUD_APP_SECRET) return reply.code(503).send({ error: "configure WHATSAPP_CLOUD_APP_SECRET" });
+    const expected = "sha256=" + createHmac("sha256", config.WHATSAPP_CLOUD_APP_SECRET).update((req as any).rawBody ?? "").digest("hex");
+    if (!sameSecret(String(req.headers["x-hub-signature-256"] ?? ""), expected)) return reply.code(401).send({ error: "assinatura inválida" });
     const msgs = channels.cloud!.parseWebhook(req.body);
     for (const m of msgs) {
       try {

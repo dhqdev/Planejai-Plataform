@@ -329,6 +329,15 @@ table.table { width: 100%; border-collapse: collapse; }
 .fab:hover { transform: translateY(-1px); }
 
 /* ---------- Login / cadastro ---------- */
+.legal { min-height: 100%; background: var(--bg); padding: 32px 16px; overflow-y: auto; height: 100%; }
+.legal-card { max-width: 760px; margin: 0 auto; line-height: 1.6; }
+.legal-card h1 { margin: 12px 0 4px; letter-spacing: -0.02em; }
+.legal-card h3 { margin: 24px 0 6px; }
+.legal-card ul { padding-left: 20px; margin: 6px 0; }
+.legal-card li { margin: 4px 0; }
+.terms-check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin: 4px 0 2px; }
+.terms-check input { margin-top: 3px; }
+.danger-zone { border-color: color-mix(in srgb, var(--err) 40%, transparent); }
 .auth { min-height: 100%; display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); }
 .auth-hero { background: var(--ink); color: var(--on-ink); padding: 56px; display: flex; flex-direction: column; justify-content: space-between; }
 .auth-hero h2 { font-size: 38px; line-height: 1.08; margin: 0 0 14px; letter-spacing: -0.035em; max-width: 460px; font-weight: 650; }
@@ -666,6 +675,22 @@ a.line-item:hover { background: var(--panel-2); }
 .queue-nums .live strong { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 
 /* ---------- Uso por cliente ---------- */
+.costs-card { margin-bottom: 14px; }
+.costs-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.costs-total { font-family: var(--mono); font-size: 26px; letter-spacing: -0.03em; font-weight: 600; margin: 2px 0; }
+.costs-bars { display: flex; align-items: stretch; gap: 2px; height: 72px; margin: 12px 0 4px; }
+.costs-bars span { flex: 1; display: flex; align-items: flex-end; cursor: pointer; padding-top: 4px; }
+.costs-bars i { width: 100%; border-radius: 4px 4px 0 0; background: var(--border-2); min-height: 0; }
+.costs-bars span:hover i, .costs-bars span.on i { background: var(--grad); }
+.costs-axis { display: flex; justify-content: space-between; font-size: 11px; font-family: var(--mono); }
+.costs-row { display: grid; grid-template-columns: minmax(0, 160px) 1fr 76px 170px; align-items: center; gap: 10px; width: 100%; background: none; border: none; padding: 7px 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border); }
+.costs-row:last-of-type { border-bottom: none; }
+.costs-name { font-size: 13px; }
+.costs-track { height: 8px; background: var(--panel-2); border-radius: 99px; overflow: hidden; }
+.costs-track i { display: block; height: 100%; border-radius: 99px; background: var(--grad); }
+.costs-val { font-family: var(--mono); font-size: 13px; text-align: right; }
+.costs-sub { font-size: 11px; font-family: var(--mono); text-align: right; }
+@media (max-width: 700px) { .costs-row { grid-template-columns: minmax(0, 110px) 1fr 70px; } }
 .usage-nums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0 16px; }
 .usage-nums div { background: var(--panel-2); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; min-width: 0; }
 .usage-nums small { color: var(--muted); font-size: 11px; }

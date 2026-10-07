@@ -31,6 +31,7 @@ COPY --from=build /app/apps/server/dist ./apps/server/dist
 COPY --from=build /app/apps/server/public ./apps/server/public
 USER node
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-  CMD wget -qO- "http://127.0.0.1:${PORT}/health" >/dev/null || exit 1
+# api: /health responde; worker: processo vivo e conexão do WhatsApp sem travar (ver src/healthcheck.ts)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+  CMD ["node", "apps/server/dist/healthcheck.js"]
 CMD ["node", "apps/server/dist/index.js"]

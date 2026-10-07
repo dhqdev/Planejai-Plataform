@@ -36,7 +36,7 @@ Todos os modelos têm fallback e podem ser trocados na tela **Modelos** do dashb
 
 1. Faça push na `main`. O GitHub Actions publica `ghcr.io/dhqdev/planejai-plataform:latest` para **amd64, arm64 e arm/v7**.
    - O pacote do GHCR nasce privado: torne-o público em *GitHub > Packages > planejai-plataform > Settings* ou cadastre o registry `ghcr.io` no Portainer com um token `read:packages`.
-2. No Portainer: *Stacks > Add stack*, cole `deploy/portainer-stack.yml` (ou aponte para este repositório) e preencha as variáveis de `.env.example`. No mínimo: `PUBLIC_URL`, `POSTGRES_PASSWORD`, `APP_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `OPENROUTER_API_KEY`, `WEBHOOK_SECRET`, `OWNER_PHONES`, `BROWSERLESS_TOKEN` e as variáveis do provedor de WhatsApp.
+2. No Portainer: *Stacks > Add stack*, cole `deploy/portainer-stack.yml` (ou aponte para este repositório) e preencha as variáveis de `.env.example`. No mínimo: `PUBLIC_URL`, `POSTGRES_PASSWORD`, `SESSION_SECRET`, `ENCRYPTION_KEY`, `INTERNAL_API_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `OPENROUTER_API_KEY`, `WEBHOOK_SECRET`, `OWNER_PHONES`, `BROWSERLESS_TOKEN` e as variáveis do provedor de WhatsApp. Segredos, backup e rollback: `docs/operacao.md`.
 3. A stack sobe `app` (API + dashboard), `worker` (agentes, lembretes), `db` (Postgres 16 próprio, volume `planejai_db`), `redis` (memória curta, próprio) e `browserless` (navegador dos agentes).
 4. Conecte o WhatsApp:
    - **Baileys (padrão)**: abra o dashboard, vá em **WhatsApp** e leia o QR code com o celular do número do assistente (*Dispositivos conectados > Conectar um dispositivo*). Use um número dedicado ao assistente. Mantenha o `worker` com 1 réplica.

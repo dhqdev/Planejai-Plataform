@@ -485,6 +485,7 @@ export const deleteTransaction = defineTool<{ id: string }>({
 
 export const createPaymentLink = defineTool<{ title: string; amount: number; quantity?: number; provider?: "mercadopago" | "stripe"; confirmed_by_user?: boolean }>({
   name: "create_payment_link",
+  ownerOnly: true,
   description:
     "Gera um link de pagamento (Mercado Pago: Pix/cartão/boleto, ou Stripe) para cobrar alguém ou pagar algo. " +
     "Exige confirmação explícita da pessoa com valor e descrição.",

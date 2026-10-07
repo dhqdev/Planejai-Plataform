@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "reac
 import { api } from "./api";
 import { Loading, Modal } from "./components";
 import { AuthPage } from "./pages/Login";
+import { PrivacyPage } from "./pages/Privacy";
 import { canInstall, haptic, isIos, isStandalone, onInstallAvailable, promptInstall } from "./touch";
 
 // Cada tela é carregada só quando abre (o app inicia leve no celular) e, logo depois, baixada em segundo plano
@@ -160,6 +161,8 @@ export function App() {
     setTheme(next);
   };
 
+  // termos e privacidade abrem sem login (link do cadastro e do convite no WhatsApp)
+  if (loc.pathname === "/privacidade") return <PrivacyPage />;
   if (me === undefined) return <Loading />;
   if (!me) return <AuthPage onLogin={setMe} />;
 

@@ -16,9 +16,11 @@ export async function startWorker(log: { info: (...a: any[]) => void; error: (..
 
   // Cada registro de work() é um consumidor independente: N conversas em paralelo.
   for (let i = 0; i < concurrency; i++) {
-    await boss.work<{ conversationId: string }>(QUEUES.process, { batchSize: 1, pollingIntervalSeconds: 1 }, async ([job]) => {
+    await boss.work<{ conversationId: string }>(QUEUES.process, { batchSize: 1, pollingIntervalSeconds: 1, includeMetadata: true }, async ([job]) => {
       if (!job) return;
-      const r = await processConversation(job.data.conversationId, { trigger: "message" });
+      // ainda há nova tentativa na fila: erro passageiro (OpenRouter fora, rede) não perde as mensagens
+      const retryable = job.retryCount < job.retryLimit;
+      const r = await processConversation(job.data.conversationId, { trigger: "message", retryable });
       log.info({ conversationId: job.data.conversationId, executionId: r.executionId, bubbles: r.bubbles.length }, "conversa processada");
       await boss.send(QUEUES.summarize, { conversationId: job.data.conversationId }, { singletonKey: job.data.conversationId, startAfter: 30 });
     });

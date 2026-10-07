@@ -24,6 +24,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [terms, setTerms] = useState(false);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
 
   useEffect(() => {
@@ -50,7 +51,8 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
         onLogin(me);
       } else {
         if (form.name.trim().split(/\s+/).length < 2) throw new Error("Informe nome e sobrenome");
-        const r = await api("/api/auth/register", { method: "POST", json: { ...form, code: code ?? undefined } });
+        if (!terms) throw new Error("Para criar a conta, aceite os termos de uso e a política de privacidade.");
+        const r = await api("/api/auth/register", { method: "POST", json: { ...form, code: code ?? undefined, accept_terms: true } });
         if (code) history.replaceState(null, "", "/");
         if (r.pending) setDone(r.message);
         else onLogin(r);
@@ -117,8 +119,16 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
                 <input className="input" type="password" value={form.password} onChange={set("password")} minLength={mode === "register" ? 8 : undefined} autoComplete={mode === "login" ? "current-password" : "new-password"} required />
                 {mode === "register" && <span className="help">Pelo menos 8 caracteres.</span>}
               </div>
+              {mode === "register" && (
+                <label className="terms-check">
+                  <input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
+                  <span>
+                    Li e aceito os <a href="/privacidade" target="_blank" rel="noreferrer">termos de uso e a política de privacidade</a>.
+                  </span>
+                </label>
+              )}
               <ErrorBox error={error} />
-              <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12, padding: "10px 12px" }} disabled={busy || (mode === "register" && !canRegister)}>
+              <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12, padding: "10px 12px" }} disabled={busy || (mode === "register" && (!canRegister || !terms))}>
                 {busy ? "Aguarde…" : mode === "login" ? "Entrar" : "Criar conta"}
               </button>
               <p className="muted" style={{ textAlign: "center", marginBottom: 0, fontSize: 13 }}>

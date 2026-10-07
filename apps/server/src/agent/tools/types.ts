@@ -62,6 +62,8 @@ export interface Tool<A = any> {
   parameters: Record<string, unknown>;
   /** id da integração necessária; a tool só aparece para o agente se estiver conectada */
   integration?: string;
+  /** só o dono da plataforma (OWNER_PHONES) usa: mexe em contas pessoais dele (e-mail, pagamentos, automações) */
+  ownerOnly?: boolean;
   run(args: A, ctx: ToolContext): Promise<unknown>;
 }
 

@@ -1,4 +1,4 @@
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { config } from "./config.js";
 import { one } from "./db/pool.js";
 
@@ -15,6 +15,8 @@ export interface Account {
   userId: string | null;
   phone: string | null;
   owner: boolean;
+  /** versão da sessão: token com versão diferente não vale mais */
+  sessionVersion: string;
 }
 
 export const OWNER_ID = "owner";
@@ -33,8 +35,40 @@ export function verifyPassword(password: string, stored: string): boolean {
   return timingSafeEqual(expected, got);
 }
 
-export function ownerAccount(): Account {
-  return { id: OWNER_ID, email: config.ADMIN_EMAIL, name: "Dono", role: "superadmin", status: "active", userId: null, phone: null, owner: true };
+/**
+ * Versão da sessão do dono: contador em settings + impressão digital da ADMIN_PASSWORD.
+ * Trocar a senha na stack (ou "sair de todos os aparelhos") derruba os logins antigos dele.
+ */
+async function ownerSessionVersion() {
+  const n = (await one("SELECT value FROM settings WHERE key = 'owner_session_version'"))?.value ?? 1;
+  const fp = createHash("sha256").update(`pw:${config.ADMIN_PASSWORD}`).digest("hex").slice(0, 10);
+  return `${n}.${fp}`;
+}
+
+export async function ownerAccount(): Promise<Account> {
+  return {
+    id: OWNER_ID,
+    email: config.ADMIN_EMAIL,
+    name: "Dono",
+    role: "superadmin",
+    status: "active",
+    userId: null,
+    phone: null,
+    owner: true,
+    sessionVersion: await ownerSessionVersion(),
+  };
+}
+
+/** Derruba todos os logins da conta (troca de senha, desativação, "sair de todos os aparelhos"). */
+export async function bumpSession(accountId: string) {
+  if (accountId === OWNER_ID) {
+    await one(
+      `INSERT INTO settings (key, value, updated_at) VALUES ('owner_session_version', '2'::jsonb, now())
+       ON CONFLICT (key) DO UPDATE SET value = to_jsonb(COALESCE(settings.value::text::int, 1) + 1), updated_at = now() RETURNING key`,
+    );
+  } else {
+    await one("UPDATE accounts SET session_version = session_version + 1 WHERE id = $1 RETURNING id", [accountId]);
+  }
 }
 
 export function toAccount(row: any): Account {
@@ -48,11 +82,12 @@ export function toAccount(row: any): Account {
     userId: row.user_id,
     phone: row.phone,
     owner: false,
+    sessionVersion: String(row.session_version ?? 1),
   };
 }
 
 export async function loadAccount(id: string): Promise<Account | null> {
-  if (id === OWNER_ID) return ownerAccount();
+  if (id === OWNER_ID) return await ownerAccount();
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
   const row = await one("SELECT * FROM accounts WHERE id = $1", [id]);
   return row ? toAccount(row) : null;
