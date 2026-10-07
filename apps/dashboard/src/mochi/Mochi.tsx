@@ -1,79 +1,50 @@
-import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import "./mochi.css";
 
 /**
- * Mochi, o mascote do Planejai: uma pedrinha macia e branca desenhada em SVG, com carinhas,
- * efeitos de cada sentimento e roupinhas. Tudo é código (sem imagem), então escala do ícone da
- * barra até a tela do guarda-roupa.
+ * Mochi, o mascote do Planejai: uma bolinha branca, fosca e sólida, desenhada em SVG.
+ * O corpo fica parado; quem fala são os olhos: seguem o mouse/dedo, passeiam sozinhos, piscam
+ * e mudam de forma em cada expressão. Ao tocar, ele amassa e reage.
  */
 
 export type Mood =
-  // estados do app
   | "idle"
-  | "working"
-  | "thinking"
-  | "searching"
-  | "approval"
-  | "question"
-  | "error"
-  | "finished"
-  | "ratelimit"
-  | "upload"
   | "greeting"
-  // sentimentos
   | "happy"
-  | "excited"
+  | "finished"
+  | "working"
+  | "searching"
+  | "thinking"
+  | "curious"
   | "surprised"
-  | "sad"
-  | "crying"
-  | "angry"
-  | "sleeping"
-  | "sleepy"
-  | "dizzy"
-  | "love"
-  | "shy"
   | "wink"
   | "laughing"
-  | "tired"
-  | "starstruck"
-  | "yummy"
-  | "uwu"
-  | "cool"
-  | "dancing"
-  | "slap";
+  | "sleepy"
+  | "sleeping"
+  | "annoyed"
+  | "angry"
+  | "sad"
+  | "shy"
+  | "dizzy"
+  | "error";
 
 export const MOODS: { id: Mood; label: string }[] = [
   { id: "idle", label: "parado" },
   { id: "happy", label: "feliz" },
-  { id: "excited", label: "animado" },
   { id: "surprised", label: "surpreso" },
-  { id: "sad", label: "triste" },
-  { id: "crying", label: "chorando" },
-  { id: "angry", label: "bravo" },
-  { id: "sleeping", label: "dormindo" },
-  { id: "sleepy", label: "com sono" },
-  { id: "dizzy", label: "confuso" },
-  { id: "love", label: "apaixonado" },
-  { id: "shy", label: "envergonhado" },
-  { id: "wink", label: "piscando" },
+  { id: "curious", label: "curioso" },
   { id: "thinking", label: "pensando" },
-  { id: "laughing", label: "dando risada" },
-  { id: "tired", label: "cansado" },
-  { id: "starstruck", label: "incrível" },
-  { id: "yummy", label: "coisa boa" },
-  { id: "uwu", label: "fofo" },
-  { id: "cool", label: "estiloso" },
-  { id: "dancing", label: "dançando" },
-  { id: "slap", label: "tapa" },
-  { id: "greeting", label: "oi" },
-  { id: "working", label: "trabalhando" },
-  { id: "searching", label: "pesquisando" },
-  { id: "upload", label: "enviando" },
-  { id: "approval", label: "aprovação" },
-  { id: "question", label: "pergunta" },
-  { id: "finished", label: "pronto" },
+  { id: "searching", label: "procurando" },
+  { id: "wink", label: "piscando" },
+  { id: "laughing", label: "rindo" },
+  { id: "sleepy", label: "com sono" },
+  { id: "sleeping", label: "dormindo" },
+  { id: "annoyed", label: "entediado" },
+  { id: "angry", label: "bravo" },
+  { id: "sad", label: "triste" },
+  { id: "shy", label: "tímido" },
+  { id: "dizzy", label: "tonto" },
   { id: "error", label: "erro" },
-  { id: "ratelimit", label: "no limite" },
 ];
 
 export type Slot = "head" | "eyes" | "neck" | "costume";
@@ -103,375 +74,97 @@ export const SLOTS: { id: Slot; label: string }[] = [
   { id: "costume", label: "Fantasia" },
 ];
 
-/* ---------------- Carinhas ---------------- */
+/* ---------------- Olhos ---------------- */
 
-type EyeKind =
-  | "dot"
-  | "big"
-  | "sparkle"
-  | "happy"
-  | "closed"
-  | "line"
-  | "lid"
-  | "sadL"
-  | "sadR"
-  | "angryL"
-  | "angryR"
-  | "tearL"
-  | "tearR"
-  | "spiral"
-  | "heart"
-  | "starry"
-  | "gt"
-  | "lt"
-  | "none";
-type MouthKind = "o" | "open" | "smile" | "tongue" | "w" | "wavy" | "frown" | "smirk" | "yawn";
-type Fx = "sparkles" | "stars" | "hearts" | "heart" | "spirals" | "zzz" | "z" | "rain" | "vein" | "sweat" | "notes" | "card" | "impact";
-type Badge = { kind: "dots" | "!" | "?" | "dot"; color: string };
+/** pálpebra: corta o olho acima de uma linha (y relativo ao centro, lado de fora e lado de dentro) */
+type Lid = { out: number; in: number };
+type EyeShape =
+  | { k: "dot"; s?: number; lid?: Lid }
+  | { k: "happy" }
+  | { k: "closed" }
+  | { k: "line" }
+  | { k: "gt" }
+  | { k: "lt" }
+  | { k: "spiral" };
 
 interface Face {
-  l: EyeKind;
-  r: EyeKind;
-  mouth?: MouthKind;
-  blush?: boolean;
-  shades?: boolean;
-  tint?: string;
-  glow?: string;
-  badge?: Badge;
-  fx?: Fx[];
+  l: EyeShape;
+  r: EyeShape;
+  /** olhar fixo (não segue o mouse) */
+  gaze?: [number, number];
+  /** olhos procurando de um lado para o outro */
+  scan?: "slow" | "fast";
 }
 
-const BLUE = "#4f72f0";
-const PURPLE = "#8b5cf0";
+const DOT: EyeShape = { k: "dot" };
 const FACES: Record<Mood, Face> = {
-  idle: { l: "dot", r: "dot" },
-  working: { l: "dot", r: "dot", tint: "#c3d4fb", glow: BLUE, badge: { kind: "dots", color: BLUE } },
-  thinking: { l: "lid", r: "lid", tint: "#d9ccfb", glow: PURPLE, badge: { kind: "dots", color: PURPLE } },
-  searching: { l: "dot", r: "dot", tint: "#cfcffb", glow: "#6a63ee", badge: { kind: "dots", color: "#6a63ee" } },
-  approval: { l: "dot", r: "dot", mouth: "o", tint: "#fbd9a8", glow: "#f29a1f", badge: { kind: "!", color: "#f29a1f" } },
-  question: { l: "dot", r: "big", tint: "#bfeaf3", glow: "#2bb3cf", badge: { kind: "?", color: "#2bb3cf" } },
-  error: { l: "line", r: "line", mouth: "frown", tint: "#f8c0c8", glow: "#ef4b5f", badge: { kind: "dot", color: "#ef4b5f" }, fx: ["sweat"] },
-  finished: { l: "happy", r: "happy", mouth: "smile", tint: "#c6eedc", glow: "#2fbf7f", badge: { kind: "dot", color: "#2fbf7f" }, fx: ["sparkles"] },
-  ratelimit: { l: "line", r: "line", mouth: "wavy", tint: "#f9d8ba", glow: "#f2862b", badge: { kind: "dot", color: "#f2862b" }, fx: ["sweat"] },
-  upload: { l: "dot", r: "dot", mouth: "smile", fx: ["card"] },
-  greeting: { l: "happy", r: "happy", mouth: "open", blush: true, glow: "#ffd6e2" },
-  happy: { l: "happy", r: "happy", mouth: "smile" },
-  excited: { l: "sparkle", r: "sparkle", mouth: "open", blush: true, glow: "#ffb37a", fx: ["sparkles"] },
-  surprised: { l: "big", r: "big", mouth: "o" },
-  sad: { l: "sadL", r: "sadR", mouth: "frown", tint: "#d9e2f2", glow: "#6d8fd6" },
-  crying: { l: "tearL", r: "tearR", mouth: "frown", tint: "#d3def5", glow: "#4f8cf0", fx: ["rain"] },
-  angry: { l: "angryL", r: "angryR", mouth: "frown", tint: "#f9d0d0", glow: "#ef3b4f", fx: ["vein"] },
-  sleeping: { l: "closed", r: "closed", glow: "#3b4fc4", fx: ["zzz"] },
-  sleepy: { l: "line", r: "line", mouth: "yawn", fx: ["z"] },
-  dizzy: { l: "spiral", r: "spiral", mouth: "wavy", tint: "#ecd3f6", glow: PURPLE, fx: ["spirals"] },
-  love: { l: "heart", r: "heart", mouth: "open", blush: true, tint: "#f9dbe8", glow: "#ec4f9a", fx: ["hearts"] },
-  shy: { l: "dot", r: "dot", mouth: "wavy", blush: true, glow: "#ff9fb7", fx: ["sweat"] },
-  wink: { l: "happy", r: "dot", mouth: "tongue" },
-  laughing: { l: "gt", r: "lt", mouth: "open", blush: true, glow: "#ffcf5c" },
-  tired: { l: "closed", r: "closed", mouth: "smile", tint: "#eceaf3" },
-  starstruck: { l: "starry", r: "starry", mouth: "open", glow: "#7b5cff", fx: ["stars"] },
-  yummy: { l: "happy", r: "happy", mouth: "tongue", blush: true },
-  uwu: { l: "happy", r: "happy", mouth: "w", fx: ["heart"], glow: "#c79bff" },
-  cool: { l: "none", r: "none", mouth: "smirk", shades: true, glow: "#7b5cff" },
-  dancing: { l: "happy", r: "happy", mouth: "open", glow: "#ff7ac6", fx: ["notes"] },
-  slap: { l: "gt", r: "lt", mouth: "wavy", tint: "#f9cfd5", glow: "#ef4b5f", fx: ["impact", "vein"] },
+  idle: { l: DOT, r: DOT },
+  greeting: { l: { k: "happy" }, r: { k: "happy" } },
+  happy: { l: { k: "happy" }, r: { k: "happy" } },
+  finished: { l: { k: "happy" }, r: { k: "happy" } },
+  working: { l: DOT, r: DOT, scan: "slow" },
+  searching: { l: DOT, r: DOT, scan: "fast" },
+  thinking: { l: { k: "dot", lid: { out: -2.5, in: -2.5 } }, r: { k: "dot", lid: { out: -2.5, in: -2.5 } }, gaze: [4, -3.5] },
+  curious: { l: { k: "dot", s: 0.85 }, r: { k: "dot", s: 1.3 } },
+  surprised: { l: { k: "dot", s: 1.3 }, r: { k: "dot", s: 1.3 } },
+  wink: { l: DOT, r: { k: "happy" } },
+  laughing: { l: { k: "gt" }, r: { k: "lt" } },
+  sleepy: { l: { k: "dot", lid: { out: 0.6, in: 0.6 } }, r: { k: "dot", lid: { out: 0.6, in: 0.6 } }, gaze: [0, 1.5] },
+  sleeping: { l: { k: "closed" }, r: { k: "closed" } },
+  annoyed: { l: { k: "dot", lid: { out: -0.8, in: -0.8 } }, r: { k: "dot", lid: { out: -0.8, in: -0.8 } }, gaze: [5, 0.5] },
+  angry: { l: { k: "dot", lid: { out: -4.5, in: 0.4 } }, r: { k: "dot", lid: { out: -4.5, in: 0.4 } } },
+  sad: { l: { k: "dot", lid: { out: 0.2, in: -4.5 } }, r: { k: "dot", lid: { out: 0.2, in: -4.5 } }, gaze: [0, 3] },
+  shy: { l: { k: "dot", s: 0.85 }, r: { k: "dot", s: 0.85 }, gaze: [-5, 3] },
+  dizzy: { l: { k: "spiral" }, r: { k: "spiral" } },
+  error: { l: { k: "line" }, r: { k: "line" } },
 };
 
-const INK = "#16161a";
-const LX = 46;
-const RX = 74;
-const EY = 77;
-const MY = 89;
-/** corpo: uma pedrinha arredondada, mais larga embaixo */
-const BODY = "M60 43 C86 43 103 54 103 76 C103 98 87 106 60 106 C33 106 17 98 17 76 C17 54 34 43 60 43 Z";
+const INK = "#121214";
+const LX = 45;
+const RX = 75;
+const EY = 78.5;
+/** corpo como na referência: topo largo e quase reto, laterais retas, cantos bem arredondados */
+const BODY = "M60 42 C88 42 102 45.5 102 64 L102 82 C102 100 88 106 60 106 C32 106 18 100 18 82 L18 64 C18 45.5 32 42 60 42 Z";
 
-function Eye({ kind, x, y = EY }: { kind: EyeKind; x: number; y?: number }) {
-  const s = { stroke: INK, strokeWidth: 2.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, fill: "none" };
-  const glint = (r: number, dx = 1.3, dy = -1.6) => <circle cx={x + dx} cy={y + dy} r={r} fill="#fff" opacity={0.95} />;
-  switch (kind) {
-    case "none":
-      return null;
-    case "dot":
+function Eye({ shape, x, side, u }: { shape: EyeShape; x: number; side: "l" | "r"; u: string }) {
+  const y = EY;
+  const s = { stroke: INK, strokeWidth: 2.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, fill: "none" };
+  switch (shape.k) {
+    case "dot": {
+      const k = shape.s ?? 1;
+      const lid = shape.lid;
+      // o lado "de dentro" do olho esquerdo é a direita, e vice-versa
+      const yl = lid ? y + (side === "l" ? lid.out : lid.in) : 0;
+      const yr = lid ? y + (side === "l" ? lid.in : lid.out) : 0;
+      const id = `${u}-lid-${side}`;
       return (
         <g className="m-eye">
-          <ellipse cx={x} cy={y} rx={3.9} ry={4.6} fill={INK} />
-          {glint(1)}
+          {lid && (
+            <clipPath id={id}>
+              <path className="m-lid" d={`M${x - 9} ${yl} L${x + 9} ${yr} L${x + 9} ${y + 12} L${x - 9} ${y + 12} Z`} />
+            </clipPath>
+          )}
+          <ellipse cx={x} cy={y} rx={4.4 * k} ry={5.1 * k} fill={INK} clipPath={lid ? `url(#${id})` : undefined} />
         </g>
       );
-    case "big":
-      return (
-        <g className="m-eye">
-          <ellipse cx={x} cy={y} rx={4.8} ry={5.6} fill={INK} />
-          {glint(1.4, 1.6, -2)}
-        </g>
-      );
-    case "sparkle":
-      return (
-        <g className="m-eye">
-          <ellipse cx={x} cy={y} rx={5.4} ry={6} fill={INK} />
-          {glint(2.1, 1.7, -2)}
-          {glint(1, -2, 2.2)}
-          <circle cx={x + 2.6} cy={y + 2.4} r={0.6} fill="#fff" />
-        </g>
-      );
+    }
     case "happy":
-      return <path className="m-eye" d={`M${x - 5.5} ${y + 2} Q${x} ${y - 6} ${x + 5.5} ${y + 2}`} {...s} />;
+      return <path className="m-eye" d={`M${x - 5.6} ${y + 2.2} Q${x} ${y - 6} ${x + 5.6} ${y + 2.2}`} {...s} />;
     case "closed":
-      return <path className="m-eye" d={`M${x - 5.5} ${y - 1.5} Q${x} ${y + 4.5} ${x + 5.5} ${y - 1.5}`} {...s} />;
+      return <path className="m-eye" d={`M${x - 5.6} ${y - 1} Q${x} ${y + 5} ${x + 5.6} ${y - 1}`} {...s} />;
     case "line":
-      return <path className="m-eye" d={`M${x - 4.8} ${y} L${x + 4.8} ${y}`} {...s} />;
-    case "lid":
-      // olho meio fechado (pensando): pálpebra reta em cima
-      return (
-        <g className="m-eye">
-          <path d={`M${x - 4.6} ${y - 1} A4.6 4.6 0 0 0 ${x + 4.6} ${y - 1} Z`} fill={INK} />
-          <path d={`M${x - 6} ${y - 1.2} L${x + 6} ${y - 1.2}`} {...s} strokeWidth={2.2} />
-        </g>
-      );
-    case "sadL":
-    case "sadR": {
-      const k = kind === "sadL" ? 1 : -1;
-      return (
-        <g className="m-eye">
-          <ellipse cx={x} cy={y + 1} rx={3.6} ry={4.2} fill={INK} />
-          {glint(0.9, 1.1, -0.6)}
-          <path d={`M${x - 5 * k} ${y - 5} L${x + 4 * k} ${y - 8.5}`} {...s} strokeWidth={2.2} />
-        </g>
-      );
-    }
-    case "angryL":
-    case "angryR": {
-      const k = kind === "angryL" ? 1 : -1;
-      return (
-        <g className="m-eye">
-          <ellipse cx={x} cy={y + 1.2} rx={3.9} ry={3.6} fill={INK} />
-          <path d={`M${x - 6 * k} ${y - 7} L${x + 5 * k} ${y - 2.6}`} {...s} strokeWidth={3} />
-        </g>
-      );
-    }
-    case "tearL":
-    case "tearR": {
-      const k = kind === "tearL" ? 1 : -1;
-      return (
-        <g className="m-eye">
-          <path d={`M${x - 5} ${y + 1} Q${x} ${y - 4} ${x + 5} ${y + 1}`} {...s} />
-          <path d={`M${x - 5 * k} ${y - 6} L${x + 4 * k} ${y - 8.5}`} {...s} strokeWidth={2} />
-          <path className="m-tear" d={`M${x + 1.5 * k} ${y + 2} C${x + 2 * k} ${y + 8} ${x + 0.5 * k} ${y + 13} ${x + 1.5 * k} ${y + 19}`} stroke="#4aa3ff" strokeWidth={3.2} strokeLinecap="round" fill="none" />
-        </g>
-      );
-    }
+      return <path className="m-eye" d={`M${x - 5} ${y} L${x + 5} ${y}`} {...s} />;
+    case "gt":
+      return <path className="m-eye" d={`M${x - 4} ${y - 4.4} L${x + 3.8} ${y} L${x - 4} ${y + 4.4}`} {...s} />;
+    case "lt":
+      return <path className="m-eye" d={`M${x + 4} ${y - 4.4} L${x - 3.8} ${y} L${x + 4} ${y + 4.4}`} {...s} />;
     case "spiral":
       return (
         <g className="m-eye m-spin">
-          <path
-            d={`M${x} ${y} m-0.4 0 a0.8 0.8 0 1 1 1.6 0 a1.9 1.9 0 1 1 -3.8 0 a3 3 0 1 1 6 0 a4.2 4.2 0 1 1 -8.4 0`}
-            stroke={INK}
-            strokeWidth={1.6}
-            strokeLinecap="round"
-            fill="none"
-          />
+          <path d={`M${x} ${y} m-0.4 0 a0.8 0.8 0 1 1 1.6 0 a1.9 1.9 0 1 1 -3.8 0 a3 3 0 1 1 6 0 a4.2 4.2 0 1 1 -8.4 0`} stroke={INK} strokeWidth={1.7} strokeLinecap="round" fill="none" />
         </g>
       );
-    case "heart":
-      return (
-        <g className="m-eye m-beat">
-          <path d={heartPath(x, y, 1.15)} fill="#ff3d6a" />
-          <ellipse cx={x - 2} cy={y - 2.4} rx={1.4} ry={0.9} fill="#fff" opacity={0.8} />
-        </g>
-      );
-    case "starry":
-      return (
-        <g className="m-eye">
-          <ellipse cx={x} cy={y} rx={5.6} ry={6} fill={INK} />
-          <path className="m-twirl" d={sparklePath(x, y - 0.2, 3.6)} fill="#fff" />
-        </g>
-      );
-    case "gt":
-      return <path className="m-eye" d={`M${x - 4} ${y - 4.2} L${x + 3.6} ${y} L${x - 4} ${y + 4.2}`} {...s} />;
-    case "lt":
-      return <path className="m-eye" d={`M${x + 4} ${y - 4.2} L${x - 3.6} ${y} L${x + 4} ${y + 4.2}`} {...s} />;
   }
-}
-
-function Mouth({ kind }: { kind: MouthKind }) {
-  const s = { stroke: INK, strokeWidth: 2.1, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, fill: "none" };
-  switch (kind) {
-    case "o":
-      return <ellipse cx={60} cy={MY + 1} rx={2.2} ry={2.6} fill={INK} />;
-    case "yawn":
-      return <ellipse className="m-yawn" cx={60} cy={MY + 1.5} rx={2.8} ry={3.6} fill="#2a1a1e" />;
-    case "open":
-      return (
-        <g>
-          <path d={`M54.5 ${MY - 1} Q60 ${MY} 65.5 ${MY - 1} Q65 ${MY + 6.5} 60 ${MY + 6.5} Q55 ${MY + 6.5} 54.5 ${MY - 1} Z`} fill="#2a1a1e" />
-          <ellipse cx={60} cy={MY + 4.6} rx={3.1} ry={1.7} fill="#ff6b81" />
-        </g>
-      );
-    case "smile":
-      return <path d={`M56 ${MY} Q60 ${MY + 3.6} 64 ${MY}`} {...s} />;
-    case "tongue":
-      return (
-        <g>
-          <rect x={59.6} y={MY + 0.6} width={4.6} height={5} rx={2.3} fill="#ff6b81" />
-          <path d={`M55.5 ${MY} Q60 ${MY + 3.4} 64.5 ${MY}`} {...s} />
-        </g>
-      );
-    case "w":
-      return <path d={`M54.5 ${MY - 0.5} Q57.25 ${MY + 3.4} 60 ${MY - 0.5} Q62.75 ${MY + 3.4} 65.5 ${MY - 0.5}`} {...s} strokeWidth={1.9} />;
-    case "wavy":
-      return <path d={`M53.5 ${MY + 1} Q55.5 ${MY - 1} 57.5 ${MY + 1} T61.5 ${MY + 1} T65.5 ${MY + 1}`} {...s} strokeWidth={1.8} />;
-    case "frown":
-      return <path d={`M56 ${MY + 2.5} Q60 ${MY - 1} 64 ${MY + 2.5}`} {...s} />;
-    case "smirk":
-      return <path d={`M56.5 ${MY + 1} Q61.5 ${MY + 2.6} 65 ${MY - 1.2}`} {...s} />;
-  }
-}
-
-function heartPath(x: number, y: number, k = 1) {
-  return `M${x} ${y + 4.6 * k} C${x - 7.4 * k} ${y - 0.4 * k} ${x - 5.2 * k} ${y - 6.4 * k} ${x} ${y - 2.6 * k} C${x + 5.2 * k} ${y - 6.4 * k} ${x + 7.4 * k} ${y - 0.4 * k} ${x} ${y + 4.6 * k} Z`;
-}
-
-function sparklePath(x: number, y: number, r: number) {
-  const q = r * 0.18;
-  return `M${x} ${y - r} Q${x + q} ${y - q} ${x + r} ${y} Q${x + q} ${y + q} ${x} ${y + r} Q${x - q} ${y + q} ${x - r} ${y} Q${x - q} ${y - q} ${x} ${y - r} Z`;
-}
-
-function starPath(cx: number, cy: number, r1: number, r2: number, n = 5) {
-  let d = "";
-  for (let i = 0; i < n * 2; i++) {
-    const r = i % 2 ? r2 : r1;
-    const a = (Math.PI / n) * i - Math.PI / 2;
-    d += `${i ? "L" : "M"}${(cx + r * Math.cos(a)).toFixed(2)} ${(cy + r * Math.sin(a)).toFixed(2)} `;
-  }
-  return d + "Z";
-}
-
-function Blush() {
-  return (
-    <g className="m-blush">
-      <ellipse cx={36} cy={87} rx={5.6} ry={3} fill="#ff7f9d" opacity={0.45} />
-      <ellipse cx={84} cy={87} rx={5.6} ry={3} fill="#ff7f9d" opacity={0.45} />
-      <path d="M33.5 88.5 L35.5 85.5 M37 88.5 L39 85.5 M81 88.5 L83 85.5 M84.5 88.5 L86.5 85.5" stroke="#ff5c84" strokeWidth={0.9} strokeLinecap="round" opacity={0.7} />
-    </g>
-  );
-}
-
-function BadgeMark({ b }: { b: Badge }) {
-  if (b.kind === "dots")
-    return (
-      <g className="m-badge">
-        <rect x={13} y={44} width={20} height={9.5} rx={4.75} fill={b.color} />
-        {[18, 23, 28].map((cx, i) => (
-          <circle key={cx} className="m-typing" style={{ animationDelay: `${i * 0.16}s` }} cx={cx} cy={48.75} r={1.4} fill="#fff" />
-        ))}
-      </g>
-    );
-  return (
-    <g className="m-badge">
-      <circle cx={24} cy={50} r={b.kind === "dot" ? 4.2 : 5.4} fill={b.color} stroke="rgba(255,255,255,.95)" strokeWidth={1.3} />
-      {b.kind !== "dot" && (
-        <text x={24} y={52.6} textAnchor="middle" fontSize={7.4} fontWeight={800} fill="#fff" fontFamily="ui-sans-serif, system-ui, sans-serif">
-          {b.kind}
-        </text>
-      )}
-    </g>
-  );
-}
-
-/* ---------------- Efeitos de cada sentimento ---------------- */
-
-function Effects({ fx, u }: { fx: Fx[]; u: string }) {
-  return (
-    <>
-      {fx.includes("sparkles") &&
-        [
-          [44, 36, 3.6, 0],
-          [60, 28, 2.6, 0.45],
-          [75, 37, 2.2, 0.9],
-          [95, 52, 2, 1.2],
-        ].map(([x, y, r, d]) => <path key={`${x}`} className="m-twinkle" style={{ animationDelay: `${d}s` }} d={sparklePath(x, y, r)} fill="#fff" />)}
-      {fx.includes("stars") &&
-        [
-          [22, 46, 3.4, 0, "#ffe27a"],
-          [98, 44, 4, 0.5, "#fff"],
-          [104, 74, 2.6, 1, "#c9b6ff"],
-          [14, 74, 2.4, 1.4, "#fff"],
-          [60, 30, 3, 0.8, "#ffe27a"],
-        ].map(([x, y, r, d, c]) => (
-          <path key={`${x}`} className="m-twinkle" style={{ animationDelay: `${d}s` }} d={sparklePath(x as number, y as number, r as number)} fill={c as string} />
-        ))}
-      {fx.includes("hearts") &&
-        [
-          [20, 52, 1, 0],
-          [100, 48, 1.2, 0.7],
-          [88, 32, 0.8, 1.3],
-          [30, 36, 0.7, 1.9],
-        ].map(([x, y, k, d]) => (
-          <path key={`${x}`} className="m-float-heart" style={{ animationDelay: `${d}s` }} d={heartPath(x, y, k)} fill="#ff4f8b" filter={`url(#${u}-neon)`} />
-        ))}
-      {fx.includes("heart") && <path className="m-float-heart" d={heartPath(96, 46, 0.9)} fill="#c27bff" filter={`url(#${u}-neon)`} />}
-      {fx.includes("spirals") &&
-        [
-          [16, 50, 0],
-          [104, 52, 0.4],
-          [12, 92, 0.8],
-          [108, 90, 1.2],
-        ].map(([x, y, d]) => (
-          <g key={`${x}`} className="m-orbit" style={{ animationDelay: `${d}s` }}>
-            <path
-              d={`M${x} ${y} m-0.4 0 a0.8 0.8 0 1 1 1.6 0 a1.9 1.9 0 1 1 -3.8 0 a3 3 0 1 1 6 0 a4.2 4.2 0 1 1 -8.4 0`}
-              stroke="#a86bff"
-              strokeWidth={1.6}
-              strokeLinecap="round"
-              fill="none"
-              filter={`url(#${u}-neon)`}
-            />
-          </g>
-        ))}
-      {(fx.includes("zzz") || fx.includes("z")) && (
-        <g className="m-zzz" fill="#8e8cff" fontFamily="ui-sans-serif, system-ui, sans-serif" fontWeight={800}>
-          <text x={90} y={46} fontSize={8}>z</text>
-          {fx.includes("zzz") && <text x={97} y={36} fontSize={10.5}>z</text>}
-          {fx.includes("zzz") && <text x={105} y={24} fontSize={13}>Z</text>}
-        </g>
-      )}
-      {fx.includes("rain") &&
-        [20, 34, 50, 70, 86, 100].map((x, i) => (
-          <line key={x} className="m-rain" style={{ animationDelay: `${i * 0.23}s` }} x1={x} y1={18} x2={x - 1.5} y2={26} stroke="#7fb3ff" strokeWidth={1.4} strokeLinecap="round" opacity={0.6} />
-        ))}
-      {fx.includes("vein") && (
-        <g transform="translate(94 46)">
-         <g className="m-vein" stroke="#ff3045" strokeWidth={2.2} strokeLinecap="round" fill="none">
-          <path d="M-2 -7 Q-2 -2 -7 -2" />
-          <path d="M2 -7 Q2 -2 7 -2" />
-          <path d="M-2 7 Q-2 2 -7 2" />
-          <path d="M2 7 Q2 2 7 2" />
-         </g>
-        </g>
-      )}
-      {fx.includes("sweat") && (
-        <path className="m-sweat" d="M95 56 C98 61 99 64 96.5 65.5 C94 67 91.5 64.5 93 61 Z" fill="#7cc4ff" stroke="#fff" strokeWidth={0.6} />
-      )}
-      {fx.includes("notes") && (
-        <g className="m-notes" fill="#ff7ac6" fontSize={12} fontWeight={700} fontFamily="ui-sans-serif, system-ui, sans-serif">
-          <text x={96} y={50}>♪</text>
-          <text x={14} y={56}>♫</text>
-        </g>
-      )}
-      {fx.includes("card") && (
-        <g className="m-card">
-          <rect x={52} y={24} width={16} height={13} rx={2.5} fill="#fff" stroke="#d8d8de" strokeWidth={0.8} />
-          <rect x={56} y={29} width={8} height={2.6} rx={1.3} fill="#ef4b5f" />
-        </g>
-      )}
-      {fx.includes("impact") && (
-        <g className="m-impact" stroke="#ef4b5f" strokeWidth={2.4} strokeLinecap="round">
-          <path d="M106 66 L114 62 M108 76 L117 76 M106 86 L114 90" />
-          <ellipse cx={85} cy={88} rx={6} ry={3.4} fill="#ff6f82" stroke="none" opacity={0.7} />
-        </g>
-      )}
-    </>
-  );
 }
 
 /* ---------------- Roupinhas ---------------- */
@@ -571,7 +264,7 @@ function Hat({ id, u }: { id: string; u: string }) {
           <rect x={55.5} y={47.4} width={8} height={7} rx={1.4} fill="none" stroke="#ffd34d" strokeWidth={1.7} />
           <ellipse cx={60} cy={58} rx={46} ry={8} fill={`url(#${u}-brim)`} />
           <ellipse cx={60} cy={56.6} rx={40} ry={4.8} fill="#7a46d0" />
-          <path d="M86 18 l1 2.4 2.4 0.4 -1.8 1.6 0.5 2.4 -2.1 -1.3 -2.1 1.3 0.5 -2.4 -1.8 -1.6 2.4 -0.4 Z" fill="#ffe27a" className="m-twinkle" />
+          <path d="M86 18 l1 2.4 2.4 0.4 -1.8 1.6 0.5 2.4 -2.1 -1.3 -2.1 1.3 0.5 -2.4 -1.8 -1.6 2.4 -0.4 Z" fill="#ffe27a" />
         </g>
       );
     case "cap":
@@ -593,7 +286,7 @@ function Hat({ id, u }: { id: string; u: string }) {
           {[16, 104].map((x) => (
             <g key={x}>
               <rect x={x - 7} y={66} width={14} height={22} rx={7} fill={`url(#${u}-dark)`} />
-              <rect x={x - 4} y={70} width={8} height={14} rx={4} fill="#8b5cf0" className="m-pulse" />
+              <rect x={x - 4} y={70} width={8} height={14} rx={4} fill="#8b5cf0" />
             </g>
           ))}
         </g>
@@ -612,7 +305,7 @@ function Hat({ id, u }: { id: string; u: string }) {
     case "flower":
       return (
         <g transform="translate(82 49) scale(1.45)">
-         <g className="m-sway">
+         <g>
           <path d="M0 4 Q-2 10 -6 13" stroke="#4c9a3a" strokeWidth={1.8} fill="none" strokeLinecap="round" />
           {Array.from({ length: 8 }, (_, i) => (
             <ellipse key={i} cx={0} cy={-6} rx={3.2} ry={6} fill="#fff" stroke="#f0d6e4" strokeWidth={0.6} transform={`rotate(${i * 45})`} />
@@ -695,7 +388,8 @@ function Pumpkin({ u }: { u: string }) {
   );
 }
 
-function Defs({ u, tint }: { u: string; tint: string }) {
+
+function Defs({ u }: { u: string }) {
   const lin = (id: string, a: string, b: string, x2 = "0.3") => (
     <linearGradient id={`${u}-${id}`} x1="0" y1="0" x2={x2} y2="1">
       <stop offset="0" stopColor={a} />
@@ -704,34 +398,25 @@ function Defs({ u, tint }: { u: string; tint: string }) {
   );
   return (
     <defs>
-      <radialGradient id={`${u}-body`} cx="0.44" cy="0.3" r="0.9">
+      {/* corpo fosco: luz vindo de cima à direita, sombra suave embaixo e à esquerda */}
+      <radialGradient id={`${u}-body`} cx="0.6" cy="0.2" r="0.95" fx="0.62" fy="0.18">
         <stop offset="0" stopColor="#ffffff" />
-        <stop offset="0.5" stopColor="#fbfafd" />
-        <stop offset="0.82" stopColor="#ebe9f1" />
-        <stop offset="1" stopColor="#d9d6e3" />
+        <stop offset="0.35" stopColor="#f3f3f5" />
+        <stop offset="0.7" stopColor="#dcdce0" />
+        <stop offset="1" stopColor="#b9b9bf" />
       </radialGradient>
+      <linearGradient id={`${u}-shade`} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0.5" stopColor="#000" stopOpacity="0" />
+        <stop offset="1" stopColor="#000" stopOpacity="0.12" />
+      </linearGradient>
+      <linearGradient id={`${u}-side`} x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stopColor="#000" stopOpacity="0.08" />
+        <stop offset="0.25" stopColor="#000" stopOpacity="0" />
+        <stop offset="1" stopColor="#000" stopOpacity="0" />
+      </linearGradient>
       <clipPath id={`${u}-clip`}>
         <path d={BODY} />
       </clipPath>
-      <filter id={`${u}-plush`} x="-10%" y="-10%" width="120%" height="120%">
-        <feGaussianBlur stdDeviation="0.45" />
-      </filter>
-      <filter id={`${u}-deep`} x="-50%" y="-50%" width="200%" height="200%">
-        <feGaussianBlur stdDeviation="5" />
-      </filter>
-      <filter id={`${u}-grain`} x="0" y="0" width="100%" height="100%">
-        <feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="2" seed="7" />
-        <feColorMatrix values="0 0 0 0 0.86  0 0 0 0 0.85  0 0 0 0 0.9  0.5 0 0 0 -0.18" />
-      </filter>
-      <radialGradient id={`${u}-tint`} cx="0.45" cy="0.3" r="0.9">
-        <stop offset="0" stopColor="#ffffff" />
-        <stop offset="0.55" stopColor={tint} className="m-tint-stop" />
-        <stop offset="1" stopColor={tint} className="m-tint-stop" />
-      </radialGradient>
-      <linearGradient id={`${u}-under`} x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0.55" stopColor="#000" stopOpacity="0" />
-        <stop offset="1" stopColor="#000" stopOpacity="0.09" />
-      </linearGradient>
       <radialGradient id={`${u}-white`} cx="0.38" cy="0.3" r="0.8">
         <stop offset="0" stopColor="#ffffff" />
         <stop offset="1" stopColor="#d9d8e0" />
@@ -773,33 +458,29 @@ function Defs({ u, tint }: { u: string; tint: string }) {
         <rect width="8" height="8" fill="#ff7ac0" />
         <rect width="3.2" height="8" fill="#ffe36b" />
       </pattern>
-      <filter id={`${u}-blur`} x="-50%" y="-50%" width="200%" height="200%">
-        <feGaussianBlur stdDeviation="2.4" />
+      <filter id={`${u}-shadow`} x="-50%" y="-200%" width="200%" height="500%">
+        <feGaussianBlur stdDeviation="3.2" />
       </filter>
-      <filter id={`${u}-glow`} x="-60%" y="-60%" width="220%" height="220%">
-        <feGaussianBlur stdDeviation="11" />
-      </filter>
-      <filter id={`${u}-soft`} x="-20%" y="-20%" width="140%" height="140%">
-        <feGaussianBlur stdDeviation="1.4" />
-      </filter>
-      <filter id={`${u}-neon`} x="-80%" y="-80%" width="260%" height="260%">
-        <feGaussianBlur stdDeviation="1.2" result="b" />
-        <feMerge>
-          <feMergeNode in="b" />
-          <feMergeNode in="SourceGraphic" />
-        </feMerge>
+      <filter id={`${u}-soft`} x="-30%" y="-60%" width="160%" height="220%">
+        <feGaussianBlur stdDeviation="4" />
       </filter>
     </defs>
   );
 }
 
+/* ---------------- Comportamento dos olhos ---------------- */
+
+const POKES: Mood[] = ["happy", "surprised", "laughing", "wink", "happy", "curious"];
+const RANGE_X = 6.5;
+const RANGE_Y = 4.5;
+
 export function Mochi({
   mood = "idle",
   outfit = {},
   size = 64,
-  follow = false,
   still = false,
   crop = false,
+  follow,
   className,
   style,
   title,
@@ -807,119 +488,170 @@ export function Mochi({
   mood?: Mood;
   outfit?: Outfit;
   size?: number;
-  /** olhinhos seguem o dedo/mouse */
-  follow?: boolean;
-  /** sem animação (miniaturas) */
+  /** sem vida (miniaturas da grade) */
   still?: boolean;
   /** caixa justa no corpo (chapéus passam por cima da caixa): para ícones na barra */
   crop?: boolean;
+  /** compatibilidade: os olhos sempre seguem o mouse quando ele não está parado */
+  follow?: boolean;
   className?: string;
   style?: CSSProperties;
   title?: string;
 }) {
+  void follow;
   const u = "m" + useId().replace(/[^a-zA-Z0-9]/g, "");
-  const look = useRef<SVGGElement>(null);
   const svg = useRef<SVGSVGElement>(null);
+  const look = useRef<SVGGElement>(null);
+  const lids = useRef<SVGGElement>(null);
+  const [poke, setPoke] = useState<Mood | null>(null);
+  const [squish, setSquish] = useState(0);
+  const clicks = useRef<number[]>([]);
 
+  const shown: Mood = poke ?? mood;
+  const face = FACES[shown] ?? FACES.idle;
+  const fixed = face.gaze;
+  const scanning = !!face.scan;
+
+  // olhar: segue o ponteiro; parado, os olhos passeiam sozinhos (pulinhos rápidos como olhos de verdade)
   useEffect(() => {
-    if (!follow) return;
+    if (still) return;
+    const g = look.current;
+    const el = svg.current;
+    if (!g || !el) return;
+    const set = (x: number, y: number) => {
+      g.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`;
+    };
+    if (fixed) {
+      set(fixed[0], fixed[1]);
+      return;
+    }
+    if (scanning) {
+      set(0, 0);
+      return;
+    }
+    let lastMove = 0;
     let raf = 0;
     const onMove = (e: PointerEvent) => {
+      lastMove = Date.now();
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
-        const el = svg.current;
-        const g = look.current;
-        if (!el || !g) return;
         const r = el.getBoundingClientRect();
+        if (!r.width) return;
         const dx = e.clientX - (r.left + r.width / 2);
-        const dy = e.clientY - (r.top + r.height * 0.64);
+        const dy = e.clientY - (r.top + r.height * 0.62);
         const d = Math.hypot(dx, dy) || 1;
-        const k = Math.min(1, d / 260);
-        g.style.transform = `translate(${((dx / d) * 3.4 * k).toFixed(2)}px, ${((dy / d) * 2.4 * k).toFixed(2)}px)`;
+        const k = Math.min(1, d / (r.width * 1.6));
+        set((dx / d) * RANGE_X * k, (dy / d) * RANGE_Y * k);
       });
     };
+    let t: ReturnType<typeof setTimeout>;
+    const wander = () => {
+      if (Date.now() - lastMove > 2500 && !document.hidden) {
+        const r = Math.random();
+        if (r < 0.3) set(0, 0);
+        else set((Math.random() * 2 - 1) * RANGE_X, (Math.random() * 2 - 1) * RANGE_Y * 0.8);
+      }
+      t = setTimeout(wander, 700 + Math.random() * 2300);
+    };
+    t = setTimeout(wander, 900);
     window.addEventListener("pointermove", onMove);
     return () => {
+      clearTimeout(t);
       cancelAnimationFrame(raf);
       window.removeEventListener("pointermove", onMove);
     };
-  }, [follow]);
+  }, [still, fixed?.[0], fixed?.[1], scanning]);
 
-  const face = FACES[mood] ?? FACES.idle;
+  // piscar: intervalo aleatório, às vezes duas vezes seguidas
+  useEffect(() => {
+    if (still || shown === "sleeping") return;
+    const g = lids.current;
+    if (!g) return;
+    let t: ReturnType<typeof setTimeout>;
+    const blink = (twice: boolean) => {
+      g.classList.add("m-blinking");
+      setTimeout(() => {
+        g.classList.remove("m-blinking");
+        if (twice) setTimeout(() => blink(false), 140);
+      }, 130);
+    };
+    const loop = () => {
+      blink(Math.random() < 0.25);
+      t = setTimeout(loop, (shown === "sleepy" ? 1400 : 2200) + Math.random() * 3800);
+    };
+    t = setTimeout(loop, 1200 + Math.random() * 2000);
+    return () => clearTimeout(t);
+  }, [still, shown]);
+
+  // reação ao toque some depois de um tempinho
+  useEffect(() => {
+    if (!poke) return;
+    const t = setTimeout(() => setPoke(null), poke === "dizzy" ? 2200 : 1100);
+    return () => clearTimeout(t);
+  }, [poke, squish]);
+
+  const onPoke = () => {
+    if (still) return;
+    const now = Date.now();
+    clicks.current = [...clicks.current.filter((c) => now - c < 2000), now];
+    setSquish((n) => n + 1);
+    setPoke(clicks.current.length >= 5 ? "dizzy" : POKES[Math.floor(Math.random() * POKES.length)]);
+  };
+
   const pumpkin = outfit.costume === "pumpkin";
-  const tint = pumpkin ? "#ffffff" : (face.tint ?? "#ffffff");
-  const glow = face.glow ?? "#9b86ff";
-  const texture = !still && size >= 80;
-  const shadesUp = outfit.eyes === "sunglasses" && !(face.l === "dot" && face.r === "dot");
+  const shadesUp = outfit.eyes === "sunglasses" && !(face.l.k === "dot" && face.r.k === "dot" && !face.l.lid && !face.l.s);
 
   return (
     <svg
       ref={svg}
-      className={`mochi m-${mood} ${still ? "m-still" : ""} ${className ?? ""}`}
+      className={`mochi ${still ? "m-still" : ""} ${face.scan ? `m-scan-${face.scan}` : ""} ${className ?? ""}`}
       width={size}
       height={crop ? Math.round((size * 80) / 104) : size}
-      viewBox={crop ? "8 35 104 80" : "0 0 120 120"}
+      viewBox={crop ? "8 34 104 80" : "0 0 120 120"}
       role="img"
       aria-label={title ?? "Mochi"}
       style={style}
+      onPointerDown={onPoke}
     >
-      <Defs u={u} tint={tint} />
-      {!still && <ellipse key={`g-${mood}`} className="m-glow" cx={60} cy={80} rx={50} ry={40} fill={glow} filter={`url(#${u}-glow)`} />}
-      <ellipse className="m-shadow" cx={60} cy={111} rx={31} ry={4.2} fill="#000" opacity={0.26} filter={`url(#${u}-blur)`} />
-      <ellipse className="m-floor" cx={60} cy={108.5} rx={36} ry={5} fill={glow} opacity={0.28} filter={`url(#${u}-blur)`} />
-      <g className="m-move">
-        <g className="m-pop" key={mood}>
-          <g className="m-squish">
-            {pumpkin ? (
-              <Pumpkin u={u} />
-            ) : (
-              <>
-                {/* silicone macio: base fosca, sombra interna embaixo, luz colorida nas bordas, brilho largo em cima e granulado fino */}
-                <path d={BODY} fill={`url(#${u}-body)`} filter={`url(#${u}-plush)`} />
-                <path d={BODY} fill={`url(#${u}-tint)`} style={{ mixBlendMode: "multiply" }} />
-                <g clipPath={`url(#${u}-clip)`}>
-                  <ellipse cx={60} cy={112} rx={46} ry={16} fill="#5b5670" opacity={0.28} filter={`url(#${u}-deep)`} />
-                  <path d={BODY} fill="none" stroke={glow} strokeOpacity={0.55} strokeWidth={7} filter={`url(#${u}-deep)`} className="m-rim" />
-                  <path d={BODY} fill="none" stroke="#fff" strokeOpacity={0.9} strokeWidth={3} filter={`url(#${u}-soft)`} transform="translate(0 1.2)" />
-                  <ellipse cx={50} cy={55} rx={27} ry={11} fill="#fff" opacity={0.95} filter={`url(#${u}-deep)`} />
-                  <ellipse cx={47} cy={51.5} rx={11} ry={3.2} fill="#fff" opacity={0.9} filter={`url(#${u}-soft)`} />
-                  {texture && <rect x={14} y={40} width={92} height={70} filter={`url(#${u}-grain)`} opacity={0.5} style={{ mixBlendMode: "multiply" }} />}
-                </g>
-              </>
-            )}
-
-            {outfit.neck && !pumpkin && <Neck id={outfit.neck} u={u} />}
-
-            <g className="m-look" ref={look}>
-              <g className="m-face">
-                <g className="m-eyes">
-                  <g className="m-blink">
-                    <Eye kind={face.l} x={LX} />
-                    <Eye kind={face.r} x={RX} />
-                  </g>
-                </g>
-                {face.blush && !outfit.eyes && <Blush />}
-                {face.mouth && <Mouth kind={face.mouth} />}
-              </g>
-              {face.shades && <Shades u={u} />}
-              {outfit.eyes && !face.shades && (
-                // óculos escuros sobem para a testa quando a carinha precisa aparecer
-                <g className="m-wear" style={shadesUp ? { transform: "translateY(-13px) scale(0.92)" } : undefined}>
-                  <EyeWear id={outfit.eyes} u={u} />
-                </g>
-              )}
+      <Defs u={u} />
+      <ellipse className="m-shadow" cx={60} cy={116} rx={27} ry={3.4} fill="#000" opacity={0.4} filter={`url(#${u}-shadow)`} />
+      <g className={squish ? `m-squish m-squish-${squish % 2}` : "m-squish"}>
+        {pumpkin ? (
+          <Pumpkin u={u} />
+        ) : (
+          <>
+            <path d={BODY} fill={`url(#${u}-body)`} />
+            <path d={BODY} fill={`url(#${u}-shade)`} />
+            <path d={BODY} fill={`url(#${u}-side)`} />
+            {/* brilho largo e difuso no alto à direita (acabamento fosco) */}
+            <g clipPath={`url(#${u}-clip)`}>
+              <ellipse cx={70} cy={52} rx={24} ry={9} fill="#fff" opacity={0.75} filter={`url(#${u}-soft)`} />
             </g>
+          </>
+        )}
 
-            {outfit.head && (
-              <g transform="translate(0 -5.5)">
-                <Hat id={outfit.head} u={u} />
-              </g>
-            )}
+        {outfit.neck && !pumpkin && <Neck id={outfit.neck} u={u} />}
+
+        <g className="m-look" ref={look}>
+          <g className={`m-eyes ${face.scan ? "m-scanning" : ""}`}>
+            <g className="m-blink" ref={lids} key={shown}>
+              <Eye shape={face.l} x={LX} side="l" u={u} />
+              <Eye shape={face.r} x={RX} side="r" u={u} />
+            </g>
           </g>
-
-          {face.badge && <BadgeMark b={face.badge} />}
-          {face.fx && <Effects fx={face.fx} u={u} />}
         </g>
+        {outfit.eyes && (
+          // óculos escuros sobem para a testa quando a expressão precisa aparecer
+          <g className="m-wear" style={shadesUp ? { transform: "translateY(-14px) scale(0.92)" } : undefined}>
+            <EyeWear id={outfit.eyes} u={u} />
+          </g>
+        )}
+
+        {outfit.head && (
+          <g transform="translate(0 -6.5)">
+            <Hat id={outfit.head} u={u} />
+          </g>
+        )}
       </g>
     </svg>
   );

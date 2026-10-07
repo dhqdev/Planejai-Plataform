@@ -36,7 +36,7 @@ export function WardrobeHost() {
 
 function Wardrobe({ onClose }: { onClose: () => void }) {
   const [outfit, setOutfit] = useOutfit();
-  const [preview, setPreview] = useState<Mood>("greeting");
+  const [preview, setPreview] = useState<Mood>("idle");
 
   const wear = (slot: keyof Outfit, id: string | undefined) => {
     haptic(10);
@@ -44,7 +44,7 @@ function Wardrobe({ onClose }: { onClose: () => void }) {
     if (!id || next[slot] === id) delete next[slot];
     else next[slot] = id;
     setOutfit(next);
-    setPreview(id && next[slot] ? "excited" : "idle");
+    setPreview(id && next[slot] ? "happy" : "idle");
   };
 
   const label = MOODS.find((m) => m.id === preview)?.label ?? "";
@@ -53,22 +53,10 @@ function Wardrobe({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="Mochi" onClose={onClose} wide>
       <div className="mochi-stage">
-        <div
-          role="button"
-          className="mochi-poke"
-          aria-label="Cutucar o Mochi"
-          style={{ cursor: "pointer" }}
-          onClick={() => {
-            haptic(14);
-            const pokes: Mood[] = ["slap", "dizzy", "surprised", "love", "angry", "laughing", "shy", "dancing", "starstruck", "yummy"];
-            setPreview(pokes[Math.floor(Math.random() * pokes.length)]);
-          }}
-        >
-          <Mochi mood={preview} outfit={outfit} size={190} follow />
-        </div>
+        <Mochi mood={preview} outfit={outfit} size={200} />
         <div className="mochi-stage-label">
           {label}
-          <small>{wearing.length ? wearing.join(" · ") : "sem roupinha"} · toque nele</small>
+          <small>{wearing.length ? wearing.join(" · ") : "sem roupinha"}</small>
         </div>
       </div>
 
@@ -90,7 +78,7 @@ function Wardrobe({ onClose }: { onClose: () => void }) {
 
       <div className="mochi-section">Expressões</div>
       <p className="muted" style={{ margin: "-4px 0 10px", fontSize: 12.5 }}>
-        No app ele muda sozinho: trabalha enquanto salva, comemora quando dá certo e cochila se você some.
+        Ele fala com os olhos: procura enquanto salva, sorri quando dá certo e cochila se você some. Toque nele para ver a reação.
       </p>
       <div className="mochi-grid">
         {MOODS.map((m) => (
