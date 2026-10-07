@@ -21,6 +21,35 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      /* Se o app não abrir (versão nova pela metade, cache velho), mostra um botão que limpa tudo e recarrega. */
+      (function () {
+        var shown = false;
+        function rescue() {
+          var root = document.getElementById("root");
+          if (shown || (root && root.children.length)) return;
+          shown = true;
+          var b = document.createElement("div");
+          b.className = "pj-rescue";
+          b.innerHTML = '<p>O Planejai não carregou.</p><button type="button">Recarregar</button>';
+          b.querySelector("button").onclick = function () {
+            var jobs = [];
+            try { if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); })); } catch (e) {}
+            try { if (window.caches) jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); })); } catch (e) {}
+            Promise.all(jobs).catch(function () {}).then(function () { location.replace(location.pathname + "?v=" + Date.now()); });
+          };
+          document.body.appendChild(b);
+        }
+        window.addEventListener("error", function (e) { if (e.target && e.target.tagName === "SCRIPT") setTimeout(rescue, 1500); }, true);
+        setTimeout(rescue, 9000);
+      })();
+    </script>
+    <style>
+      .pj-rescue { position: fixed; inset: 0; display: grid; place-content: center; gap: 14px; text-align: center; font: 15px/1.4 Inter, system-ui, sans-serif; color: #74746f; background: #f6f6f4; z-index: 9999; }
+      .pj-rescue p { margin: 0; }
+      .pj-rescue button { justify-self: center; border: 0; border-radius: 999px; padding: 12px 26px; font: 600 15px Inter, system-ui, sans-serif; background: #141414; color: #fff; cursor: pointer; }
+      @media (prefers-color-scheme: dark) { .pj-rescue { background: #111; color: #9a9a94; } .pj-rescue button { background: #f1f1ee; color: #111; } }
+    </style>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

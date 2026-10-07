@@ -144,7 +144,11 @@ function Eye({ shape, x, side, u }: { shape: EyeShape; x: number; side: "l" | "r
               <path className="m-lid" d={`M${x - 9} ${yl} L${x + 9} ${yr} L${x + 9} ${y + 12} L${x - 9} ${y + 12} Z`} />
             </clipPath>
           )}
-          <ellipse cx={x} cy={y} rx={4.4 * k} ry={5.1 * k} fill={INK} clipPath={lid ? `url(#${id})` : undefined} />
+          <g clipPath={lid ? `url(#${id})` : undefined}>
+            <ellipse cx={x} cy={y} rx={4.4 * k} ry={5.1 * k} fill={INK} />
+            {/* reflexo pequeno: olho de vidro, não de tinta */}
+            <ellipse cx={x + 1.5 * k} cy={y - 2.1 * k} rx={1.25 * k} ry={1.05 * k} fill="#fff" opacity={0.92} />
+          </g>
         </g>
       );
     }
@@ -461,6 +465,9 @@ function Defs({ u }: { u: string }) {
       <filter id={`${u}-shadow`} x="-50%" y="-200%" width="200%" height="500%">
         <feGaussianBlur stdDeviation="3.2" />
       </filter>
+      <filter id={`${u}-contact`} x="-50%" y="-300%" width="200%" height="700%">
+        <feGaussianBlur stdDeviation="1.6" />
+      </filter>
       <filter id={`${u}-soft`} x="-30%" y="-60%" width="160%" height="220%">
         <feGaussianBlur stdDeviation="4" />
       </filter>
@@ -614,7 +621,8 @@ export function Mochi({
       onPointerDown={onPoke}
     >
       <Defs u={u} />
-      <ellipse className="m-shadow" cx={60} cy={116} rx={27} ry={3.4} fill="#000" opacity={0.4} filter={`url(#${u}-shadow)`} />
+      <ellipse className="m-shadow" cx={60} cy={108.5} rx={40} ry={4} fill="#000" opacity={0.22} filter={`url(#${u}-shadow)`} />
+      <ellipse className="m-shadow" cx={60} cy={106.4} rx={30} ry={2.4} fill="#000" opacity={0.42} filter={`url(#${u}-contact)`} />
       <g className={squish ? `m-squish m-squish-${squish % 2}` : "m-squish"}>
         {pumpkin ? (
           <Pumpkin u={u} />
@@ -626,7 +634,10 @@ export function Mochi({
             {/* brilho largo e difuso no alto à direita (acabamento fosco) */}
             <g clipPath={`url(#${u}-clip)`}>
               <ellipse cx={70} cy={52} rx={24} ry={9} fill="#fff" opacity={0.75} filter={`url(#${u}-soft)`} />
+              {/* luz que volta do chão na borda de baixo: dá volume */}
+              <ellipse cx={58} cy={106} rx={32} ry={4.5} fill="#fff" opacity={0.45} filter={`url(#${u}-soft)`} />
             </g>
+            <path d={BODY} fill="none" stroke="#000" strokeOpacity={0.07} strokeWidth={0.8} />
           </>
         )}
 

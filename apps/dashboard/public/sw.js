@@ -32,7 +32,9 @@ self.addEventListener("fetch", (e) => {
         (hit) =>
           hit ||
           fetch(req).then((res) => {
-            if (res.ok) caches.open(VERSION).then((c) => c.put(req, res.clone()));
+            // nunca guarda o index.html no lugar de um arquivo que sumiu no deploy
+            const type = res.headers.get("content-type") || "";
+            if (res.ok && !type.includes("text/html")) caches.open(VERSION).then((c) => c.put(req, res.clone()));
             return res;
           }),
       ),
@@ -44,7 +46,7 @@ self.addEventListener("fetch", (e) => {
     e.respondWith(
       fetch(req)
         .then((res) => {
-          caches.open(VERSION).then((c) => c.put("/", res.clone()));
+          if (res.ok) caches.open(VERSION).then((c) => c.put("/", res.clone()));
           return res;
         })
         .catch(() => caches.match("/")),

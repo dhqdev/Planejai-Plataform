@@ -1,0 +1,126 @@
+/* Movimento do Planejai: cada tipo de componente tem um jeito próprio de reagir, sempre curto e discreto.
+   - botões: afundam com mola e soltam com um quique; onda a partir do dedo (motion.ts)
+   - botão da marca: o degradê corre ao passar o mouse
+   - cards clicáveis: sobem um pouco; cards da página entram em cascata
+   - abas: o traço nasce do centro; segmentos trocam com um "pop"
+   - menu lateral: ícone dá um passinho; item ativo ganha a barrinha crescendo
+   - ícones: giram de leve; o + do botão flutuante gira 90°
+   - campos: o anel de foco abre em vez de aparecer
+   Tudo desliga com "reduzir movimento". */
+
+:root {
+  --spring: cubic-bezier(.34, 1.56, .64, 1);
+  --soft: cubic-bezier(.2, .9, .25, 1);
+}
+
+/* ---------- botões ---------- */
+.btn, .icon-btn, .fab, .more-tile, .cal-fab { position: relative; overflow: hidden; isolation: isolate; }
+.btn { transition: background .15s, border-color .15s, color .15s, opacity .15s, transform .32s var(--spring), box-shadow .2s; }
+.btn:hover:not(:disabled) { transform: translateY(-1px); }
+.btn:active:not(:disabled) { transform: scale(.95); transition-duration: .08s; }
+.btn-primary:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(0, 0, 0, .14); }
+.btn .ico { transition: transform .3s var(--spring); }
+.btn:hover:not(:disabled) .ico { transform: translateX(1px) scale(1.08); }
+
+/* degradê vivo: corre devagar no hover */
+.btn-brand { background-size: 180% 100%; background-position: 0 50%; transition: background-position .6s var(--soft), transform .32s var(--spring), box-shadow .2s; }
+.btn-brand:hover:not(:disabled) { background-position: 100% 50%; box-shadow: 0 8px 22px rgba(226, 51, 130, .28); }
+
+/* onda do toque (motion.ts coloca o span) */
+.pj-ripple { position: absolute; border-radius: 50%; pointer-events: none; background: currentColor; opacity: .16; transform: scale(0); animation: pj-ripple .55s var(--soft) forwards; z-index: -1; }
+@keyframes pj-ripple { to { transform: scale(1); opacity: 0; } }
+
+.icon-btn { transition: transform .3s var(--spring), border-color .15s, background .15s; }
+.icon-btn .ico { transition: transform .4s var(--spring); }
+.icon-btn:hover .ico { transform: rotate(-12deg) scale(1.1); }
+.icon-btn:active { transform: scale(.88); transition-duration: .08s; }
+
+.fab { transition: transform .35s var(--spring), box-shadow .2s; }
+.fab .ico, .cal-fab .ico { transition: transform .45s var(--spring); }
+.fab:hover .ico, .cal-fab:hover .ico { transform: rotate(90deg); }
+.fab:active, .cal-fab:active { transform: scale(.9); }
+
+/* ---------- cards ---------- */
+.card.clickable { transition: transform .3s var(--spring), box-shadow .25s, border-color .15s; }
+.card.clickable:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0, 0, 0, .08); }
+:root[data-theme="dark"] .card.clickable:hover { box-shadow: 0 10px 28px rgba(0, 0, 0, .4); }
+
+/* entrada em cascata dos blocos da página */
+.route-fade .grid > *, .route-fade .grid-2 > *, .route-fade .grid-3 > *, .route-fade .grid-4 > *,
+.route-fade .more-grid > *, .route-fade .team-grid > *, .route-fade .fin-kpis > * { animation: pj-rise .42s var(--soft) backwards; }
+.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(2) { animation-delay: .04s; }
+.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(3) { animation-delay: .08s; }
+.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(4) { animation-delay: .12s; }
+.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(5) { animation-delay: .16s; }
+.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(6) { animation-delay: .2s; }
+.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(n + 7) { animation-delay: .24s; }
+@keyframes pj-rise { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+
+/* números dos indicadores sobem ao aparecer */
+.stat .value { animation: pj-num .5s var(--soft) .1s backwards; }
+@keyframes pj-num { from { opacity: 0; transform: translateY(6px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
+
+/* ---------- abas e segmentos ---------- */
+.tabs button { position: relative; transition: color .2s; }
+.tabs button::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--text); transform: scaleX(0); transition: transform .35s var(--spring); }
+.tabs button.active { border-bottom-color: transparent; }
+.tabs button.active::after { transform: scaleX(1); }
+.tabs button:hover:not(.active) { color: var(--text); }
+
+.seg button { transition: color .2s, background .2s, box-shadow .2s, transform .3s var(--spring); }
+.seg button.active { animation: pj-pop .32s var(--spring); }
+.seg button:active { transform: scale(.94); }
+@keyframes pj-pop { 0% { transform: scale(.9); } 100% { transform: scale(1); } }
+
+/* barra de baixo do celular: o ícone ativo quica */
+.tab.active .tab-ico { animation: pj-hop .45s var(--spring); }
+@keyframes pj-hop { 0% { transform: translateY(0) scale(.86); } 45% { transform: translateY(-3px) scale(1.08); } 100% { transform: none; } }
+
+/* ---------- menu lateral ---------- */
+.nav a { transition: background .15s, color .15s, transform .25s var(--spring); }
+.nav a .ico { transition: transform .35s var(--spring); }
+.nav a:hover .ico { transform: translateX(2px); }
+.nav a.active::before { animation: pj-grow .4s var(--spring) both; transform-origin: center; }
+@keyframes pj-grow { from { transform: scaleY(0); } to { transform: none; } }
+
+/* ---------- listas ---------- */
+.list-item { transition: background .15s, box-shadow .25s var(--soft); }
+.list-item:hover, .list-item.active { box-shadow: inset 2px 0 0 var(--text); }
+.more-tile { transition: transform .32s var(--spring), background .15s, border-color .15s; }
+.more-tile:hover { transform: translateY(-2px); border-color: var(--border-2); }
+.more-tile:active { transform: scale(.94); transition-duration: .08s; }
+.more-tile > :first-child { transition: transform .4s var(--spring); }
+.more-tile:hover > :first-child { transform: scale(1.12) rotate(-4deg); }
+
+/* ---------- campos ---------- */
+.input, .textarea, select.input { transition: border-color .15s, box-shadow .25s var(--soft); }
+.input:focus, .textarea:focus { box-shadow: 0 0 0 4px color-mix(in srgb, var(--text) 8%, transparent); }
+input[type="checkbox"]:not([switch]), input[type="radio"] { transition: transform .25s var(--spring); }
+input[type="checkbox"]:not([switch]):checked, input[type="radio"]:checked { animation: pj-pop .3s var(--spring); }
+
+/* ---------- selos e avisos ---------- */
+.badge, .chip { transition: transform .25s var(--spring); }
+.chip:hover { transform: translateY(-1px); }
+.notice, .ok-box, .error-box { animation: pj-rise .35s var(--soft) backwards; }
+.update-pill::before { animation: pj-breathe 1.8s ease-in-out infinite; }
+@keyframes pj-breathe { 50% { transform: scale(1.35); opacity: .7; } }
+
+/* ---------- janelas ---------- */
+.modal-body > * { animation: pj-rise .36s var(--soft) backwards; }
+.modal-body > :nth-child(2) { animation-delay: .03s; }
+.modal-body > :nth-child(3) { animation-delay: .06s; }
+.modal-body > :nth-child(4) { animation-delay: .09s; }
+.modal-body > :nth-child(n + 5) { animation-delay: .12s; }
+.modal-foot .btn { animation: pj-rise .36s var(--soft) .1s backwards; }
+
+/* ---------- atualizando ---------- */
+.pj-updating {
+  position: fixed; inset: 0; z-index: 9999; display: grid; place-content: center; justify-items: center; gap: 14px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  color: var(--muted); font-weight: 550; animation: fade-in .2s ease both;
+}
+.pj-updating-dot { width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid var(--border-2); border-top-color: var(--text); animation: ptr-spin .7s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pj-ripple { display: none; }
+}

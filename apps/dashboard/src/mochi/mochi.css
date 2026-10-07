@@ -47,7 +47,7 @@
   color: #9a9aa4; overflow: hidden;
 }
 .mochi-stage::after { content: ""; position: absolute; inset: auto 0 0; height: 1px; background: var(--border); }
-.mochi-stage-label { text-align: center; color: #d8d8de; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; margin-top: -4px; }
+.mochi-stage-label { text-align: center; color: #d8d8de; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; margin-top: 10px; }
 .mochi-stage-label small { display: block; text-align: center; font-weight: 450; color: #8d8d96; font-size: 11.5px; }
 .mochi-section { margin: 14px 0 8px; font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
 .mochi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px; }
@@ -63,3 +63,14 @@
 .mochi-tile-label { font-family: var(--mono); font-size: 10.5px; color: #a6a6b0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .mochi-tile.active .mochi-tile-label { color: #f1f1f4; }
 .mochi-none { font-size: 22px; color: #55555e; height: 62px; display: grid; place-items: center; }
+
+/* tema claro: guarda-roupa claro também (o Mochi branco ganha contraste pela sombra) */
+:root[data-theme="light"] .mochi-stage { background: radial-gradient(60% 70% at 50% 45%, #f4f4f1 0%, #e6e6e2 70%, #dcdcd7 100%); }
+:root[data-theme="light"] .mochi-stage-label { color: #2a2a2a; }
+:root[data-theme="light"] .mochi-stage-label small { color: #74746f; }
+:root[data-theme="light"] .mochi-tile { border-color: var(--border); background: linear-gradient(180deg, #f1f1ee, #e7e7e3); }
+:root[data-theme="light"] .mochi-tile:hover { border-color: var(--border-2); }
+:root[data-theme="light"] .mochi-tile.active { border-color: #141414; box-shadow: 0 0 0 1px #141414 inset, 0 6px 18px rgba(0, 0, 0, 0.08); }
+:root[data-theme="light"] .mochi-tile-label { color: #74746f; }
+:root[data-theme="light"] .mochi-tile.active .mochi-tile-label { color: #141414; }
+:root[data-theme="light"] .mochi-none { color: #b0b0aa; }

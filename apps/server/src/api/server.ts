@@ -194,7 +194,8 @@ export async function buildServer() {
       },
     });
     app.setNotFoundHandler((req, reply) => {
-      if (req.method === "GET" && !req.url.startsWith("/api/") && !req.url.startsWith("/webhooks/")) {
+      // arquivo do app que não existe (aba antiga depois de um deploy): 404 de verdade, não o index no lugar do JS
+      if (req.method === "GET" && !req.url.startsWith("/api/") && !req.url.startsWith("/webhooks/") && !req.url.startsWith("/assets/")) {
         return reply.sendFile("index.html");
       }
       return reply.code(404).send({ error: "não encontrado" });

@@ -169,7 +169,7 @@ export function App() {
   return (
     <div className="layout">
       <header className="topbar">
-        <MochiButton size={38} />
+        <MochiButton size={50} />
         <strong className="topbar-title">{titleFor(loc.pathname, NAV)}</strong>
         <span className="spacer" />
         <button className="icon-btn" onClick={toggleTheme} aria-label="Trocar tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button>
