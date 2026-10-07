@@ -15,6 +15,7 @@ import { Guard, GuardTimeout, redactSecrets } from "./guard.js";
 import { isOwner } from "../ingest.js";
 import { describeMessage, preprocessMedia } from "./media.js";
 import { Progress } from "./progress.js";
+import { pickReaction } from "./reaction.js";
 import { Tracer } from "./trace.js";
 import { allShort, pushShort, recentShort, redisAlive, type ShortEntry } from "../shortmem.js";
 import { config } from "../config.js";
@@ -157,6 +158,14 @@ async function processLocked(
 
   try {
     if (lastInbound) channel.markRead(conversation.remote_jid, lastInbound.external_id).catch(() => {});
+    // Primeira coisa que a pessoa vê: uma reação com o emoji do tema, na hora e sem IA
+    let autoReaction: string | null = null;
+    if (lastInbound && opts.trigger !== "reminder") {
+      const said = pending.filter((m) => m.role === "user").map((m) => m.content ?? "").join(" ");
+      autoReaction = pickReaction(said, lastInbound.meta?.kind);
+      channel.react(conversation.remote_jid, lastInbound.external_id, autoReaction).catch(() => {});
+      outbox.reactions.push({ messageId: lastInbound.external_id, emoji: autoReaction });
+    }
     if (opts.trigger !== "reminder") progress.start();
     await preprocessMedia(pending, channel, tracer, conversation.remote_jid);
 
@@ -208,6 +217,7 @@ async function processLocked(
       summary: conversation.summary,
       specialists: team,
       disconnected,
+      autoReaction,
     });
 
     const ctx: ToolContext = {

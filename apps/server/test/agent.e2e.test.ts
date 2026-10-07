@@ -27,7 +27,7 @@ function fakeOpenRouter(body: any) {
     const userText = String(body.messages.findLast((m: any) => m.role === "user")?.content ?? "");
     if (userText.includes("tudo bem")) {
       if (last.role === "tool") return completion("rodada extra (não deveria acontecer)");
-      return completion("Tudo ótimo por aqui! 😄 E você?", [call("react_to_message", { emoji: "👋" })]);
+      return completion("Tudo ótimo por aqui! 😄 E você?", [call("save_memory", { content: "Gosta de conversar de manhã" })]);
     }
     if (userText.includes("previsão")) {
       if (last.role === "tool") return completion("Amanhã faz 25° e sol ☀️");
@@ -45,7 +45,7 @@ function fakeOpenRouter(body: any) {
     }
     if (userText.includes("cinema")) return completion(null, [call("ask_financeiro", { message: "Quanto custa ir ao cinema sábado?" })]);
     if (userText.includes("padaria")) return completion(null, [call("react_to_message", { emoji: "✅" }), call("ask_financeiro", { message: "anotar gasto de R$ 8,20 na padaria" })]);
-    if (userText.includes("valeu")) return completion(null, [call("react_to_message", { emoji: "🙏" })]);
+    if (userText.includes("valeu")) return completion("[[silencio]]");
     return completion("[[silencio]]");
   }
 
@@ -108,6 +108,7 @@ describe.skipIf(!enabled)("time de agentes (e2e)", () => {
     const r = await mod.processConversation(convId, { trigger: "playground", channel });
 
     expect(channel.sent).toEqual([
+      { type: "reaction", emoji: "💸", messageId: "in1" },
       { type: "reaction", emoji: "✅", messageId: "in1" },
       { type: "text", text: "Anotado! R$ 8,20 em Padaria (Alimentação) 🐷" },
     ]);
@@ -134,6 +135,7 @@ describe.skipIf(!enabled)("time de agentes (e2e)", () => {
     await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'valeu!', 'in2')", [convId]);
     const channel = new channels.PlaygroundChannel();
     await mod.processConversation(convId, { trigger: "playground", channel });
+    // a reação do tema sai sozinha, sem IA; o CTO fica em silêncio
     expect(channel.sent).toEqual([{ type: "reaction", emoji: "🙏", messageId: "in2" }]);
   });
 
@@ -154,6 +156,7 @@ describe.skipIf(!enabled)("time de agentes (e2e)", () => {
     const channel = new channels.PlaygroundChannel();
     const r = await mod.processConversation(convId, { trigger: "playground", channel });
     expect(channel.sent).toEqual([
+      { type: "reaction", emoji: "🌦️", messageId: "in5" },
       { type: "text", text: "Opa, deixa eu ver aqui rapidinho 🔎" },
       { type: "text", text: "Amanhã faz 25° e sol ☀️" },
     ]);
@@ -166,7 +169,10 @@ describe.skipIf(!enabled)("time de agentes (e2e)", () => {
     await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'quanto gasto pra ir ao cinema?', 'in3')", [convId]);
     const channel = new channels.PlaygroundChannel();
     const r = await mod.processConversation(convId, { trigger: "playground", channel });
-    expect(channel.sent).toEqual([{ type: "text", text: "Dá uns R$ 50 com pipoca 🍿" }]);
+    expect(channel.sent).toEqual([
+      { type: "reaction", emoji: "💸", messageId: "in3" },
+      { type: "text", text: "Dá uns R$ 50 com pipoca 🍿" },
+    ]);
 
     const steps = await db.many("SELECT id, parent_id, agent, type, name, output FROM execution_steps WHERE execution_id = $1 ORDER BY id", [r.executionId]);
     const names = steps.filter((s) => s.type !== "llm").map((s) => `${s.agent}:${s.name}`);

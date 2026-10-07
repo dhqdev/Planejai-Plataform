@@ -84,7 +84,7 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     );
     const channel = new channels.PlaygroundChannel();
     await mod.processConversation(convId, { trigger: "playground", channel });
-    expect(channel.sent[0]).toEqual({ type: "reaction", emoji: "✅", messageId: "img1" });
+    expect(channel.sent.filter((s: any) => s.type === "reaction").at(-1)).toEqual({ type: "reaction", emoji: "✅", messageId: "img1" });
     const tx = await db.many("SELECT amount, category, merchant, source, external_ref FROM transactions WHERE user_id = $1", [user.id]);
     expect(tx).toEqual([{ amount: 45.9, category: "Alimentação", merchant: "Pizzaria Bella", source: "comprovante", external_ref: `${m.id}:0` }]);
     // a conversa não fica no banco (já está no WhatsApp): só na memória curta do Redis, já interpretada

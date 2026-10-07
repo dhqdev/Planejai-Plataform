@@ -11,6 +11,8 @@ export function ctoSystemPrompt(opts: {
   summary: string | null;
   specialists: AgentDef[];
   disconnected: string[];
+  /** emoji que o sistema já reagiu na última mensagem, pelo tema */
+  autoReaction?: string | null;
 }) {
   const now = new Date();
   const { settings, user } = opts;
@@ -26,9 +28,9 @@ export function ctoSystemPrompt(opts: {
 - Português do Brasil, natural, como um amigo esperto no WhatsApp. Sem tom de robô, sem templates ("Lembrete: 10:00"), sem "Como posso ajudar?".
 - Curto e direto. Listas com "• " só para vários itens. Negrito *assim*, itálico _assim_. Nada de markdown (#, **, tabelas).
 - Pode dividir em balões com uma linha só com "---" (1 a 3; resposta com várias partes fica melhor em 2 ou 3). Use emojis à vontade, com jeito de gente (🍿🔥😅🙌✨), variando. No máximo uma pergunta por vez.
-- Reaja com react_to_message quando um humano reagiria (👍/✅ confirmações e tarefas feitas, ❤️, 😂, 🙏). Não em toda mensagem.
-- Se a mensagem não pede resposta ("ok", "valeu", emoji) e você já reagiu, responda exatamente [[silencio]].
-- Quando for reagir e também responder, escreva a resposta na MESMA vez da reação (texto + react_to_message juntos): sai mais rápido.
+- A última mensagem da pessoa já recebeu uma reação automática com o emoji do tema (veja em Contexto). Não reaja de novo; só use react_to_message para trocar por ✅ quando concluir uma tarefa (gasto anotado, lembrete criado) ou se o emoji não combinou.
+- Se a mensagem não pede resposta ("ok", "valeu", emoji), responda exatamente [[silencio]]: a reação já basta.
+- Quando for trocar a reação e também responder, escreva a resposta na MESMA vez (texto + react_to_message juntos): sai mais rápido.
 
 # Ritmo (rápido no simples, avisa quando vai demorar)
 - Pergunta simples, conversa, opinião, conhecimento geral, conta, lembrete, gasto: responda direto, sem chamar o time. Rapidez vale mais que perfeição aqui.
@@ -74,7 +76,7 @@ ${team}
 ${settings.persona ? `\n# Instruções do dono\n${settings.persona}\n` : ""}
 # Contexto
 - Agora: ${formatLocal(now, opts.timezone)} (${isoLocal(now, opts.timezone)}, fuso ${opts.timezone}).
-- Pessoa: ${user.name ?? "nome desconhecido"}, WhatsApp +${user.phone}.${opts.disconnected.length ? `\n- Integrações não conectadas: ${opts.disconnected.join(", ")}.` : ""}
+- Pessoa: ${user.name ?? "nome desconhecido"}, WhatsApp +${user.phone}.${opts.autoReaction ? `\n- Reação automática já enviada na última mensagem: ${opts.autoReaction}` : ""}${opts.disconnected.length ? `\n- Integrações não conectadas: ${opts.disconnected.join(", ")}.` : ""}
 - Memórias:
 ${memories}${opts.summary ? `\n- Resumo das conversas anteriores:\n${opts.summary}` : ""}`;
 }

@@ -182,3 +182,18 @@ function minimalPdf(text: string) {
   out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(out, "latin1");
 }
+
+describe("reação instantânea pelo tema", () => {
+  it("escolhe o emoji do assunto sem IA", async () => {
+    const { pickReaction } = await import("../src/agent/reaction.js");
+    expect(pickReaction("tem sessão de cinema hoje?")).toBe("🍿");
+    expect(pickReaction("Gastei 8,20 na padaria")).toBe("💸");
+    expect(pickReaction("qual o melhor celular até 2 mil?")).toBe("📱");
+    expect(pickReaction("valeu!")).toBe("🙏");
+    expect(pickReaction("quero viajar pra praia em dezembro")).toBe("✈️");
+    expect(pickReaction("que barato esse golpe")).not.toBe("🍻");
+    expect(pickReaction("", "audio")).toBe("🎧");
+    expect(pickReaction("e isso aqui?")).toBe("👀");
+  });
+});
+

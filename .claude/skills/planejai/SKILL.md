@@ -56,7 +56,7 @@ apps/server/src/
 apps/dashboard/src/        React + Vite; App.tsx monta o menu por papel (SUPER_NAV / ADMIN_NAV) e, no celular, a barra de abas
                            (SUPER_TABS / ADMIN_TABS) + "Mais" em bottom sheet; páginas carregadas sob demanda (lazy)
   components.tsx           Modal = bottom sheet no celular (sobe, arrasta pra baixo pra fechar, trava o scroll do fundo)
-  touch.ts                 haptic() (navigator.vibrate; iOS não vibra), feedback de toque, service worker, prompt de instalação
+  touch.ts                 haptic(): navigator.vibrate no Android; no iPhone (iOS 18+) clica um <input switch> escondido dentro do click. Feedback de toque, service worker, prompt de instalação
 apps/dashboard/public/     manifest.webmanifest, sw.js (cache só de /assets e /icons; nunca /api) e icons/
 deploy/portainer-stack.yml stack compose (app, worker, db, redis, browserless)
 deploy/swarm-traefik-stack.yml  Swarm + Traefik (network_public), domínio autoplanejai.tekvosoft.com
@@ -107,6 +107,7 @@ O CTO ganha automaticamente `ask_<id>` e os outros especialistas ganham `consult
 ### Ritmo das respostas (estilo Instinct)
 - `agent/progress.ts`: mantém o "digitando..." ligado e manda avisos curtos. A frase que o CTO escreve junto de um `ask_*` sai na hora ("deixa eu ver aqui 🔎"); se ele não escrever nada, um aviso de reserva sai após 7s e outro aos 45s (máx. 3 por execução, sem LLM).
 - Resposta junto de `react_to_message`/`save_memory` é entregue sem outra rodada do modelo (pergunta simples = 1 chamada). Não quebre isso ao mexer no runner.
+- A primeira coisa de toda execução é a reação temática instantânea (`agent/reaction.ts`, regex, sem IA): cinema 🍿, gasto 💸, viagem ✈️... O CTO não reage de novo; só troca por ✅ quando conclui uma tarefa. Tema novo = linha nova em THEMES (a ordem importa).
 
 ### Melhoria diária e proatividade
 - `improve.ts` (fila `improve.daily`, 19h no `DEFAULT_TIMEZONE`): uma chamada barata em JSON por pessoa ativa; assuntos somam em `user_topics` e viram agente do cliente (`client_agents`, até 3, ferramentas só da lista `CLIENT_AGENT_TOOLS`) quando aparecem em 2 dias diferentes. Botão "Melhorar agora" em Agentes.
