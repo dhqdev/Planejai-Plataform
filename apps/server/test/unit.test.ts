@@ -11,13 +11,19 @@ import { phoneVariants } from "../src/ingest.js";
 describe("formatação para WhatsApp", () => {
   it("converte markdown para o estilo do WhatsApp", () => {
     expect(toWhatsApp("**Kinoplex** e [ingresso](https://ingresso.com)\n- 14h30\n### Sessões")).toBe(
-      "*Kinoplex* e ingresso: https://ingresso.com\n• 14h30\n*Sessões*",
+      "*Kinoplex* e ingresso: https://ingresso.com\n14h30\n*Sessões*",
     );
+  });
+
+  it("tira traços e travessões para soar como gente", () => {
+    expect(toWhatsApp("Opções:\n- Kinoplex — 14h30\n• Cinemark - das 16 - 18h\n1. Pipoca")).toBe("Opções:\nKinoplex, 14h30\nCinemark, das 16 a 18h\n1. Pipoca");
+    expect(toWhatsApp("Fica uns R$ 50 – com pipoca 🍿")).toBe("Fica uns R$ 50, com pipoca 🍿");
+    expect(toWhatsApp("Guarda-chuva e -5 graus")).toBe("Guarda-chuva e -5 graus");
   });
 
   it("divide balões com --- e posiciona mídias", () => {
     expect(splitBubbles("Sessões de sábado:\n• 14h30\n[[media:m1]]\n---\nQual horário você prefere?")).toEqual([
-      { type: "text", text: "Sessões de sábado:\n• 14h30" },
+      { type: "text", text: "Sessões de sábado:\n14h30" },
       { type: "media", id: "m1" },
       { type: "text", text: "Qual horário você prefere?" },
     ]);

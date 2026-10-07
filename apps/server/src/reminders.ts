@@ -52,14 +52,35 @@ export async function listReminders(userId?: string) {
   );
 }
 
-/** Depois de disparar: lembrete recorrente agenda o próximo, único vira "done". */
+/**
+ * Depois de disparar: lembrete recorrente agenda o próximo. O único que deu certo é apagado de vez,
+ * junto com o que o agente tiver guardado sobre ele na memória: lembrete que passou não fica ocupando contexto.
+ */
 export async function afterFire(id: string, ok: boolean) {
-  const r = await one("SELECT cron, timezone, status FROM reminders WHERE id = $1", [id]);
+  const r = await one("SELECT user_id, intent, cron, timezone, status, created_at FROM reminders WHERE id = $1", [id]);
   if (!r || r.status !== "scheduled") return;
   if (r.cron) {
     await query("UPDATE reminders SET last_fired_at = now() WHERE id = $1", [id]);
     await enqueue(id, nextCronDate(r.cron, r.timezone));
+  } else if (ok) {
+    await forgetReminder(r);
+    await query("DELETE FROM reminders WHERE id = $1", [id]);
   } else {
-    await query("UPDATE reminders SET status = $2, last_fired_at = now() WHERE id = $1", [id, ok ? "done" : "failed"]);
+    await query("UPDATE reminders SET status = 'failed', last_fired_at = now() WHERE id = $1", [id]);
   }
 }
+
+/** Apaga memórias criadas junto com o lembrete (até 10 min antes/depois) que falam do mesmo assunto. */
+async function forgetReminder(r: { user_id: string; intent: string; created_at: Date }) {
+  const words = [...new Set(r.intent.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").match(/[a-z]{4,}/g) ?? [])]
+    .filter((w) => !STOP.has(w))
+    .slice(0, 12);
+  await query(
+    `DELETE FROM memories
+      WHERE user_id = $1
+        AND created_at BETWEEN $2::timestamptz - interval '10 minutes' AND $2::timestamptz + interval '10 minutes'
+        AND ('lembrete' = ANY(tags) OR content ILIKE '%lembr%' OR ($3 <> '' AND search @@ to_tsquery('portuguese', $3)))`,
+    [r.user_id, r.created_at, words.join(" | ")],
+  );
+}
+const STOP = new Set(["lembrar", "lembrete", "pediu", "minutos", "horas", "hoje", "amanha", "depois", "para", "pela", "pelo", "dele", "dela", "sobre", "agora", "quando", "esta", "isso"]);

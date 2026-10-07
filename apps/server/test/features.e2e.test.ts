@@ -178,6 +178,20 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(tx.n).toBe(1);
   });
 
+  it("lembrete que passou some junto com a memória sobre ele; recorrente continua", async () => {
+    const r = await db.one(
+      "INSERT INTO reminders (user_id, conversation_id, intent, due_at) VALUES ($1, $2, 'lembrar o David de ligar para o dentista', now()) RETURNING id",
+      [user.id, convId],
+    );
+    await db.query("INSERT INTO memories (user_id, content) VALUES ($1, 'Precisa ligar para o dentista hoje'), ($1, 'Mora em Campinas')", [user.id]);
+    const { afterFire } = await import("../src/reminders.js");
+    await afterFire(r.id, true);
+    expect(await db.one("SELECT COUNT(*)::int AS n FROM reminders WHERE id = $1", [r.id])).toEqual({ n: 0 });
+    const mems = await db.many("SELECT content FROM memories WHERE user_id = $1", [user.id]);
+    expect(mems.map((m: any) => m.content)).toContain("Mora em Campinas");
+    expect(mems.map((m: any) => m.content)).not.toContain("Precisa ligar para o dentista hoje");
+  });
+
   it("painéis: cadastro vira admin com acesso só aos próprios dados; super admin vê tudo", async () => {
     const { buildServer } = await import("../src/api/server.js");
     const app = await buildServer();

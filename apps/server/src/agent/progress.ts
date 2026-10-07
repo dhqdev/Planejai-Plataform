@@ -1,5 +1,6 @@
 import type { Channel } from "../channels/types.js";
 import { redactSecrets } from "./guard.js";
+import { humanize } from "./humanize.js";
 import type { Tracer } from "./trace.js";
 
 /** Avisos de reserva quando o CTO foi pesquisar sem dizer nada (variados para não soar robô). */
@@ -62,7 +63,7 @@ export class Progress {
 
   /** Manda um aviso agora (texto do CTO ou de reserva). No máximo `max` por execução. */
   async say(text: string, origin: "cto" | "reserva" = "cto") {
-    const clean = redactSecrets(text.trim());
+    const clean = redactSecrets(humanize(text.trim()));
     if (!clean || this.stopped || this.sent.length >= (this.o.max ?? 3)) return false;
     this.sent.push(clean);
     const step = await this.o.tracer.step({ agent: "cto", type: "channel", name: "aviso_andamento", input: { text: clean, origem: origin } });

@@ -15,6 +15,7 @@ import { Guard, GuardTimeout, redactSecrets } from "./guard.js";
 import { isOwner } from "../ingest.js";
 import { describeMessage, preprocessMedia } from "./media.js";
 import { Progress } from "./progress.js";
+import { humanize } from "./humanize.js";
 import { pickReaction } from "./reaction.js";
 import { Tracer } from "./trace.js";
 import { allShort, pushShort, recentShort, redisAlive, type ShortEntry } from "../shortmem.js";
@@ -32,13 +33,13 @@ const MAX_BATCH = 20;
 
 /** Formata texto de LLM para WhatsApp (markdown -> estilo WhatsApp) */
 export function toWhatsApp(text: string) {
-  return text
+  const out = text
     .replace(/\*\*(.+?)\*\*/g, "*$1*")
     .replace(/__(.+?)__/g, "_$1_")
     .replace(/^#{1,6}\s+(.+)$/gm, "*$1*")
     .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, (_m, label, url) => (label === url ? url : `${label}: ${url}`))
-    .replace(/^\s*[-*]\s+/gm, "• ")
     .trim();
+  return humanize(out);
 }
 
 export type Bubble = { type: "text"; text: string } | { type: "media"; id: string };

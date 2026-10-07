@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { normalizePhone } from "./accounts.js";
+import { humanize } from "./agent/humanize.js";
 import { activeChannel, playground } from "./channels/index.js";
 import type { Channel } from "./channels/types.js";
 import { config } from "./config.js";
@@ -181,6 +182,7 @@ export async function handleInviteReply(opts: { user: any; text: string; channel
 export async function notifyUser(userId: string, text: string, image?: { base64: string; mimetype: string }) {
   const u = await one("SELECT * FROM users WHERE id = $1", [userId]);
   if (!u) return;
+  text = humanize(text);
   const { conv, channel } = await conversationOf(u.id, u.phone);
   await channel.sendText(conv.remote_jid, text);
   if (image) await channel.sendImage(conv.remote_jid, { base64: image.base64, mimetype: image.mimetype });
