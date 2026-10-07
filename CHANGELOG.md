@@ -1,5 +1,10 @@
 # Versões do Planejai
 
+## v1.1.0 (2026-10-07)
+
+- Painel: notificações, documentos, código de login, Meet, mapa, Execuções nova e WhatsApp que religa sozinho
+
+
 ## v1.0.0 (2026-10-07)
 
 - n8n ligado pela rede, automações criadas pelo assistente e versões (releases)
