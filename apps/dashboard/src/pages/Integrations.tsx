@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
-import { ErrorBox, IntegrationIcon, Loading, Modal, PageHead } from "../components";
+import { CopyField, ErrorBox, IntegrationIcon, Loading, Modal, PageHead } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
+import { Connections } from "../Connections";
 
 export function IntegrationsPage() {
   const { data, error, reload } = useApi<any>("/api/integrations");
@@ -26,6 +27,7 @@ export function IntegrationsPage() {
     <div className="page">
       <PageHead title="Integrações" subtitle="Ferramentas que o seu agente pode usar. Credenciais ficam criptografadas no seu banco." />
       {notice && <div className={notice.ok ? "ok-box" : "error-box"} style={{ marginBottom: 14 }}>{notice.text}</div>}
+      <div style={{ marginBottom: 20 }}><Connections owner /></div>
       {categories.map((cat) => (
         <div key={cat} style={{ marginBottom: 20 }}>
           <h3 className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".06em" }}>{cat}</h3>
@@ -134,7 +136,28 @@ function ConnectModal({ integration: i, onClose }: { integration: any; onClose: 
           Onde pegar as credenciais <Icon name="external" size={13} />
         </a>
       )}
+      {i.id === "n8n" && <N8nInfo />}
       {msg && <div className={msg.ok ? "ok-box" : "error-box"} style={{ marginTop: 12 }}>{msg.text}</div>}
     </Modal>
+  );
+}
+
+/** O que colar no n8n para ele falar com o Planejai (nós HTTP Request). */
+function N8nInfo() {
+  const { data } = useApi<any>("/api/integrations/n8n/info");
+  if (!data) return null;
+  return (
+    <div className="n8n-info">
+      <h4>Para o n8n falar com o Planejai</h4>
+      <p className="help">Nos nós HTTP Request, use este endereço e mande a chave no cabeçalho <code>X-Planejai-Key</code>.</p>
+      <div className="field"><label>Endereço</label><CopyField value={data.base_url} /></div>
+      <div className="field"><label>Chave{data.key_from_env ? " (INTERNAL_API_KEY)" : ""}</label><CopyField value={data.key} /></div>
+      <div className="n8n-endpoints">
+        {data.endpoints.map(([m, path, desc]: string[]) => (
+          <div key={m + path}><span className={`method m-${m.toLowerCase()}`}>{m}</span><code>{path}</code><small className="muted">{desc}</small></div>
+        ))}
+      </div>
+      <p className="help">Eventos enviados ao webhook de eventos: {data.events.join(", ")}.</p>
+    </div>
   );
 }

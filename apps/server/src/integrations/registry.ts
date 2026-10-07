@@ -303,6 +303,56 @@ export const INTEGRATIONS: IntegrationDef[] = [
       return `Conectado (${String(c.secret_key).includes("_live_") ? "produção" : "teste"})`;
     },
   },
+  {
+    id: "telegram",
+    name: "Telegram",
+    description: "Conversar com o assistente pelo Telegram. Cada pessoa conecta a conta dela em Minha conta > Conexões.",
+    category: "Comunicação",
+    icon: "send",
+    docsUrl: "https://t.me/BotFather",
+    fields: [
+      {
+        key: "bot_token",
+        label: "Token do bot",
+        type: "password",
+        required: true,
+        placeholder: "123456789:AA...",
+        help: "No Telegram, fale com o @BotFather, mande /newbot, escolha nome e @ do bot e cole aqui o token que ele devolver.",
+      },
+    ],
+    test: async (c) => {
+      const res = await fetch(`https://api.telegram.org/bot${c.bot_token}/getMe`, { signal: timed() });
+      const json = await okJson(res, "Telegram");
+      return `Bot @${json.result?.username} conectado`;
+    },
+  },
+  {
+    id: "n8n",
+    name: "n8n",
+    description: "Suas automações do n8n: o assistente lista e dispara fluxos, o n8n manda mensagens e cria contas pela API interna e recebe eventos da plataforma.",
+    category: "Infraestrutura",
+    icon: "workflow",
+    docsUrl: "https://docs.n8n.io/api/authentication/",
+    fields: [
+      { key: "base_url", label: "Endereço do n8n", type: "url", required: true, placeholder: "https://n8n.seudominio.com", help: "O mesmo endereço que você abre no navegador. Na mesma rede do Swarm pode ser http://n8n_n8n:5678." },
+      { key: "api_key", label: "Chave da API do n8n", type: "password", required: true, help: "No n8n: Settings > n8n API > Create an API key." },
+      { key: "webhook_user", label: "Usuário do Basic Auth dos webhooks (opcional)", type: "text", help: "Se seus webhooks usam Basic Auth, o assistente usa este usuário e senha ao disparar um fluxo." },
+      { key: "webhook_password", label: "Senha do Basic Auth dos webhooks (opcional)", type: "password" },
+      {
+        key: "events_url",
+        label: "Webhook de eventos (opcional)",
+        type: "url",
+        placeholder: "https://n8n.seudominio.com/webhook/planejai-eventos",
+        help: "Um nó Webhook (POST) no n8n. A plataforma avisa nele quando entra cliente, sai gasto, estoura limite, dispara lembrete ou alguém conecta o Telegram.",
+      },
+    ],
+    test: async (c) => {
+      const res = await fetch(`${c.base_url.replace(/\/$/, "")}/api/v1/workflows?limit=250`, { headers: { "X-N8N-API-KEY": c.api_key, accept: "application/json" }, signal: timed() });
+      const json = await okJson(res, "n8n");
+      const list = json.data ?? [];
+      return `Conectado: ${list.length} fluxo(s), ${list.filter((w: any) => w.active).length} ativo(s)`;
+    },
+  },
 ];
 
 const cache = new Map<string, { at: number; creds: Record<string, string> | null }>();

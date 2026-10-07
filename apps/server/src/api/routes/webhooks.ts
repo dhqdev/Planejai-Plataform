@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { channels } from "../../channels/index.js";
 import { config } from "../../config.js";
 import { ingest } from "../../ingest.js";
+import { handleTelegramUpdate, telegramSecretOk } from "../../telegram.js";
 
 function secretOk(req: FastifyRequest) {
   if (!config.WEBHOOK_SECRET) return true;
@@ -26,6 +27,14 @@ export async function registerWebhookRoutes(app: FastifyInstance) {
       }
     }
     return { ok: true, received: msgs.length, results };
+  });
+
+  // Telegram: o setWebhook (ao salvar o token em Integrações) manda o segredo no cabeçalho
+  app.post("/webhooks/telegram", async (req, reply) => {
+    if (!telegramSecretOk(req.headers["x-telegram-bot-api-secret-token"])) return reply.code(401).send({ error: "segredo inválido" });
+    // responde logo; o Telegram reenvia se demorar
+    void handleTelegramUpdate(req.body).catch((err) => req.log.error({ err }, "falha no update do Telegram"));
+    return { ok: true };
   });
 
   // WhatsApp Cloud API (Meta): verificação do webhook

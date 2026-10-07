@@ -3,6 +3,7 @@ import * as comm from "./tools/communication.js";
 import * as core from "./tools/core.js";
 import * as finance from "./tools/finance.js";
 import * as images from "./tools/images.js";
+import * as n8n from "./tools/n8n.js";
 import * as prod from "./tools/productivity.js";
 import * as research from "./tools/research.js";
 import * as social from "./tools/social.js";
@@ -140,7 +141,7 @@ export const SPECIALISTS: AgentDef[] = [
     face: { color: 0, eyes: "wide", mouth: "smile", extra: "leaf" },
     name: "Produtividade",
     icon: "folder",
-    role: "Notion (páginas, notas, bancos), Linear e GitHub (issues, PRs).",
+    role: "Notion (páginas, notas, bancos), Linear, GitHub (issues, PRs) e as automações do n8n do dono (listar, ver falhas, disparar fluxos).",
     instructions: "Retorne links diretos para o que encontrar ou criar.",
     tools: [
       prod.notionSearch,
@@ -150,6 +151,9 @@ export const SPECIALISTS: AgentDef[] = [
       prod.githubCreateIssue,
       prod.linearSearchIssues,
       prod.linearCreateIssue,
+      n8n.n8nWorkflows,
+      n8n.n8nExecutions,
+      n8n.n8nTrigger,
     ],
   },
 ];

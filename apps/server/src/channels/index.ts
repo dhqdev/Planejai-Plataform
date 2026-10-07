@@ -2,6 +2,7 @@ import { config } from "../config.js";
 import { BaileysChannel } from "./baileys.js";
 import { CloudChannel } from "./cloud.js";
 import { EvolutionChannel } from "./evolution.js";
+import { TelegramChannel } from "./telegram.js";
 import type { Channel, InboundMessage, OutboundImage } from "./types.js";
 
 export const channels: Record<string, Channel> = {
@@ -9,6 +10,10 @@ export const channels: Record<string, Channel> = {
   evolution: new EvolutionChannel(),
   cloud: new CloudChannel(),
 };
+
+/** Telegram roda junto com o WhatsApp (não é alternativa a ele): cada pessoa pode usar os dois. */
+export const telegram = new TelegramChannel();
+channels.telegram = telegram;
 
 /** Canal de teste do dashboard (Playground): guarda o que seria enviado em vez de mandar pro WhatsApp. */
 export class PlaygroundChannel implements Channel {

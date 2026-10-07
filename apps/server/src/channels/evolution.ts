@@ -51,10 +51,10 @@ export class EvolutionChannel implements Channel {
     const r = await this.call("/message/sendMedia", {
       number: remoteJid,
       mediatype: image.kind ?? "image",
-      mimetype: image.mimetype ?? (image.kind === "video" ? "video/mp4" : "image/png"),
+      mimetype: image.mimetype ?? (image.kind === "video" ? "video/mp4" : image.kind === "document" ? "application/pdf" : "image/png"),
       caption: image.caption ?? "",
       media: image.base64 ?? image.url,
-      fileName: image.fileName ?? (image.kind === "video" ? "gravacao.mp4" : "imagem.png"),
+      fileName: image.fileName ?? (image.kind === "video" ? "gravacao.mp4" : image.kind === "document" ? "arquivo.pdf" : "imagem.png"),
     });
     return { id: r?.key?.id };
   }

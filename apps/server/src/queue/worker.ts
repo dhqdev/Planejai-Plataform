@@ -1,3 +1,6 @@
+import { emitEvent } from "../events.js";
+import { type OutboundJob, runOutboundJob } from "../api/routes/internal.js";
+import { startTelegramPolling } from "../telegram.js";
 import { processConversation, summarizeConversation } from "../agent/orchestrator.js";
 import { one } from "../db/pool.js";
 import { purgeOld } from "../maintenance.js";
@@ -35,6 +38,7 @@ export async function startWorker(log: { info: (...a: any[]) => void; error: (..
           ". Escreva a mensagem para a pessoa.",
       });
       ok = true;
+      void emitEvent("reminder.fired", { user_id: reminder.user_id, reminder_id: reminder.id, intent: reminder.intent });
     } finally {
       await afterFire(reminder.id, ok);
     }
@@ -66,6 +70,14 @@ export async function startWorker(log: { info: (...a: any[]) => void; error: (..
     await dailyImprovement(log);
   });
   await boss.schedule(QUEUES.improve, "0 19 * * *", undefined, { tz: config.DEFAULT_TIMEZONE });
+
+  // mensagens pedidas pelo n8n / automações (API interna)
+  await boss.work<OutboundJob>(QUEUES.outbound, { batchSize: 1, pollingIntervalSeconds: 2 }, async ([job]) => {
+    if (job) await runOutboundJob(job.data);
+  });
+
+  // Telegram sem webhook (sem https público): o worker busca as mensagens
+  startTelegramPolling(log);
 
   log.info("worker iniciado (filas: processamento, lembretes, resumos)");
 }

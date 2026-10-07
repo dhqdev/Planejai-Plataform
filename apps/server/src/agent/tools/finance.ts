@@ -1,4 +1,5 @@
 import { config } from "../../config.js";
+import { emitEvent } from "../../events.js";
 import { randomUUID } from "node:crypto";
 import { many, one, query } from "../../db/pool.js";
 import { getCredentials } from "../../integrations/registry.js";
@@ -394,6 +395,9 @@ export const addTransaction = defineTool<{
       if (!row) return { ok: true, duplicate: true, note: "Esse comprovante/mensagem já tinha sido lançado; nada foi duplicado." };
       ids.push(row.id);
     }
+    const alerts = args.kind !== "expense" ? [] : await budgetAlerts(ctx.user.id, ctx.timezone, category, first);
+    void emitEvent("transaction.created", { user_id: ctx.user.id, ids, kind: args.kind, amount: total, category, description: args.description ?? null, source: args.source ?? "conversa" });
+    if (alerts.length) void emitEvent("budget.alert", { user_id: ctx.user.id, category, alerts });
     return {
       ok: true,
       ids,
@@ -401,7 +405,7 @@ export const addTransaction = defineTool<{
       ...(n > 1 ? { installments: n, installment_values: parts.map(brl) } : {}),
       category,
       ...(await monthTotals(ctx.user.id, ctx.timezone, first, category)),
-      ...(args.kind !== "expense" ? {} : await budgetAlerts(ctx.user.id, ctx.timezone, category, first).then((a) => (a.length ? { budget_alert: a.join(" ") } : {}))),
+      ...(alerts.length ? { budget_alert: alerts.join(" ") } : {}),
     };
   },
 });

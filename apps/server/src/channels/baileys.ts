@@ -35,7 +35,9 @@ export class BaileysChannel implements Channel {
   async sendImage(jid: string, image: OutboundImage) {
     const content = image.base64 ? Buffer.from(image.base64, "base64") : { url: image.url! };
     const r =
-      image.kind === "video"
+      image.kind === "document"
+        ? await this.sock().sendMessage(jid, { document: content, caption: image.caption, mimetype: image.mimetype ?? "application/pdf", fileName: image.fileName ?? "arquivo.pdf" })
+        : image.kind === "video"
         ? await this.sock().sendMessage(jid, { video: content, caption: image.caption, mimetype: image.mimetype ?? "video/mp4" })
         : await this.sock().sendMessage(jid, { image: content, caption: image.caption, mimetype: image.mimetype });
     return { id: r?.key?.id ?? undefined };

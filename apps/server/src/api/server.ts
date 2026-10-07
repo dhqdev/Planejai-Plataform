@@ -12,6 +12,7 @@ import { phoneVariants } from "../ingest.js";
 import { getSettings } from "../settings.js";
 import { registerDashboardRoutes } from "./routes/dashboard.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
+import { registerInternalRoutes } from "./routes/internal.js";
 
 const COOKIE = "pj_session";
 
@@ -176,6 +177,7 @@ export async function buildServer() {
   app.get("/api/auth/me", { preHandler: requireAuth }, async (req) => publicAccount(req.account));
 
   await registerWebhookRoutes(app);
+  await registerInternalRoutes(app);
   await registerDashboardRoutes(app);
 
   // Dashboard (SPA) servido pelo mesmo container

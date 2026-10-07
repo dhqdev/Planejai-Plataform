@@ -9,6 +9,7 @@ export const QUEUES = {
   invite: "invite.send",
   watch: "watch.check",
   improve: "improve.daily",
+  outbound: "outbound.send",
 } as const;
 
 let boss: PgBoss | null = null;
@@ -25,6 +26,7 @@ export async function getBoss(): Promise<PgBoss> {
   await b.createQueue(QUEUES.invite, { name: QUEUES.invite, policy: "standard" });
   await b.createQueue(QUEUES.watch, { name: QUEUES.watch, policy: "singleton" });
   await b.createQueue(QUEUES.improve, { name: QUEUES.improve, policy: "singleton" });
+  await b.createQueue(QUEUES.outbound, { name: QUEUES.outbound, policy: "standard" });
   boss = b;
   return b;
 }

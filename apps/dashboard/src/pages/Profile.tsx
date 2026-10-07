@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../api";
 import type { Me } from "../App";
 import { ErrorBox, PageHead } from "../components";
+import { Connections } from "../Connections";
 import { useApi } from "../hooks";
 
 export function ProfilePage({ me }: { me: Me }) {
@@ -47,6 +48,7 @@ export function ProfilePage({ me }: { me: Me }) {
         <div className="field"><label>Nova senha</label><input className="input" type="password" value={pw.password} onChange={(e) => setPw({ ...pw, password: e.target.value })} /></div>
         <button className="btn" onClick={() => save(pw)}>Trocar senha</button>
       </div>
+      <Connections />
       </div>
     </div>
   );

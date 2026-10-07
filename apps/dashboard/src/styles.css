@@ -971,3 +971,21 @@ a.line-item:hover { background: var(--panel-2); }
   .cal-page.fit .cal-week { display: flex; flex-direction: column; }
   .cal-page.fit .cal-week-body { flex: 1; max-height: none; min-height: 0; }
 }
+
+/* ---------- Conexões (WhatsApp, Telegram) e n8n ---------- */
+.conn-sub { margin: -6px 0 10px; font-size: 13px; }
+.conn-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.conn-ico { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0; }
+.conn-ico.wa { background: color-mix(in srgb, #25d366 16%, var(--panel)); color: #128c4a; }
+.conn-ico.tg { background: color-mix(in srgb, #2aabee 16%, var(--panel)); color: #1b8ccc; }
+.conn-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.conn-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.n8n-info { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.n8n-info h4 { margin: 0 0 4px; font-size: 14px; }
+.n8n-endpoints { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.n8n-endpoints > div { display: grid; grid-template-columns: 56px auto 1fr; gap: 8px; align-items: center; font-size: 12.5px; }
+.n8n-endpoints code { font-family: var(--mono); font-size: 12px; }
+.n8n-endpoints small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.method { font-family: var(--mono); font-size: 10.5px; font-weight: 700; text-align: center; border-radius: 6px; padding: 2px 0; background: var(--panel-2); }
+.method.m-get { color: #16a3a3; } .method.m-post { color: var(--brand-1); } .method.m-patch { color: var(--brand-4); }
+@media (max-width: 640px) { .n8n-endpoints > div { grid-template-columns: 52px 1fr; } .n8n-endpoints small { grid-column: 2; } }

@@ -176,3 +176,11 @@ Sem WhatsApp, teste pelos e2e (canal playground) e veja os passos em **Execuçõ
 - Textos para o usuário final em português do Brasil, tom natural de WhatsApp, sem templates fixos.
 - Toda chamada de LLM e de tool passa pelo `Tracer` para aparecer em Execuções.
 - Push direto na `main` (sem PR), a pedido do dono.
+
+## Telegram e n8n
+
+- **Telegram** (`channels/telegram.ts`, `telegram.ts`): um bot do dono (token em Integrações > Telegram; ao salvar, `setupTelegram` pega o @ e liga o webhook `/webhooks/telegram` com segredo derivado do APP_SECRET; sem https público o worker faz long polling). A pessoa liga a conta em Minha conta > Conexões (link `t.me/bot?start=CODIGO`, uso único, 15 min, tabela `link_codes`) ou mandando o próprio contato no bot (confere o número com `users`). Ligação em `channel_links`; uma conta do Telegram por pessoa. Sem ligação o bot só explica como conectar (sem IA). `conversationOf` usa a conversa mais recente, então lembretes e avisos saem no canal onde a pessoa está falando. Texto estilo WhatsApp vira HTML (`toTelegramHtml`).
+- **API interna** (`api/routes/internal.ts`, cabeçalho `X-Planejai-Key` = `internalKey()` em events.ts, ou `INTERNAL_API_KEY`): `GET/POST/PATCH /api/internal/users`, `POST /api/internal/send` (texto, imagem, vídeo, PDF; fila `outbound.send` no worker), `POST /api/internal/agent` (o assistente escreve do jeito dele), `POST /api/internal/transactions`, `GET /api/internal/finance`. A lista aparece no modal Integrações > n8n.
+- **Eventos** (`events.ts`): `emitEvent` faz POST no "Webhook de eventos" da integração n8n com `X-Planejai-Signature` (HMAC do corpo com a chave interna): user.created, user.activated, transaction.created, budget.alert, reminder.fired, telegram.linked.
+- **Ferramentas do assistente** (`agent/tools/n8n.ts`, com o especialista Produtividade): `n8n_workflows`, `n8n_executions`, `n8n_trigger` (pede confirmação; Basic Auth opcional dos webhooks). Só o dono (OWNER_PHONES) pode usar.
+- Fluxos prontos para importar no n8n: `/mnt/project-files/planejai-deploy/n8n/` (auxiliares convertidos da Evolution para a API interna e fluxo de eventos).

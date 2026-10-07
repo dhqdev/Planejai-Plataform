@@ -183,6 +183,8 @@ const ICONS: Record<string, string> = {
   browser: "globe",
   payment: "card",
   shop: "shop",
+  send: "send",
+  workflow: "graph",
 };
 
 export function IntegrationIcon({ icon }: { icon: string }) {

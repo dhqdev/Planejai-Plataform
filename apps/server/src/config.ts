@@ -33,6 +33,8 @@ const schema = z.object({
   WHATSAPP_CLOUD_VERIFY_TOKEN: z.string().default(""),
   WHATSAPP_CLOUD_APP_SECRET: z.string().default(""),
   WEBHOOK_SECRET: z.string().default(""),
+  /** chave da API interna (n8n e automações); vazio = derivada do APP_SECRET, aparece em Integrações > n8n */
+  INTERNAL_API_KEY: z.string().default(""),
 
   // Números (só dígitos, com DDI) que podem falar com o agente sem aprovação.
   OWNER_PHONES: z

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { normalizePhone } from "./accounts.js";
 import { humanize } from "./agent/humanize.js";
-import { activeChannel, playground } from "./channels/index.js";
+import { activeChannel, channels, playground } from "./channels/index.js";
 import type { Channel } from "./channels/types.js";
 import { config } from "./config.js";
 import { many, one, query } from "./db/pool.js";
@@ -59,6 +59,7 @@ export async function conversationOf(userId: string, phone: string) {
 }
 
 function getChannelSafe(id: string): Channel {
+  if (id === "telegram" && channels.telegram) return channels.telegram;
   const c = activeChannel();
   if (c && c.id === id) return c;
   return id === "playground" ? playground : (c ?? playground);
@@ -158,6 +159,7 @@ export async function handleInviteReply(opts: { user: any; text: string; channel
   }
   for (const inv of pending) {
     await query("UPDATE invites SET status = $2, responded_at = now(), invitee_user_id = $3 WHERE id = $1", [inv.id, yes ? "accepted" : "declined", user.id]);
+    if (yes) void import("./events.js").then((e) => e.emitEvent("user.activated", { user_id: user.id, phone: user.phone, name: inv.name ?? null, invite_id: inv.id }));
     if (yes && inv.inviter_user_id) {
       await query("INSERT INTO contacts (user_id, contact_id) VALUES ($1, $2), ($2, $1) ON CONFLICT DO NOTHING", [inv.inviter_user_id, user.id]);
     }

@@ -26,6 +26,8 @@ import { queueOverview, retryJob } from "../../queue/boss.js";
 import { ESSENTIAL, getTabs, OPTIONAL, saveTabs } from "../../tabs.js";
 import { faceFor } from "../../agent/team.js";
 import { requireAuth, requireSuper } from "../server.js";
+import { emitEvent, internalKey } from "../../events.js";
+import { botUsername, connections, setupTelegram, telegramLink, unlink } from "../../telegram.js";
 
 const PLAYGROUND_PHONE = "playground";
 
@@ -294,6 +296,40 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     });
 
     // ---------- Abas do app: essencial para todo mundo, o resto liberado pela reunião noturna ----------
+    // ---------- Conexões (WhatsApp, Telegram) da própria pessoa ----------
+    const myUserId = async (a: { userId: string | null; owner: boolean }) => {
+      if (a.userId) return a.userId;
+      if (!a.owner || !config.OWNER_PHONES.length) return null;
+      const u = await one("SELECT id FROM users WHERE phone = ANY($1) ORDER BY last_seen_at DESC NULLS LAST LIMIT 1", [config.OWNER_PHONES.flatMap((p) => phoneVariants(p))]);
+      return u?.id ?? null;
+    };
+    base.get("/api/me/connections", async (req) => {
+      const uid = await myUserId(req.account);
+      const user = uid ? await one("SELECT phone FROM users WHERE id = $1", [uid]) : null;
+      const links = uid ? await connections(uid) : [];
+      const tg = links.find((l: any) => l.channel === "telegram");
+      const bot = await botUsername();
+      return {
+        linked: Boolean(uid),
+        whatsapp: user ? { phone: user.phone } : null,
+        telegram: { available: Boolean(bot), bot, connected: tg ? { username: tg.username, since: tg.created_at } : null },
+      };
+    });
+    base.post("/api/me/connections/telegram", async (req, reply) => {
+      const uid = await myUserId(req.account);
+      if (!uid) return reply.code(400).send({ error: "Sua conta ainda não está ligada a um número de WhatsApp" });
+      try {
+        return await telegramLink(uid);
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
+    base.delete("/api/me/connections/telegram", async (req) => {
+      const uid = await myUserId(req.account);
+      if (uid) await unlink(uid, "telegram");
+      return { ok: true };
+    });
+
     base.get("/api/me/tabs", async (req) => {
       if (req.account.role === "superadmin") return { all: true, essential: ESSENTIAL, modules: Object.keys(OPTIONAL), custom: [], catalog: OPTIONAL };
       const tabs = req.account.userId ? await getTabs(req.account.userId) : { modules: [], custom: [] };
@@ -595,6 +631,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
         return { client: row, updated: true };
       }
       const client = await one("INSERT INTO users (phone, name, full_name, email, status) VALUES ($1, $2, $2, $3, 'active') RETURNING *", [phone, fullName, email]);
+      void emitEvent("user.created", { user_id: client.id, phone, name: fullName, email, source: "painel" });
       // convite já aceito: serve de link para a pessoa criar a senha do painel
       const code = randomBytes(6).toString("base64url").replace(/[-_]/g, "x").slice(0, 8).toUpperCase();
       await query(
@@ -729,8 +766,9 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       }
       if (def.test) {
         try {
-          const message = await def.test({ ...current, ...creds });
+          let message = await def.test({ ...current, ...creds });
           await saveCredentials(def.id, creds);
+          if (def.id === "telegram") message = await setupTelegram();
           return { ok: true, message };
         } catch (err) {
           return reply.code(400).send({ error: (err as Error).message });
@@ -739,6 +777,24 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       await saveCredentials(def.id, creds);
       return { ok: true, message: def.oauth ? "Credenciais salvas. Agora clique em Conectar com Google." : "Salvo" };
     });
+
+    // n8n: o que colar no n8n para ele falar com a plataforma
+    api.get("/api/integrations/n8n/info", async () => ({
+      base_url: config.PUBLIC_URL.replace(/\/$/, ""),
+      key: internalKey(),
+      key_from_env: Boolean(config.INTERNAL_API_KEY),
+      endpoints: [
+        ["GET", "/api/internal/ping", "Testa a chave"],
+        ["GET", "/api/internal/users?phone=", "Busca pessoa (e login do painel)"],
+        ["POST", "/api/internal/users", "Cria ou reativa pessoa; com email e password cria o login"],
+        ["PATCH", "/api/internal/users", "Troca senha, nome ou status (active/blocked)"],
+        ["POST", "/api/internal/send", "Manda texto, imagem, vídeo ou PDF no canal da pessoa"],
+        ["POST", "/api/internal/agent", "Pede ao assistente para falar com a pessoa do jeito dele"],
+        ["POST", "/api/internal/transactions", "Lança gasto ou receita"],
+        ["GET", "/api/internal/finance?phone=&month=", "Resumo do mês"],
+      ],
+      events: ["user.created", "user.activated", "transaction.created", "budget.alert", "reminder.fired", "telegram.linked"],
+    }));
 
     api.post<{ Params: { id: string } }>("/api/integrations/:id/test", async (req, reply) => {
       const def = getDef(req.params.id);
