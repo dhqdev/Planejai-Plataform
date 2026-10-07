@@ -84,3 +84,18 @@ export function useApi<T = any>(path: string | null, opts: { poll?: number } = {
 
   return { data, error, loading, reload, setData };
 }
+
+/** Notebook/desktop com altura suficiente: as telas cabem inteiras, sem rolar a página (só listas rolam por dentro). */
+export const FIT_QUERY = "(min-width: 1024px) and (min-height: 680px)";
+
+export function useMedia(query: string) {
+  const [ok, setOk] = useState(() => typeof matchMedia !== "undefined" && matchMedia(query).matches);
+  useEffect(() => {
+    const m = matchMedia(query);
+    const on = () => setOk(m.matches);
+    on();
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, [query]);
+  return ok;
+}

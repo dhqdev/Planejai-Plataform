@@ -22,11 +22,12 @@ export function ProfilePage({ me }: { me: Me }) {
     }
   };
   return (
-    <div className="page" style={{ maxWidth: 720 }}>
+    <div className="page" style={{ maxWidth: 1080 }}>
       <PageHead title="Minha conta" subtitle={me.email} />
       {msg && <div className="ok-box" style={{ marginBottom: 12 }}>{msg}</div>}
       <ErrorBox error={error} />
-      <div className="card card-pad" style={{ marginBottom: 14 }}>
+      <div className="grid grid-2" style={{ alignItems: "start" }}>
+      <div className="card card-pad">
         <h3>Perfil</h3>
         <div className="field"><label>Nome</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
         <div className="field">
@@ -45,6 +46,7 @@ export function ProfilePage({ me }: { me: Me }) {
         <div className="field"><label>Senha atual</label><input className="input" type="password" value={pw.current_password} onChange={(e) => setPw({ ...pw, current_password: e.target.value })} /></div>
         <div className="field"><label>Nova senha</label><input className="input" type="password" value={pw.password} onChange={(e) => setPw({ ...pw, password: e.target.value })} /></div>
         <button className="btn" onClick={() => save(pw)}>Trocar senha</button>
+      </div>
       </div>
     </div>
   );

@@ -38,7 +38,7 @@ export function AgentsPage() {
   };
 
   return (
-    <div className="page page-wide">
+    <div className="page page-wide fit agents-page">
       <PageHead
         title="Agentes"
         subtitle="O CTO conversa com a pessoa e chama os especialistas. Toda noite às 19h o Téo (CTO) faz a reunião do time: ajusta o jeito de falar com cada pessoa, passa dicas para cada agente e cria agentes novos, cada um com nome e carinha."
@@ -53,11 +53,12 @@ export function AgentsPage() {
       />
       {result && <div className="notice" style={{ marginBottom: 14 }}>{result}</div>}
 
-      <div className="card card-pad" style={{ marginBottom: 14 }}>
+      <div className="agents-body">
+      <div className="card card-pad agents-map" style={{ marginBottom: 14 }}>
         <TeamMap />
       </div>
 
-      <div className="grid grid-2" style={{ alignItems: "start" }}>
+      <div className="grid grid-2 agents-lists" style={{ alignItems: "start" }}>
         <div className="card">
           <div className="card-pad"><h3 style={{ margin: 0 }}>Time fixo</h3></div>
           {data.map((a) => (
@@ -98,6 +99,7 @@ export function AgentsPage() {
             {topics.data && !topics.data.length && <p className="muted" style={{ margin: 0 }}>Aparecem depois da primeira análise das 19h.</p>}
           </div>
         </div>
+      </div>
       </div>
 
       {sel && (

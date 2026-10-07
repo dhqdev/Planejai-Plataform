@@ -123,28 +123,32 @@ export function budgetChart(title: string, subtitle: string, rows: { label: stri
 export async function svgToPng(svg: string): Promise<string> {
   const size = svg.match(/width="(\d+)" height="(\d+)"/);
   const width = Number(size?.[1] ?? W);
-  const height = Number(size?.[2] ?? 720);
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#F6F6F4}svg{display:block}</style></head><body>${svg}</body></html>`;
+  return htmlToPng(html, width);
+}
+
+/** HTML -> PNG (base64) da página inteira, na largura dada (altura acompanha o conteúdo). */
+export async function htmlToPng(html: string, width: number): Promise<string> {
   const b = await getCredentials("browserless");
   if (b?.url) {
     const url = `${b.url.replace(/\/$/, "")}/chromium/screenshot${b.token ? `?token=${encodeURIComponent(b.token)}` : ""}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ html, options: { type: "png", omitBackground: false }, viewport: { width, height, deviceScaleFactor: 1 } }),
+      body: JSON.stringify({ html, options: { type: "png", fullPage: true, omitBackground: false }, viewport: { width, height: 600, deviceScaleFactor: 1 } }),
       signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) throw new Error(`Browserless ${res.status}: ${(await res.text()).slice(0, 200)}`);
     return Buffer.from(await res.arrayBuffer()).toString("base64");
   }
-  if (!config.CHROME_PATH) throw new Error("Para gerar gráfico preciso do navegador da stack (Browserless) ou de CHROME_PATH.");
+  if (!config.CHROME_PATH) throw new Error("Para gerar imagem preciso do navegador da stack (Browserless) ou de CHROME_PATH.");
   const puppeteer = (await import("puppeteer-core")).default;
   const browser = await puppeteer.launch({ executablePath: config.CHROME_PATH, headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width, height, deviceScaleFactor: 1 });
+    await page.setViewport({ width, height: 600, deviceScaleFactor: 1 });
     await page.setContent(html, { waitUntil: "load" });
-    const buf = await page.screenshot({ type: "png", clip: { x: 0, y: 0, width, height } });
+    const buf = await page.screenshot({ type: "png", fullPage: true });
     return Buffer.from(buf).toString("base64");
   } finally {
     await browser.close().catch(() => {});

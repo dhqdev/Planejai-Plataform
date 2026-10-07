@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, ago, brl, ms, usd, when } from "../api";
 import type { Me } from "../App";
 import { AgentTag, CATEGORY_COLORS, Donut, Empty, Modal, PageHead, Status } from "../components";
-import { useApi } from "../hooks";
+import { FIT_QUERY, useApi, useMedia } from "../hooks";
 import { Icon } from "../icons";
 import { TeamMap } from "../TeamMap";
 import { haptic } from "../touch";
@@ -468,10 +468,38 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
   };
 
   const ctx: Ctx = { sys: sys.data, mine: mine.data, isSuper };
+  // no notebook a tela cabe inteira: números em cima, mapa do time à esquerda e o resto numa coluna que rola por dentro
+  const fit = useMedia(FIT_QUERY) && !editing && !!widgets?.length;
+  const renderWidget = (x: Widget) => {
+    const def = WIDGETS[x.type]!;
+    return (
+      <div key={x.id} data-wid={x.id} className={`widget ${x.size} w-${x.type} ${dragId === x.id ? "dragging" : ""}`}>
+        {editing && (
+          <div className="widget-tools">
+            <button className="grip" aria-label="Mover" onPointerDown={onGripDown(x.id)}>
+              <Icon name="grip" size={15} />
+            </button>
+            {def.sizes.length > 1 && (
+              <button aria-label={`Tamanho: ${SIZE_LABEL[x.size]}`} title={SIZE_LABEL[x.size]} onClick={() => resize(x.id)}>
+                <Icon name="resize" size={14} />
+              </button>
+            )}
+            <button className="remove" aria-label="Remover" onClick={() => remove(x.id)}>
+              <Icon name="x" size={14} />
+            </button>
+          </div>
+        )}
+        {def.render(ctx)}
+      </div>
+    );
+  };
+  const stats = fit ? widgets!.filter((x) => x.size === "s") : [];
+  const lead = fit ? widgets!.find((x) => x.type === "team") : undefined;
+  const rest = fit ? widgets!.filter((x) => x.size !== "s" && x !== lead) : [];
   const first = (me.name ?? "").split(" ")[0];
 
   return (
-    <div className="page page-wide">
+    <div className={`page page-wide ${fit ? "fit dash-fit" : ""}`}>
       <PageHead
         title={isSuper ? "Painel" : first ? `Olá, ${first}` : "Início"}
         subtitle={editing ? "Arraste pela alça para mudar de lugar. Toque no tamanho para alternar." : isSuper ? "Como o Planejai está trabalhando agora" : "Seu Planejai em um lugar"}
@@ -487,13 +515,13 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
             </>
           ) : (
             <div className="dash-actions">
-              <button className="btn phone-only" onClick={() => setModal("quick")}>
+              <button className={`btn ${fit ? "" : "phone-only"}`} onClick={() => setModal("quick")}>
                 <Icon name="settings" size={16} /> Ajustes
               </button>
               <button className="btn" onClick={() => setEditing(true)}>
                 <Icon name="layout" size={16} /> Editar<span className="hide-phone"> painel</span>
               </button>
-              <button className="btn btn-brand phone-only" onClick={() => setModal("invite")}>
+              <button className={`btn btn-brand ${fit ? "" : "phone-only"}`} onClick={() => setModal("invite")}>
                 <Icon name="user-plus" size={16} /> Convidar
               </button>
             </div>
@@ -501,31 +529,17 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
         }
       />
 
-      {widgets && (
+      {fit ? (
+        <div className="board-fit">
+          {!!stats.length && <div className="board fit-stats">{stats.map(renderWidget)}</div>}
+          <div className={`fit-body ${lead ? "" : "no-lead"}`}>
+            {lead && <div className="fit-main">{renderWidget(lead)}</div>}
+            {!!rest.length && <div className="fit-side">{rest.map(renderWidget)}</div>}
+          </div>
+        </div>
+      ) : widgets && (
         <div ref={board} className={`board ${editing ? "editing" : ""}`} onPointerMove={onGripMove} onPointerUp={onGripUp} onPointerCancel={onGripUp}>
-          {widgets.map((x) => {
-            const def = WIDGETS[x.type]!;
-            return (
-              <div key={x.id} data-wid={x.id} className={`widget ${x.size} ${dragId === x.id ? "dragging" : ""}`}>
-                {editing && (
-                  <div className="widget-tools">
-                    <button className="grip" aria-label="Mover" onPointerDown={onGripDown(x.id)}>
-                      <Icon name="grip" size={15} />
-                    </button>
-                    {def.sizes.length > 1 && (
-                      <button aria-label={`Tamanho: ${SIZE_LABEL[x.size]}`} title={SIZE_LABEL[x.size]} onClick={() => resize(x.id)}>
-                        <Icon name="resize" size={14} />
-                      </button>
-                    )}
-                    <button className="remove" aria-label="Remover" onClick={() => remove(x.id)}>
-                      <Icon name="x" size={14} />
-                    </button>
-                  </div>
-                )}
-                {def.render(ctx)}
-              </div>
-            );
-          })}
+          {widgets.map(renderWidget)}
           {!widgets.length && (
             <div className="widget xl">
               <Empty>

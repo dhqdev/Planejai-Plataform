@@ -214,3 +214,16 @@ describe("reação instantânea pelo tema", () => {
   });
 });
 
+
+describe("imagens simples (make_image)", () => {
+  it("monta mapa mental, passos e tabela escapando HTML", async () => {
+    const { buildImageHtml } = await import("../src/images.js");
+    const m = buildImageHtml({ kind: "mapa_mental", title: "Livro <x>", sections: [{ title: "Ideia 1", items: ["a"] }, { title: "Ideia 2" }, { title: "Ideia 3" }] });
+    expect(m.width).toBe(1600);
+    expect(m.html).toContain("Livro &lt;x&gt;");
+    expect(m.html.match(/class="br"/g)).toHaveLength(3);
+    const t = buildImageHtml({ kind: "tabela", title: "T", columns: ["A", "B"], rows: [["1", "2"]] });
+    expect(t.html).toContain("<th>A</th>");
+    expect(buildImageHtml({ kind: "passos", title: "P", sections: [{ title: "um" }] }).html).toContain('class="n">1<');
+  });
+});

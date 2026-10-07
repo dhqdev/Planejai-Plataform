@@ -226,7 +226,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
   const calendars = CALENDARS.filter((c) => c.id !== "google" || isSuper || (data?.events ?? []).some((e) => e.kind === "google"));
 
   return (
-    <div className={`page cal-page ${side && !phone ? "with-side" : ""}`}>
+    <div className={`page cal-page fit ${side && !phone ? "with-side" : ""}`}>
       {!phone && side && (
         <aside className="cal-side">
           <button className="cal-create" onClick={() => setCreating(withTime(selected))}>
@@ -304,7 +304,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
         )}
         <ErrorBox error={error} />
 
-        <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        <div className={`cal-body cal-body-${view}`} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
           {view === "month" && (
             <MonthView
               cursor={cursor}

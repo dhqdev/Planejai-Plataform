@@ -33,7 +33,7 @@ export function SettingsPage() {
   );
 
   return (
-    <div className="page">
+    <div className="page fit settings-page">
       <PageHead title="Configurações" />
       <div className="grid grid-2">
         <div className="card card-pad">

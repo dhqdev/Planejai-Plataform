@@ -2,6 +2,7 @@ import * as agenda from "./tools/agenda.js";
 import * as comm from "./tools/communication.js";
 import * as core from "./tools/core.js";
 import * as finance from "./tools/finance.js";
+import * as images from "./tools/images.js";
 import * as prod from "./tools/productivity.js";
 import * as research from "./tools/research.js";
 import * as social from "./tools/social.js";
@@ -74,6 +75,7 @@ export const SPECIALISTS: AgentDef[] = [
       research.mercadolivreSearch,
       core.attachImage,
       core.readDocument,
+      images.makeImage,
     ],
   },
   {
@@ -166,6 +168,7 @@ export const CTO_TOOLS: Tool[] = [
   finance.calculate,
   finance.setBudget,
   finance.makeChart,
+  images.makeImage,
   agenda.scheduleReminder,
   social.sendToContact,
   social.listContactsTool,
@@ -205,6 +208,7 @@ export const CLIENT_AGENT_TOOLS: Record<string, Tool> = Object.fromEntries(
     agenda.calendarListEvents,
     core.getDatetime,
     core.attachImage,
+    images.makeImage,
   ].map((t) => [t.name, t]),
 );
 

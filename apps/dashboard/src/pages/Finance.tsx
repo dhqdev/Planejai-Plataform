@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api, brl, day } from "../api";
-import { CATEGORY_COLORS, Donut, Empty, ErrorBox, Loading, Modal } from "../components";
+import { CATEGORY_COLORS, Donut, Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
@@ -90,13 +90,19 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
   const insight = buildInsight(cats, expenses, prevCat, budgets, monthName(month));
 
   return (
-    <div className="page fin-page">
+    <div className="page fin-page fit">
+      <div className="hide-phone">
+        <PageHead
+          title="Finanças"
+          subtitle={`${cap(monthName(month))} de ${month.slice(0, 4)}${isSuper ? ` · ${user ? (people.data ?? []).find((p) => p.id === user)?.name ?? "" : "todas as pessoas"}` : ""}`}
+          actions={<button className="btn btn-brand" onClick={() => setAdding(true)}><Icon name="plus" size={16} /> Lançamento</button>}
+        />
+      </div>
       <div className="fin-top">
         <div className="fin-tabs">
           <button className={tab === "overview" ? "active" : ""} onClick={() => { haptic(5); setTab("overview"); }}><Icon name="layout" size={16} /> Visão geral</button>
           <button className={tab === "list" ? "active" : ""} onClick={() => { haptic(5); setTab("list"); }}><Icon name="receipt" size={16} /> Lançamentos</button>
         </div>
-        <span className="muted hide-phone fin-month-label">{cap(monthName(month))} de {month.slice(0, 4)}</span>
         <span className="spacer" />
         <div className="fin-period">
           <button className="icon-btn round" aria-label="Mês anterior" onClick={() => go(-1)}><Icon name="chevron-left" size={16} /></button>
@@ -111,8 +117,8 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
             ))}
           </div>
         )}
-        <button className="btn btn-brand fin-add" onClick={() => setAdding(true)}>
-          <Icon name="plus" size={16} /> <span className="hide-phone">Lançamento</span>
+        <button className="btn btn-brand fin-add phone-only" aria-label="Novo lançamento" onClick={() => setAdding(true)}>
+          <Icon name="plus" size={18} />
         </button>
       </div>
       <ErrorBox error={error} />
@@ -152,6 +158,24 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                 )}
               </div>
 
+              <div className="card card-pad fin-trend">
+                <div className="fin-card-head"><h3>Últimos meses</h3></div>
+                <div className="fin-months">
+                  {months.map((m: any) => (
+                    <button key={m.month} className={m.month === month ? "active" : ""} onClick={() => { haptic(5); setCat(null); setMonth(m.month); }} title={`${m.month}: ${brl(m.expenses)}`}>
+                      <span className="fin-month-bar"><i style={{ height: `${(Number(m.expenses) / maxMonth) * 100}%` }} /></span>
+                      <small>{monthName(m.month).slice(0, 3)}</small>
+                    </button>
+                  ))}
+                </div>
+                <h3 style={{ marginTop: 16 }}>Dia a dia</h3>
+                <div className="bars" style={{ height: 56 }}>
+                  {days.map((d) => <div key={d.day} className={`bar ${d.expenses ? "spent" : ""}`} title={`dia ${d.day}: ${brl(d.expenses)}`} style={{ height: `${(d.expenses / maxDay) * 100}%` }} />)}
+                </div>
+              </div>
+            </div>
+
+            <div className="fin-col fin-col-donut">
               <div className="card fin-donut-card">
                 <div className="fin-card-head">
                   <span className="tone-ico" style={{ ["--c" as any]: "var(--brand-3)" }}><Icon name="target" size={15} /></span>
@@ -183,22 +207,6 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                   <Empty>Sem gastos em {monthName(month)}. No WhatsApp é só dizer "gastei 32 no almoço" ou mandar a foto do comprovante.</Empty>
                 )}
               </div>
-
-              <div className="card card-pad">
-                <div className="fin-card-head"><h3>Últimos meses</h3></div>
-                <div className="fin-months">
-                  {months.map((m: any) => (
-                    <button key={m.month} className={m.month === month ? "active" : ""} onClick={() => { haptic(5); setCat(null); setMonth(m.month); }} title={`${m.month}: ${brl(m.expenses)}`}>
-                      <span className="fin-month-bar"><i style={{ height: `${(Number(m.expenses) / maxMonth) * 100}%` }} /></span>
-                      <small>{monthName(m.month).slice(0, 3)}</small>
-                    </button>
-                  ))}
-                </div>
-                <h3 style={{ marginTop: 18 }}>Dia a dia</h3>
-                <div className="bars" style={{ height: 56 }}>
-                  {days.map((d) => <div key={d.day} className={`bar ${d.expenses ? "spent" : ""}`} title={`dia ${d.day}: ${brl(d.expenses)}`} style={{ height: `${(d.expenses / maxDay) * 100}%` }} />)}
-                </div>
-              </div>
             </div>
 
             <div className="fin-col">
@@ -213,9 +221,10 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                   const pct = b.limit ? b.spent / b.limit : 0;
                   return (
                     <div key={b.id} className="budget-row" onClick={() => setBudget({ category: b.category, amount: b.limit, user: b.user_id ?? (user || undefined) })}>
-                      <span>{b.category ?? "Total do mês"}{everyone && b.user_name ? <span className="muted"> · {b.user_name}</span> : null}</span>
-                      <small>{brl(b.spent)} de {brl(b.limit)} · {Math.round(pct * 100)}%</small>
+                      <span className="budget-name">{b.category ?? "Total do mês"}</span>
+                      <strong className={pct >= 1 ? "over" : ""}>{Math.round(pct * 100)}%</strong>
                       <span className={`budget-bar ${pct >= 1 ? "over" : pct >= 0.8 ? "warn" : ""}`}><i style={{ width: `${Math.min(100, pct * 100)}%` }} /></span>
+                      <small className="budget-meta">{brl(b.spent)} de {brl(b.limit)}{everyone && b.user_name ? ` · ${b.user_name.split(" ")[0]}` : ""}</small>
                     </div>
                   );
                 })}
@@ -246,6 +255,7 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
         </>
       ) : (
         <>
+          <div className="fin-list-page">
           <div className="fin-section-head">
             <h3>Por categoria</h3>
             {cat && <button className="btn btn-sm btn-ghost" onClick={() => setCat(null)}><Icon name="x" size={14} /> {cat}</button>}
@@ -293,6 +303,7 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
               );
             })}
             {!list.length && <Empty>Nada lançado {cat ? `em ${cat} ` : ""}neste mês.</Empty>}
+          </div>
           </div>
         </>
       )}
