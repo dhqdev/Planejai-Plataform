@@ -67,6 +67,10 @@ services:
     deploy:
       mode: replicated
       replicas: 1
+      # para o antigo antes de subir o novo: só pode existir uma conexão do WhatsApp
+      update_config:
+        parallelism: 1
+        order: stop-first
       restart_policy:
         condition: any
         delay: 5s
