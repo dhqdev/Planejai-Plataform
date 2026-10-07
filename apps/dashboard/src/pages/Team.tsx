@@ -26,7 +26,7 @@ export function TeamPage() {
 
   const Card = ({ m, lead }: { m: Member; lead?: boolean }) => (
     <button className={`team-card ${lead ? "lead" : ""}`} onClick={() => setSel(m)}>
-      <span className="face-tile"><AgentFace face={m.face} size={lead ? 62 : 54} /></span>
+      <span className="face-tile"><AgentFace face={m.face} size={lead ? 70 : 76} /></span>
       <strong>{m.persona ?? m.name}</strong>
       <small>{m.focus ?? m.name}</small>
     </button>

@@ -62,7 +62,7 @@ export function AgentsPage() {
           <div className="card-pad"><h3 style={{ margin: 0 }}>Time fixo</h3></div>
           {data.map((a) => (
             <div key={a.id} className="line-item clickable" style={{ padding: "12px 16px" }} onClick={() => setSel(a)}>
-              <span className="face-tile"><AgentFace face={a.face} size={36} /></span>
+              <span className="face-tile"><AgentFace face={a.face} size={46} /></span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <strong>{a.persona ?? a.name}</strong> <span className="muted">· {a.name}</span>
                 <div className="muted ellipsis" style={{ fontSize: 12 }}>{a.model}</div>
@@ -77,7 +77,7 @@ export function AgentsPage() {
           <div className="card-pad"><h3 style={{ margin: 0 }}>Criados para clientes</h3></div>
           {(clients.data ?? []).map((a) => (
             <div key={a.id} className="line-item" style={{ padding: "12px 16px", opacity: a.active ? 1 : 0.5 }}>
-              <span className="face-tile"><AgentFace face={a.face} size={36} /></span>
+              <span className="face-tile"><AgentFace face={a.face} size={46} /></span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <strong>{a.persona ?? a.name}</strong> <span className="muted">· {a.persona && a.persona !== a.name ? `${a.name} · ` : ""}{a.owner}</span>
                 <div className="muted ellipsis" style={{ fontSize: 12 }}>{a.focus} · {a.uses} usos · {(a.tools ?? []).length} ferramentas</div>

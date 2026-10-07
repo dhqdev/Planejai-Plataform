@@ -217,7 +217,7 @@ function ClientUsage({ id }: { id: string }) {
       <h3 style={{ marginTop: 16 }}>Agentes criados para ele</h3>
       {(data.agents ?? []).map((a: any) => (
         <div key={a.id} className="line-item" style={{ opacity: a.active ? 1 : 0.5 }}>
-          <span className="face-tile" style={{ width: 38, height: 38, borderRadius: 12 }}><AgentFace face={a.face} size={30} /></span>
+          <span className="face-tile" style={{ width: 40, height: 40 }}><AgentFace face={a.face} size={40} /></span>
           <span style={{ flex: 1, minWidth: 0 }}>
             <strong>{a.persona}</strong> <span className="muted">· {a.name}</span>
             <div className="muted ellipsis" style={{ fontSize: 12 }}>{a.focus} · criado {ago(a.created_at)}</div>

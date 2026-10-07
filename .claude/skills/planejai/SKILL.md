@@ -81,7 +81,7 @@ deploy/swarm-traefik-stack.yml  Swarm + Traefik (network_public), domínio autop
 1. Novo item em `SPECIALISTS` (`team.ts`) com `role` claro (é o que o CTO lê para decidir delegar).
 2. Nova rota `agent:<id>` em `ROUTE_DEFAULTS` (`llm/router.ts`) com o modelo mais barato que dá conta.
 3. Rótulo em `AGENT_LABEL` (`apps/dashboard/src/components.tsx`).
-4. Apelido e carinha: `persona` e `face` (cor 0-7 da paleta, olhos, boca, acessório) no `team.ts`, e a mesma entrada em `CORE_FACES` (`apps/dashboard/src/faces.tsx`).
+4. Apelido e carinha: `persona` e `face` (pessoinha a traço: fundo pastel 0-7, olhos, boca, cabelo/acessório em `extra`) no `team.ts`, e a mesma entrada em `CORE_FACES` (`apps/dashboard/src/faces.tsx`).
 O CTO ganha automaticamente `ask_<id>` e os outros especialistas ganham `consult_<id>`.
 
 ### WhatsApp (Baileys)
@@ -98,7 +98,7 @@ O CTO ganha automaticamente `ask_<id>` e os outros especialistas ganham `consult
 - Contatos: `send_to_contact` ("manda esse look pro Giovani") só envia para quem aceitou o convite.
 - Rota nova no `dashboard.ts`: se mostra dados de pessoas, vai no bloco com escopo e filtra com `scopeUserId(req.account)` (null = tudo); se é configuração/custo/sistema, vai no bloco `requireSuper`.
 - Abas do cliente (`tabs.ts`, `GET /api/me/tabs`): todo mundo começa só com Início, Agenda, Finanças e De olho. Módulos (`OPTIONAL`: convites, memorias, meu_time) e até 3 abas sob medida (`/aba/:slug`, feitas de widgets do Painel) são liberados pela reunião noturna ou pelo super admin em Clientes. Rota de módulo no `App.tsx` só existe se `has(modulo)`.
-- Visual: neutro; o degradê da marca (`--grad`: #FF7A1A, #FF4458, #E23382, #8B2BE2) só em pontos de destaque (mascote, item ativo do menu e da barra, topo do card de Finanças, barras de limite, borda do Téo). Categorias usam a paleta (`CATEGORY_COLORS`, igual à dos gráficos). Não pinte o resto.
+- Visual: neutro; o degradê da marca (`--grad`: #FF7A1A, #FF4458, #E23382, #8B2BE2) só em pontos de destaque (item ativo do menu e da barra, topo do card de Finanças, barras de limite, borda do Téo). Categorias usam a paleta (`CATEGORY_COLORS`, igual à dos gráficos). Não pinte o resto.
 - Página nova no dashboard: rota em `App.tsx` dentro do ramo certo (`isSuper` ou admin) e item no menu com ícone de `icons.tsx` (nada de emoji). Widget novo do Painel: entrada em `WIDGETS` de `pages/Dashboard.tsx` (tamanhos s/m/l/xl; o layout de cada conta fica em `/api/me/dashboard`). O teste `features.e2e.test.ts` confere que admin leva 403 nas rotas de super admin; acrescente as novas lá.
 
 ### Memória curta, retenção e mídia

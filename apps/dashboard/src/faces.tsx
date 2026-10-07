@@ -1,7 +1,10 @@
+import { useId } from "react";
+
 /**
- * Carinhas dos agentes: um robozinho de corpo colorido (paleta do Planejai) com visor branco,
- * olhos, boca e um acessório. Tudo SVG, sem imagem. Os agentes novos ganham uma combinação
- * sorteada pelo servidor (faceFor), então cada um tem a sua.
+ * Carinhas dos agentes: pessoinhas desenhadas a traço (preto e branco) dentro de um círculo pastel.
+ * O servidor guarda só a combinação (faceFor), então cada agente novo ganha a sua:
+ * color = fundo pastel, eyes = olhar, mouth = boca, extra = cabelo/acessório
+ * (crown coque, antenna cacheado, cap boné, bow cabelo comprido, headset fone, leaf espetado, none repartido).
  */
 export interface Face {
   color: number;
@@ -10,143 +13,145 @@ export interface Face {
   extra: string;
 }
 
-export const FACE_COLORS = ["#FF7A1A", "#FF4458", "#E23382", "#B830C8", "#8B2BE2", "#5B45E8", "#2F7BEA", "#16A3A3"];
-const INK = "#18181B";
+/** Fundos pastel, um tom claro de cada cor da paleta. */
+export const FACE_COLORS = ["#FFE6D3", "#FFE0E3", "#FBE3F0", "#F3E2F8", "#EAE2FC", "#E0E5FD", "#DCEBFB", "#D9F1EC"];
+const INK = "#111111";
+const SKIN = "#FFFFFF";
+const line = { stroke: INK, strokeWidth: 2.4, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
 
-function Eyes({ kind }: { kind: string }) {
-  const L = 25;
-  const R = 39;
-  const Y = 37;
-  const dot = (x: number) => (
-    <g key={x}>
-      <circle cx={x} cy={Y} r={3.4} fill={INK} />
-      <circle cx={x + 1.1} cy={Y - 1.2} r={1} fill="#fff" />
-    </g>
-  );
-  const happy = (x: number) => <path key={x} d={`M${x - 3.5} ${Y + 1} q3.5 -4.5 7 0`} stroke={INK} strokeWidth={2.4} fill="none" strokeLinecap="round" />;
+function HairBack({ kind }: { kind: string }) {
+  if (kind === "antenna")
+    return (
+      <g fill={INK}>
+        {[[35, 31, 8.5], [43, 22, 9], [55, 21, 9.5], [64, 29, 8.5], [67, 40, 6.5], [33, 41, 6.5]].map(([x, y, r]) => <circle key={`${x}-${y}`} cx={x} cy={y} r={r} />)}
+      </g>
+    );
+  if (kind === "bow") return <path d="M31 42 C30 25 40 18 50 18 C61 18 70 25 69 42 L71 69 Q62 73 57 66 L43 66 Q38 73 29 69 Z" fill={INK} />;
+  if (kind === "crown") return <circle cx={48} cy={19} r={5.5} fill={INK} />;
+  return null;
+}
+
+function HairFront({ kind }: { kind: string }) {
   switch (kind) {
-    case "happy":
-      return <>{happy(L)}{happy(R)}</>;
-    case "wide":
+    case "crown":
+      return <path d="M33 44 C31 29 40 22 50 22 C60 22 67 27 67 37 C61 36 55 33 52 29 C48 34 41 36 37 45 Z" fill={INK} />;
+    case "antenna":
+      return <path d="M34 43 C35 30 45 25 54 26 C61 27 67 32 66 41 C60 34 52 33 46 35 C41 37 37 39 34 43 Z" fill={INK} />;
+    case "cap":
       return (
         <>
-          {[L, R].map((x) => (
-            <g key={x}>
-              <circle cx={x} cy={Y} r={4.6} fill={INK} />
-              <circle cx={x + 1.4} cy={Y - 1.6} r={1.6} fill="#fff" />
-              <circle cx={x - 1.4} cy={Y + 1.6} r={0.7} fill="#fff" />
-            </g>
-          ))}
+          <path d="M33 40 C33 27 41 21 50 21 C59 21 67 27 67 40 Z" fill={INK} />
+          <path d="M52 37 L77 38 Q79 40.5 77 43 L53 41 Z" fill={INK} />
         </>
       );
+    case "bow":
+      return <path d="M34 43 C34 29 42 23 50 23 C58 23 66 29 66 43 C61 35 55 31 50 31 C46 34 40 37 34 43 Z" fill={INK} />;
+    case "headset":
+      return (
+        <>
+          <path d="M34 41 C33 28 41 22 51 22 C60 22 67 28 66 39 C62 33 56 30 50 30 C46 34 40 37 34 41 Z" fill={INK} />
+          <path d="M31 46 C31 19 69 19 69 46" fill="none" {...line} strokeWidth={3} />
+          <rect x={27.5} y={41} width={7} height={11} rx={3.5} fill={INK} />
+          <rect x={65.5} y={41} width={7} height={11} rx={3.5} fill={INK} />
+          <path d="M31 51 Q33 60 43 59" fill="none" {...line} strokeWidth={2} />
+        </>
+      );
+    case "leaf":
+      return <path d="M34 41 L35 28 L40 31 L42 21 L47 27 L51 19 L54 26 L59 21 L60 28 L66 26 L66 40 C60 33 50 31 43 34 C39 35 36 38 34 41 Z" fill={INK} />;
+    default:
+      return <path d="M34 42 C33 28 41 22 51 22 C60 22 67 28 66 40 C62 33 56 30 50 30 C46 34 40 37 34 42 Z" fill={INK} />;
+  }
+}
+
+function Eyes({ kind }: { kind: string }) {
+  const L = 44.5;
+  const R = 56.5;
+  const Y = 46;
+  const dot = (x: number) => <ellipse key={x} cx={x} cy={Y} rx={1.6} ry={2.2} fill={INK} />;
+  const brow = (x: number, tilt = 0) => <path key={`b${x}`} d={`M${x - 3} ${Y - 5 + tilt} q3 -1.8 6 ${-tilt}`} fill="none" {...line} strokeWidth={2} />;
+  switch (kind) {
+    case "happy":
+      return <>{[L, R].map((x) => <path key={x} d={`M${x - 2.6} ${Y + 0.8} q2.6 -3.4 5.2 0`} fill="none" {...line} strokeWidth={2} />)}{brow(L)}{brow(R)}</>;
+    case "wide":
+      return <>{[L, R].map((x) => <g key={x}><circle cx={x} cy={Y} r={2.6} fill={INK} /><circle cx={x + 0.8} cy={Y - 0.9} r={0.8} fill="#fff" /></g>)}{brow(L, -1)}{brow(R, 1)}</>;
     case "wink":
-      return <>{dot(L)}{happy(R)}</>;
+      return <>{dot(L)}<path d={`M${R - 2.6} ${Y} q2.6 -2.6 5.2 0`} fill="none" {...line} strokeWidth={2} />{brow(L)}{brow(R)}</>;
     case "glasses":
       return (
         <>
-          <circle cx={L} cy={Y} r={5.6} stroke={INK} strokeWidth={2} fill="none" />
-          <circle cx={R} cy={Y} r={5.6} stroke={INK} strokeWidth={2} fill="none" />
-          <path d={`M${L + 5.6} ${Y} h${R - L - 11.2}`} stroke={INK} strokeWidth={2} />
-          <circle cx={L} cy={Y} r={2.2} fill={INK} />
-          <circle cx={R} cy={Y} r={2.2} fill={INK} />
+          <circle cx={L} cy={Y} r={4.2} fill="none" {...line} strokeWidth={2} />
+          <circle cx={R} cy={Y} r={4.2} fill="none" {...line} strokeWidth={2} />
+          <path d={`M${L + 4.2} ${Y} h${R - L - 8.4}`} {...line} strokeWidth={2} />
+          {dot(L)}
+          {dot(R)}
         </>
       );
     case "sleepy":
       return (
         <>
           {[L, R].map((x) => (
-            <path key={x} d={`M${x - 3.5} ${Y - 0.5} q3.5 3.5 7 0`} stroke={INK} strokeWidth={2.4} fill="none" strokeLinecap="round" />
+            <g key={x}>
+              <path d={`M${x - 3} ${Y - 1.2} h6`} {...line} strokeWidth={2.2} />
+              <ellipse cx={x} cy={Y + 0.6} rx={1.3} ry={1.4} fill={INK} />
+            </g>
           ))}
+          {brow(L, 1)}
+          {brow(R, -1)}
         </>
       );
     default:
-      return <>{dot(L)}{dot(R)}</>;
+      return <>{dot(L)}{dot(R)}{brow(L, 0.5)}{brow(R, -0.5)}</>;
   }
 }
 
 function Mouth({ kind }: { kind: string }) {
-  const p = { stroke: INK, strokeWidth: 2.2, fill: "none", strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   switch (kind) {
     case "open":
-      return <path d="M28 44 q4 6.5 8 0 z" fill={INK} stroke={INK} strokeWidth={1.4} strokeLinejoin="round" />;
+      return <path d="M46.5 56 q4 5 8 0 z" fill={INK} {...line} strokeWidth={1.6} />;
     case "cat":
-      return <path d="M27 44 q2.5 3 5 0 q2.5 3 5 0" {...p} />;
+      return <path d="M45.5 56 q2.5 2.5 5 0 q2.5 2.5 5 0" fill="none" {...line} strokeWidth={2} />;
     case "grin":
-      return <path d="M27 43.5 h10 q0 5.5 -5 5.5 q-5 0 -5 -5.5 z" fill="#fff" stroke={INK} strokeWidth={2} strokeLinejoin="round" />;
+      return <path d="M46 55.5 h9 q0 4.5 -4.5 4.5 q-4.5 0 -4.5 -4.5 z" fill="#fff" {...line} strokeWidth={1.8} />;
     case "o":
-      return <ellipse cx={32} cy={45.5} rx={2.2} ry={2.6} fill={INK} />;
+      return <ellipse cx={50.5} cy={57} rx={1.5} ry={1.9} fill={INK} />;
     case "flat":
-      return <path d="M28.5 45.5 h7" {...p} />;
+      return <path d="M47.5 57 q3 1 6 -0.5" fill="none" {...line} strokeWidth={2} />;
     default:
-      return <path d="M27.5 44 q4.5 4.5 9 0" {...p} />;
+      return <path d="M46.5 55.5 q4 3.5 8 0" fill="none" {...line} strokeWidth={2} />;
   }
 }
-
-function Extra({ kind, color }: { kind: string; color: string }) {
-  switch (kind) {
-    case "antenna":
-      return (
-        <>
-          <path d="M32 18 v-9" stroke={color} strokeWidth={3} strokeLinecap="round" />
-          <circle cx={32} cy={7} r={4} fill={color} />
-        </>
-      );
-    case "cap":
-      return (
-        <>
-          <path d="M12 26 C12 13 21 9 32 9 C43 9 52 13 52 26 Z" fill={INK} />
-          <path d="M42 23 h17 a2.5 2.5 0 0 1 0 5 h-17 z" fill={INK} />
-          <circle cx={32} cy={9.5} r={2.2} fill={color} />
-        </>
-      );
-    case "bow":
-      return (
-        <g transform="translate(47 15) rotate(18)">
-          <path d="M0 0 L-8 -5.5 V5.5 Z M0 0 L8 -5.5 V5.5 Z" fill="#FF4458" stroke="#fff" strokeWidth={1.4} strokeLinejoin="round" />
-          <circle r={2.6} fill="#FF4458" stroke="#fff" strokeWidth={1.4} />
-        </g>
-      );
-    case "headset":
-      return (
-        <>
-          <path d="M8 36 a24 24 0 0 1 48 0" stroke={INK} strokeWidth={3} fill="none" strokeLinecap="round" />
-          <rect x={3} y={31} width={8} height={14} rx={4} fill={INK} />
-          <rect x={53} y={31} width={8} height={14} rx={4} fill={INK} />
-          <path d="M7 44 q1 9 13 8" stroke={INK} strokeWidth={2} fill="none" strokeLinecap="round" />
-          <circle cx={21} cy={52} r={2.2} fill={INK} />
-        </>
-      );
-    case "leaf":
-      return (
-        <>
-          <path d="M32 18 v-7" stroke="#16A3A3" strokeWidth={2.6} strokeLinecap="round" />
-          <path d="M32 12 C28 4 20 4 18 6 C20 12 27 13 32 12 Z" fill="#16A3A3" />
-          <path d="M32 11 C35 5 41 4 44 6 C42 11 37 12 32 11 Z" fill="#2FC4A8" />
-        </>
-      );
-    case "crown":
-      return <path d="M19 19 L21 7 L27 13 L32 5 L37 13 L43 7 L45 19 Z" fill="#FFB524" stroke="#fff" strokeWidth={1.4} strokeLinejoin="round" />;
-    default:
-      return null;
-  }
-}
-
-/** Acessórios que ficam na frente do corpo (o resto fica atrás, saindo pelo topo). */
-const FRONT = new Set(["cap", "headset", "bow"]);
 
 export function AgentFace({ face, size = 40, title }: { face?: Face | null; size?: number; title?: string }) {
-  const f = face ?? { color: 4, eyes: "dot", mouth: "smile", extra: "none" };
-  const color = FACE_COLORS[((f.color % FACE_COLORS.length) + FACE_COLORS.length) % FACE_COLORS.length]!;
+  const clip = useId().replace(/:/g, "");
+  const f = face ?? { color: 5, eyes: "dot", mouth: "smile", extra: "none" };
+  const idx = ((f.color % FACE_COLORS.length) + FACE_COLORS.length) % FACE_COLORS.length;
+  const darkShirt = idx % 2 === 0;
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" role="img" aria-label={title ?? "agente"} className="agent-face">
-      {!FRONT.has(f.extra) && <Extra kind={f.extra} color={color} />}
-      <rect x={9} y={18} width={46} height={42} rx={17} fill={color} />
-      <rect x={14.5} y={27} width={35} height={25} rx={12.5} fill="#fff" />
-      <circle cx={19.5} cy={45} r={2.6} fill={color} opacity={0.35} />
-      <circle cx={44.5} cy={45} r={2.6} fill={color} opacity={0.35} />
-      <Eyes kind={f.eyes} />
-      <Mouth kind={f.mouth} />
-      {FRONT.has(f.extra) && <Extra kind={f.extra} color={color} />}
+    <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={title ?? "agente"} className="agent-face">
+      <defs>
+        <clipPath id={clip}>
+          <circle cx={50} cy={50} r={50} />
+        </clipPath>
+      </defs>
+      <circle cx={50} cy={50} r={50} fill={FACE_COLORS[idx]} />
+      <g clipPath={`url(#${clip})`}>
+        <g transform="translate(50 62) scale(1.2) translate(-50 -56)">
+        <HairBack kind={f.extra} />
+        {/* corpo: jaqueta aberta e camiseta */}
+        <path d="M12 106 C14 88 22 79 38 75 L62 75 C78 79 86 88 88 106 Z" fill={SKIN} {...line} />
+        <path d="M41 75 L44 106 L56 106 L59 75 Z" fill={darkShirt ? INK : SKIN} {...line} />
+        {darkShirt && <path d="M48 86 L53 90 L48.5 91 L53 96" fill="none" stroke="#fff" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />}
+        <path d="M38 75 L33 83 L39 97 M62 75 L67 83 L61 97" fill="none" {...line} />
+        <path d="M44 64 L44 76 Q50 79 56 76 L56 64" fill={SKIN} {...line} />
+        {/* orelha e cabeça */}
+        <ellipse cx={34.5} cy={48} rx={3.4} ry={5.2} fill={SKIN} {...line} />
+        <path d="M34 45 C34 30 42 24 50 24 C59 24 66 30 66 45 C66 57 60 66 50 66 C41 66 34 58 34 45 Z" fill={SKIN} {...line} />
+        <HairFront kind={f.extra} />
+        <Eyes kind={f.eyes} />
+        <path d="M49.5 50 q3 -1.2 3.2 1.2 q-0.6 2 -4 1.2" fill="none" {...line} strokeWidth={1.8} />
+        <Mouth kind={f.mouth} />
+        </g>
+      </g>
     </svg>
   );
 }

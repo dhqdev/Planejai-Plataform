@@ -75,7 +75,7 @@ export function TeamMap() {
           return (
             <button key={n.id} className={`agent ${n.kind}`} style={{ left: `${p.x}%`, top: `${p.y}%` }} onClick={() => setOpen(n)}>
               <span className="bubble-ico" style={{ position: "relative" }}>
-                <AgentFace face={n.face} size={n.kind === "cto" ? 56 : n.kind === "client" ? 34 : 42} title={n.persona ?? n.name} />
+                <AgentFace face={n.face} size={n.kind === "cto" ? 74 : n.kind === "client" ? 48 : 58} title={n.persona ?? n.name} />
                 {act > 0 && <span className="pulse" />}
               </span>
               <span className="agent-name">{n.persona ?? n.name}</span>
