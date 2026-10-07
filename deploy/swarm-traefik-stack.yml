@@ -32,6 +32,8 @@ x-env: &env
   N8N_API_KEY: ""
   # Automações que cada cliente pode ter (criadas pelo assistente no n8n)
   AUTOMATIONS_PER_USER: "5"
+  # --- Login no painel: navegador novo recebe código de 6 dígitos no WhatsApp (OWNER_PHONES para o dono) ---
+  LOGIN_CODE: "true"
   # --- Redis próprios: memória curta das conversas (24h) e cache descartável ---
   REDIS_URL: redis://redis:6379
   REDIS_CACHE_URL: redis://redis-cache:6379
