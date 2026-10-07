@@ -44,7 +44,7 @@ function Wardrobe({ onClose }: { onClose: () => void }) {
     if (!id || next[slot] === id) delete next[slot];
     else next[slot] = id;
     setOutfit(next);
-    setPreview(id && next[slot] ? "love" : "idle");
+    setPreview(id && next[slot] ? "excited" : "idle");
   };
 
   const label = MOODS.find((m) => m.id === preview)?.label ?? "";
@@ -55,11 +55,12 @@ function Wardrobe({ onClose }: { onClose: () => void }) {
       <div className="mochi-stage">
         <div
           role="button"
+          className="mochi-poke"
           aria-label="Cutucar o Mochi"
           style={{ cursor: "pointer" }}
           onClick={() => {
             haptic(14);
-            const pokes: Mood[] = ["slap", "dizzy", "surprised", "love", "annoyed", "dancing"];
+            const pokes: Mood[] = ["slap", "dizzy", "surprised", "love", "angry", "laughing", "shy", "dancing", "starstruck", "yummy"];
             setPreview(pokes[Math.floor(Math.random() * pokes.length)]);
           }}
         >
@@ -80,7 +81,7 @@ function Wardrobe({ onClose }: { onClose: () => void }) {
             </MochiTile>
             {ITEMS.filter((i) => i.slot === slot.id).map((item) => (
               <MochiTile key={item.id} label={item.label.toLowerCase()} active={outfit[slot.id] === item.id} onClick={() => wear(slot.id, item.id)}>
-                <Mochi size={64} still outfit={{ ...outfit, [slot.id]: item.id }} />
+                <Mochi size={74} still outfit={{ ...outfit, [slot.id]: item.id }} />
               </MochiTile>
             ))}
           </div>
@@ -94,7 +95,7 @@ function Wardrobe({ onClose }: { onClose: () => void }) {
       <div className="mochi-grid">
         {MOODS.map((m) => (
           <MochiTile key={m.id} label={m.label} active={preview === m.id} onClick={() => { haptic(6); setPreview(m.id); }}>
-            <Mochi size={64} mood={m.id} outfit={{ ...outfit, eyes: undefined }} still={preview !== m.id} />
+            <Mochi size={74} mood={m.id} outfit={{ ...outfit, eyes: undefined }} still={preview !== m.id} />
           </MochiTile>
         ))}
       </div>

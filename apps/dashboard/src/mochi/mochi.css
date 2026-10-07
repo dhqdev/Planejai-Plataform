@@ -1,138 +1,190 @@
-/* Mochi: animações do mascote (só CSS, roda leve no celular) */
+/* Mochi: animações do mascote (só CSS, leve no celular). Princípio: tudo respira, nada fica parado. */
 .mochi { display: block; overflow: visible; color: var(--muted, #888); flex-shrink: 0; }
-.mochi * { transform-box: fill-box; transform-origin: center; }
+.mochi .m-eye, .mochi .m-twinkle, .mochi .m-float-heart, .mochi .m-orbit, .mochi .m-vein, .mochi .m-sweat, .mochi .m-badge, .mochi .m-card, .mochi .m-impact, .mochi .m-glow, .mochi .m-shadow, .mochi .m-floor, .mochi .m-spin, .mochi .m-beat, .mochi .m-twirl, .mochi .m-yawn, .mochi .m-blink, .mochi .m-eyes, .mochi .m-face, .mochi .m-look, .mochi .m-wear, .mochi .m-pulse, .mochi .m-sway, .mochi .m-blush, .mochi .m-rain, .mochi .m-typing, .mochi .m-zzz text, .mochi .m-notes text { transform-box: fill-box; transform-origin: center; }
 .mochi .m-move, .mochi .m-pop, .mochi .m-squish { transform-box: view-box; transform-origin: 60px 106px; }
-.mochi .m-wear { transition: transform 0.35s cubic-bezier(.3, 1.4, .5, 1); }
 .mochi .m-look { transition: transform 0.18s ease-out; }
-.mochi .m-eyes { transition: transform 0.4s ease; }
+.mochi .m-eyes, .mochi .m-face { transition: transform 0.4s ease; }
+.mochi .m-wear { transition: transform 0.35s cubic-bezier(.3, 1.4, .5, 1); }
 .mochi .m-tint-stop { transition: stop-color 0.5s ease; }
 
-/* respiração / flutuar */
-.mochi .m-move { animation: m-bob 3.4s ease-in-out infinite; }
-.mochi .m-shadow { animation: m-shadow 3.4s ease-in-out infinite; }
-.mochi .m-pop { animation: m-change 0.42s cubic-bezier(.3, 1.6, .5, 1) both; }
-.mochi .m-blink { animation: m-blink 4.8s infinite; }
+/* ---------- base: flutua, respira (estica e achata), olha em volta e pisca ---------- */
+.mochi .m-move { animation: m-float 4.2s ease-in-out infinite; }
+.mochi .m-squish { animation: m-breath 4.2s ease-in-out infinite; }
+.mochi .m-shadow { animation: m-shadow 4.2s ease-in-out infinite; }
+.mochi .m-floor { animation: m-floor 4.2s ease-in-out infinite; }
+.mochi .m-pop { animation: m-change 0.6s cubic-bezier(.25, 1.7, .45, 1) both; }
+.mochi .m-blink { animation: m-blink 5.2s infinite; }
+.mochi.m-idle .m-eyes, .mochi.m-happy .m-face, .mochi.m-tired .m-face { animation: m-lookaround 9s ease-in-out infinite; }
 
-@keyframes m-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
-@keyframes m-shadow { 0%, 100% { transform: scale(1); opacity: 0.22; } 50% { transform: scale(0.88); opacity: 0.15; } }
-@keyframes m-change { 0% { transform: scale(0.94, 1.06); } 60% { transform: scale(1.04, 0.96); } 100% { transform: none; } }
-@keyframes m-blink { 0%, 93%, 100% { transform: scaleY(1); } 95.5% { transform: scaleY(0.12); } }
+@keyframes m-float { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-3.5px) rotate(1deg); } }
+@keyframes m-breath { 0%, 100% { transform: scale(1.025, 0.975); } 50% { transform: scale(0.985, 1.02); } }
+@keyframes m-shadow { 0%, 100% { transform: scale(1); opacity: 0.26; } 50% { transform: scale(0.86); opacity: 0.16; } }
+@keyframes m-floor { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.9); } }
+@keyframes m-change { 0% { transform: scale(0.86, 1.12); } 35% { transform: scale(1.09, 0.92); } 65% { transform: scale(0.97, 1.03); } 100% { transform: none; } }
+@keyframes m-blink { 0%, 90%, 94%, 96%, 100% { transform: scaleY(1); } 92%, 95% { transform: scaleY(0.1); } }
+@keyframes m-lookaround {
+  0%, 30%, 100% { transform: translate(0, 0); }
+  35%, 48% { transform: translate(-3px, -0.5px); }
+  53%, 66% { transform: translate(3px, 0.5px); }
+  71% { transform: translate(0, 0); }
+}
 
-/* trabalhando: pulinhos rápidos */
-.mochi.m-working .m-move { animation: m-hopsmall 0.9s ease-in-out infinite; }
-.mochi.m-working .m-shadow { animation: m-shadow 0.9s ease-in-out infinite; }
-@keyframes m-hopsmall { 0%, 100% { transform: translateY(0) scale(1.03, 0.97); } 50% { transform: translateY(-4px) scale(0.98, 1.02); } }
+/* brilho atrás e reflexo no chão */
+.mochi .m-glow { opacity: 0.3; animation: m-glow 3s ease-in-out infinite; }
+@keyframes m-glow { 0%, 100% { opacity: 0.18; transform: scale(0.94); } 50% { opacity: 0.38; transform: scale(1.05); } }
 
-/* digitando (badge de três pontinhos) */
+/* ---------- estados do app ---------- */
+.mochi.m-working .m-move { animation: m-hopsmall 0.8s ease-in-out infinite; }
+.mochi.m-working .m-squish { animation: m-squash-fast 0.8s ease-in-out infinite; }
+.mochi.m-working .m-shadow { animation: m-shadow 0.8s ease-in-out infinite; }
+@keyframes m-hopsmall { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes m-squash-fast { 0%, 100% { transform: scale(1.06, 0.94); } 50% { transform: scale(0.97, 1.04); } }
+
 .mochi .m-typing { animation: m-typing 1.1s ease-in-out infinite; }
-@keyframes m-typing { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-1px); } }
-.mochi .m-badge { animation: m-badge-in 0.35s cubic-bezier(.3, 1.6, .5, 1) both; }
+@keyframes m-typing { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-1.2px); } }
+.mochi .m-badge { animation: m-badge-in 0.45s cubic-bezier(.3, 1.8, .5, 1) both; }
 @keyframes m-badge-in { from { transform: scale(0); } to { transform: scale(1); } }
 
-/* pensando: inclina devagar */
-.mochi.m-thinking .m-squish { animation: m-tilt 3s ease-in-out infinite; }
-@keyframes m-tilt { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+.mochi.m-thinking .m-squish { animation: m-tilt 3.2s ease-in-out infinite; }
+.mochi.m-thinking .m-eyes { animation: m-ponder 3.2s ease-in-out infinite; }
+@keyframes m-tilt { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(4deg); } }
+@keyframes m-ponder { 0%, 100% { transform: translate(2px, -1.5px); } 50% { transform: translate(-1px, -2px); } }
 
-/* pesquisando: olhos procuram de um lado para o outro */
-.mochi.m-searching .m-eyes { animation: m-scan 2s ease-in-out infinite; }
-@keyframes m-scan { 0%, 100% { transform: translateX(-3.5px); } 45%, 55% { transform: translateX(3.5px); } }
+.mochi.m-searching .m-eyes { animation: m-scan 1.8s ease-in-out infinite; }
+.mochi.m-searching .m-move { animation: m-lean 1.8s ease-in-out infinite; }
+@keyframes m-scan { 0%, 100% { transform: translateX(-4px); } 45%, 55% { transform: translateX(4px); } }
+@keyframes m-lean { 0%, 100% { transform: translateX(-1.5px) rotate(-2deg); } 50% { transform: translateX(1.5px) rotate(2deg); } }
 
-/* pergunta: cabeça de lado */
-.mochi.m-question .m-squish { transform: rotate(-6deg); }
+.mochi.m-question .m-squish { animation: m-tilt-q 2.6s ease-in-out infinite; }
+@keyframes m-tilt-q { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(-4deg) scale(1.01, 0.99); } }
+.mochi.m-approval .m-move { animation: m-nudge 1.6s ease-in-out infinite; }
+@keyframes m-nudge { 0%, 70%, 100% { transform: translateY(0); } 78% { transform: translateY(-4px); } 86% { transform: translateY(0); } 92% { transform: translateY(-2px); } }
 
-/* pronto: pulo feliz */
-.mochi.m-finished .m-move { animation: m-jump 1.3s cubic-bezier(.4, 0, .4, 1) infinite; }
-.mochi.m-finished .m-shadow { animation: m-shadow-jump 1.3s cubic-bezier(.4, 0, .4, 1) infinite; }
-@keyframes m-jump {
-  0%, 100% { transform: translateY(0) scale(1.06, 0.94); }
-  15% { transform: translateY(0) scale(1); }
-  40% { transform: translateY(-9px) scale(0.97, 1.03); }
-  65% { transform: translateY(0) scale(1.05, 0.95); }
-  80% { transform: translateY(0) scale(1); }
-}
-@keyframes m-shadow-jump { 0%, 15%, 65%, 100% { transform: scale(1); } 40% { transform: scale(0.75); opacity: 0.12; } }
+.mochi.m-finished .m-move, .mochi.m-greeting .m-move, .mochi.m-excited .m-move { animation: m-jump 1.2s cubic-bezier(.4, 0, .4, 1) infinite; }
+.mochi.m-finished .m-squish, .mochi.m-greeting .m-squish, .mochi.m-excited .m-squish { animation: m-jump-squash 1.2s cubic-bezier(.4, 0, .4, 1) infinite; }
+.mochi.m-finished .m-shadow, .mochi.m-greeting .m-shadow, .mochi.m-excited .m-shadow { animation: m-shadow-jump 1.2s cubic-bezier(.4, 0, .4, 1) infinite; }
+@keyframes m-jump { 0%, 20%, 70%, 100% { transform: translateY(0); } 45% { transform: translateY(-11px); } }
+@keyframes m-jump-squash { 0%, 100% { transform: scale(1.1, 0.9); } 20% { transform: scale(0.94, 1.08); } 45% { transform: scale(0.98, 1.03); } 70% { transform: scale(1.1, 0.9); } 82% { transform: scale(0.98, 1.02); } }
+@keyframes m-shadow-jump { 0%, 20%, 70%, 100% { transform: scale(1); } 45% { transform: scale(0.7); opacity: 0.1; } }
+.mochi.m-greeting .m-squish { animation-name: m-hello; }
+@keyframes m-hello { 0%, 100% { transform: scale(1.08, 0.92) rotate(0); } 25% { transform: scale(0.95, 1.06) rotate(-7deg); } 45% { transform: rotate(7deg); } 70% { transform: scale(1.08, 0.92); } }
+
+.mochi.m-error .m-move, .mochi.m-slap .m-move { animation: m-shake 1.9s ease-in-out infinite; }
+@keyframes m-shake { 0%, 34%, 100% { transform: translateX(0); } 4%, 14%, 24% { transform: translateX(-3px) rotate(-2deg); } 9%, 19%, 29% { transform: translateX(3px) rotate(2deg); } }
+.mochi.m-slap .m-squish { animation: m-slap 1.9s cubic-bezier(.2, .9, .3, 1) infinite; }
+@keyframes m-slap { 0% { transform: none; } 4% { transform: scale(0.86, 1.08) rotate(-10deg); } 16% { transform: rotate(4deg); } 30%, 100% { transform: none; } }
+.mochi .m-impact { animation: m-impact 1.9s ease-out infinite; }
+@keyframes m-impact { 0%, 3% { opacity: 0; transform: scale(0.5); } 9% { opacity: 1; transform: scale(1.1); } 45%, 100% { opacity: 0; } }
+
+.mochi.m-ratelimit .m-squish, .mochi.m-sad .m-squish, .mochi.m-tired .m-squish { animation: m-droop 4s ease-in-out infinite; }
+@keyframes m-droop { 0%, 100% { transform: scale(1.05, 0.94); } 50% { transform: scale(1.08, 0.91); } }
+.mochi.m-sad .m-move, .mochi.m-tired .m-move, .mochi.m-crying .m-move { animation: m-float-slow 5s ease-in-out infinite; }
+@keyframes m-float-slow { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
+
+.mochi .m-card { animation: m-card 1.5s ease-in-out infinite; }
+@keyframes m-card { 0% { opacity: 0; transform: translateY(10px) scale(0.8); } 30%, 70% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-10px); } }
+.mochi.m-upload .m-move { animation: m-hopsmall 1.5s ease-in-out infinite; }
+
+/* ---------- sentimentos ---------- */
+.mochi.m-crying .m-squish { animation: m-sob 0.9s ease-in-out infinite; }
+@keyframes m-sob { 0%, 100% { transform: scale(1.04, 0.96); } 50% { transform: scale(1.0, 1.0) translateY(-1px); } }
+.mochi .m-tear { stroke-dasharray: 22; animation: m-tear 1.4s ease-in infinite; }
+@keyframes m-tear { 0% { stroke-dashoffset: 22; opacity: 0.4; } 60% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: -22; opacity: 0.6; } }
+.mochi .m-rain { animation: m-rain 1.3s linear infinite; }
+@keyframes m-rain { 0% { transform: translateY(-8px); opacity: 0; } 20% { opacity: 0.7; } 100% { transform: translateY(26px); opacity: 0; } }
+
+.mochi.m-angry .m-move { animation: m-fume 0.5s ease-in-out infinite; }
+.mochi.m-angry .m-squish { animation: m-puff 1.6s ease-in-out infinite; }
+@keyframes m-fume { 0%, 100% { transform: translateX(-0.8px); } 50% { transform: translateX(0.8px); } }
+@keyframes m-puff { 0%, 100% { transform: scale(1.04, 0.96); } 50% { transform: scale(1.08, 0.94); } }
+.mochi .m-vein { animation: m-vein 0.8s ease-in-out infinite; transform-box: fill-box; }
+@keyframes m-vein { 0%, 100% { transform: scale(0.85); } 50% { transform: scale(1.15); } }
+.mochi .m-sweat { animation: m-sweat 2.2s ease-in infinite; }
+@keyframes m-sweat { 0% { opacity: 0; transform: translateY(-3px); } 20% { opacity: 1; } 80% { opacity: 1; transform: translateY(6px); } 100% { opacity: 0; transform: translateY(8px); } }
+
+.mochi.m-sleeping .m-move { animation: m-float-slow 5s ease-in-out infinite; }
+.mochi.m-sleeping .m-squish, .mochi.m-sleepy .m-squish { animation: m-snore 3.8s ease-in-out infinite; }
+.mochi.m-sleeping .m-blink, .mochi.m-sleepy .m-blink, .mochi.m-tired .m-blink { animation: none; }
+@keyframes m-snore { 0%, 100% { transform: scale(1.06, 0.93); } 50% { transform: scale(0.99, 1.02); } }
+.mochi.m-sleepy .m-move { animation: m-nod 3.8s ease-in-out infinite; }
+@keyframes m-nod { 0%, 60%, 100% { transform: rotate(0); } 75% { transform: rotate(6deg) translateY(1px); } 85% { transform: rotate(-1deg); } }
+.mochi .m-zzz text { animation: m-z 2.8s ease-in infinite; opacity: 0; }
+.mochi .m-zzz text:nth-child(2) { animation-delay: 0.9s; }
+.mochi .m-zzz text:nth-child(3) { animation-delay: 1.8s; }
+@keyframes m-z { 0% { opacity: 0; transform: translate(0, 4px) scale(0.6) rotate(-10deg); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(5px, -9px) scale(1.15) rotate(8deg); } }
+.mochi .m-yawn { animation: m-yawn 3.8s ease-in-out infinite; }
+@keyframes m-yawn { 0%, 100% { transform: scale(0.4); } 40%, 60% { transform: scale(1.2); } }
+
+.mochi .m-spin { animation: m-spin 1.2s linear infinite; }
+@keyframes m-spin { to { transform: rotate(360deg); } }
+.mochi .m-orbit { animation: m-orbit 2.4s ease-in-out infinite; }
+@keyframes m-orbit { 0% { transform: rotate(0) scale(0.8); opacity: 0.5; } 50% { transform: rotate(180deg) scale(1.15); opacity: 1; } 100% { transform: rotate(360deg) scale(0.8); opacity: 0.5; } }
+.mochi.m-dizzy .m-move { animation: m-wobble 1.4s ease-in-out infinite; }
+@keyframes m-wobble { 0%, 100% { transform: rotate(-6deg) translateX(-1.5px); } 50% { transform: rotate(6deg) translateX(1.5px); } }
+
+.mochi .m-beat { animation: m-beat 0.85s ease-in-out infinite; }
+@keyframes m-beat { 0%, 100% { transform: scale(1); } 20% { transform: scale(1.3); } 40% { transform: scale(0.95); } 55% { transform: scale(1.12); } }
+.mochi .m-float-heart { animation: m-rise 2.6s ease-out infinite; opacity: 0; }
+@keyframes m-rise { 0% { opacity: 0; transform: translateY(8px) scale(0.4) rotate(-10deg); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateY(-16px) scale(1.15) rotate(10deg); } }
+.mochi.m-love .m-squish { animation: m-swoon 2.4s ease-in-out infinite; }
+@keyframes m-swoon { 0%, 100% { transform: rotate(-4deg) scale(1.02, 0.98); } 50% { transform: rotate(4deg) scale(0.99, 1.02); } }
+
+.mochi.m-shy .m-face { animation: m-shy 3s ease-in-out infinite; }
+.mochi.m-shy .m-squish { animation: m-shrink 3s ease-in-out infinite; }
+@keyframes m-shy { 0%, 100% { transform: translate(-3px, 1.5px); } 50% { transform: translate(-2px, 2px); } }
+@keyframes m-shrink { 0%, 100% { transform: scale(1.04, 0.95) rotate(-3deg); } 50% { transform: scale(1.02, 0.97) rotate(-5deg); } }
+.mochi .m-blush { animation: m-blush 2.4s ease-in-out infinite; }
+@keyframes m-blush { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
+
+.mochi.m-laughing .m-move { animation: m-giggle 0.36s ease-in-out infinite; }
+.mochi.m-laughing .m-squish { animation: m-giggle-squash 0.36s ease-in-out infinite; }
+@keyframes m-giggle { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-2.5px) rotate(2deg); } }
+@keyframes m-giggle-squash { 0%, 100% { transform: scale(1.05, 0.95); } 50% { transform: scale(0.98, 1.03); } }
+
+.mochi.m-wink .m-squish { animation: m-tilt-wink 2.6s ease-in-out infinite; }
+@keyframes m-tilt-wink { 0%, 100% { transform: rotate(4deg); } 50% { transform: rotate(7deg) scale(1.02, 0.98); } }
+.mochi.m-wink .m-blink, .mochi.m-cool .m-blink { animation: none; }
+
+.mochi.m-surprised .m-move { animation: m-startle 2.6s ease-out infinite; }
+.mochi.m-surprised .m-squish { animation: m-startle-squash 2.6s ease-out infinite; }
+@keyframes m-startle { 0%, 100% { transform: translateY(0); } 6% { transform: translateY(-9px); } 18% { transform: translateY(0); } }
+@keyframes m-startle-squash { 0%, 100% { transform: none; } 4% { transform: scale(0.9, 1.12); } 18% { transform: scale(1.06, 0.94); } 28% { transform: none; } }
+
+.mochi.m-starstruck .m-squish { animation: m-swoon 2s ease-in-out infinite; }
+.mochi .m-twirl { animation: m-twirl 2.2s ease-in-out infinite; }
+@keyframes m-twirl { 0%, 100% { transform: rotate(-15deg) scale(0.9); } 50% { transform: rotate(15deg) scale(1.15); } }
 .mochi .m-twinkle { animation: m-twinkle 1.6s ease-in-out infinite; }
 @keyframes m-twinkle { 0%, 100% { transform: scale(0.3) rotate(0); opacity: 0; } 50% { transform: scale(1) rotate(45deg); opacity: 1; } }
 
-/* erro: treme */
-.mochi.m-error .m-move { animation: m-shake 2.2s ease-in-out infinite; }
-@keyframes m-shake { 0%, 30%, 100% { transform: translateX(0); } 5%, 15%, 25% { transform: translateX(-2.5px); } 10%, 20% { transform: translateX(2.5px); } }
+.mochi.m-yummy .m-squish, .mochi.m-uwu .m-squish { animation: m-wiggle 1.8s ease-in-out infinite; }
+@keyframes m-wiggle { 0%, 100% { transform: rotate(-4deg) scale(1.03, 0.97); } 25% { transform: rotate(0) scale(0.98, 1.02); } 50% { transform: rotate(4deg) scale(1.03, 0.97); } 75% { transform: rotate(0) scale(0.98, 1.02); } }
 
-/* no limite: murcha */
-.mochi.m-ratelimit .m-squish { animation: m-droop 3.6s ease-in-out infinite; }
-@keyframes m-droop { 0%, 100% { transform: scale(1.03, 0.96); } 50% { transform: scale(1.06, 0.92); } }
+.mochi.m-cool .m-move { animation: m-groove 2.4s ease-in-out infinite; }
+@keyframes m-groove { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-2px) rotate(3deg); } }
 
-/* dormindo e bocejo: respira devagar e solta zzz */
-.mochi.m-sleeping .m-move { animation: none; }
-.mochi.m-sleeping .m-squish, .mochi.m-yawn .m-squish { animation: m-breathe 3.6s ease-in-out infinite; }
-.mochi.m-sleeping .m-blink, .mochi.m-yawn .m-blink { animation: none; }
-@keyframes m-breathe { 0%, 100% { transform: scale(1.03, 0.97); } 50% { transform: scale(0.99, 1.02); } }
-.mochi .m-zzz text { animation: m-z 2.7s ease-in infinite; opacity: 0; }
-.mochi .m-zzz text:nth-child(2) { animation-delay: 0.9s; }
-.mochi .m-zzz text:nth-child(3) { animation-delay: 1.8s; }
-@keyframes m-z { 0% { opacity: 0; transform: translate(0, 4px) scale(0.6); } 30% { opacity: 0.9; } 100% { opacity: 0; transform: translate(4px, -8px) scale(1.1); } }
-.mochi .m-yawn { animation: m-yawn 3.6s ease-in-out infinite; }
-@keyframes m-yawn { 0%, 100% { transform: scale(0.4); } 40%, 60% { transform: scale(1.15); } }
+.mochi.m-dancing .m-move { animation: m-dance 0.9s ease-in-out infinite; }
+.mochi.m-dancing .m-squish { animation: m-dance-squash 0.45s ease-in-out infinite; }
+@keyframes m-dance { 0%, 100% { transform: rotate(-10deg) translateX(-4px); } 25% { transform: rotate(0) translateY(-6px); } 50% { transform: rotate(10deg) translateX(4px); } 75% { transform: rotate(0) translateY(-6px); } }
+@keyframes m-dance-squash { 0%, 100% { transform: scale(1.06, 0.94); } 50% { transform: scale(0.96, 1.05); } }
+.mochi .m-notes text { animation: m-z 1.8s ease-in infinite; opacity: 0; }
+.mochi .m-notes text:nth-child(2) { animation-delay: 0.9s; }
 
-/* tonto: olhos em espiral girando e corpo balançando */
-.mochi .m-spin { animation: m-spin 1.3s linear infinite; }
-@keyframes m-spin { to { transform: rotate(360deg); } }
-.mochi.m-dizzy .m-squish { animation: m-wobble 1.6s ease-in-out infinite; }
-@keyframes m-wobble { 0%, 100% { transform: rotate(-5deg) translateX(-1px); } 50% { transform: rotate(5deg) translateX(1px); } }
-
-/* oi: mãozinha acenando */
-.mochi .m-nub-r { transform-box: view-box; transform-origin: 96px 78px; }
-.mochi.m-greeting .m-nub-r { animation: m-wave 1s ease-in-out infinite; }
-@keyframes m-wave { 0%, 100% { transform: rotate(-14deg); } 50% { transform: rotate(18deg); } }
-.mochi .m-nub { animation: m-nub-in 0.4s cubic-bezier(.3, 1.6, .5, 1) both; }
-@keyframes m-nub-in { from { opacity: 0; transform: scale(0.2); } }
-
-/* amor: coração batendo e corações subindo */
-.mochi .m-beat { animation: m-beat 0.9s ease-in-out infinite; }
-@keyframes m-beat { 0%, 100% { transform: scale(1); } 25% { transform: scale(1.25); } 45% { transform: scale(0.95); } }
-.mochi .m-float-heart { animation: m-rise 2.4s ease-out infinite; opacity: 0; }
-@keyframes m-rise { 0% { opacity: 0; transform: translateY(6px) scale(0.5); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px) scale(1.1); } }
-
-/* surpreso: susto */
-.mochi.m-surprised .m-move { animation: m-startle 2.6s ease-out infinite; }
-@keyframes m-startle { 0% { transform: translateY(0) scale(1); } 8% { transform: translateY(-6px) scale(0.95, 1.07); } 20%, 100% { transform: translateY(0) scale(1); } }
-
-/* orgulhoso: estrelas girando, peito estufado */
-.mochi .m-twirl { animation: m-twirl 3s ease-in-out infinite; }
-@keyframes m-twirl { 0%, 100% { transform: rotate(-12deg) scale(1); } 50% { transform: rotate(12deg) scale(1.12); } }
-.mochi.m-proud .m-squish { transform: scale(1.03, 1.0); }
-
-/* bravinho: olha de canto */
-.mochi.m-annoyed .m-eyes { animation: m-side 4s ease-in-out infinite; }
-@keyframes m-side { 0%, 100% { transform: translateX(0); } 30%, 70% { transform: translateX(2.5px); } }
-
-/* enviando: cartãozinho sobe */
-.mochi .m-card { animation: m-card 1.6s ease-in-out infinite; }
-@keyframes m-card { 0% { opacity: 0; transform: translateY(8px); } 30%, 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-8px); } }
-
-/* dançando */
-.mochi.m-dancing .m-move { animation: m-dance 1s ease-in-out infinite; }
-.mochi.m-dancing .m-nub-l { animation: m-wave 0.5s ease-in-out infinite alternate; transform-box: view-box; transform-origin: 26px 92px; }
-.mochi.m-dancing .m-nub-r { animation: m-wave 0.5s ease-in-out infinite alternate-reverse; }
-@keyframes m-dance { 0%, 100% { transform: rotate(-8deg) translateX(-3px); } 25% { transform: rotate(0) translateY(-4px); } 50% { transform: rotate(8deg) translateX(3px); } 75% { transform: rotate(0) translateY(-4px); } }
-
-/* brilho de cada humor */
-.mochi .m-glow { opacity: 0.32; animation: m-glow 2.6s ease-in-out infinite; }
-@keyframes m-glow { 0%, 100% { opacity: 0.22; transform: scale(0.94); } 50% { opacity: 0.4; transform: scale(1.04); } }
-
-/* tapa: amassa de lado e treme */
-.mochi.m-slap .m-move { animation: m-slap 1.6s cubic-bezier(.2, .9, .3, 1) infinite; }
-@keyframes m-slap { 0% { transform: translateX(0); } 6% { transform: translateX(-7px) scale(0.9, 1.06) rotate(-8deg); } 18% { transform: translateX(2px) rotate(3deg); } 28%, 100% { transform: none; } }
-.mochi .m-impact { animation: m-impact 1.6s ease-out infinite; }
-@keyframes m-impact { 0%, 4% { opacity: 0; transform: scale(0.6); } 10% { opacity: 1; transform: scale(1); } 45%, 100% { opacity: 0; } }
+/* roupinhas que se mexem */
+.mochi .m-pulse { animation: m-pulse 0.9s ease-in-out infinite; }
+@keyframes m-pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+.mochi .m-sway { animation: m-flower 2.6s ease-in-out infinite; transform-origin: 50% 100%; }
+@keyframes m-flower { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
 
 /* miniaturas paradas */
 .mochi.m-still *, .mochi.m-still { animation: none !important; }
-.mochi.m-still .m-float-heart, .mochi.m-still .m-twinkle, .mochi.m-still .m-zzz text, .mochi.m-still .m-card { opacity: 1; }
+.mochi.m-still .m-float-heart, .mochi.m-still .m-twinkle, .mochi.m-still .m-zzz text, .mochi.m-still .m-card, .mochi.m-still .m-notes text, .mochi.m-still .m-rain { opacity: 1; }
+
+/* tocar: amassa */
+.mochi-badge:active .mochi .m-squish, .mochi-poke:active .mochi .m-squish { transform: scale(1.12, 0.86); transition: transform 0.08s; }
 
 @media (prefers-reduced-motion: reduce) {
   .mochi *, .mochi { animation: none !important; transition: none !important; }
-  .mochi .m-float-heart, .mochi .m-twinkle, .mochi .m-zzz text, .mochi .m-card { opacity: 1; }
+  .mochi .m-float-heart, .mochi .m-twinkle, .mochi .m-zzz text, .mochi .m-card, .mochi .m-notes text { opacity: 1; }
 }
 
 /* ---------- onde ele aparece ---------- */
@@ -159,7 +211,7 @@
 .mochi-tile:hover { border-color: #3a3a42; }
 .mochi-tile:active { transform: scale(0.95); }
 .mochi-tile.active { border-color: #d8d8de; box-shadow: 0 0 0 1px #d8d8de inset, 0 6px 18px rgba(0, 0, 0, 0.25); }
-.mochi-tile-art { display: grid; place-items: center; height: 62px; }
+.mochi-tile-art { display: grid; place-items: center; height: 70px; }
 .mochi-tile-label { font-family: var(--mono); font-size: 10.5px; color: #a6a6b0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .mochi-tile.active .mochi-tile-label { color: #f1f1f4; }
 .mochi-none { font-size: 22px; color: #55555e; height: 62px; display: grid; place-items: center; }
