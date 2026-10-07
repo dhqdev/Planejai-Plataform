@@ -145,7 +145,16 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
         `SELECT category, SUM(amount) AS total FROM transactions t WHERE ${where} AND kind = 'expense' GROUP BY category`,
         [uid, tz, prevMonth],
       );
-      const budgets = uid ? await budgetStatus(uid, tz, month) : [];
+      // super admin vendo todo mundo: limites de cada pessoa, com o nome
+      const budgets = uid
+        ? await budgetStatus(uid, tz, month)
+        : await many(
+            `SELECT b.id, b.user_id, COALESCE(u.full_name, u.name, '+' || u.phone) AS user_name, b.category, b.amount::float AS limit,
+                    COALESCE((SELECT SUM(t.amount) FROM transactions t WHERE t.user_id = b.user_id AND t.kind = 'expense'
+                       AND (b.category IS NULL OR t.category = b.category) AND to_char(t.occurred_at AT TIME ZONE $1, 'YYYY-MM') = $2), 0)::float AS spent
+               FROM budgets b JOIN users u ON u.id = b.user_id ORDER BY user_name, b.category NULLS FIRST`,
+            [tz, month],
+          );
       return { month, totals, byCategory, prevByCategory, daily, months, transactions, budgets };
     });
 

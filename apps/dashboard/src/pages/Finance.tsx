@@ -48,7 +48,7 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
   const [adding, setAdding] = useState(false);
   const [cat, setCat] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
-  const [budget, setBudget] = useState<{ category: string | null; amount?: number } | null>(null);
+  const [budget, setBudget] = useState<{ category: string | null; amount?: number; user?: string } | null>(null);
   const people = useApi<any[]>(isSuper ? "/api/people" : null);
   const { data, error, reload } = useApi<any>(`/api/finance?month=${month}${user ? `&user=${user}` : ""}`, { poll: 20000 });
 
@@ -60,7 +60,10 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
   const prevCat = new Map<string, number>((data?.prevByCategory ?? []).map((c: any) => [c.category, Number(c.total)]));
   const cats = (data?.byCategory ?? []).map((c: any) => ({ label: c.category as string, value: Number(c.total), count: Number(c.count) }));
   const maxMonth = Math.max(1, ...months.map((m: any) => Number(m.expenses)));
-  const maxDay = Math.max(1, ...(data?.daily ?? []).map((d: any) => Number(d.expenses ?? 0)));
+  const daysIn = new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0).getDate();
+  const byDay = new Map<number, number>((data?.daily ?? []).map((d: any) => [Number(d.day), Number(d.expenses ?? 0)]));
+  const days = Array.from({ length: daysIn }, (_, i) => ({ day: i + 1, expenses: byDay.get(i + 1) ?? 0 }));
+  const maxDay = Math.max(1, ...days.map((d) => d.expenses));
   const list = (data?.transactions ?? []).filter((t: any) => !cat || t.category === cat);
   const groups: [string, any[]][] = [];
   for (const t of list) {
@@ -70,9 +73,9 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
     else groups.push([k, [t]]);
   }
   const isCurrent = month === thisMonth();
-  const budgets: { id: string; category: string | null; limit: number; spent: number }[] = data?.budgets ?? [];
-  const budgetOf = new Map(budgets.filter((b) => b.category).map((b) => [b.category!, b]));
-  const canBudget = !isSuper || !!user;
+  const budgets: { id: string; user_id?: string; user_name?: string; category: string | null; limit: number; spent: number }[] = data?.budgets ?? [];
+  const everyone = isSuper && !user;
+  const budgetOf = new Map(everyone ? [] : budgets.filter((b) => b.category).map((b) => [b.category!, b]));
   const go = (n: number) => { haptic(6); setCat(null); setMonth(shift(month, n)); };
 
   return (
@@ -90,7 +93,7 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
             {(people.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name ?? `+${p.phone}`}</option>)}
           </select>
         )}
-        <button className="btn btn-primary" onClick={() => setAdding(true)} disabled={isSuper && !user} title={isSuper && !user ? "Escolha a pessoa primeiro" : undefined}>
+        <button className="btn btn-primary" onClick={() => setAdding(true)}>
           <Icon name="plus" size={16} /> <span className="hide-phone">Lançamento</span>
         </button>
       </div>
@@ -120,11 +123,11 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
             </div>
           </div>
 
-          {canBudget && (
+          {(
             <>
               <div className="fin-section-head">
                 <h3>Limites do mês</h3>
-                <button className="btn btn-sm" onClick={() => setBudget({ category: budgets.some((b) => !b.category) ? (cats[0]?.label ?? "Alimentação") : null })}>
+                <button className="btn btn-sm" onClick={() => setBudget({ category: !everyone && budgets.some((b) => !b.category) ? (cats[0]?.label ?? "Alimentação") : null, user: user || undefined })}>
                   <Icon name="plus" size={14} /> Limite
                 </button>
               </div>
@@ -132,8 +135,8 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                 {budgets.map((b) => {
                   const pct = b.limit ? b.spent / b.limit : 0;
                   return (
-                    <div key={b.id} className="budget-row" onClick={() => setBudget({ category: b.category, amount: b.limit })}>
-                      <span>{b.category ?? "Total do mês"}</span>
+                    <div key={b.id} className="budget-row" onClick={() => setBudget({ category: b.category, amount: b.limit, user: b.user_id ?? (user || undefined) })}>
+                      <span>{b.category ?? "Total do mês"}{everyone && b.user_name ? <span className="muted"> · {b.user_name}</span> : null}</span>
                       <small>{brl(b.spent)} de {brl(b.limit)} · {Math.round(pct * 100)}%</small>
                       <span className={`budget-bar ${pct >= 1 ? "over" : pct >= 0.8 ? "warn" : ""}`}><i style={{ width: `${Math.min(100, pct * 100)}%` }} /></span>
                     </div>
@@ -218,15 +221,15 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                 </div>
                 <h3 style={{ marginTop: 18 }}>Dia a dia</h3>
                 <div className="bars" style={{ height: 56 }}>
-                  {(data.daily ?? []).map((d: any) => <div key={d.day} className="bar" title={`dia ${d.day}: ${brl(d.expenses)}`} style={{ height: `${(Number(d.expenses ?? 0) / maxDay) * 100}%` }} />)}
+                  {days.map((d) => <div key={d.day} className={`bar ${d.expenses ? "spent" : ""}`} title={`dia ${d.day}: ${brl(d.expenses)}`} style={{ height: `${(d.expenses / maxDay) * 100}%` }} />)}
                 </div>
               </div>
             </div>
           </div>
         </>
       )}
-      {budget && <BudgetModal user={user} initial={budget} onClose={() => { setBudget(null); void reload(); }} />}
-      {adding && <AddTransaction user={user} onClose={() => { setAdding(false); void reload(); }} />}
+      {budget && <BudgetModal user={budget.user ?? user} people={isSuper ? people.data ?? [] : null} initial={budget} onClose={() => { setBudget(null); void reload(); }} />}
+      {adding && <AddTransaction user={user} people={isSuper ? people.data ?? [] : null} onClose={() => { setAdding(false); void reload(); }} />}
       {detail && (
         <Modal
           title={detail.kind === "income" ? "Receita" : "Gasto"}
@@ -259,7 +262,8 @@ function shift(month: string, delta: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function AddTransaction({ user, onClose }: { user: string; onClose: () => void }) {
+function AddTransaction({ user: preset, people, onClose }: { user: string; people: any[] | null; onClose: () => void }) {
+  const [user, setUser] = useState(preset);
   const cats = useApi<string[]>("/api/finance/categories");
   const [f, setF] = useState({ kind: "expense", amount: "", category: "", description: "", date: new Date().toISOString().slice(0, 10) });
   const [error, setError] = useState<string | null>(null);
@@ -278,6 +282,14 @@ function AddTransaction({ user, onClose }: { user: string; onClose: () => void }
         }}>Salvar</button>
       }
     >
+      {people && !preset && (
+        <div className="field"><label>Pessoa</label>
+          <select className="select" value={user} onChange={(e) => setUser(e.target.value)}>
+            <option value="">Escolha</option>
+            {people.map((p) => <option key={p.id} value={p.id}>{p.full_name ?? p.name ?? `+${p.phone}`}</option>)}
+          </select>
+        </div>
+      )}
       <div className="tabs">
         <button className={f.kind === "expense" ? "active" : ""} onClick={() => setF({ ...f, kind: "expense" })}>Gasto</button>
         <button className={f.kind === "income" ? "active" : ""} onClick={() => setF({ ...f, kind: "income" })}>Receita</button>
@@ -296,8 +308,9 @@ function AddTransaction({ user, onClose }: { user: string; onClose: () => void }
   );
 }
 
-function BudgetModal({ user, initial, onClose }: { user: string; initial: { category: string | null; amount?: number }; onClose: () => void }) {
+function BudgetModal({ user: preset, people, initial, onClose }: { user: string; people: any[] | null; initial: { category: string | null; amount?: number }; onClose: () => void }) {
   const cats = useApi<string[]>("/api/finance/categories");
+  const [user, setUser] = useState(preset);
   const [category, setCategory] = useState(initial.category ?? "");
   const [amount, setAmount] = useState(initial.amount ? String(initial.amount).replace(".", ",") : "");
   const [error, setError] = useState<string | null>(null);
@@ -318,10 +331,18 @@ function BudgetModal({ user, initial, onClose }: { user: string; initial: { cate
       footer={
         <>
           {initial.amount != null && <button className="btn btn-danger" onClick={() => save("0")}><Icon name="trash" size={16} /> Remover</button>}
-          <button className="btn btn-primary" onClick={() => save(amount)}>Salvar</button>
+          <button className="btn btn-primary" disabled={!!people && !user} onClick={() => save(amount)}>Salvar</button>
         </>
       }
     >
+      {people && !preset && (
+        <div className="field"><label>Pessoa</label>
+          <select className="select" value={user} onChange={(e) => setUser(e.target.value)}>
+            <option value="">Escolha</option>
+            {people.map((p) => <option key={p.id} value={p.id}>{p.full_name ?? p.name ?? `+${p.phone}`}</option>)}
+          </select>
+        </div>
+      )}
       <div className="field"><label>Para</label>
         <select className="select" value={category} disabled={initial.amount != null} onChange={(e) => setCategory(e.target.value)}>
           <option value="">Total do mês</option>

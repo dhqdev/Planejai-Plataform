@@ -277,6 +277,8 @@ table.table { width: 100%; border-collapse: collapse; }
 
 .bars { display: flex; align-items: flex-end; gap: 4px; height: 120px; }
 .bars .bar { flex: 1; background: var(--text); border-radius: 4px 4px 0 0; min-height: 2px; position: relative; opacity: 0.85; }
+.fin-page .bars .bar { background: var(--border-2); opacity: 1; }
+.fin-page .bars .bar.spent { background: linear-gradient(180deg, var(--brand-1), var(--brand-2)); }
 .bars .bar.err { background: var(--err); }
 .bars-labels { display: flex; gap: 4px; font-size: 10px; color: var(--muted); }
 .bars-labels span { flex: 1; text-align: center; }
