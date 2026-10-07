@@ -76,14 +76,20 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
             type=sha,prefix=sha-,format=short
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
+      - name: Versão do package.json
+        run: echo "APP_VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+
       - uses: docker/build-push-action@v6
         with:
           context: .
+          build-args: |
+            APP_VERSION=${{ env.APP_VERSION }}
+            GIT_SHA=${{ github.sha }}
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -93,9 +99,10 @@ jobs:
 
       # Opcional: redeploy automático no Portainer. Crie um webhook na stack/serviço
       # (Portainer > Stack > Webhook) e salve a URL no secret PORTAINER_WEBHOOK_URL.
-      # Cada build também ganha a tag sha-XXXXXXX: para voltar uma versão, ponha PLANEJAI_TAG=sha-XXXXXXX na stack.
+      # Cada build também ganha a tag sha-XXXXXXX, e cada release as tags X.Y.Z e X.Y (workflow Release):
+      # para voltar uma versão, troque :latest por uma delas na stack.
       - name: Redeploy no Portainer
-        if: ${{ github.ref == 'refs/heads/main' }}
+        if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
         env:
           PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
         run: |

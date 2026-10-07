@@ -46,6 +46,9 @@ import { Icon, Logo } from "./icons";
 import { openWardrobe } from "./mochi/state";
 import { MochiButton, MochiIcon, WardrobeHost } from "./mochi/Wardrobe";
 
+/** Versão do app (package.json), igual à release vX.Y.Z no GitHub. */
+declare const __APP_VERSION__: string;
+
 export interface Me {
   id: string;
   email: string;
@@ -191,7 +194,7 @@ export function App() {
             <div className="avatar">{(me.name ?? me.email).slice(0, 1).toUpperCase()}</div>
             <div style={{ minWidth: 0 }}>
               <div className="me-name">{me.name ?? me.email}</div>
-              <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"}</div>
+              <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · <span className="app-version">v{__APP_VERSION__}</span></div>
             </div>
           </div>
           <div className="row">
@@ -292,7 +295,7 @@ export function App() {
             <div className="avatar">{(me.name ?? me.email).slice(0, 1).toUpperCase()}</div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className="me-name">{me.name ?? me.email}</div>
-              <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"}</div>
+              <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · <span className="app-version">v{__APP_VERSION__}</span></div>
             </div>
           </div>
           <div className="more-grid">

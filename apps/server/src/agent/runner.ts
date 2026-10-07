@@ -20,7 +20,8 @@ const SLOW_TOOL = /^(ask_|browser_|screenshot_url)/;
 export const OWNER_INTEGRATIONS = new Set(["google", "slack", "notion", "github", "linear", "n8n", "mercadopago", "stripe"]);
 
 export function isOwnerOnly(t: Pick<Tool, "integration" | "ownerOnly">) {
-  return Boolean(t.ownerOnly || (t.integration && OWNER_INTEGRATIONS.has(t.integration)));
+  // ownerOnly: false libera de propósito uma ferramenta de integração do dono (ex.: automações seguras dos clientes)
+  return t.ownerOnly ?? Boolean(t.integration && OWNER_INTEGRATIONS.has(t.integration));
 }
 
 /** Ferramentas que esta pessoa pode usar agora: integração conectada e, se for do dono, só para o dono. */

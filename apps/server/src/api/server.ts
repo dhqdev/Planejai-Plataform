@@ -1,4 +1,5 @@
 import cookie from "@fastify/cookie";
+import { COMMIT, VERSION } from "../version.js";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { existsSync } from "node:fs";
@@ -74,7 +75,7 @@ export async function buildServer() {
 
   app.get("/health", async () => {
     await pool.query("SELECT 1");
-    return { ok: true };
+    return { ok: true, version: VERSION, commit: COMMIT };
   });
 
   // Login: dono da stack (.env) ou conta cadastrada
@@ -185,7 +186,7 @@ export async function buildServer() {
     return { ok: true, pending: true, message: "Cadastro recebido! Assim que o administrador aprovar você já pode entrar." };
   });
 
-  app.get("/api/auth/config", async () => ({ signupMode: (await getSettings()).signupMode }));
+  app.get("/api/auth/config", async () => ({ signupMode: (await getSettings()).signupMode, version: VERSION }));
 
   app.post("/api/auth/logout", async (_req, reply) => {
     reply.clearCookie(COOKIE, { path: "/" });

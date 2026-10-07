@@ -17,9 +17,10 @@ Por dentro, quem trabalha é um **time de agentes de IA que conversam entre si**
 7. [WhatsApp](#whatsapp)
 8. [Telegram e n8n](#telegram-e-n8n)
 9. [Segurança e privacidade](#segurança-e-privacidade)
-10. [Operação: backup, rollback e saúde](#operação-backup-rollback-e-saúde)
-11. [Desenvolvimento](#desenvolvimento)
-12. [Estrutura do código](#estrutura-do-código)
+10. [Versões (releases)](#versões-releases)
+11. [Operação: backup, rollback e saúde](#operação-backup-rollback-e-saúde)
+12. [Desenvolvimento](#desenvolvimento)
+13. [Estrutura do código](#estrutura-do-código)
 
 ---
 
@@ -130,6 +131,8 @@ A stack segue o mesmo padrão do n8n do servidor: Traefik na rede externa `netwo
    | `redis-cache` | Cache descartável, com despejo LRU |
    | `browserless` | Navegador dos agentes, com versão fixa e numa rede própria sem acesso ao banco |
 
+   O `app` entra na `network_public` com o apelido `planejai-app` e o `worker` também está nela (sem Traefik), para falar com o n8n por dentro.
+
 4. **Primeiro acesso.** Abra o `PUBLIC_URL` e entre com `ADMIN_EMAIL` e `ADMIN_PASSWORD`. As migrações rodam sozinhas no boot.
 5. **WhatsApp.** Vá em **WhatsApp** no painel e leia o QR code (veja a [seção WhatsApp](#whatsapp)).
 6. **Redeploy automático (opcional).** Crie um webhook do serviço no Portainer e salve a URL no secret `PORTAINER_WEBHOOK_URL` do repositório. O CI chama esse webhook depois de publicar a imagem.
@@ -146,6 +149,8 @@ A lista completa, com comentários, está em [`.env.example`](.env.example). As 
 | `ENCRYPTION_KEY` | sim (≥32) | Criptografa as credenciais das integrações. `ENCRYPTION_KEY_OLD` serve para trocar a chave sem perder nada |
 | `APP_SECRET` | legado | Só para abrir credenciais antigas. No boot elas são recriptografadas com a `ENCRYPTION_KEY` |
 | `INTERNAL_API_KEY` | para o n8n (≥24) | Chave da API interna. Vazia deixa a API desligada |
+| `N8N_URL` / `N8N_API_KEY` | para o n8n | n8n na mesma rede (`http://n8n-interno:5678`) e chave da API dele, para o assistente criar fluxos |
+| `AUTOMATIONS_PER_USER` | não | Automações no n8n por cliente (5) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | sim | Conta do dono (super admin) |
 | `OPENROUTER_API_KEY` | sim | Modelos de IA |
 | `WHATSAPP_PROVIDER` | sim | `baileys` (padrão), `evolution`, `cloud` ou `none` |
@@ -176,6 +181,23 @@ As integrações (Google, Notion, GitHub, Linear, Slack, Tavily, Brave, Mercado 
 
 ## Telegram e n8n
 
+- **n8n na mesma stack, sem conectar nada.** Com Planejai e n8n na rede `network_public`, um fala com o outro por dentro:
+  - O Planejai chama o n8n em `N8N_URL` (`http://n8n-interno:5678`, apelido definido em [`deploy/n8n-stack.yml`](deploy/n8n-stack.yml)).
+  - O n8n chama o Planejai em `http://planejai-app:3000` (apelido do `app`). Os fluxos usam `{{ $env.PLANEJAI_API_URL }}` e `{{ $env.PLANEJAI_API_KEY }}`, definidos na stack do n8n com `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`.
+  - `PLANEJAI_API_KEY` (n8n) tem que ser igual à `INTERNAL_API_KEY` (Planejai). Para o assistente listar e criar fluxos, ponha também `N8N_API_KEY`.
+- **Fluxos prontos no n8n** (pasta "Planejai (plataforma nova)"):
+
+  | Fluxo | Webhook | Para quê |
+  | --- | --- | --- |
+  | Planejai · Eventos | `/webhook/planejai-eventos` | Recebe os eventos da plataforma (boas-vindas, aviso de limite ao dono e ramos livres) |
+  | Planejai · Criar conta | `/webhook/planejai-criar-conta` | Trial ou venda: cria a pessoa e o login e manda o acesso no WhatsApp (exige `X-Planejai-Key`) |
+  | Planejai · Pagamento Asaas | `/webhook/planejai-asaas` | Pagamento confirmado: cria a conta ou agradece a renovação (`ASAAS_WEBHOOK_TOKEN` opcional) |
+  | Planejai · Enviar mensagem | subfluxo | Qualquer fluxo manda mensagem pelo Planejai (texto fixo ou escrito pelo assistente) |
+
+- **Automações pedidas pelos clientes.** O especialista Produtividade cria fluxos no n8n quando alguém pede ("me avisa todo dia às 8h das notícias de IA", "me avisa quando esse site mudar"). Ferramentas: `automation_save`, `automation_list` e `automation_manage`.
+  - Para clientes o fluxo é seguro por construção: só nós simples (agenda, webhook, RSS, HTTP para endereço público fixo, filtros e transformação), sem código, sem credenciais e sem `$env`. O aviso sempre vai para a própria pessoa.
+  - Cada cliente tem até `AUTOMATIONS_PER_USER` automações (padrão 5). Os fluxos aparecem no n8n como "Cliente · Nome · …" e somem quando a pessoa apaga a conta.
+  - O dono pode usar qualquer nó.
 - **Telegram.** Cadastre o bot do dono em Integrações > Telegram. Cada pessoa liga a própria conta em Minha conta > Conexões. Lembretes e avisos saem no canal em que a pessoa está falando.
 - **API interna para o n8n.** Toda chamada leva o cabeçalho `X-Planejai-Key: {INTERNAL_API_KEY}`. Endpoints:
 
@@ -204,6 +226,14 @@ As integrações (Google, Notion, GitHub, Linear, Slack, Tavily, Brave, Mercado 
   - O cadastro exige aceitar os termos ([/privacidade](apps/dashboard/src/pages/Privacy.tsx)).
   - No WhatsApp, a pessoa escreve "apague meus dados" e confirma com "APAGAR TUDO". No painel, use Minha conta > Apagar minha conta.
   - Nos logs, CPF, cartão, chaves e senhas aparecem mascarados, e o texto das conversas some em 24h.
+
+## Versões (releases)
+
+O projeto segue versões `MAJOR.MINOR.PATCH` (começou em 1.0.0). A versão aparece no painel (embaixo, ao lado do seu nome) e no `/health`.
+
+- **Gerar uma versão:** GitHub > Actions > **Release** > *Run workflow* e escolha `patch` (correções), `minor` (novidades) ou `major` (mudança grande).
+- O workflow sobe o número nos `package.json`, escreve o [`CHANGELOG.md`](CHANGELOG.md) com os commits desde a última versão, cria a tag `vX.Y.Z` e a release no GitHub, e roda o CI na tag.
+- O CI testa e publica a imagem com as tags `X.Y.Z`, `X.Y` e `latest`. Para fixar uma versão na stack, troque `:latest` por `:1.2.0`.
 
 ## Operação: backup, rollback e saúde
 
@@ -247,7 +277,7 @@ apps/
     privacy.ts      apagar dados (LGPD)
     healthcheck.ts  healthcheck da imagem
   dashboard/src/    React + Vite (PWA), pages/, mochi/ (mascote)
-deploy/             stacks do Portainer (Swarm + Traefik e compose comum)
+deploy/             stacks do Portainer (Planejai Swarm + Traefik, compose comum e n8n ligado ao Planejai)
 docs/operacao.md    segredos, backup, rollback, saúde e plano do número
 ```
 

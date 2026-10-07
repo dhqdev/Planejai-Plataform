@@ -1,7 +1,7 @@
 {
   "name": "planejai-plataform",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Planejai: assistente pessoal no WhatsApp com time de agentes de IA (CTO + especialistas), integrações e dashboard.",
   "workspaces": [
     "apps/server",

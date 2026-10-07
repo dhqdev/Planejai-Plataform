@@ -25,6 +25,13 @@ x-env: &env
   OWNER_PHONES: "5519995378302"
   ALLOW_UNKNOWN_CONTACTS: "false"
   INVITES_PER_DAY: "40"
+  # --- n8n na mesma rede (network_public): liga sozinho, sem tela de Integrações ---
+  # n8n-interno é o apelido do n8n na rede (veja deploy/n8n-stack.yml). Eventos vão para /webhook/planejai-eventos.
+  N8N_URL: http://n8n-interno:5678
+  # Para o assistente listar e CRIAR fluxos: no n8n, Settings > n8n API > Create an API key, e cole aqui.
+  N8N_API_KEY: ""
+  # Automações que cada cliente pode ter (criadas pelo assistente no n8n)
+  AUTOMATIONS_PER_USER: "5"
   # --- Redis próprios: memória curta das conversas (24h) e cache descartável ---
   REDIS_URL: redis://redis:6379
   REDIS_CACHE_URL: redis://redis-cache:6379
@@ -46,9 +53,12 @@ services:
       ROLE: api
       PORT: "3000"
     networks:
-      - network_public
-      - planejai_internal
-      - planejai_browser
+      # o n8n chama a API interna por http://planejai-app:3000 (sem sair para a internet)
+      network_public:
+        aliases:
+          - planejai-app
+      planejai_internal: {}
+      planejai_browser: {}
     deploy:
       mode: replicated
       replicas: 1
@@ -72,6 +82,8 @@ services:
       <<: *env
       ROLE: worker
     networks:
+      # para falar com o n8n pela rede interna (sem labels do Traefik: não fica exposto)
+      - network_public
       - planejai_internal
       - planejai_browser
     deploy:

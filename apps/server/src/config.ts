@@ -42,6 +42,12 @@ const schema = z.object({
   WEBHOOK_SECRET: z.string().default(""),
   /** chave da API interna (n8n e automações); vazia = API interna desligada. Aparece em Integrações > n8n */
   INTERNAL_API_KEY: z.string().default(""),
+  // n8n na mesma rede da stack: preenchido aqui, a integração já nasce conectada (sem tela de Integrações)
+  N8N_URL: z.string().default(""),
+  N8N_API_KEY: z.string().default(""),
+  N8N_EVENTS_URL: z.string().default(""),
+  // automações que cada cliente pode ter ativas no n8n (criadas pelo assistente)
+  AUTOMATIONS_PER_USER: z.coerce.number().int().min(0).max(50).default(5),
 
   // Números (só dígitos, com DDI) que podem falar com o agente sem aprovação.
   OWNER_PHONES: z

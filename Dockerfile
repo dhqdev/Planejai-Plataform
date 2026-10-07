@@ -22,8 +22,13 @@ RUN npm ci --omit=dev --workspace apps/server --include-workspace-root=false --i
 
 FROM node:22-alpine
 RUN apk add --no-cache ffmpeg
+# versão (release vX.Y.Z) e commit, mostrados no painel e no /health
+ARG APP_VERSION=""
+ARG GIT_SHA=""
 ENV NODE_ENV=production \
-    PORT=3000
+    PORT=3000 \
+    APP_VERSION=$APP_VERSION \
+    GIT_SHA=$GIT_SHA
 WORKDIR /app
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY apps/server/package.json ./apps/server/package.json

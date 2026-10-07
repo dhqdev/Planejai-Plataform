@@ -1,0 +1,80 @@
+name: Release
+
+# Gera uma versão nova do Planejai: sobe o número no package.json, escreve o CHANGELOG com os commits
+# desde a última versão, cria a tag vX.Y.Z e a release no GitHub, e dispara o CI na tag
+# (que testa e publica a imagem com as tags X.Y.Z, X.Y e latest).
+# Rodar: GitHub > Actions > Release > Run workflow, escolhendo o tipo.
+on:
+  workflow_dispatch:
+    inputs:
+      tipo:
+        description: "patch = correções (1.0.1), minor = novidades (1.1.0), major = mudança grande (2.0.0), atual = publica a versão do package.json sem subir"
+        type: choice
+        options: [patch, minor, major, atual]
+        default: minor
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency: release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Próxima versão
+        id: v
+        run: |
+          last=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
+          if [ "${{ inputs.tipo }}" != "atual" ]; then
+            npm version "${{ inputs.tipo }}" --no-git-tag-version --workspaces --include-workspace-root >/dev/null
+          fi
+          version=$(node -p "require('./package.json').version")
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "A tag v$version já existe. Escolha patch, minor ou major." >&2; exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "last=$last" >> "$GITHUB_OUTPUT"
+
+      - name: Notas da versão
+        run: |
+          range="${{ steps.v.outputs.last }}"; [ -n "$range" ] && range="$range..HEAD" || range="HEAD"
+          {
+            echo "## v${{ steps.v.outputs.version }} ($(date -u +%Y-%m-%d))"
+            echo
+            git log "$range" --no-merges --pretty='- %s' | grep -v '^- release: ' || echo "- Primeira versão"
+            echo
+          } > notes.md
+          { cat notes.md; [ -f CHANGELOG.md ] && sed '1{/^# /d}' CHANGELOG.md; } > changelog.tmp
+          { echo "# Versões do Planejai"; echo; cat changelog.tmp; } > CHANGELOG.md
+          rm changelog.tmp
+          cat notes.md
+
+      - name: Commit, tag e push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A package.json package-lock.json apps/*/package.json CHANGELOG.md
+          git commit -m "release: v${{ steps.v.outputs.version }}"
+          git tag -a "v${{ steps.v.outputs.version }}" -m "Planejai v${{ steps.v.outputs.version }}"
+          git push origin HEAD:main "v${{ steps.v.outputs.version }}"
+
+      - name: Release no GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "v${{ steps.v.outputs.version }}" --title "Planejai v${{ steps.v.outputs.version }}" --notes-file notes.md --verify-tag
+
+      # push feito pelo GITHUB_TOKEN não dispara outros workflows; workflow_dispatch dispara
+      - name: Testar e publicar a imagem da versão
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref "v${{ steps.v.outputs.version }}"

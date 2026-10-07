@@ -1,3 +1,4 @@
+import { deleteUserAutomations } from "./agent/tools/automations.js";
 import type { Channel } from "./channels/types.js";
 import { pool, one, query, many } from "./db/pool.js";
 import { isOwner, phoneVariants } from "./ingest.js";
@@ -12,6 +13,7 @@ export async function eraseUserData(userId: string): Promise<{ ok: boolean }> {
   const user = await one("SELECT id, phone FROM users WHERE id = $1", [userId]);
   if (!user) return { ok: false };
   const convs = await many<{ id: string }>("SELECT id FROM conversations WHERE user_id = $1", [userId]);
+  await deleteUserAutomations(userId);
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

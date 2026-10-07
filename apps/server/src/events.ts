@@ -28,7 +28,8 @@ export async function emitEvent(event: PlanejaiEvent, data: Record<string, unkno
     const body = JSON.stringify({ event, at: new Date().toISOString(), data });
     await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Planejai-Event": event, "X-Planejai-Signature": createHmac("sha256", internalKey()).update(body).digest("hex") },
+      // a chave vai junto para o n8n conferir com {{ $env.PLANEJAI_API_KEY }} (o nó Crypto não faz HMAC do corpo cru)
+      headers: { "Content-Type": "application/json", "X-Planejai-Event": event, "X-Planejai-Key": internalKey(), "X-Planejai-Signature": createHmac("sha256", internalKey()).update(body).digest("hex") },
       body,
       signal: AbortSignal.timeout(10_000),
     });

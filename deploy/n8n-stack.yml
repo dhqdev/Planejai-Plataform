@@ -1,0 +1,76 @@
+# Stack do n8n (Swarm + Traefik) ligada ao Planejai pela rede network_public.
+# O que muda em relação a uma stack comum do n8n:
+#   1. apelido "n8n-interno" na rede: o Planejai fala com o n8n por http://n8n-interno:5678 (sem sair para a internet)
+#   2. PLANEJAI_API_URL e PLANEJAI_API_KEY: os fluxos chamam o Planejai com {{ $env.PLANEJAI_API_URL }} e {{ $env.PLANEJAI_API_KEY }}
+#   3. N8N_BLOCK_ENV_ACCESS_IN_NODE=false: deixa os nós lerem essas duas variáveis
+# PLANEJAI_API_KEY tem que ser igual à INTERNAL_API_KEY da stack do Planejai.
+version: "3.7"
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    environment:
+      # --- Conexão com o Banco de Dados ---
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres_postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_USER=postgres
+      - DB_POSTGRESDB_PASSWORD=TROQUE_SENHA_DO_POSTGRES
+      - DB_POSTGRESDB_DATABASE=n8n
+      # --- Conexão com o Redis ---
+      - QUEUE_BULL_REDIS_HOST=redis_redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      # --- Configurações do n8n ---
+      - N8N_HOST=auto.tekvosoft.com
+      - WEBHOOK_URL=https://auto.tekvosoft.com/
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      - TZ=America/Sao_Paulo
+      - N8N_TRUST_PROXY=true
+      - N8N_ENCRYPTION_KEY=A_MESMA_CHAVE_QUE_O_N8N_JA_USA
+      # --- Planejai (mesma rede) ---
+      - PLANEJAI_API_URL=http://planejai-app:3000
+      - PLANEJAI_API_KEY=IGUAL_A_INTERNAL_API_KEY_DO_PLANEJAI
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      # token do webhook do Asaas (opcional; o mesmo configurado no Asaas)
+      - ASAAS_WEBHOOK_TOKEN=
+      # --- Puppeteer ---
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
+      # --- Processamento de vídeo ---
+      - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
+      - N8N_PAYLOAD_SIZE_MAX=256
+      - NODE_OPTIONS=--max-old-space-size=2048
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - n8n_files:/files
+    networks:
+      network_public:
+        aliases:
+          - n8n-interno
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        # --- Configuração do Traefik ---
+        - "traefik.enable=true"
+        - "traefik.docker.network=network_public"
+        - "traefik.http.routers.n8n.rule=Host(`auto.tekvosoft.com`)"
+        - "traefik.http.routers.n8n.entrypoints=websecure"
+        - "traefik.http.routers.n8n.service=n8n-service"
+        - "traefik.http.routers.n8n.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.n8n-service.loadbalancer.server.port=5678"
+volumes:
+  n8n_data:
+    external: true
+    name: n8n_data
+  n8n_files:
+    name: n8n_files
+networks:
+  network_public:
+    external: true
+    name: network_public

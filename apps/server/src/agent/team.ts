@@ -3,6 +3,7 @@ import * as comm from "./tools/communication.js";
 import * as core from "./tools/core.js";
 import * as finance from "./tools/finance.js";
 import * as images from "./tools/images.js";
+import * as automations from "./tools/automations.js";
 import * as n8n from "./tools/n8n.js";
 import * as prod from "./tools/productivity.js";
 import * as research from "./tools/research.js";
@@ -141,8 +142,12 @@ export const SPECIALISTS: AgentDef[] = [
     face: { color: 0, eyes: "wide", mouth: "smile", extra: "leaf" },
     name: "Produtividade",
     icon: "folder",
-    role: "Notion (páginas, notas, bancos), Linear, GitHub (issues, PRs) e as automações do n8n do dono (listar, ver falhas, disparar fluxos).",
-    instructions: "Retorne links diretos para o que encontrar ou criar.",
+    role:
+      "Automações no n8n para qualquer pessoa (avisos agendados, acompanhar notícias, sites e APIs, gatilhos), " +
+      "e para o dono também Notion, Linear, GitHub e os fluxos dele no n8n (listar, ver falhas, disparar).",
+    instructions:
+      "Retorne links diretos para o que encontrar ou criar. Para automação: confirme com o CTO o que a pessoa quer (o quê, quando, de onde vem a informação), " +
+      "monte o fluxo mais simples possível com automation_save e devolva em uma frase o que vai acontecer e quando. Se o n8n recusar, corrija e salve de novo com o mesmo workflow_id.",
     tools: [
       prod.notionSearch,
       prod.notionReadPage,
@@ -154,6 +159,9 @@ export const SPECIALISTS: AgentDef[] = [
       n8n.n8nWorkflows,
       n8n.n8nExecutions,
       n8n.n8nTrigger,
+      automations.automationSave,
+      automations.automationList,
+      automations.automationManage,
     ],
   },
 ];

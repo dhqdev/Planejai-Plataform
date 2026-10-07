@@ -346,7 +346,17 @@ export const INTEGRATIONS: IntegrationDef[] = [
         help: "Um nó Webhook (POST) no n8n. A plataforma avisa nele quando entra cliente, sai gasto, estoura limite, dispara lembrete ou alguém conecta o Telegram.",
       },
     ],
+    // n8n na mesma stack/rede: N8N_URL (ex.: http://n8n_n8n:5678) já liga eventos e disparos; com N8N_API_KEY também lista e cria fluxos
+    envFallback: () =>
+      config.N8N_URL
+        ? {
+            base_url: config.N8N_URL,
+            ...(config.N8N_API_KEY ? { api_key: config.N8N_API_KEY } : {}),
+            events_url: config.N8N_EVENTS_URL || `${config.N8N_URL.replace(/\/$/, "")}/webhook/planejai-eventos`,
+          }
+        : null,
     test: async (c) => {
+      if (!c.api_key) return "Ligado pela stack (eventos e disparos). Para listar e criar fluxos, ponha N8N_API_KEY.";
       const res = await fetch(`${c.base_url.replace(/\/$/, "")}/api/v1/workflows?limit=250`, { headers: { "X-N8N-API-KEY": c.api_key, accept: "application/json" }, signal: timed() });
       const json = await okJson(res, "n8n");
       const list = json.data ?? [];
@@ -370,7 +380,11 @@ export async function getCredentials(id: string): Promise<Record<string, string>
   if (row?.enabled && row.credentials_enc) creds = decryptJson(row.credentials_enc);
   // OAuth sem token ainda não está conectado
   if (creds && getDef(id)?.oauth && !creds.refresh_token) creds = null;
-  if (!creds && (!row || row.enabled)) creds = getDef(id)?.envFallback?.() ?? null;
+  // o que veio da stack (variáveis de ambiente) completa o que foi salvo na tela; o da tela vence
+  if (!row || row.enabled) {
+    const env = getDef(id)?.envFallback?.() ?? null;
+    if (env) creds = creds ? { ...env, ...creds } : env;
+  }
   cache.set(id, { at: Date.now(), creds });
   return creds;
 }
