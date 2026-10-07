@@ -58,9 +58,18 @@ async function accessToken() {
   return tokenCache.token;
 }
 
+export class MercadoLivreError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 export async function mercadolivreApi(path: string) {
   const res = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${await accessToken()}`, Accept: "application/json" } });
   const j: any = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Mercado Livre ${res.status}: ${j.message ?? JSON.stringify(j).slice(0, 200)}`);
+  if (!res.ok) throw new MercadoLivreError(`Mercado Livre ${res.status}: ${j.message ?? JSON.stringify(j).slice(0, 200)}`, res.status);
   return j;
 }

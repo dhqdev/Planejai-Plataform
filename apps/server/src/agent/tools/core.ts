@@ -1,3 +1,4 @@
+import { cacheGet } from "../../shortmem.js";
 import { many, query } from "../../db/pool.js";
 import { formatLocal, isoLocal } from "../../time.js";
 import { defineTool, obj } from "./types.js";
@@ -104,9 +105,12 @@ export const readDocument = defineTool<{ message_id: number | string; offset?: n
     "ou query para trazer só os trechos que falam de algo (mais barato).",
   parameters: obj({ message_id: { type: "number" }, offset: { type: "number" }, query: { type: "string" } }, ["message_id"]),
   async run(args, ctx) {
-    const rows = await many(`SELECT meta FROM messages WHERE id = $1 AND conversation_id = $2`, [Number(args.message_id), ctx.conversation.id]);
-    const text: string | undefined = rows[0]?.meta?.doc_text;
-    if (!text) return { error: "Documento não encontrado (mensagens brutas ficam guardadas por 24h)." };
+    let text = await cacheGet<string>(`doc:${ctx.conversation.id}:${Number(args.message_id)}`);
+    if (!text) {
+      const rows = await many(`SELECT meta FROM messages WHERE id = $1 AND conversation_id = $2`, [Number(args.message_id), ctx.conversation.id]);
+      text = rows[0]?.meta?.doc_text ?? null;
+    }
+    if (!text) return { error: "Documento não encontrado (documentos ficam disponíveis por 24h)." };
     if (args.query) {
       const terms = args.query.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
       const paras = text.split(/\n+/);

@@ -34,6 +34,14 @@ async function okJson(res: Response, label: string) {
 
 const timed = (ms = 15_000) => AbortSignal.timeout(ms);
 
+/** Cabeçalhos recomendados pela API REST do GitHub (versão fixada evita mudanças silenciosas). */
+export const GH_HEADERS = (token: string) => ({
+  Authorization: `Bearer ${token}`,
+  "User-Agent": "planejai",
+  Accept: "application/vnd.github+json",
+  "X-GitHub-Api-Version": "2022-11-28",
+});
+
 /**
  * Catálogo de integrações. Cada campo pedido aqui é exatamente o que as ferramentas usam
  * (nada a mais): o "help" diz onde pegar e quais permissões marcar.
@@ -114,9 +122,9 @@ export const INTEGRATIONS: IntegrationDef[] = [
       { key: "default_repo", label: "Repositório padrão (opcional)", type: "text", placeholder: "dono/repositorio", help: "Usado quando você pede uma issue sem dizer o repositório." },
     ],
     test: async (c) => {
-      const j = await okJson(await fetch("https://api.github.com/user", { headers: { Authorization: `Bearer ${c.token}`, "User-Agent": "planejai", Accept: "application/vnd.github+json" }, signal: timed() }), "GitHub");
+      const j = await okJson(await fetch("https://api.github.com/user", { headers: GH_HEADERS(c.token!), signal: timed() }), "GitHub");
       if (c.default_repo) {
-        await okJson(await fetch(`https://api.github.com/repos/${c.default_repo}`, { headers: { Authorization: `Bearer ${c.token}`, "User-Agent": "planejai" }, signal: timed() }), `GitHub (${c.default_repo})`);
+        await okJson(await fetch(`https://api.github.com/repos/${c.default_repo}`, { headers: GH_HEADERS(c.token!), signal: timed() }), `GitHub (${c.default_repo})`);
       }
       return `Conectado como ${j.login}${c.default_repo ? ` · ${c.default_repo}` : ""}`;
     },

@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { ErrorBox, IntegrationIcon, Loading, Modal, PageHead } from "../components";
 import { useApi } from "../hooks";
+import { Icon } from "../icons";
 
 export function IntegrationsPage() {
   const { data, error, reload } = useApi<any>("/api/integrations");
@@ -130,7 +131,7 @@ function ConnectModal({ integration: i, onClose }: { integration: any; onClose: 
       ))}
       {i.docsUrl && (
         <a className="muted" href={i.docsUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
-          Onde pegar as credenciais ↗
+          Onde pegar as credenciais <Icon name="external" size={13} />
         </a>
       )}
       {msg && <div className={msg.ok ? "ok-box" : "error-box"} style={{ marginTop: 12 }}>{msg.text}</div>}

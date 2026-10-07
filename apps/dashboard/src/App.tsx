@@ -6,24 +6,23 @@ import { AuthPage } from "./pages/Login";
 import { canInstall, haptic, isIos, isStandalone, onInstallAvailable, promptInstall } from "./touch";
 
 // Cada tela é carregada só quando abre: o app inicia leve no celular
-const AccountsPage = lazy(() => import("./pages/Accounts").then((m) => ({ default: m.AccountsPage })));
 const AgentsPage = lazy(() => import("./pages/Agents").then((m) => ({ default: m.AgentsPage })));
-const ConversationsPage = lazy(() => import("./pages/Conversations").then((m) => ({ default: m.ConversationsPage })));
+const ClientsPage = lazy(() => import("./pages/Clients").then((m) => ({ default: m.ClientsPage })));
+const DashboardPage = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.DashboardPage })));
 const ExecutionDetailPage = lazy(() => import("./pages/Executions").then((m) => ({ default: m.ExecutionDetailPage })));
 const ExecutionsPage = lazy(() => import("./pages/Executions").then((m) => ({ default: m.ExecutionsPage })));
 const FinancePage = lazy(() => import("./pages/Finance").then((m) => ({ default: m.FinancePage })));
-const HomePage = lazy(() => import("./pages/Home").then((m) => ({ default: m.HomePage })));
 const IntegrationsPage = lazy(() => import("./pages/Integrations").then((m) => ({ default: m.IntegrationsPage })));
+const InvitesPage = lazy(() => import("./pages/Invites").then((m) => ({ default: m.InvitesPage })));
 const MemoriesPage = lazy(() => import("./pages/Memories").then((m) => ({ default: m.MemoriesPage })));
 const ModelsPage = lazy(() => import("./pages/Models").then((m) => ({ default: m.ModelsPage })));
-const OverviewPage = lazy(() => import("./pages/Overview").then((m) => ({ default: m.OverviewPage })));
-const PeoplePage = lazy(() => import("./pages/People").then((m) => ({ default: m.PeoplePage })));
-const PlaygroundPage = lazy(() => import("./pages/Playground").then((m) => ({ default: m.PlaygroundPage })));
 const ProfilePage = lazy(() => import("./pages/Profile").then((m) => ({ default: m.ProfilePage })));
 const RemindersPage = lazy(() => import("./pages/Reminders").then((m) => ({ default: m.RemindersPage })));
 const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
+const WatchesPage = lazy(() => import("./pages/Watches").then((m) => ({ default: m.WatchesPage })));
 const WhatsAppPage = lazy(() => import("./pages/WhatsApp").then((m) => ({ default: m.WhatsAppPage })));
 import { useApi } from "./hooks";
+import { Icon, Logo } from "./icons";
 
 export interface Me {
   id: string;
@@ -36,51 +35,52 @@ export interface Me {
 
 type NavItem = { section: string } | { to: string; label: string; icon: string; badge?: string };
 
-/** Super admin (dono da stack): tudo. Admin (quem se cadastrou): só os próprios dados. */
+/** Super admin (dono da stack): tudo. Admin (cliente com acesso ao painel): só os próprios dados. */
 const SUPER_NAV: NavItem[] = [
   { section: "Visão geral" },
-  { to: "/", label: "Painel", icon: "◫" },
-  { to: "/executions", label: "Execuções", icon: "≡" },
-  { to: "/conversations", label: "Conversas", icon: "💬" },
-  { to: "/playground", label: "Playground", icon: "▶" },
+  { to: "/", label: "Painel", icon: "home" },
+  { to: "/executions", label: "Execuções", icon: "activity" },
+  { section: "Pessoas" },
+  { to: "/clients", label: "Clientes", icon: "users", badge: "clients" },
+  { to: "/invites", label: "Convites", icon: "user-plus" },
   { section: "Agente" },
-  { to: "/whatsapp", label: "WhatsApp", icon: "📱" },
-  { to: "/agents", label: "Time de agentes", icon: "🧠" },
-  { to: "/integrations", label: "Integrações", icon: "🔌" },
-  { to: "/models", label: "Modelos", icon: "⚙" },
+  { to: "/agents", label: "Agentes", icon: "brain" },
+  { to: "/whatsapp", label: "WhatsApp", icon: "phone" },
+  { to: "/integrations", label: "Integrações", icon: "plug" },
+  { to: "/models", label: "Modelos", icon: "cpu" },
   { section: "Dados" },
-  { to: "/finance", label: "Finanças", icon: "💰" },
-  { to: "/reminders", label: "Lembretes", icon: "⏰" },
-  { to: "/memories", label: "Memórias", icon: "🧩" },
-  { section: "Administração" },
-  { to: "/people", label: "Pessoas", icon: "👥" },
-  { to: "/accounts", label: "Contas do painel", icon: "🔐", badge: "accounts" },
-  { to: "/settings", label: "Configurações", icon: "⚑" },
+  { to: "/finance", label: "Finanças", icon: "wallet" },
+  { to: "/reminders", label: "Lembretes", icon: "bell" },
+  { to: "/watches", label: "Acompanhamentos", icon: "eye" },
+  { to: "/memories", label: "Memórias", icon: "bookmark" },
+  { section: "Sistema" },
+  { to: "/settings", label: "Configurações", icon: "settings" },
 ];
 
 const ADMIN_NAV: NavItem[] = [
   { section: "Meu Planejai" },
-  { to: "/", label: "Início", icon: "◫" },
-  { to: "/finance", label: "Meus gastos", icon: "💰" },
-  { to: "/reminders", label: "Lembretes", icon: "⏰" },
-  { to: "/conversations", label: "Conversas", icon: "💬" },
-  { to: "/memories", label: "O que ele sabe de mim", icon: "🧩" },
+  { to: "/", label: "Início", icon: "home" },
+  { to: "/finance", label: "Gastos", icon: "wallet" },
+  { to: "/reminders", label: "Lembretes", icon: "bell" },
+  { to: "/watches", label: "Acompanhamentos", icon: "eye" },
+  { to: "/invites", label: "Convites", icon: "user-plus" },
+  { to: "/memories", label: "O que ele sabe", icon: "bookmark" },
   { section: "Conta" },
-  { to: "/profile", label: "Minha conta", icon: "👤" },
+  { to: "/profile", label: "Minha conta", icon: "user" },
 ];
 
 /** Abas da barra inferior no celular; o resto fica em "Mais". */
 const SUPER_TABS = [
-  { to: "/", label: "Painel", icon: "◫" },
-  { to: "/conversations", label: "Conversas", icon: "💬" },
-  { to: "/finance", label: "Finanças", icon: "💰" },
-  { to: "/playground", label: "Testar", icon: "▶" },
+  { to: "/", label: "Painel", icon: "home" },
+  { to: "/clients", label: "Clientes", icon: "users" },
+  { to: "/executions", label: "Execuções", icon: "activity" },
+  { to: "/agents", label: "Agentes", icon: "brain" },
 ];
 const ADMIN_TABS = [
-  { to: "/", label: "Início", icon: "◫" },
-  { to: "/finance", label: "Gastos", icon: "💰" },
-  { to: "/reminders", label: "Lembretes", icon: "⏰" },
-  { to: "/conversations", label: "Conversas", icon: "💬" },
+  { to: "/", label: "Início", icon: "home" },
+  { to: "/finance", label: "Gastos", icon: "wallet" },
+  { to: "/reminders", label: "Lembretes", icon: "bell" },
+  { to: "/invites", label: "Convites", icon: "user-plus" },
 ];
 
 export function App() {
@@ -117,16 +117,16 @@ export function App() {
   return (
     <div className="layout">
       <header className="topbar">
-        <div className="brand-logo" style={{ width: 30, height: 30, fontSize: 14 }}>P</div>
+        <Logo size={28} />
         <strong className="topbar-title">{titleFor(loc.pathname, isSuper ? SUPER_NAV : ADMIN_NAV)}</strong>
         <span className="spacer" />
-        <button className="icon-btn" onClick={toggleTheme} aria-label="Trocar tema">{theme === "dark" ? "☀" : "☾"}</button>
+        <button className="icon-btn" onClick={toggleTheme} aria-label="Trocar tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button>
       </header>
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-logo">P</div>
+          <div className="brand-logo"><Logo size={26} /></div>
           <div>
-            Planejai
+            planejai
             <small>{isSuper ? "Super admin" : "Painel"}</small>
           </div>
         </div>
@@ -140,8 +140,8 @@ export function App() {
             </div>
           </div>
           <div className="row">
-            <button className="btn btn-sm" style={{ flex: 1 }} onClick={toggleTheme}>
-              {theme === "dark" ? "☀ Claro" : "☾ Escuro"}
+            <button className="btn btn-sm" style={{ flex: 1 }} onClick={toggleTheme} aria-label="Trocar tema">
+              <Icon name={theme === "dark" ? "sun" : "moon"} size={15} /> <span className="label">{theme === "dark" ? "Claro" : "Escuro"}</span>
             </button>
             <button
               className="btn btn-sm"
@@ -149,8 +149,9 @@ export function App() {
                 await api("/api/auth/logout", { method: "POST" });
                 setMe(null);
               }}
+              aria-label="Sair"
             >
-              Sair
+              <Icon name="logout" size={15} /> <span className="label">Sair</span>
             </button>
           </div>
         </div>
@@ -161,29 +162,24 @@ export function App() {
         <Routes>
           {isSuper ? (
             <>
-              <Route path="/" element={<OverviewPage />} />
               <Route path="/executions" element={<ExecutionsPage />} />
               <Route path="/executions/:id" element={<ExecutionDetailPage />} />
-              <Route path="/playground" element={<PlaygroundPage />} />
+              <Route path="/clients" element={<ClientsPage />} />
               <Route path="/whatsapp" element={<WhatsAppPage />} />
               <Route path="/agents" element={<AgentsPage />} />
               <Route path="/integrations" element={<IntegrationsPage />} />
               <Route path="/models" element={<ModelsPage />} />
-              <Route path="/people" element={<PeoplePage />} />
-              <Route path="/accounts" element={<AccountsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </>
           ) : (
-            <>
-              <Route path="/" element={<HomePage me={me} />} />
-              <Route path="/profile" element={<ProfilePage me={me} />} />
-            </>
+            <Route path="/profile" element={<ProfilePage me={me} />} />
           )}
+          <Route path="/" element={<DashboardPage me={me} theme={theme} onTheme={toggleTheme} />} />
+          <Route path="/invites" element={<InvitesPage isSuper={isSuper} />} />
+          <Route path="/watches" element={<WatchesPage isSuper={isSuper} />} />
           <Route path="/finance" element={<FinancePage isSuper={isSuper} />} />
           <Route path="/reminders" element={<RemindersPage isSuper={isSuper} />} />
           <Route path="/memories" element={<MemoriesPage isSuper={isSuper} />} />
-          <Route path="/conversations" element={<ConversationsPage />} />
-          <Route path="/conversations/:id" element={<ConversationsPage />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
         </div>
@@ -193,12 +189,12 @@ export function App() {
       <nav className="tabbar" aria-label="Navegação">
         {(isSuper ? SUPER_TABS : ADMIN_TABS).map((t) => (
           <NavLink key={t.to} to={t.to} end={t.to === "/"} className="tab">
-            <span className="tab-ico">{t.icon}</span>
+            <span className="tab-ico"><Icon name={t.icon} size={22} /></span>
             <span>{t.label}</span>
           </NavLink>
         ))}
         <button className={`tab ${menu ? "active" : ""}`} onClick={() => setMenu(true)}>
-          <span className="tab-ico">☰</span>
+          <span className="tab-ico"><Icon name="menu" size={22} /></span>
           <span>Mais</span>
         </button>
       </nav>
@@ -207,7 +203,7 @@ export function App() {
         <Modal title="Menu" onClose={() => setMenu(false)}>
           {!isStandalone() && (installable || isIos()) && (
             <div className="install-card">
-              <div className="brand-logo">P</div>
+              <div className="brand-logo"><Logo size={26} /></div>
               <div style={{ flex: 1 }}>
                 <strong>Instalar o Planejai</strong>
                 <div className="muted" style={{ fontSize: 12 }}>
@@ -223,9 +219,9 @@ export function App() {
                 <div className="nav-section" key={i}>{item.section}</div>
               ) : (
                 <button key={item.to} className={`sheet-item ${loc.pathname === item.to ? "active" : ""}`} onClick={() => { haptic(); setMenu(false); nav(item.to); }}>
-                  <span className="ico">{item.icon}</span>
+                  <Icon name={item.icon} />
                   {item.label}
-                  <span className="chev">›</span>
+                  <span className="chev"><Icon name="chevron-right" size={16} /></span>
                 </button>
               ),
             )}
@@ -251,8 +247,8 @@ function titleFor(path: string, items: NavItem[]) {
 }
 
 function Nav({ items, isSuper }: { items: NavItem[]; isSuper: boolean }) {
-  const accounts = useApi<any[]>(isSuper ? "/api/accounts" : null, { poll: 60000 });
-  const pending = (accounts.data ?? []).filter((a) => a.status === "pending").length;
+  const clients = useApi<any[]>(isSuper ? "/api/clients" : null, { poll: 60000 });
+  const pending = (clients.data ?? []).filter((c) => c.status === "pending" || c.account_status === "pending").length;
   return (
     <nav className="nav">
       {items.map((item, i) =>
@@ -261,10 +257,10 @@ function Nav({ items, isSuper }: { items: NavItem[]; isSuper: boolean }) {
             {item.section}
           </div>
         ) : (
-          <NavLink key={item.to} to={item.to} end={item.to === "/"}>
-            <span className="ico">{item.icon}</span>
-            {item.label}
-            {item.badge === "accounts" && pending > 0 && <span className="count">{pending}</span>}
+          <NavLink key={item.to} to={item.to} end={item.to === "/"} title={item.label} data-count={item.badge === "clients" && pending > 0 ? pending : undefined}>
+            <Icon name={item.icon} />
+            <span className="label">{item.label}</span>
+            {item.badge === "clients" && pending > 0 && <span className="count">{pending}</span>}
           </NavLink>
         ),
       )}

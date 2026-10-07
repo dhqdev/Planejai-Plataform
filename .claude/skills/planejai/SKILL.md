@@ -92,14 +92,21 @@ O CTO ganha automaticamente `ask_<id>` e os outros especialistas ganham `consult
 
 ### Painéis e permissões
 - Dono da stack = `ADMIN_EMAIL`/`ADMIN_PASSWORD` do .env, sempre super admin (id "owner", não fica na tabela).
-- Cadastro público (`/api/auth/register`) cria conta `admin` ligada à pessoa do WhatsApp pelo número. Modo em Configurações (`signupMode`): `approval` (padrão), `open` ou `closed`. Aprovar a conta libera o número no WhatsApp; desativar bloqueia.
+- Entrada só por convite (`signupMode` padrão `invite`; também `approval`, `open`, `closed`). Convite (`social.ts`, fila `invite.send`) chega no WhatsApp; SIM/NÃO é tratado no ingest sem LLM e o aceite cria contatos nos dois sentidos. O link `/convite/CODIGO` abre o cadastro do painel já preenchido; convite vale como aprovação.
+- Super admin cadastra cliente completo (nome e sobrenome, e-mail, telefone) em **Clientes** (`POST /api/clients`), que devolve o link para a pessoa criar a senha.
+- Contatos: `send_to_contact` ("manda esse look pro Giovani") só envia para quem aceitou o convite.
 - Rota nova no `dashboard.ts`: se mostra dados de pessoas, vai no bloco com escopo e filtra com `scopeUserId(req.account)` (null = tudo); se é configuração/custo/sistema, vai no bloco `requireSuper`.
-- Página nova no dashboard: rota em `App.tsx` dentro do ramo certo (`isSuper` ou admin) e item no menu correspondente. O teste `features.e2e.test.ts` confere que admin leva 403 nas rotas de super admin; acrescente as novas lá.
+- Página nova no dashboard: rota em `App.tsx` dentro do ramo certo (`isSuper` ou admin) e item no menu com ícone de `icons.tsx` (nada de emoji; visual monocromático). Widget novo do Painel: entrada em `WIDGETS` de `pages/Dashboard.tsx` (tamanhos s/m/l/xl; o layout de cada conta fica em `/api/me/dashboard`). O teste `features.e2e.test.ts` confere que admin leva 403 nas rotas de super admin; acrescente as novas lá.
 
 ### Memória curta, retenção e mídia
 - Contexto do CTO = últimas `HISTORY_LIMIT` entradas do Redis (texto já interpretado) + resumo da conversa + memórias. Não volte a mandar mídia crua ou documento inteiro para o LLM: documento entra com prévia de 2.500 caracteres e o resto via `read_document`.
-- Mensagens brutas vivem `MESSAGE_RETENTION_HOURS` (24h). `purgeOld` resume antes de apagar; gastos, memórias e lembretes nunca são apagados por ela.
+- Conversa não é guardada no Postgres quando o Redis está no ar: a mensagem é apagada depois de processada e a resposta não é gravada (o histórico já está no WhatsApp). Sem Redis, cai no modo antigo (guarda `MESSAGE_RETENTION_HOURS` e resume).
+- Cache no Redis (`shortmem.ts`: `cached`, `markSeen`, `countInWindow`): resultado de web_search/fetch_url (6h) e Mercado Livre (1h), interpretação de mídia por hash (30 dias), texto de documento (24h), dedupe de webhook e ritmo por minuto. Ferramenta nova determinística pode entrar no cache do runner (`agent/cache.ts`).
 - Gravações e prints ficam em `media_files` (servidos por `/api/media/:id`) por `EXECUTION_RETENTION_DAYS`.
+
+### Melhoria diária e proatividade
+- `improve.ts` (fila `improve.daily`, 19h no `DEFAULT_TIMEZONE`): uma chamada barata em JSON por pessoa ativa; assuntos somam em `user_topics` e viram agente do cliente (`client_agents`, até 3, ferramentas só da lista `CLIENT_AGENT_TOOLS`) quando aparecem em 2 dias diferentes. Botão "Melhorar agora" em Agentes.
+- `watches.ts` (fila `watch.check`, a cada 15 min): preço (Mercado Livre) e notícias (busca) são conferidos sem LLM; só quando algo melhora o modelo `proactive` escreve o aviso.
 
 ### Gastos automáticos
 - Foto/documento de comprovante: a visão escreve `FINANCEIRO: tipo=...; valor_total=...; data=...; estabelecimento=...`; o CTO chama `add_transaction` direto com `message_id` (vira `external_ref`, então reprocessar não duplica).
@@ -127,7 +134,7 @@ npm run dev:dashboard           # dashboard em :5173 com proxy para :3000
 npm run typecheck && npm test   # e2e rodam com TEST_DATABASE_URL (banco descartável); REDIS_URL e CHROME_PATH ligam os testes de Redis e navegador
 npm run build                   # dashboard vai para apps/server/public
 ```
-Teste conversas sem WhatsApp pela tela **Playground**; cada resposta linka para a execução com todos os passos.
+Sem WhatsApp, teste pelos e2e (canal playground) e veja os passos em **Execuções**.
 
 ## Publicar
 - Push na `main` dispara `.github/workflows/docker.yml`: imagem `ghcr.io/dhqdev/planejai-plataform` para amd64, arm64 e arm/v7, e redeploy no Portainer se o secret `PORTAINER_WEBHOOK_URL` existir.

@@ -2,7 +2,7 @@
    - arquivos do app (/assets, ícones): cache primeiro (têm hash no nome, nunca mudam)
    - páginas: rede primeiro, cai para o app em cache se estiver offline
    - /api e /webhooks: nunca passam pelo cache (dados sempre frescos e privados) */
-const VERSION = "planejai-v1";
+const VERSION = "planejai-v2";
 const SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {

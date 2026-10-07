@@ -2,8 +2,9 @@ import { useState } from "react";
 import { api, brl, day } from "../api";
 import { CATEGORY_COLORS, Donut, Empty, ErrorBox, Loading, Modal, PageHead, Stat } from "../components";
 import { useApi } from "../hooks";
+import { Icon } from "../icons";
 
-const SOURCE: Record<string, string> = { conversa: "💬 conversa", audio: "🎙️ áudio", comprovante: "🧾 comprovante", documento: "📄 documento", painel: "🖥️ painel" };
+const SOURCE: Record<string, string> = { conversa: "conversa", audio: "áudio", comprovante: "comprovante", documento: "documento", painel: "painel" };
 
 function thisMonth() {
   const d = new Date();
@@ -48,12 +49,12 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
       {!data ? <Loading /> : (
         <>
           <div className="grid grid-4" style={{ marginBottom: 14 }}>
-            <Stat label="Gastos no mês" value={brl(expenses)} icon="💸" sub={diff == null ? `${data.totals.count} lançamentos` : (
-              <span className={diff > 0 ? "trend-up" : "trend-down"}>{diff > 0 ? "▲" : "▼"} {brl(Math.abs(diff))} vs mês anterior</span>
+            <Stat label="Gastos no mês" value={brl(expenses)} icon="wallet" sub={diff == null ? `${data.totals.count} lançamentos` : (
+              <span className={diff > 0 ? "trend-up" : "trend-down"}>{diff > 0 ? "+" : "-"}{brl(Math.abs(diff))} vs mês anterior</span>
             )} />
-            <Stat label="Receitas" value={brl(income)} icon="💵" tone="ok" />
-            <Stat label="Saldo" value={<span style={{ color: income - expenses < 0 ? "var(--err)" : "var(--ok)" }}>{brl(income - expenses)}</span>} icon="⚖️" tone="info" />
-            <Stat label="Maior categoria" value={cats[0]?.label ?? "–"} icon="🏷️" tone="warn" sub={cats[0] ? `${brl(cats[0].value)} · ${expenses ? Math.round((cats[0].value / expenses) * 100) : 0}%` : undefined} />
+            <Stat label="Receitas" value={brl(income)} icon="arrow" tone="ok" />
+            <Stat label="Saldo" value={<span style={{ color: income - expenses < 0 ? "var(--err)" : "var(--ok)" }}>{brl(income - expenses)}</span>} icon="target" tone="info" />
+            <Stat label="Maior categoria" value={cats[0]?.label ?? "–"} icon="hash" tone="warn" sub={cats[0] ? `${brl(cats[0].value)} · ${expenses ? Math.round((cats[0].value / expenses) * 100) : 0}%` : undefined} />
           </div>
 
           <div className="grid grid-2" style={{ marginBottom: 14 }}>
@@ -107,7 +108,7 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                     {isSuper && <td>{t.user_name ?? `+${t.phone}`}</td>}
                     <td className="muted">{SOURCE[t.source] ?? t.source}</td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }} className={t.kind === "income" ? "amount-in" : "amount-out"}>{t.kind === "income" ? "+ " : "− "}{brl(t.amount)}</td>
-                    <td><button className="btn btn-sm btn-ghost" title="Apagar" onClick={async () => { if (confirm("Apagar este lançamento?")) { await api(`/api/finance/${t.id}`, { method: "DELETE" }); void reload(); } }}>✕</button></td>
+                    <td><button className="btn btn-sm btn-ghost" title="Apagar" onClick={async () => { if (confirm("Apagar este lançamento?")) { await api(`/api/finance/${t.id}`, { method: "DELETE" }); void reload(); } }}><Icon name="trash" size={14} /></button></td>
                   </tr>
                 ))}
               </tbody>

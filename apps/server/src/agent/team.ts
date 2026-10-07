@@ -4,12 +4,19 @@ import * as core from "./tools/core.js";
 import * as finance from "./tools/finance.js";
 import * as prod from "./tools/productivity.js";
 import * as research from "./tools/research.js";
+import * as social from "./tools/social.js";
+import { many } from "../db/pool.js";
 import type { Tool } from "./tools/types.js";
 
 export interface AgentDef {
   id: string;
   name: string;
-  emoji: string;
+  /** ícone no painel (nome do conjunto de ícones do dashboard) */
+  icon: string;
+  /** rota de modelo; padrão agent:<id> */
+  task?: string;
+  /** agente criado para um cliente pela melhoria diária */
+  clientAgentId?: string;
   /** descrição usada pelo CTO para decidir quando delegar */
   role: string;
   instructions: string;
@@ -21,7 +28,7 @@ export const SPECIALISTS: AgentDef[] = [
   {
     id: "pesquisador",
     name: "Pesquisador",
-    emoji: "🔎",
+    icon: "search",
     role:
       "Pesquisa qualquer coisa atual na internet: sessões de cinema, preços e lojas (inclusive Mercado Livre), restaurantes, notícias, endereços, horários, " +
       "comparações de produtos. Abre páginas e tira print de páginas para mandar como foto.",
@@ -46,7 +53,7 @@ export const SPECIALISTS: AgentDef[] = [
   {
     id: "agenda",
     name: "Agenda",
-    emoji: "📅",
+    icon: "calendar",
     role: "Lembretes (únicos ou recorrentes), compromissos e Google Agenda: criar, listar, cancelar, ver o que tem no dia.",
     instructions:
       "Converta pedidos de tempo relativo com cuidado usando a data/hora atual informada. Para 'daqui X minutos' use in_minutes. " +
@@ -63,7 +70,7 @@ export const SPECIALISTS: AgentDef[] = [
   {
     id: "financeiro",
     name: "Financeiro",
-    emoji: "💰",
+    icon: "wallet",
     role:
       "Finanças pessoais: gastos e receitas (inclusive de comprovantes, notas, faturas e extratos), parcelas, resumos e comparações do mês, " +
       "contas, divisão de despesas e links de pagamento (Mercado Pago/Stripe).",
@@ -84,7 +91,7 @@ export const SPECIALISTS: AgentDef[] = [
   {
     id: "comunicacao",
     name: "Comunicação",
-    emoji: "✉️",
+    icon: "mail",
     role: "E-mail (Gmail) e Slack: buscar, ler, resumir, redigir e enviar mensagens.",
     instructions:
       "Para enviar qualquer coisa, primeiro devolva o rascunho ao CTO; só envie com confirmed_by_user=true quando o CTO disser que a pessoa aprovou.",
@@ -93,7 +100,7 @@ export const SPECIALISTS: AgentDef[] = [
   {
     id: "produtividade",
     name: "Produtividade",
-    emoji: "🗂️",
+    icon: "folder",
     role: "Notion (páginas, notas, bancos), Linear e GitHub (issues, PRs).",
     instructions: "Retorne links diretos para o que encontrar ou criar.",
     tools: [
@@ -121,16 +128,56 @@ export const CTO_TOOLS: Tool[] = [
   finance.addTransaction,
   finance.calculate,
   agenda.scheduleReminder,
+  social.sendToContact,
+  social.listContactsTool,
+  social.invitePerson,
+  social.watchCreate,
+  social.watchList,
+  social.watchCancel,
 ];
 
 export const CTO: Omit<AgentDef, "tools"> = {
   id: "cto",
   name: "CTO",
-  emoji: "🧠",
+  icon: "brain",
   role: "Orquestrador: conversa com a pessoa, decide, delega aos especialistas e compõe a resposta final.",
   instructions: "",
 };
 
 export function getSpecialist(id: string) {
   return SPECIALISTS.find((s) => s.id === id);
+}
+
+/** Ferramentas que a melhoria diária pode dar a um agente de cliente (só leitura/pesquisa e registros simples). */
+export const CLIENT_AGENT_TOOLS: Record<string, Tool> = Object.fromEntries(
+  [
+    research.webSearch,
+    research.fetchUrl,
+    research.screenshotUrl,
+    research.mercadolivreSearch,
+    research.browserOpen,
+    research.browserAction,
+    research.browserClose,
+    finance.listTransactions,
+    finance.financeSummary,
+    finance.calculate,
+    agenda.calendarListEvents,
+    core.getDatetime,
+    core.attachImage,
+  ].map((t) => [t.name, t]),
+);
+
+/** Agentes que a melhoria diária criou para esta pessoa, no formato do time. */
+export async function clientAgents(userId: string): Promise<AgentDef[]> {
+  const rows = await many("SELECT * FROM client_agents WHERE user_id = $1 AND active ORDER BY created_at", [userId]);
+  return rows.map((r) => ({
+    id: `c_${r.slug}`,
+    name: r.name,
+    icon: "sparkle",
+    task: "agent:cliente",
+    clientAgentId: r.id,
+    role: `${r.focus} (especialista criado para esta pessoa a partir do que ela mais pede)`,
+    instructions: r.instructions,
+    tools: (r.tools as string[]).map((n) => CLIENT_AGENT_TOOLS[n]).filter(Boolean) as Tool[],
+  }));
 }

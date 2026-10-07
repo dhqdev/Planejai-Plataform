@@ -65,8 +65,9 @@ async function slack(method: string, params: Record<string, unknown>) {
   if (!creds) throw new Error("Slack não conectado");
   const res = await fetch(`https://slack.com/api/${method}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${creds.bot_token}`, "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify(params),
+    // Form-encoded: métodos de leitura (conversations.list/history) não aceitam corpo JSON no Slack
+    headers: { Authorization: `Bearer ${creds.bot_token}`, "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])),
   });
   const j: any = await res.json();
   if (!j.ok) throw new Error(`Slack ${method}: ${j.error}`);

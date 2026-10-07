@@ -50,6 +50,8 @@ export interface ToolContext {
   callChain: string[];
   /** travas da execução (prazo e número de ações), as mesmas para o time todo */
   guard?: Guard;
+  /** fotos que chegaram nesta rodada (só em memória), para encaminhar a um contato */
+  inboundImages?: { base64: string; mimetype: string }[];
 }
 
 export interface Tool<A = any> {

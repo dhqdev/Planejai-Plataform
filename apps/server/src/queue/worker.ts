@@ -1,6 +1,10 @@
 import { processConversation, summarizeConversation } from "../agent/orchestrator.js";
 import { one } from "../db/pool.js";
 import { purgeOld } from "../maintenance.js";
+import { dailyImprovement } from "../improve.js";
+import { sendInvite } from "../social.js";
+import { checkDueWatches } from "../watches.js";
+import { config } from "../config.js";
 import { afterFire } from "../reminders.js";
 import { QUEUES, getBoss } from "./boss.js";
 
@@ -45,6 +49,23 @@ export async function startWorker(log: { info: (...a: any[]) => void; error: (..
   });
   // de hora em hora: resume e apaga mensagens com mais de 24h, logs e gravações antigas
   await boss.schedule(QUEUES.purge, "17 * * * *");
+
+  // convites saem pelo worker (é ele que segura a conexão do WhatsApp)
+  await boss.work<{ inviteId: string }>(QUEUES.invite, { batchSize: 1, pollingIntervalSeconds: 2 }, async ([job]) => {
+    if (job) await sendInvite(job.data.inviteId);
+  });
+
+  // acompanhamentos (preço, novidades): checagem sem IA a cada 15 min, só os vencidos
+  await boss.work(QUEUES.watch, { batchSize: 1, pollingIntervalSeconds: 30 }, async () => {
+    await checkDueWatches(log);
+  });
+  await boss.schedule(QUEUES.watch, "*/15 * * * *");
+
+  // melhoria diária dos agentes de cada cliente, às 19h
+  await boss.work(QUEUES.improve, { batchSize: 1, pollingIntervalSeconds: 60 }, async () => {
+    await dailyImprovement(log);
+  });
+  await boss.schedule(QUEUES.improve, "0 19 * * *", undefined, { tz: config.DEFAULT_TIMEZONE });
 
   log.info("worker iniciado (filas: processamento, lembretes, resumos)");
 }

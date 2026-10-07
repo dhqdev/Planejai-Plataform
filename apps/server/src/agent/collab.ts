@@ -1,4 +1,5 @@
 import type { ChatMessage } from "../llm/types.js";
+import { query } from "../db/pool.js";
 import type { BrowserSession } from "./browser.js";
 import { getSettings } from "../settings.js";
 import { specialistSystemPrompt } from "./prompts.js";
@@ -73,7 +74,7 @@ export function delegationTool(def: AgentDef): Tool<{ message: string }> {
   return defineTool({
     name: `ask_${def.id}`,
     description:
-      `${def.emoji} ${def.name}: ${def.role} ` +
+      `${def.name}: ${def.role} ` +
       "É uma conversa: chamar de novo continua de onde parou (use para cobrar, corrigir ou pedir mais). Mande a tarefa completa na primeira vez.",
     parameters: obj({ message: { type: "string", description: "Tarefa ou resposta para o especialista, com todo o contexto necessário" } }, ["message"]),
     async run(args, ctx) {
@@ -83,7 +84,8 @@ export function delegationTool(def: AgentDef): Tool<{ message: string }> {
         const thread = ctx.room.threads.get(def.id) ?? [{ role: "system", content: await systemFor(def, ctx, own) } as ChatMessage];
         thread.push({ role: "user", content: `[CTO] ${args.message}${ctx.room.boardText()}` });
         ctx.room.edges.push({ from: ctx.agent, to: def.id });
-        const r = await runToolLoop({ agent: def.id, task: `agent:${def.id}`, ctx: { ...ctx, agent: def.id, callChain: chain }, tools: all, maxSteps: 7, messages: thread });
+        if (def.clientAgentId) void query("UPDATE client_agents SET uses = uses + 1 WHERE id = $1", [def.clientAgentId]).catch(() => {});
+        const r = await runToolLoop({ agent: def.id, task: def.task ?? `agent:${def.id}`, ctx: { ...ctx, agent: def.id, callChain: chain }, tools: all, maxSteps: 7, messages: thread });
         ctx.room.threads.set(def.id, r.messages);
         return { report: r.text || "(o especialista não retornou relatório)" };
       });
@@ -95,7 +97,7 @@ export function delegationTool(def: AgentDef): Tool<{ message: string }> {
 export function consultTool(def: AgentDef): Tool<{ question: string }> {
   return defineTool({
     name: `consult_${def.id}`,
-    description: `Pergunte ao colega ${def.emoji} ${def.name} (${def.role}) algo da área dele. Seja específico e dê o contexto.`,
+    description: `Pergunte ao colega ${def.name} (${def.role}) algo da área dele. Seja específico e dê o contexto.`,
     parameters: obj({ question: { type: "string" } }, ["question"]),
     async run(args, ctx) {
       const chain = [...ctx.callChain, def.id];

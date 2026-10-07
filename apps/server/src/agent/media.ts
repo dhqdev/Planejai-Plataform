@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { cacheGet, cacheSet } from "../shortmem.js";
 import { execFile } from "node:child_process";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -16,6 +18,10 @@ const run = promisify(execFile);
 /** Quanto do documento entra direto no contexto do CTO (o resto fica disponível em read_document). */
 export const DOC_PREVIEW_CHARS = 2500;
 const DOC_MAX_CHARS = 60_000;
+/** interpretação de mídia repetida (mesmo arquivo) fica 30 dias no Redis */
+const MEDIA_CACHE_SECONDS = 30 * 86400;
+/** texto de documento fica 24h para read_document (a mensagem em si não é guardada) */
+const DOC_CACHE_SECONDS = 86400;
 
 const VISION_PROMPT =
   "Descreva esta imagem em português, objetivo e completo, para um assistente que não pode vê-la. " +
@@ -180,8 +186,19 @@ export async function preprocessMedia(pending: any[], channel: Channel, tracer: 
     try {
       const media = await channel.downloadMedia({ externalId: m.external_id, remoteJid, media: m.media } as any);
       if (!media) throw new Error("Não foi possível baixar a mídia");
+      // foto fica em memória só durante esta resposta, para poder ser encaminhada a um contato
+      if (kind === "image") m.inboundImage = { base64: media.base64, mimetype: media.mimetype };
+      // a mesma mídia já interpretada antes (encaminhada, reenviada): reaproveita do cache, sem gastar token
+      const hash = createHash("sha256").update(media.base64).digest("hex").slice(0, 40);
+      const memo = await cacheGet<Record<string, unknown>>(`media:${kind}:${hash}`);
+      if (memo) {
+        Object.assign(m.meta, memo);
+        await step.ok({ cache: true, ...memo });
+      }
       let usage: ChatResult | undefined;
-      if (kind === "audio") {
+      if (memo) {
+        /* já interpretada */
+      } else if (kind === "audio") {
         usage = await transcribe(media.base64, audioFormat(media.mimetype));
         m.meta.transcript = usage.message.content?.trim();
         await step.ok({ transcript: m.meta.transcript }, usage);
@@ -221,6 +238,11 @@ export async function preprocessMedia(pending: any[], channel: Channel, tracer: 
         }
         await step.ok({ description: m.meta.video_description, transcript: m.meta.transcript }, usage);
       }
+      if (!memo) {
+        const keep = ["transcript", "image_description", "video_description", "doc_text", "doc_chars", "doc_pages"];
+        const out = Object.fromEntries(keep.filter((k) => m.meta[k] != null).map((k) => [k, m.meta[k]]));
+        if (Object.keys(out).length) await cacheSet(`media:${kind}:${hash}`, out, MEDIA_CACHE_SECONDS);
+      }
     } catch (err) {
       if (kind === "document") m.meta.doc_error = (err as Error).message;
       await step.fail(err);
@@ -228,6 +250,7 @@ export async function preprocessMedia(pending: any[], channel: Channel, tracer: 
     // o arquivo só serve até aqui; não guarda mídia pesada no banco
     const { base64: _drop, ...mediaMeta } = m.media;
     m.media = mediaMeta;
+    if (m.meta.doc_text) await cacheSet(`doc:${m.conversation_id}:${m.id}`, m.meta.doc_text, DOC_CACHE_SECONDS);
     await query("UPDATE messages SET meta = $2, media = $3 WHERE id = $1", [m.id, m.meta, mediaMeta]);
   }
 }

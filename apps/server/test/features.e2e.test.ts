@@ -87,10 +87,15 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(channel.sent[0]).toEqual({ type: "reaction", emoji: "✅", messageId: "img1" });
     const tx = await db.many("SELECT amount, category, merchant, source, external_ref FROM transactions WHERE user_id = $1", [user.id]);
     expect(tx).toEqual([{ amount: 45.9, category: "Alimentação", merchant: "Pizzaria Bella", source: "comprovante", external_ref: `${m.id}:0` }]);
-    // a foto não fica guardada no banco depois de interpretada
-    const stored = await db.one("SELECT media, meta FROM messages WHERE id = $1", [m.id]);
-    expect(stored.media.base64).toBeUndefined();
-    expect(stored.meta.image_description).toContain("valor_total=45.90");
+    // a conversa não fica no banco (já está no WhatsApp): só na memória curta do Redis, já interpretada
+    const stored = await db.many("SELECT id FROM messages WHERE id = $1", [m.id]);
+    expect(stored).toEqual([]);
+    const { recentShort, cacheGet } = await import("../src/shortmem.js");
+    expect((await recentShort(convId, 10))?.some((e) => e.text.includes("valor_total=45.90"))).toBe(true);
+    // a mesma foto de novo não paga visão outra vez: a interpretação fica no cache
+    const { createHash } = await import("node:crypto");
+    const hash = createHash("sha256").update(img.base64).digest("hex").slice(0, 40);
+    expect(((await cacheGet<any>(`media:image:${hash}`)) as any).image_description).toContain("Pizzaria Bella");
 
     // mesmo comprovante de novo (reprocessamento): não duplica
     const { addTransaction } = await import("../src/agent/tools/finance.js");
@@ -107,8 +112,21 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
       { kind: "document", fileName: "extrato.csv" },
     ]);
     await mod.processConversation(convId, { trigger: "playground", channel: new channels.PlaygroundChannel() });
-    const row = await db.one("SELECT meta FROM messages WHERE external_id = 'doc1'");
-    expect(row.meta.doc_text).toContain("Mercado,250.40");
+    // o texto do documento fica 24h no Redis para read_document, mesmo sem a mensagem no banco
+    const { readDocument } = await import("../src/agent/tools/core.js");
+    const { cacheGet } = await import("../src/shortmem.js");
+    const keys = await (async () => {
+      const { Redis } = await import("ioredis");
+      const r = new Redis(process.env.REDIS_URL!);
+      const k = await r.keys(`pj:cache:doc:${convId}:*`);
+      await r.quit();
+      return k;
+    })();
+    expect(keys.length).toBe(1);
+    const msgId = Number(keys[0]!.split(":").at(-1));
+    expect(await cacheGet<string>(`doc:${convId}:${msgId}`)).toContain("Mercado,250.40");
+    const read: any = await readDocument.run({ message_id: msgId, query: "uber" }, { conversation: { id: convId } } as any);
+    expect(read.matches).toContain("Uber,32.10");
     expect(seen.at(-1)).toContain("[documento extrato.csv]");
     expect(seen.at(-1)).toContain("Uber,32.10");
   });
@@ -145,15 +163,16 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(ttl).toBeLessThanOrEqual(24 * 3600);
   });
 
-  it("limpeza: mensagens com mais de 24h viram resumo e são apagadas", async () => {
-    await db.query("UPDATE messages SET created_at = now() - interval '30 hours' WHERE conversation_id = $1", [convId]);
-    const { purgeOld } = await import("../src/maintenance.js");
-    const r = await purgeOld();
-    expect(r.messages).toBeGreaterThan(0);
+  it("memória curta vira resumo antes de expirar e nenhuma conversa fica no banco", async () => {
     const left = await db.one("SELECT COUNT(*)::int AS n FROM messages WHERE conversation_id = $1", [convId]);
     expect(left.n).toBe(0);
-    const conv = await db.one("SELECT summary FROM conversations WHERE id = $1", [convId]);
+    const { summarizeConversation } = await import("../src/agent/orchestrator.js");
+    await summarizeConversation(convId, { olderThanMs: 0 });
+    const conv = await db.one("SELECT summary, summary_ts FROM conversations WHERE id = $1", [convId]);
     expect(conv.summary).toBeTruthy();
+    expect(Number(conv.summary_ts)).toBeGreaterThan(0);
+    const { purgeOld } = await import("../src/maintenance.js");
+    await purgeOld();
     // o gasto continua lá
     const tx = await db.one("SELECT COUNT(*)::int AS n FROM transactions WHERE user_id = $1", [user.id]);
     expect(tx.n).toBe(1);
@@ -164,7 +183,11 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     const app = await buildServer();
     const cookieOf = (res: any) => String(res.headers["set-cookie"]).split(";")[0]!;
 
-    // cadastro (modo padrão: aprovação)
+    // padrão é só por convite: sem código não entra
+    const noCode = await app.inject({ method: "POST", url: "/api/auth/register", payload: { name: "Zé", email: "ze@x.com", password: "senha-forte", phone: "(19) 92222-2222" } });
+    expect(noCode.statusCode).toBe(403);
+    await (await import("../src/settings.js")).saveSettings({ signupMode: "approval" });
+    // cadastro com aprovação
     const reg = await app.inject({ method: "POST", url: "/api/auth/register", payload: { name: "Ana", email: "ana@x.com", password: "senha-forte", phone: "(19) 91111-1111" } });
     expect(reg.json()).toMatchObject({ pending: true });
     const blocked = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "ana@x.com", password: "senha-forte" } });

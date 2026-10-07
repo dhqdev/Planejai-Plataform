@@ -48,11 +48,12 @@ export function SettingsPage() {
           <div className="field">
             <label>Cadastro no painel</label>
             <select className="select" value={form.signupMode} onChange={(e) => setForm({ ...form, signupMode: e.target.value })}>
+              <option value="invite">Só por convite (recomendado)</option>
               <option value="approval">Aberto, mas eu aprovo cada conta</option>
               <option value="open">Aberto: libera na hora (painel e WhatsApp)</option>
               <option value="closed">Fechado: só eu crio contas</option>
             </select>
-            <div className="help">Quem se cadastra vira admin e vê só os próprios dados. Liberar na hora deixa o número usar o assistente (gasta sua chave do OpenRouter).</div>
+            <div className="help">Só por convite: a pessoa entra pelo link do convite ou respondendo SIM no WhatsApp. Quem entra vê só os próprios dados. Liberar na hora deixa o número usar o assistente (gasta sua chave do OpenRouter).</div>
           </div>
           <div className="row">
             <button className="btn btn-primary" onClick={save}>Salvar</button>
@@ -60,7 +61,7 @@ export function SettingsPage() {
           </div>
         </div>
         <div className="card card-pad">
-          <h3>🛡️ Travas de segurança</h3>
+          <h3>Travas de segurança</h3>
           <p className="muted" style={{ marginTop: 0 }}>Valem para todo mundo, menos para os números de dono. Quando uma trava age, aparece em Execuções como "trava: …".</p>
           {num("maxExecutionMinutes", "Tempo máximo por resposta (minutos)", "Perto do fim o time é avisado para responder com o que tem; no limite, tudo é cancelado e a pessoa recebe um aviso. Entre 0,5 e 30.", 0.5)}
           {num("maxToolCalls", "Ações por resposta", "Ferramentas e consultas somando o time todo. Evita loop de pesquisa. Entre 5 e 200.")}

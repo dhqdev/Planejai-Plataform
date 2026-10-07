@@ -3,6 +3,9 @@ import { config } from "./config.js";
 import { one, query } from "./db/pool.js";
 import { QUEUES, getBoss } from "./queue/boss.js";
 import { getSettings } from "./settings.js";
+import { countInWindow, markSeen } from "./shortmem.js";
+import { handleInviteReply } from "./social.js";
+import { getChannel } from "./channels/index.js";
 
 /** Celulares do Brasil chegam no WhatsApp com ou sem o nono dígito (55 19 9xxxx-xxxx vs 55 19 xxxx-xxxx). */
 export function phoneVariants(phone: string): string[] {
@@ -52,6 +55,16 @@ export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; re
     return { queued: false, reason: "reação" };
   }
 
+  // Mensagem repetida (o WhatsApp reentrega às vezes): com o Redis, o banco nem é tocado
+  if (msg.externalId && (await markSeen(`${msg.channel}:${msg.externalId}`, 48 * 3600)) === false) return { queued: false, reason: "duplicada" };
+
+  // Resposta a convite (SIM/NÃO) é tratada aqui mesmo, sem IA
+  if (msg.kind === "text") {
+    const channel = getChannel(msg.channel);
+    if (await handleInviteReply({ user, text: msg.text, channel, remoteJid: msg.remoteJid })) return { queued: false, reason: "convite" };
+  }
+  if (user.status !== "active") return { queued: false, reason: `contato ${user.status}` };
+
   const inserted = await one(
     `INSERT INTO messages (conversation_id, role, content, external_id, media, meta, created_at)
      VALUES ($1, 'user', $2, $3, $4, $5, $6)
@@ -59,7 +72,10 @@ export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; re
     [conv.id, msg.text, msg.externalId, msg.media ?? null, { kind: msg.kind, quoted: msg.quoted ?? null, fileName: msg.media?.fileName ?? null }, msg.timestamp],
   );
   if (!inserted) return { queued: false, reason: "duplicada" };
-  if (user.status !== "active") return { queued: false, reason: `contato ${user.status}` };
+  await query(
+    "INSERT INTO usage_daily (user_id, day, messages) VALUES ($1, current_date, 1) ON CONFLICT (user_id, day) DO UPDATE SET messages = usage_daily.messages + 1",
+    [user.id],
+  );
 
   const settings = await getSettings();
   // Ritmo: quem manda mensagem demais por minuto (spam, robô, loop) recebe no máximo uma resposta por minuto,
@@ -67,8 +83,10 @@ export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; re
   let delay = config.MESSAGE_DEBOUNCE_SECONDS;
   let throttled = false;
   if (!isOwner(msg.phone)) {
-    const r = await one("SELECT COUNT(*)::int AS n FROM messages WHERE conversation_id = $1 AND role = 'user' AND created_at > now() - interval '1 minute'", [conv.id]);
-    if (r.n > settings.rateLimitPerMinute) {
+    const n =
+      (await countInWindow(`conv:${conv.id}`, 60)) ??
+      (await one("SELECT COUNT(*)::int AS n FROM messages WHERE conversation_id = $1 AND role = 'user' AND created_at > now() - interval '1 minute'", [conv.id])).n;
+    if (n > settings.rateLimitPerMinute) {
       delay = Math.max(delay, 60);
       throttled = true;
     }

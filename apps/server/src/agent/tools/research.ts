@@ -249,25 +249,68 @@ export const mercadolivreSearch = defineTool<{ query: string; limit?: number; so
     condition: { type: "string", enum: ["new", "used"] },
   }, ["query"]),
   async run(args) {
-    const { mercadolivreApi } = await import("../../integrations/mercadolivre.js");
-    const p = new URLSearchParams({ q: args.query, limit: String(Math.min(args.limit ?? 8, 20)) });
+    const { mercadolivreApi, MercadoLivreError } = await import("../../integrations/mercadolivre.js");
+    const limit = Math.min(args.limit ?? 8, 20);
+    const p = new URLSearchParams({ q: args.query, limit: String(limit) });
     if (args.sort) p.set("sort", args.sort);
     if (args.condition) p.set("condition", args.condition);
-    const j = await mercadolivreApi(`/sites/MLB/search?${p}`);
-    return {
-      total: j.paging?.total,
-      items: (j.results ?? []).map((r: any) => ({
-        title: r.title,
-        price: r.price,
-        original_price: r.original_price ?? undefined,
-        condition: r.condition,
-        free_shipping: r.shipping?.free_shipping ?? false,
-        installments: r.installments ? `${r.installments.quantity}x de ${r.installments.amount}${r.installments.rate === 0 ? " sem juros" : ""}` : undefined,
-        seller: r.seller?.nickname,
-        official_store: r.official_store_name ?? undefined,
-        link: r.permalink,
-        thumbnail: r.thumbnail,
-      })),
-    };
+    try {
+      // Busca de anúncios (com o token OAuth da conta conectada)
+      const j = await mercadolivreApi(`/sites/MLB/search?${p}`);
+      return {
+        source: "anuncios",
+        total: j.paging?.total,
+        items: (j.results ?? []).map((r: any) => ({
+          title: r.title,
+          price: r.price,
+          original_price: r.original_price ?? undefined,
+          condition: r.condition,
+          free_shipping: r.shipping?.free_shipping ?? false,
+          installments: r.installments ? `${r.installments.quantity}x de ${r.installments.amount}${r.installments.rate === 0 ? " sem juros" : ""}` : undefined,
+          seller: r.seller?.nickname,
+          official_store: r.official_store_name ?? undefined,
+          link: r.permalink,
+          thumbnail: r.thumbnail,
+        })),
+      };
+    } catch (e) {
+      // Desde 2025 o Mercado Livre bloqueia /sites/{site}/search (403) para apps não homologados,
+      // mesmo com token. Cai para o catálogo: /products/search + ofertas de cada produto.
+      if (!(e instanceof MercadoLivreError) || (e.status !== 403 && e.status !== 401)) throw e;
+    }
+    const n = Math.min(limit, 6); // cada produto custa 1 chamada de ofertas
+    let cat: any;
+    try {
+      cat = await mercadolivreApi(`/products/search?${new URLSearchParams({ status: "active", site_id: "MLB", q: args.query, limit: String(n) })}`);
+    } catch (e) {
+      if (e instanceof MercadoLivreError && (e.status === 403 || e.status === 401)) {
+        return {
+          error:
+            "O Mercado Livre recusou a busca para este app (403). A busca de anúncios exige app homologado; reconecte a conta no dashboard ou use web_search/browser_open no site.",
+        };
+      }
+      throw e;
+    }
+    const items = await Promise.all(
+      (cat.results ?? []).slice(0, n).map(async (prod: any) => {
+        const offers = await mercadolivreApi(`/products/${prod.id}/items?limit=5`).catch(() => null);
+        let list: any[] = offers?.results ?? [];
+        if (args.condition) list = list.filter((o) => o.condition === args.condition);
+        const best = list.sort((a, b) => Number(a.price) - Number(b.price))[0];
+        return {
+          title: prod.name,
+          price: best?.price,
+          original_price: best?.original_price ?? undefined,
+          condition: best?.condition,
+          free_shipping: best?.shipping?.free_shipping ?? false,
+          offers: list.length || undefined,
+          link: `https://www.mercadolivre.com.br/p/${prod.id}`,
+          thumbnail: prod.pictures?.[0]?.url,
+        };
+      }),
+    );
+    if (args.sort === "price_asc") items.sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
+    if (args.sort === "price_desc") items.sort((a, b) => (b.price ?? -Infinity) - (a.price ?? -Infinity));
+    return { source: "catalogo", total: cat.paging?.total, items };
   },
 });

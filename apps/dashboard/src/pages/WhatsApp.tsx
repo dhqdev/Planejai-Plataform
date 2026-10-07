@@ -69,7 +69,7 @@ export function WhatsAppPage() {
           <div className="row" style={{ marginBottom: 14 }}>
             <span className={`badge ${cls}`}>{label}</span>
             {s.listening ? (
-              <span className="badge badge-ok">● escutando agora</span>
+              <span className="badge badge-ok"><span className="dot dot-ok" /> escutando agora</span>
             ) : (
               <span className="badge badge-err">worker sem sinal{s.heartbeat_at ? ` há ${ago(s.heartbeat_at).replace(/^há /, "")}` : ""}</span>
             )}

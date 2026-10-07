@@ -1,6 +1,7 @@
 import { summarizeConversation } from "./agent/orchestrator.js";
 import { config } from "./config.js";
 import { many, query } from "./db/pool.js";
+import { redisAlive } from "./shortmem.js";
 
 /**
  * Limpeza periódica (de hora em hora, no worker):
@@ -22,6 +23,15 @@ export async function purgeOld(log?: { info: (...a: any[]) => void; error: (...a
     } catch (err) {
       // sem resumo não apaga: tenta de novo na próxima rodada
       log?.error({ err, conversationId: c.conversation_id }, "falha ao resumir antes de limpar");
+    }
+  }
+  // Memória curta no Redis expira em MESSAGE_RETENTION_HOURS: resume antes o que está perto de sumir
+  if (await redisAlive()) {
+    const recent = await many<{ id: string }>("SELECT id FROM conversations WHERE updated_at > now() - make_interval(hours => $1)", [hours + 2]);
+    for (const c of recent) {
+      await summarizeConversation(c.id, { olderThanMs: Math.max(1, hours - 3) * 3600_000 }).catch((err) =>
+        log?.error({ err, conversationId: c.id }, "falha ao resumir memória curta"),
+      );
     }
   }
   const msgs = await query(

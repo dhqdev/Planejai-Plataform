@@ -97,14 +97,32 @@ export async function buildServer() {
     return publicAccount(toAccount(row));
   });
 
-  // Cadastro público: vira admin da própria conta (vê só os próprios dados), ligado ao número do WhatsApp
-  app.post<{ Body: { name?: string; email?: string; password?: string; phone?: string } }>("/api/auth/register", async (req, reply) => {
+  // Convite público: dados para a tela de cadastro (/convite/:code)
+  app.get<{ Params: { code: string } }>("/api/invite/:code", async (req, reply) => {
+    const inv = await one(
+      `SELECT i.name, i.phone, i.email, i.status, i.expires_at, COALESCE(u.full_name, u.name, a.name) AS inviter
+         FROM invites i LEFT JOIN users u ON u.id = i.inviter_user_id LEFT JOIN accounts a ON a.id = i.inviter_account_id WHERE i.code = $1`,
+      [String(req.params.code).toUpperCase()],
+    );
+    if (!inv || inv.status === "declined" || inv.status === "expired" || new Date(inv.expires_at) < new Date()) return reply.code(404).send({ error: "Convite inválido ou expirado" });
+    const used = await one("SELECT 1 FROM accounts WHERE phone = ANY($1)", [phoneVariants(inv.phone)]);
+    return { name: inv.name, email: inv.email, phone: inv.phone, inviter: inv.inviter, used: Boolean(used) };
+  });
+
+  // Cadastro: no modo convite (padrão) só entra quem tem o código; vira admin da própria conta, ligado ao WhatsApp
+  app.post<{ Body: { name?: string; email?: string; password?: string; phone?: string; code?: string } }>("/api/auth/register", async (req, reply) => {
     const { signupMode } = await getSettings();
     if (signupMode === "closed") return reply.code(403).send({ error: "Cadastros estão fechados." });
-    const name = String(req.body?.name ?? "").trim().slice(0, 80);
+    const code = String(req.body?.code ?? "").trim().toUpperCase();
+    const invite = code
+      ? await one("SELECT * FROM invites WHERE code = $1 AND status IN ('pending', 'accepted') AND expires_at > now()", [code])
+      : null;
+    if (code && !invite) return reply.code(400).send({ error: "Convite inválido ou expirado" });
+    if (signupMode === "invite" && !invite) return reply.code(403).send({ error: "O Planejai é só por convite. Peça um convite a quem já usa." });
+    const name = String(req.body?.name ?? invite?.name ?? "").trim().slice(0, 80);
     const email = String(req.body?.email ?? "").trim().toLowerCase();
     const password = String(req.body?.password ?? "");
-    const phone = normalizePhone(req.body?.phone ?? "");
+    const phone = invite ? invite.phone : normalizePhone(req.body?.phone ?? "");
     if (!name) return reply.code(400).send({ error: "Informe seu nome" });
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return reply.code(400).send({ error: "E-mail inválido" });
     if (password.length < 8) return reply.code(400).send({ error: "A senha precisa ter pelo menos 8 caracteres" });
@@ -112,12 +130,31 @@ export async function buildServer() {
     if (email === config.ADMIN_EMAIL.toLowerCase() || (await one("SELECT 1 FROM accounts WHERE email = $1", [email]))) {
       return reply.code(409).send({ error: "Já existe uma conta com esse e-mail" });
     }
-    const open = signupMode === "open";
-    // Liga à pessoa do WhatsApp (cria se ainda não falou com o assistente)
+    // convite vale como aprovação
+    const open = signupMode === "open" || Boolean(invite);
     const variants = phoneVariants(phone);
     let user = await one("SELECT * FROM users WHERE phone = ANY($1)", [variants]);
-    if (!user) user = await one("INSERT INTO users (phone, name, status) VALUES ($1, $2, $3) RETURNING *", [phone, name, open ? "active" : "pending"]);
-    else if (open && user.status === "pending") await query("UPDATE users SET status = 'active', name = COALESCE(name, $2) WHERE id = $1", [user.id, name]);
+    if (!user) {
+      user = await one("INSERT INTO users (phone, name, full_name, email, status, invited_by) VALUES ($1, $2, $2, $3, $4, $5) RETURNING *", [
+        phone,
+        name,
+        email,
+        open ? "active" : "pending",
+        invite?.inviter_user_id ?? null,
+      ]);
+    } else {
+      await query(
+        `UPDATE users SET full_name = COALESCE(full_name, $2), email = COALESCE(email, $3),
+           status = CASE WHEN $4 AND status = 'pending' THEN 'active' ELSE status END, invited_by = COALESCE(invited_by, $5) WHERE id = $1`,
+        [user.id, name, email, open, invite?.inviter_user_id ?? null],
+      );
+    }
+    if (invite && invite.status === "pending") {
+      await query("UPDATE invites SET status = 'accepted', responded_at = now(), invitee_user_id = $2 WHERE id = $1", [invite.id, user.id]);
+      if (invite.inviter_user_id) {
+        await query("INSERT INTO contacts (user_id, contact_id) VALUES ($1, $2), ($2, $1) ON CONFLICT DO NOTHING", [invite.inviter_user_id, user.id]);
+      }
+    }
     const row = await one(
       `INSERT INTO accounts (email, name, password_hash, role, status, user_id, phone) VALUES ($1, $2, $3, 'admin', $4, $5, $6) RETURNING *`,
       [email, name, hashPassword(password), open ? "active" : "pending", user.id, phone],

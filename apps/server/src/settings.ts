@@ -7,8 +7,8 @@ export interface AgentSettings {
   persona: string;
   timezone: string;
   language: string;
-  /** Cadastro no painel: "approval" (dono aprova), "open" (libera na hora) ou "closed" */
-  signupMode: "approval" | "open" | "closed";
+  /** Cadastro no painel: "invite" (só com convite, padrão), "approval" (dono aprova), "open" (libera na hora) ou "closed" */
+  signupMode: "invite" | "approval" | "open" | "closed";
   /** Travas de segurança */
   /** tempo máximo de uma resposta (CTO + time), em minutos */
   maxExecutionMinutes: number;
@@ -39,7 +39,7 @@ const defaults = (): AgentSettings => ({
   persona: "",
   timezone: config.DEFAULT_TIMEZONE,
   language: "pt-BR",
-  signupMode: "approval",
+  signupMode: "invite",
   maxExecutionMinutes: 8,
   maxToolCalls: 40,
   rateLimitPerMinute: 10,

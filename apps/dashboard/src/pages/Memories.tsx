@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, day } from "../api";
 import { Empty, ErrorBox, PageHead } from "../components";
 import { useApi } from "../hooks";
+import { Icon } from "../icons";
 
 export function MemoriesPage({ isSuper }: { isSuper: boolean }) {
   const [q, setQ] = useState("");
@@ -21,10 +22,10 @@ export function MemoriesPage({ isSuper }: { isSuper: boolean }) {
           <tbody>
             {items.map((m) => (
               <tr key={m.id}>
-                <td>🧩 {m.content}</td>
+                <td>{m.content}</td>
                 {isSuper && <td>{m.user_name ?? "–"}</td>}
                 <td className="muted" style={{ whiteSpace: "nowrap" }}>{day(m.created_at)}</td>
-                <td><button className="btn btn-sm btn-ghost" title="Esquecer" onClick={async () => { await api(`/api/memories/${m.id}`, { method: "DELETE" }); void reload(); }}>✕</button></td>
+                <td><button className="btn btn-sm btn-ghost" title="Esquecer" onClick={async () => { await api(`/api/memories/${m.id}`, { method: "DELETE" }); void reload(); }}><Icon name="x" size={14} /></button></td>
               </tr>
             ))}
           </tbody>

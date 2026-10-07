@@ -2,10 +2,24 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Me } from "../App";
 import { ErrorBox } from "../components";
+import { Logo } from "../icons";
+
+interface Invite {
+  name: string | null;
+  email: string | null;
+  phone: string;
+  inviter: string | null;
+  used: boolean;
+}
+
+/** Código do convite quando a pessoa abre o link /convite/CODIGO. */
+const inviteCode = () => /^\/convite\/([A-Za-z0-9]+)/.exec(location.pathname)?.[1]?.toUpperCase() ?? null;
 
 export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
-  const [mode, setMode] = useState<"login" | "register">("login");
-  const [signup, setSignup] = useState<string>("approval");
+  const code = inviteCode();
+  const [mode, setMode] = useState<"login" | "register">(code ? "register" : "login");
+  const [signup, setSignup] = useState<string>("invite");
+  const [invite, setInvite] = useState<Invite | null>(null);
   const [form, setForm] = useState({ name: "", email: "", password: "", phone: "" });
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -14,16 +28,30 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
 
   useEffect(() => {
     api("/api/auth/config").then((c) => setSignup(c.signupMode), () => {});
-  }, []);
+    if (code)
+      api<Invite>(`/api/invite/${code}`).then(
+        (i) => {
+          setInvite(i);
+          setForm((f) => ({ ...f, name: i.name ?? "", email: i.email ?? "", phone: i.phone }));
+          if (i.used) setMode("login");
+        },
+        (e) => setError((e as Error).message),
+      );
+  }, [code]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      if (mode === "login") onLogin(await api("/api/auth/login", { method: "POST", json: { email: form.email, password: form.password } }));
-      else {
-        const r = await api("/api/auth/register", { method: "POST", json: form });
+      if (mode === "login") {
+        const me = await api<Me>("/api/auth/login", { method: "POST", json: { email: form.email, password: form.password } });
+        if (code) history.replaceState(null, "", "/");
+        onLogin(me);
+      } else {
+        if (form.name.trim().split(/\s+/).length < 2) throw new Error("Informe nome e sobrenome");
+        const r = await api("/api/auth/register", { method: "POST", json: { ...form, code: code ?? undefined } });
+        if (code) history.replaceState(null, "", "/");
         if (r.pending) setDone(r.message);
         else onLogin(r);
       }
@@ -34,63 +62,80 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
     }
   };
 
+  const canRegister = signup !== "closed" && (signup !== "invite" || Boolean(code));
+
   return (
     <div className="auth">
       <section className="auth-hero">
-        <div className="brand" style={{ padding: 0, color: "#fff" }}>
-          <div className="brand-logo" style={{ background: "rgba(255,255,255,0.2)", boxShadow: "none" }}>P</div>
-          Planejai
+        <div className="brand" style={{ padding: 0 }}>
+          <Logo size={34} />
+          planejai
         </div>
         <div>
           <h2>Seu assistente no WhatsApp que resolve de verdade.</h2>
-          <p>Um time de agentes de IA que pesquisa, lembra, anota seus gastos e cuida da sua rotina, numa conversa só.</p>
+          <p>Um time de agentes que pesquisa, lembra, anota seus gastos e fica de olho no que importa para você.</p>
           <div className="features">
-            <div>💬 Fala, texto, foto e documento: ele entende tudo</div>
-            <div>💰 Mandou o comprovante, o gasto já está anotado</div>
-            <div>⏰ Lembretes naturais, do jeito que você fala</div>
-            <div>🔎 Pesquisa na internet e até grava a tela para você ver</div>
+            <div>Fala, texto, foto e documento</div>
+            <div>Comprovante enviado, gasto anotado</div>
+            <div>Lembretes do jeito que você fala</div>
+            <div>Avisa sozinho quando o preço baixa</div>
           </div>
         </div>
-        <small style={{ opacity: 0.75 }}>Planejai · assistente pessoal</small>
+        <small style={{ opacity: 0.6 }}>Entrada só por convite</small>
       </section>
       <section className="auth-form">
         <form className="card" onSubmit={submit}>
+          <div className="auth-logo"><Logo size={44} /></div>
           {done ? (
             <>
-              <h1>Quase lá! 🎉</h1>
+              <h1>Quase lá</h1>
               <p className="muted">{done}</p>
               <button type="button" className="btn" onClick={() => { setDone(null); setMode("login"); }}>Voltar para o login</button>
             </>
           ) : (
             <>
-              <h1>{mode === "login" ? "Entrar" : "Criar conta"}</h1>
+              <h1>{mode === "login" ? "Entrar" : invite ? `Olá${invite.name ? `, ${invite.name.split(" ")[0]}` : ""}` : "Criar conta"}</h1>
               <p className="muted" style={{ marginTop: 0, marginBottom: 20 }}>
-                {mode === "login" ? "Acesse o painel do seu assistente." : "Use o mesmo número de WhatsApp que conversa com o assistente."}
+                {mode === "login"
+                  ? "Acesse o painel do seu assistente."
+                  : invite?.inviter
+                    ? `${invite.inviter} convidou você. Crie sua senha para acessar o painel.`
+                    : "Use o mesmo número de WhatsApp que conversa com o assistente."}
               </p>
               {mode === "register" && (
                 <>
-                  <div className="field"><label>Nome</label><input className="input" value={form.name} onChange={set("name")} autoFocus required /></div>
-                  <div className="field"><label>WhatsApp</label><input className="input" placeholder="(19) 99999-9999" value={form.phone} onChange={set("phone")} required /></div>
+                  <div className="field"><label>Nome completo</label><input className="input" value={form.name} onChange={set("name")} autoComplete="name" autoFocus required /></div>
+                  <div className="field">
+                    <label>WhatsApp</label>
+                    <input className="input" placeholder="(19) 99999-9999" value={invite ? `+${invite.phone}` : form.phone} onChange={set("phone")} disabled={Boolean(invite)} inputMode="tel" required />
+                  </div>
                 </>
               )}
-              <div className="field"><label>E-mail</label><input className="input" type="email" value={form.email} onChange={set("email")} autoFocus={mode === "login"} required /></div>
+              <div className="field"><label>E-mail</label><input className="input" type="email" value={form.email} onChange={set("email")} autoComplete="email" autoFocus={mode === "login"} required /></div>
               <div className="field">
                 <label>Senha</label>
-                <input className="input" type="password" value={form.password} onChange={set("password")} minLength={mode === "register" ? 8 : undefined} required />
+                <input className="input" type="password" value={form.password} onChange={set("password")} minLength={mode === "register" ? 8 : undefined} autoComplete={mode === "login" ? "current-password" : "new-password"} required />
                 {mode === "register" && <span className="help">Pelo menos 8 caracteres.</span>}
               </div>
               <ErrorBox error={error} />
-              <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12, padding: "10px 12px" }} disabled={busy}>
+              <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12, padding: "10px 12px" }} disabled={busy || (mode === "register" && !canRegister)}>
                 {busy ? "Aguarde…" : mode === "login" ? "Entrar" : "Criar conta"}
               </button>
-              {signup !== "closed" && (
-                <p className="muted" style={{ textAlign: "center", marginBottom: 0 }}>
-                  {mode === "login" ? "Ainda não tem conta? " : "Já tem conta? "}
-                  <button type="button" className="link" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(null); }}>
-                    {mode === "login" ? "Cadastre-se" : "Entrar"}
-                  </button>
-                </p>
-              )}
+              <p className="muted" style={{ textAlign: "center", marginBottom: 0, fontSize: 13 }}>
+                {mode === "register" ? (
+                  <>
+                    Já tem conta?{" "}
+                    <button type="button" className="link" onClick={() => { setMode("login"); setError(null); }}>Entrar</button>
+                  </>
+                ) : canRegister ? (
+                  <>
+                    Ainda não tem conta?{" "}
+                    <button type="button" className="link" onClick={() => { setMode("register"); setError(null); }}>Cadastre-se</button>
+                  </>
+                ) : signup === "invite" ? (
+                  "O Planejai é só por convite. Peça um convite a quem já usa: ele chega no seu WhatsApp."
+                ) : null}
+              </p>
             </>
           )}
         </form>

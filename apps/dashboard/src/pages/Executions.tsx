@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, ms, usd, when } from "../api";
-import { AGENT_LABEL, ErrorBox, Json, Loading, PageHead, Status } from "../components";
+import { AGENT_ICON, AGENT_LABEL, ErrorBox, Json, Loading, PageHead, Status } from "../components";
 import { useApi } from "../hooks";
+import { Icon } from "../icons";
 
-const TRIGGER_LABEL: Record<string, string> = { message: "💬 Mensagem", reminder: "⏰ Lembrete", playground: "▶ Playground" };
+const TRIGGER_LABEL: Record<string, string> = { message: "Mensagem", reminder: "Lembrete", playground: "Teste", watch: "Acompanhamento", improve: "Melhoria diária" };
+const TRIGGER_ICON: Record<string, string> = { message: "send", reminder: "bell", playground: "play", watch: "eye", improve: "sparkle" };
 
 export function ExecutionsPage() {
   const [status, setStatus] = useState("");
@@ -32,7 +34,8 @@ export function ExecutionsPage() {
               <option value="">Todos os gatilhos</option>
               <option value="message">Mensagem</option>
               <option value="reminder">Lembrete</option>
-              <option value="playground">Playground</option>
+              <option value="watch">Acompanhamento</option>
+              <option value="improve">Melhoria diária</option>
             </select>
             <button
               className="btn"
@@ -68,7 +71,7 @@ export function ExecutionsPage() {
                 <td><Status status={e.status} /></td>
                 <td>{TRIGGER_LABEL[e.trigger] ?? e.trigger}</td>
                 <td className="ellipsis" title={e.input}>{e.input}</td>
-                <td className="muted">{(e.agents ?? []).map((a: string) => AGENT_LABEL[a]?.split(" ")[0] ?? a).join(" ")}</td>
+                <td className="muted">{(e.agents ?? []).map((a: string) => AGENT_LABEL[a] ?? a.replace(/^c_/, "")).join(", ")}</td>
                 <td>{e.user_name ?? e.phone}</td>
                 <td className="muted">{when(e.started_at)}</td>
                 <td>{ms(e.duration_ms)}</td>
@@ -103,7 +106,7 @@ interface Step {
   started_at: string;
 }
 
-const TYPE_ICON: Record<string, string> = { llm: "✦", tool: "🔧", delegate: "➜", channel: "📤", info: "ℹ" };
+const TYPE_ICON: Record<string, string> = { llm: "sparkle", tool: "settings", delegate: "arrow", channel: "send", info: "circle" };
 
 export function ExecutionDetailPage() {
   const { id } = useParams();
@@ -138,7 +141,6 @@ export function ExecutionDetailPage() {
         actions={
           <>
             <Status status={data.status} />
-            {data.conversation_id && <Link className="btn" to={`/conversations/${data.conversation_id}`}>Ver conversa</Link>}
             <Link className="btn" to="/executions">Voltar</Link>
           </>
         }
@@ -161,10 +163,10 @@ export function ExecutionDetailPage() {
               <span className={`dot ${s.status === "success" ? "dot-ok" : s.status === "error" ? "dot-err" : "dot-warn"}`} style={{ marginTop: 6 }} />
               <div style={{ minWidth: 0 }}>
                 <div className="step-name">
-                  {TYPE_ICON[s.type]} {s.name}
+                  <Icon name={TYPE_ICON[s.type] ?? "circle"} size={13} /> {s.name}
                 </div>
                 <div className="step-meta">
-                  {AGENT_LABEL[s.agent] ?? s.agent} · {ms(s.duration_ms)}
+                  {AGENT_LABEL[s.agent] ?? s.agent.replace(/^c_/, "")} · {ms(s.duration_ms)}
                   {s.model ? ` · ${s.model}` : ""}
                   {Number(s.cost_usd) > 0 ? ` · ${usd(s.cost_usd)}` : ""}
                 </div>
@@ -237,8 +239,8 @@ function FlowCanvas({ data, steps, onSelect, selected }: { data: any; steps: Ste
   const statusOf = (list: Step[]) => (list.some((s) => s.status === "error") ? "err" : list.length && list.every((s) => s.status === "success") ? "ok" : "");
   type N = { key: string; x: number; y: number; icon: string; title: string; sub: string; status: string; step?: Step };
   const nodes: N[] = [
-    { key: "trigger", x: col(0), y: midY, icon: TRIGGER_LABEL[data.trigger]?.split(" ")[0] ?? "⚡", title: "Gatilho", sub: TRIGGER_LABEL[data.trigger]?.split(" ").slice(1).join(" ") ?? data.trigger, status: "ok" },
-    { key: "cto", x: col(1), y: midY, icon: "🧠", title: "CTO", sub: `${ctoLlm.length} chamadas · ${ctoLlm[0]?.model ?? ""}`, status: statusOf(ctoLlm), step: ctoLlm[0] },
+    { key: "trigger", x: col(0), y: midY, icon: TRIGGER_ICON[data.trigger] ?? "play", title: "Gatilho", sub: TRIGGER_LABEL[data.trigger] ?? data.trigger, status: "ok" },
+    { key: "cto", x: col(1), y: midY, icon: "brain", title: "CTO", sub: `${ctoLlm.length} chamadas · ${ctoLlm[0]?.model ?? ""}`, status: statusOf(ctoLlm), step: ctoLlm[0] },
     ...agents.map((a, i) => {
       const own = steps.filter((s) => s.agent === a);
       const tools = [...new Set(own.filter((s) => s.type === "tool").map((s) => s.name))];
@@ -247,14 +249,14 @@ function FlowCanvas({ data, steps, onSelect, selected }: { data: any; steps: Ste
         key: a,
         x: col(2),
         y: 25 + i * 92 + (rows - agents.length) * 46,
-        icon: AGENT_LABEL[a]?.split(" ")[0] ?? "🤖",
-        title: AGENT_LABEL[a]?.split(" ").slice(1).join(" ") ?? a,
+        icon: AGENT_ICON[a] ?? "sparkle",
+        title: AGENT_LABEL[a] ?? a.replace(/^c_/, ""),
         sub: tools.join(", ") || "conversou",
         status: statusOf(own),
         step: first,
       };
     }),
-    { key: "out", x: col(agents.length ? 3 : 2) + (agents.length ? 60 : 0), y: midY, icon: "📤", title: "Resposta", sub: sends.length ? `${sends.length} mensagem(ns)` : data.output === "[[silencio]]" ? "silêncio (só reação)" : "–", status: statusOf(sends), step: sends[0] },
+    { key: "out", x: col(agents.length ? 3 : 2) + (agents.length ? 60 : 0), y: midY, icon: "send", title: "Resposta", sub: sends.length ? `${sends.length} mensagem(ns)` : data.output === "[[silencio]]" ? "silêncio (só reação)" : "–", status: statusOf(sends), step: sends[0] },
   ];
   const pos = new Map(nodes.map((n) => [n.key, n]));
   const running = data.status === "running";
@@ -318,11 +320,11 @@ function FlowCanvas({ data, steps, onSelect, selected }: { data: any; steps: Ste
           >
             {n.status && (
               <div className="node-badge" style={{ background: n.status === "ok" ? "var(--ok)" : "var(--err)" }}>
-                {n.status === "ok" ? "✓" : "!"}
+                <Icon name={n.status === "ok" ? "check" : "x"} size={11} />
               </div>
             )}
             <div className="node-title">
-              <div className="node-icon">{n.icon}</div>
+              <div className="node-icon"><Icon name={n.icon} size={16} /></div>
               <span>{n.title}</span>
             </div>
             <div className="node-sub ellipsis" style={{ maxWidth: W - 24 }} title={n.sub}>{n.sub}</div>

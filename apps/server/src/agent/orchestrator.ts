@@ -9,13 +9,13 @@ import { getSettings } from "../settings.js";
 import { delegationTool, TeamRoom } from "./collab.js";
 import { ctoSystemPrompt } from "./prompts.js";
 import { availableTools, runToolLoop } from "./runner.js";
-import { CTO_TOOLS, SPECIALISTS } from "./team.js";
+import { clientAgents, CTO_TOOLS, SPECIALISTS } from "./team.js";
 import { finishBrowser } from "./tools/research.js";
 import { Guard, GuardTimeout, redactSecrets } from "./guard.js";
 import { isOwner } from "../ingest.js";
 import { describeMessage, preprocessMedia } from "./media.js";
 import { Tracer } from "./trace.js";
-import { pushShort, recentShort, type ShortEntry } from "../shortmem.js";
+import { allShort, pushShort, recentShort, redisAlive, type ShortEntry } from "../shortmem.js";
 import { config } from "../config.js";
 import { Outbox, type ConversationRow, type ToolContext, type UserRow } from "./tools/types.js";
 
@@ -23,6 +23,8 @@ import { Outbox, type ConversationRow, type ToolContext, type UserRow } from "./
 const HISTORY_LIMIT = 16;
 /** Mensagens que disparam a compactação em resumo */
 const SUMMARY_TRIGGER = 40;
+/** Entradas na memória curta que disparam o resumo (a lista guarda no máximo 60) */
+const REDIS_SUMMARY_TRIGGER = 36;
 /** Numa enxurrada de mensagens, só as últimas entram numa resposta */
 const MAX_BATCH = 20;
 
@@ -177,7 +179,8 @@ async function processLocked(
         )
       ).map((m) => ({ id: m.id, role: m.role, text: m.role === "event" ? m.content : describeMessage(m), ts: new Date(m.created_at).getTime(), ext: m.external_id }));
     }
-    const history = [...past.filter((e) => !pendingIds.has(e.id)), ...fresh];
+    const summarizedTs = Number((conversation as any).summary_ts ?? 0);
+    const history = [...past.filter((e) => !pendingIds.has(e.id) && e.ts > summarizedTs), ...fresh];
 
     const messages: ChatMessage[] = [];
     for (const m of history) {
@@ -193,7 +196,7 @@ async function processLocked(
 
     // Só entra no time quem tem pelo menos uma ferramenta utilizável (menos token e nada de delegação inútil)
     const team = [];
-    for (const s of SPECIALISTS) if ((await availableTools(s.tools)).length) team.push(s);
+    for (const s of [...SPECIALISTS, ...(await clientAgents(user.id))]) if ((await availableTools(s.tools)).length) team.push(s);
     const lastText = fresh.map((e) => e.text).join(" ").slice(0, 500);
     const disconnected = [];
     for (const i of INTEGRATIONS) if (!(await isConnected(i.id))) disconnected.push(i.name);
@@ -219,6 +222,7 @@ async function processLocked(
       room: new TeamRoom(),
       callChain: ["cto"],
       guard,
+      inboundImages: pending.map((m) => m.inboundImage).filter(Boolean),
     };
     const tools = [...(await availableTools(CTO_TOOLS)), ...team.map(delegationTool)];
     let result;
@@ -243,11 +247,14 @@ async function processLocked(
     const unplaced = [...outbox.media.keys()].filter((id) => !placed.has(id)).map((id) => ({ type: "media", id }) as Bubble);
     if (unplaced.length) bubbles.splice(Math.min(1, bubbles.length), 0, ...unplaced);
 
-    await deliver(bubbles, { channel, conversation, outbox, tracer });
-    await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
+    const keepInDb = !(await redisAlive());
+    await deliver(bubbles, { channel, conversation, outbox, tracer, keepInDb });
+    // A conversa já está no WhatsApp e na memória curta (Redis): com o Redis no ar, a mensagem sai do banco
+    if (keepInDb) await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
+    else await query("DELETE FROM messages WHERE id = ANY($1)", [pending.map((m) => m.id)]);
     await query("UPDATE conversations SET updated_at = now() WHERE id = $1", [conversationId]);
     const sentTexts = bubbles.filter((b): b is { type: "text"; text: string } => b.type === "text").map((b) => b.text);
-    if (sentTexts.length) await pushShort(conversationId, [{ id: Number.MAX_SAFE_INTEGER, role: "assistant", text: sentTexts.join("\n"), ts: Date.now() }]);
+    if (sentTexts.length) await pushShort(conversationId, [{ id: Date.now(), role: "assistant", text: sentTexts.join("\n"), ts: Date.now() }]);
     await tracer.finish(silent ? "[[silencio]]" : result.text);
     return { executionId: tracer.executionId, bubbles, outbox };
   } catch (err) {
@@ -283,11 +290,7 @@ function limitText(text: string, m: { meta?: any }, max: number) {
 /** Algum limite de 24h da pessoa estourou? Devolve qual, para o log. */
 async function usageLimitHit(userId: string, s: { dailyMessageLimit: number; dailyCostLimitUsd: number }) {
   if (s.dailyMessageLimit > 0) {
-    const r = await one(
-      `SELECT COUNT(*)::int AS n FROM messages m JOIN conversations c ON c.id = m.conversation_id
-        WHERE c.user_id = $1 AND m.role = 'user' AND m.created_at > now() - interval '24 hours'`,
-      [userId],
-    );
+    const r = await one("SELECT COALESCE(SUM(messages), 0)::int AS n FROM usage_daily WHERE user_id = $1 AND day >= current_date - 1", [userId]);
     if (r.n > s.dailyMessageLimit) return { limite: "mensagens em 24h", usado: r.n, maximo: s.dailyMessageLimit };
   }
   if (s.dailyCostLimitUsd > 0) {
@@ -297,7 +300,7 @@ async function usageLimitHit(userId: string, s: { dailyMessageLimit: number; dai
   return null;
 }
 
-async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: ConversationRow; outbox: Outbox; tracer: Tracer }) {
+async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: ConversationRow; outbox: Outbox; tracer: Tracer; keepInDb: boolean }) {
   for (const [i, b] of bubbles.entries()) {
     const step = await o.tracer.step({ agent: "cto", type: "channel", name: b.type === "text" ? "enviar_texto" : "enviar_imagem", input: b.type === "text" ? { text: b.text } : { media: b.id } });
     try {
@@ -309,17 +312,19 @@ async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: C
         }
         b.text = redactSecrets(b.text);
         const r = await o.channel.sendText(o.conversation.remote_jid, b.text);
-        await query("INSERT INTO messages (conversation_id, role, content, external_id, processed) VALUES ($1, 'assistant', $2, $3, true)", [
-          o.conversation.id,
-          b.text,
-          r.id ?? null,
-        ]);
+        if (o.keepInDb) {
+          await query("INSERT INTO messages (conversation_id, role, content, external_id, processed) VALUES ($1, 'assistant', $2, $3, true)", [
+            o.conversation.id,
+            b.text,
+            r.id ?? null,
+          ]);
+        }
         await step.ok(r);
       } else {
         const img = o.outbox.media.get(b.id);
         if (!img) throw new Error(`media ${b.id} não existe`);
         const r = await o.channel.sendImage(o.conversation.remote_jid, img);
-        await query(
+        if (o.keepInDb) await query(
           "INSERT INTO messages (conversation_id, role, content, external_id, media, processed) VALUES ($1, 'assistant', $2, $3, $4, true)",
           [o.conversation.id, img.caption ?? "[imagem]", r.id ?? null, { url: img.url ?? null, mimetype: img.mimetype ?? null }],
         );
@@ -336,9 +341,24 @@ async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: C
  * Sem upTo, resume quando passa de SUMMARY_TRIGGER (mantendo as recentes); com upTo, resume tudo até esse id
  * (usado antes de apagar mensagens com mais de 24h, para nada importante se perder).
  */
-export async function summarizeConversation(conversationId: string, opts: { upTo?: number } = {}) {
-  const conv = await one<ConversationRow>("SELECT * FROM conversations WHERE id = $1", [conversationId]);
+export async function summarizeConversation(conversationId: string, opts: { upTo?: number; olderThanMs?: number } = {}) {
+  const conv = await one<ConversationRow & { summary_ts: string }>("SELECT * FROM conversations WHERE id = $1", [conversationId]);
   if (!conv) return;
+  // Com Redis, a conversa mora só na memória curta: resume de lá antes que expire ou que a lista seja cortada
+  if (opts.upTo == null && (await redisAlive())) {
+    const since = Number(conv.summary_ts ?? 0);
+    const entries = ((await allShort(conversationId)) ?? []).filter((e) => e.ts > since);
+    let old: ShortEntry[];
+    if (opts.olderThanMs != null) old = entries.filter((e) => e.ts < Date.now() - opts.olderThanMs!);
+    else old = entries.length >= REDIS_SUMMARY_TRIGGER ? entries.slice(0, entries.length - HISTORY_LIMIT) : [];
+    if (!old.length) return;
+    const transcript = old
+      .map((e) => `${e.role === "assistant" ? "Assistente" : e.role === "event" ? "Evento" : "Pessoa"}: ${e.text.slice(0, 1500)}`)
+      .join("\n");
+    const summary = await writeSummary(conv.summary, transcript);
+    if (summary) await query("UPDATE conversations SET summary = $2, summary_ts = $3 WHERE id = $1", [conversationId, summary, old.at(-1)!.ts]);
+    return;
+  }
   const rows = await many(
     "SELECT id, role, content, meta FROM messages WHERE conversation_id = $1 AND id > $2 AND processed = true AND ($3::bigint IS NULL OR id <= $3) ORDER BY id",
     [conversationId, conv.summary_until, opts.upTo ?? null],
@@ -353,6 +373,11 @@ export async function summarizeConversation(conversationId: string, opts: { upTo
   const transcript = old
     .map((m) => `${m.role === "assistant" ? "Assistente" : m.role === "event" ? "Evento" : "Pessoa"}: ${describeMessage(m).slice(0, 1500)}`)
     .join("\n");
+  const summary = await writeSummary(conv.summary, transcript);
+  if (summary) await query("UPDATE conversations SET summary = $2, summary_until = $3 WHERE id = $1", [conversationId, summary, old.at(-1)!.id]);
+}
+
+async function writeSummary(current: string | null, transcript: string) {
   const r = await chatCompletion(await resolveModel("summary"), {
     messages: [
       {
@@ -361,10 +386,8 @@ export async function summarizeConversation(conversationId: string, opts: { upTo
           "Atualize o resumo da conversa entre uma pessoa e seu assistente. Mantenha fatos, decisões, pendências, compromissos e preferências. " +
           "Descarte conversa fiada. Máximo 15 linhas, em português, em tópicos curtos.",
       },
-      { role: "user", content: `Resumo atual:\n${conv.summary ?? "(vazio)"}\n\nNovas mensagens:\n${transcript.slice(0, 40_000)}` },
+      { role: "user", content: `Resumo atual:\n${current ?? "(vazio)"}\n\nNovas mensagens:\n${transcript.slice(0, 40_000)}` },
     ],
   });
-  if (r.message.content) {
-    await query("UPDATE conversations SET summary = $2, summary_until = $3 WHERE id = $1", [conversationId, r.message.content.trim(), old.at(-1)!.id]);
-  }
+  return r.message.content?.trim() || null;
 }

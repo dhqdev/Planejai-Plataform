@@ -1,96 +1,118 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ErrorBox, Loading, PageHead } from "../components";
+import { api, ago } from "../api";
+import { Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
 import { useApi } from "../hooks";
+import { Icon } from "../icons";
+import { TeamMap } from "../TeamMap";
 
-/** O time de agentes desenhado como um workflow do n8n: WhatsApp → CTO → especialistas. */
+/** Time de agentes: mapa, ferramentas de cada um e os agentes que a melhoria diária criou para cada cliente. */
 export function AgentsPage() {
   const { data, error } = useApi<any[]>("/api/agents");
-  const [sel, setSel] = useState("cto");
+  const clients = useApi<any[]>("/api/client-agents");
+  const topics = useApi<any[]>("/api/topics");
+  const [sel, setSel] = useState<any | null>(null);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
   if (error) return <div className="page"><ErrorBox error={error} /></div>;
   if (!data) return <Loading />;
 
-  const cto = data[0];
-  const specialists = data.slice(1);
-  const W = 210;
-  const H = 70;
-  const gap = 96;
-  const height = Math.max(360, specialists.length * gap + 40);
-  const midY = height / 2 - H / 2;
-  const nodes = [
-    { id: "whatsapp", x: 30, y: midY, icon: "💬", title: "WhatsApp", sub: "mensagens, áudios, fotos" },
-    { id: "cto", x: 300, y: midY, icon: cto.emoji, title: cto.name, sub: cto.model },
-    ...specialists.map((s: any, i: number) => ({ id: s.id, x: 600, y: 20 + i * gap, icon: s.emoji, title: s.name, sub: s.model })),
-  ];
-  const at = new Map(nodes.map((n) => [n.id, n]));
-  const path = (a: string, b: string) => {
-    const p = at.get(a)!;
-    const q = at.get(b)!;
-    const x1 = p.x + W, y1 = p.y + H / 2, x2 = q.x, y2 = q.y + H / 2, dx = (x2 - x1) / 2;
-    return `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+  const runNow = async () => {
+    setRunning(true);
+    setResult(null);
+    try {
+      const r = await api<any>("/api/improve/run", { method: "POST", json: {} });
+      setResult(`Analisou ${r?.users ?? 0} pessoa(s), criou ${r?.created ?? 0} agente(s).`);
+      clients.reload();
+      topics.reload();
+    } catch (e) {
+      setResult((e as Error).message);
+    } finally {
+      setRunning(false);
+    }
   };
-  const agent = data.find((a) => a.id === sel);
+  const toggle = async (a: any) => {
+    await api(`/api/client-agents/${a.id}`, { method: "PATCH", json: { active: !a.active } });
+    clients.reload();
+  };
 
   return (
-    <div className="page-wide">
+    <div className="page page-wide">
       <PageHead
-        title="Time de agentes"
-        subtitle="O CTO conversa com a pessoa e delega para especialistas, cada um com suas ferramentas e seu modelo"
-        actions={<Link className="btn" to="/models">Trocar modelos</Link>}
+        title="Agentes"
+        subtitle="O CTO conversa com a pessoa e chama os especialistas. Todo dia às 19h o Planejai cria agentes novos para os assuntos que cada cliente mais pede."
+        actions={
+          <>
+            <Link className="btn" to="/models"><Icon name="cpu" size={16} /> Modelos</Link>
+            <button className="btn btn-primary" disabled={running} onClick={runNow}>
+              <Icon name="sparkle" size={16} /> {running ? "Analisando…" : "Melhorar agora"}
+            </button>
+          </>
+        }
       />
-      <div className="canvas" style={{ height }}>
-        <div style={{ position: "relative", width: 860, height }}>
-          <svg className="edges" width={860} height={height}>
-            <path className="edge" d={path("whatsapp", "cto")} />
-            {specialists.map((s: any) => (
-              <path key={s.id} className={`edge ${sel === s.id ? "active" : ""}`} d={path("cto", s.id)} />
-            ))}
-          </svg>
-          {nodes.map((n) => (
-            <div key={n.id} className={`node ${sel === n.id ? "selected" : ""}`} style={{ left: n.x, top: n.y, width: W }} onClick={() => n.id !== "whatsapp" && setSel(n.id)}>
-              <div className="node-title">
-                <div className="node-icon">{n.icon}</div>
-                {n.title}
+      {result && <div className="notice" style={{ marginBottom: 14 }}>{result}</div>}
+
+      <div className="card card-pad" style={{ marginBottom: 14 }}>
+        <TeamMap />
+      </div>
+
+      <div className="grid grid-2" style={{ alignItems: "start" }}>
+        <div className="card">
+          <div className="card-pad"><h3 style={{ margin: 0 }}>Time fixo</h3></div>
+          {data.map((a) => (
+            <div key={a.id} className="line-item clickable" style={{ padding: "12px 16px" }} onClick={() => setSel(a)}>
+              <Icon name={a.icon} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <strong>{a.name}</strong>
+                <div className="muted ellipsis" style={{ fontSize: 12 }}>{a.model}</div>
               </div>
-              <div className="node-sub ellipsis" style={{ maxWidth: W - 24 }}>{n.sub}</div>
+              <span className="muted" style={{ fontSize: 12 }}>{a.tools.length} ferramentas</span>
+              <Icon name="chevron-right" size={16} />
             </div>
           ))}
         </div>
+
+        <div className="card">
+          <div className="card-pad"><h3 style={{ margin: 0 }}>Criados para clientes</h3></div>
+          {(clients.data ?? []).map((a) => (
+            <div key={a.id} className="line-item" style={{ padding: "12px 16px", opacity: a.active ? 1 : 0.5 }}>
+              <Icon name="sparkle" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <strong>{a.name}</strong> <span className="muted">· {a.owner}</span>
+                <div className="muted ellipsis" style={{ fontSize: 12 }}>{a.focus} · {a.uses} usos · {(a.tools ?? []).length} ferramentas</div>
+              </div>
+              <button className="btn btn-sm" onClick={() => toggle(a)}>{a.active ? "Pausar" : "Reativar"}</button>
+            </div>
+          ))}
+          {clients.data && !clients.data.length && <Empty>Ainda nenhum. Quando um assunto aparece em dois dias diferentes, a melhoria das 19h cria um especialista para a pessoa.</Empty>}
+
+          <div className="card-pad" style={{ borderTop: "1px solid var(--border)" }}>
+            <h3 style={{ marginTop: 0 }}>Assuntos que mais aparecem</h3>
+            {(topics.data ?? []).slice(0, 12).map((t) => (
+              <div key={`${t.owner}-${t.topic}`} className="line-item">
+                <span style={{ flex: 1 }}>{t.topic} <span className="muted">· {t.owner}</span></span>
+                <span className="muted" style={{ fontSize: 12 }}>{t.days} dia(s) · {ago(t.last_at)}</span>
+              </div>
+            ))}
+            {topics.data && !topics.data.length && <p className="muted" style={{ margin: 0 }}>Aparecem depois da primeira análise das 19h.</p>}
+          </div>
+        </div>
       </div>
 
-      {agent && (
-        <div className="card card-pad" style={{ marginTop: 14 }}>
-          <div className="row">
-            <h3 style={{ margin: 0 }}>{agent.emoji} {agent.name}</h3>
-            <span className="badge badge-info">{agent.model}</span>
-          </div>
-          <p className="muted">{agent.role}</p>
-          <table className="table">
-            <thead><tr><th>Ferramenta</th><th>O que faz</th><th>Status</th></tr></thead>
-            <tbody>
-              {agent.tools.map((t: any) => (
-                <tr key={t.name}>
-                  <td className="mono">{t.name}</td>
-                  <td className="muted">{t.description}</td>
-                  <td>
-                    {t.available ? (
-                      <span className="badge badge-ok">disponível</span>
-                    ) : (
-                      <Link to="/integrations" className="badge badge-warn">conectar {t.integration}</Link>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {agent.id === "cto" && (
-                <tr>
-                  <td className="mono">ask_*</td>
-                  <td className="muted">Delegação para cada especialista (em paralelo quando faz sentido)</td>
-                  <td><span className="badge badge-ok">disponível</span></td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+      {sel && (
+        <Modal title={sel.name} icon={<Icon name={sel.icon} />} onClose={() => setSel(null)} wide>
+          <p className="muted" style={{ marginTop: 0 }}>{sel.role}</p>
+          <span className="chip">{sel.model}</span>
+          {sel.tools.map((t: any) => (
+            <div key={t.name} className="line-item">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="mono" style={{ fontSize: 12 }}>{t.name}</div>
+                <div className="muted" style={{ fontSize: 12 }}>{t.description}</div>
+              </div>
+              {t.available ? <Icon name="check" size={16} /> : <Link to="/integrations" className="chip">conectar {t.integration}</Link>}
+            </div>
+          ))}
+        </Modal>
       )}
     </div>
   );

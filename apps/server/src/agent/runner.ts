@@ -2,6 +2,8 @@ import { chatCompletion } from "../llm/openrouter.js";
 import { resolveModel } from "../llm/router.js";
 import type { ChatMessage, ToolSpec } from "../llm/types.js";
 import { isConnected } from "../integrations/registry.js";
+import { cacheGet, cacheSet } from "../shortmem.js";
+import { toolCacheKey } from "./cache.js";
 import type { Tool, ToolContext } from "./tools/types.js";
 
 export async function availableTools(tools: Tool[]) {
@@ -113,8 +115,18 @@ export async function runToolLoop(opts: {
           return { id: call.id, content: JSON.stringify({ error: `Tool desconhecida: ${call.function.name}` }) };
         }
         try {
+          const ck = toolCacheKey(tool.name, args);
+          const hit = ck ? await cacheGet<any>(ck.key) : null;
+          if (hit != null) {
+            await toolStep.ok({ cache: true, ...((typeof hit === "object" && hit) || { value: hit }) });
+            return { id: call.id, content: typeof hit === "string" ? hit : JSON.stringify(hit) };
+          }
           const run = tool.run(args, { ...ctx, parentStepId: toolStep.id });
           const out: any = guard ? await guard.race(run) : await run;
+          if (ck && out != null && !(typeof out === "object" && ("error" in out || "media_id" in out))) {
+            const { _usage, ...rest } = typeof out === "object" ? out : ({ value: out } as any);
+            await cacheSet(ck.key, rest, ck.ttl);
+          }
           let usage;
           if (out && typeof out === "object" && "_usage" in out) {
             const u = out._usage;

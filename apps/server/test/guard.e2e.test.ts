@@ -41,7 +41,13 @@ describe.skipIf(!enabled)("travas de segurança (e2e)", () => {
     return { user: u, convId: (await upsertConversation(u.id, "playground", `jid-${phone}`)).id as string };
   }
   async function say(convId: string, text: string) {
-    await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', $2, $3)", [convId, text, `e${++seq}`]);
+    const m = await db.one("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', $2, $3) RETURNING conversation_id", [convId, text, `e${++seq}`]);
+    // o ingest conta o uso do dia (as mensagens em si não ficam no banco)
+    await db.query(
+      `INSERT INTO usage_daily (user_id, day, messages) SELECT user_id, current_date, 1 FROM conversations WHERE id = $1
+       ON CONFLICT (user_id, day) DO UPDATE SET messages = usage_daily.messages + 1`,
+      [m.conversation_id],
+    );
     const channel = new channels.PlaygroundChannel();
     const r = await mod.processConversation(convId, { trigger: "message", channel });
     return { r, channel, texts: channel.sent.filter((s) => s.type === "text").map((s) => s.text!) };

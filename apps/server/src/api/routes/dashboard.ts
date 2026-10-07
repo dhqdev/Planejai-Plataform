@@ -1,8 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { randomBytes } from "node:crypto";
-import { processConversation } from "../../agent/orchestrator.js";
 import { CTO, CTO_TOOLS, SPECIALISTS } from "../../agent/team.js";
-import { activeChannel, PlaygroundChannel } from "../../channels/index.js";
+import { activeChannel } from "../../channels/index.js";
 import { config } from "../../config.js";
 import { signSession, verifySession } from "../../crypto.js";
 import { many, one, query } from "../../db/pool.js";
@@ -13,11 +12,14 @@ import { listModels } from "../../llm/openrouter.js";
 import { listRoutes, resetRoute, resolveModel, saveRoute } from "../../llm/router.js";
 import { cancelReminder, listReminders } from "../../reminders.js";
 import { getSettings, saveSettings } from "../../settings.js";
-import { upsertConversation } from "../../ingest.js";
 import { SESSION_ID, sendWaCommand } from "../../whatsapp/session.js";
 import { hashPassword, normalizePhone, scopeUserId, verifyPassword } from "../../accounts.js";
+import { phoneVariants } from "../../ingest.js";
 import { CATEGORIES, parseAmount } from "../../agent/tools/finance.js";
-import { redisInfo, clearShort } from "../../shortmem.js";
+import { cacheStats, redisInfo } from "../../shortmem.js";
+import { createInvite, inviteLink, inviteStats, listContacts } from "../../social.js";
+import { cancelWatch, listWatches } from "../../watches.js";
+import { improveUser, dailyImprovement } from "../../improve.js";
 import { requireAuth, requireSuper } from "../server.js";
 
 const PLAYGROUND_PHONE = "playground";
@@ -63,8 +65,8 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       const counts = await one(
         `SELECT (SELECT COUNT(*) FROM reminders WHERE status = 'scheduled' AND ($1::uuid IS NULL OR user_id = $1)) AS reminders,
                 (SELECT COUNT(*) FROM memories WHERE ($1::uuid IS NULL OR user_id = $1)) AS memories,
-                (SELECT COUNT(*) FROM messages m JOIN conversations c ON c.id = m.conversation_id
-                  WHERE m.created_at > now() - interval '24 hours' AND ($1::uuid IS NULL OR c.user_id = $1)) AS messages_24h`,
+                (SELECT COALESCE(SUM(messages), 0) FROM usage_daily WHERE day = current_date AND ($1::uuid IS NULL OR user_id = $1)) AS messages_24h,
+                (SELECT COUNT(*) FROM watches WHERE active AND ($1::uuid IS NULL OR user_id = $1)) AS watches`,
         [uid],
       );
       const byCategory = await many(
@@ -159,29 +161,101 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
 
     base.get("/api/finance/categories", async () => CATEGORIES);
 
-    // ---------- Conversas ----------
-    base.get("/api/conversations", async (req) =>
-      many(
-        `SELECT c.id, c.channel, c.remote_jid, c.updated_at, c.summary, u.id AS user_id, u.name, u.phone, u.status,
-                (SELECT content FROM messages m WHERE m.conversation_id = c.id ORDER BY id DESC LIMIT 1) AS last_message,
-                (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
-           FROM conversations c JOIN users u ON u.id = c.user_id
-          WHERE ($1::uuid IS NULL OR c.user_id = $1) ORDER BY c.updated_at DESC LIMIT 200`,
-        [scopeUserId(req.account)],
-      ),
-    );
-
-    base.get<{ Params: { id: string }; Querystring: { before?: string } }>("/api/conversations/:id/messages", async (req, reply) => {
-      const conv = await one("SELECT user_id FROM conversations WHERE id = $1", [req.params.id]);
+    // ---------- Convites e contatos ----------
+    base.get("/api/invites", async (req) => {
       const uid = scopeUserId(req.account);
-      if (!conv || (uid && conv.user_id !== uid)) return reply.code(404).send({ error: "não encontrada" });
-      return (
-        await many(
-          `SELECT id, role, content, external_id, media - 'base64' AS media, meta - 'doc_text' AS meta, created_at FROM messages
-            WHERE conversation_id = $1 AND ($2::bigint IS NULL OR id < $2) ORDER BY id DESC LIMIT 100`,
-          [req.params.id, req.query.before ?? null],
-        )
-      ).reverse();
+      const isSuper = req.account.role === "superadmin";
+      const rows = await many(
+        `SELECT i.id, i.code, i.name, i.phone, i.email, i.status, i.sent_at, i.created_at, i.responded_at, i.expires_at,
+                COALESCE(u.full_name, u.name, a.name, 'Equipe') AS inviter_name
+           FROM invites i LEFT JOIN users u ON u.id = i.inviter_user_id LEFT JOIN accounts a ON a.id = i.inviter_account_id
+          WHERE ($1::uuid IS NULL OR i.inviter_user_id = $1) ORDER BY i.created_at DESC LIMIT 300`,
+        [uid],
+      );
+      const leaderboard = isSuper
+        ? await many(
+            `SELECT COALESCE(u.full_name, u.name, '+' || u.phone) AS name, COUNT(*)::int AS total, COUNT(*) FILTER (WHERE i.status = 'accepted')::int AS accepted
+               FROM invites i JOIN users u ON u.id = i.inviter_user_id GROUP BY 1 ORDER BY accepted DESC, total DESC LIMIT 20`,
+          )
+        : [];
+      return { invites: rows.map((r) => ({ ...r, link: inviteLink(r.code) })), stats: await inviteStats(uid), leaderboard };
+    });
+    base.post<{ Body: { name?: string; phone?: string; email?: string } }>("/api/invites", async (req, reply) => {
+      const a = req.account;
+      if (a.role !== "superadmin" && !a.userId) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil antes de convidar." });
+      try {
+        const r = await createInvite({
+          inviterUserId: a.role === "superadmin" ? (a.userId ?? null) : a.userId,
+          inviterAccountId: a.owner ? null : a.id,
+          name: req.body.name,
+          phone: String(req.body.phone ?? ""),
+          email: req.body.email,
+        });
+        if ("already" in r) return reply.code(409).send({ error: "Essa pessoa já é seu contato." });
+        return { ...r.invite, link: inviteLink(r.invite.code) };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
+    base.delete<{ Params: { id: string } }>("/api/invites/:id", async (req) => {
+      const r = await query("UPDATE invites SET status = 'expired' WHERE id = $1 AND status = 'pending' AND ($2::uuid IS NULL OR inviter_user_id = $2)", [
+        req.params.id,
+        scopeUserId(req.account),
+      ]);
+      return { ok: (r.rowCount ?? 0) > 0 };
+    });
+    base.get("/api/contacts", async (req) => {
+      const uid = req.account.userId;
+      return uid ? listContacts(uid) : [];
+    });
+
+    // ---------- Acompanhamentos (o agente fica de olho e avisa sozinho) ----------
+    base.get("/api/watches", async (req) => listWatches(scopeUserId(req.account)));
+    base.delete<{ Params: { id: string } }>("/api/watches/:id", async (req) => ({ ok: await cancelWatch(req.params.id, scopeUserId(req.account)) }));
+
+    // ---------- Painel editável: layout de cada conta ----------
+    base.get("/api/me/dashboard", async (req) => {
+      if (req.account.owner) return (await one("SELECT value FROM settings WHERE key = 'owner_dashboard'"))?.value ?? null;
+      return (await one("SELECT dashboard FROM accounts WHERE id = $1", [req.account.id]))?.dashboard ?? null;
+    });
+    base.put<{ Body: { widgets: unknown[] } }>("/api/me/dashboard", async (req, reply) => {
+      const widgets = Array.isArray(req.body?.widgets) ? req.body.widgets.slice(0, 40) : null;
+      if (!widgets) return reply.code(400).send({ error: "layout inválido" });
+      const value = JSON.stringify({ widgets });
+      if (value.length > 20_000) return reply.code(400).send({ error: "layout grande demais" });
+      if (req.account.owner) {
+        await query("INSERT INTO settings (key, value, updated_at) VALUES ('owner_dashboard', $1, now()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = now()", [value]);
+      } else await query("UPDATE accounts SET dashboard = $2 WHERE id = $1", [req.account.id, value]);
+      return { ok: true };
+    });
+
+    // ---------- Mapa do time: agentes e com que frequência conversam ----------
+    base.get("/api/graph", async (req) => {
+      const uid = scopeUserId(req.account);
+      const nodes = [
+        { id: "cto", name: CTO.name, icon: CTO.icon, role: CTO.role, kind: "cto" },
+        ...SPECIALISTS.map((s) => ({ id: s.id, name: s.name, icon: s.icon, role: s.role, kind: "specialist" })),
+      ];
+      const clients = await many(
+        `SELECT ca.id, ca.slug, ca.name, ca.focus, ca.uses, COALESCE(u.full_name, u.name) AS owner FROM client_agents ca JOIN users u ON u.id = ca.user_id
+          WHERE ca.active AND ($1::uuid IS NULL OR ca.user_id = $1) ORDER BY ca.uses DESC LIMIT 12`,
+        [uid],
+      );
+      for (const c of clients) nodes.push({ id: `c_${c.slug}`, name: c.name, icon: "sparkle", role: `${c.focus}${uid ? "" : ` (de ${c.owner})`}`, kind: "client" } as any);
+      const edges = await many(
+        `SELECT p.agent AS "from", s.agent AS "to", COUNT(*)::int AS n FROM execution_steps s
+           JOIN execution_steps p ON p.id = s.parent_id JOIN executions e ON e.id = s.execution_id
+          WHERE s.type = 'llm' AND p.type = 'delegate' AND s.agent <> p.agent AND s.started_at > now() - interval '7 days'
+            AND ($1::uuid IS NULL OR e.user_id = $1)
+          GROUP BY 1, 2`,
+        [uid],
+      );
+      const activity = await many(
+        `SELECT s.agent, COUNT(*)::int AS n FROM execution_steps s JOIN executions e ON e.id = s.execution_id
+          WHERE s.type = 'llm' AND s.started_at > now() - interval '7 days' AND ($1::uuid IS NULL OR e.user_id = $1) GROUP BY 1`,
+        [uid],
+      );
+      return { nodes, edges, activity: Object.fromEntries(activity.map((a) => [a.agent, a.n])) };
     });
 
     // ---------- Memórias ----------
@@ -273,7 +347,9 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       const counts = await one(`
         SELECT (SELECT COUNT(*) FROM users WHERE status = 'active' AND phone <> 'playground') AS people,
                (SELECT COUNT(*) FROM users WHERE status = 'pending') AS pending_people,
-               (SELECT COUNT(*) FROM messages WHERE created_at > now() - interval '24 hours') AS messages_24h,
+               (SELECT COALESCE(SUM(messages), 0) FROM usage_daily WHERE day = current_date) AS messages_24h,
+               (SELECT COUNT(*) FROM invites WHERE status = 'accepted') AS invites_accepted,
+               (SELECT COUNT(*) FROM client_agents WHERE active) AS client_agents,
                (SELECT COUNT(*) FROM reminders WHERE status = 'scheduled') AS reminders`);
       const daily = await many(`
         SELECT to_char(d, 'YYYY-MM-DD') AS day,
@@ -299,6 +375,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
         channel: { provider: config.WHATSAPP_PROVIDER, configured },
         openrouter: Boolean(config.OPENROUTER_API_KEY),
         redis: await redisInfo(),
+        cache: await cacheStats(),
         retentionHours: config.MESSAGE_RETENTION_HOURS,
       };
     });
@@ -334,6 +411,73 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       const r = await query("DELETE FROM executions WHERE started_at < now() - make_interval(days => $1)", [days]);
       return { deleted: r.rowCount };
     });
+
+    // ---------- Clientes ----------
+    api.get("/api/clients", async () =>
+      many(`SELECT u.id, u.phone, u.name, u.full_name, u.email, u.status, u.created_at, u.last_seen_at,
+                   COALESCE(inv.full_name, inv.name) AS invited_by_name,
+                   (SELECT COUNT(*)::int FROM invites i WHERE i.inviter_user_id = u.id) AS invites_sent,
+                   (SELECT COUNT(*)::int FROM invites i WHERE i.inviter_user_id = u.id AND i.status = 'accepted') AS invites_accepted,
+                   (SELECT COUNT(*)::int FROM contacts c WHERE c.user_id = u.id) AS contacts,
+                   (SELECT COUNT(*)::int FROM client_agents ca WHERE ca.user_id = u.id AND ca.active) AS agents,
+                   a.id AS account_id, a.email AS account_email, a.status AS account_status, a.role AS account_role
+              FROM users u LEFT JOIN users inv ON inv.id = u.invited_by LEFT JOIN accounts a ON a.user_id = u.id
+             WHERE u.phone <> 'playground' ORDER BY u.status = 'pending' DESC, u.created_at DESC LIMIT 500`),
+    );
+    api.post<{ Body: { full_name?: string; email?: string; phone?: string; notify?: boolean } }>("/api/clients", async (req, reply) => {
+      const fullName = String(req.body.full_name ?? "").trim().replace(/\s+/g, " ").slice(0, 120);
+      const email = String(req.body.email ?? "").trim().toLowerCase();
+      const phone = normalizePhone(req.body.phone ?? "");
+      if (fullName.split(" ").length < 2) return reply.code(400).send({ error: "Informe nome e sobrenome" });
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return reply.code(400).send({ error: "E-mail inválido" });
+      if (phone.length < 12 || phone.length > 15) return reply.code(400).send({ error: "Telefone inválido: use DDD e número" });
+      const exists = await one("SELECT id FROM users WHERE phone = ANY($1)", [phoneVariants(phone)]);
+      if (exists) {
+        const row = await one(
+          "UPDATE users SET full_name = $2, email = $3, status = CASE WHEN status = 'blocked' THEN status ELSE 'active' END WHERE id = $1 RETURNING *",
+          [exists.id, fullName, email],
+        );
+        return { client: row, updated: true };
+      }
+      const client = await one("INSERT INTO users (phone, name, full_name, email, status) VALUES ($1, $2, $2, $3, 'active') RETURNING *", [phone, fullName, email]);
+      // convite já aceito: serve de link para a pessoa criar a senha do painel
+      const code = randomBytes(6).toString("base64url").replace(/[-_]/g, "x").slice(0, 8).toUpperCase();
+      await query(
+        "INSERT INTO invites (code, inviter_account_id, name, phone, email, status, invitee_user_id, responded_at, sent_at) VALUES ($1, $2, $3, $4, $5, 'accepted', $6, now(), now())",
+        [code, req.account.owner ? null : req.account.id, fullName, phone, email, client.id],
+      );
+      if (req.body.notify) {
+        const { notifyUser } = await import("../../social.js");
+        await notifyUser(
+          client.id,
+          `Oi, ${fullName.split(" ")[0]}! Você foi cadastrado no Planejai, um assistente aqui no WhatsApp para gastos, lembretes e pesquisas. ` +
+            `Pode me mandar mensagem quando quiser. Para acessar o painel: ${inviteLink(code)}`,
+        ).catch(() => {});
+      }
+      return { client, link: inviteLink(code) };
+    });
+    api.patch<{ Params: { id: string }; Body: { status?: string; full_name?: string; email?: string } }>("/api/clients/:id", async (req) =>
+      one(
+        `UPDATE users SET status = COALESCE($2, status), full_name = COALESCE($3, full_name), email = COALESCE($4, email) WHERE id = $1 RETURNING *`,
+        [req.params.id, ["active", "pending", "blocked"].includes(req.body.status ?? "") ? req.body.status : null, req.body.full_name ?? null, req.body.email ?? null],
+      ),
+    );
+
+    // ---------- Agentes de cada cliente (melhoria diária) ----------
+    api.get("/api/client-agents", async () =>
+      many(`SELECT ca.*, COALESCE(u.full_name, u.name, '+' || u.phone) AS owner FROM client_agents ca JOIN users u ON u.id = ca.user_id ORDER BY ca.active DESC, ca.uses DESC`),
+    );
+    api.patch<{ Params: { id: string }; Body: { active?: boolean; instructions?: string } }>("/api/client-agents/:id", async (req) =>
+      one("UPDATE client_agents SET active = COALESCE($2, active), instructions = COALESCE($3, instructions), updated_at = now() WHERE id = $1 RETURNING *", [
+        req.params.id,
+        typeof req.body.active === "boolean" ? req.body.active : null,
+        req.body.instructions ?? null,
+      ]),
+    );
+    api.get("/api/topics", async () =>
+      many(`SELECT t.topic, round(t.score::numeric, 1) AS score, t.days, t.last_at, COALESCE(u.full_name, u.name) AS owner FROM user_topics t JOIN users u ON u.id = t.user_id ORDER BY t.score DESC LIMIT 100`),
+    );
+    api.post<{ Body: { user?: string } }>("/api/improve/run", async (req) => (req.body?.user ? improveUser(req.body.user) : dailyImprovement()));
 
     // ---------- Pessoas ----------
     api.get("/api/people", async () =>
@@ -419,10 +563,10 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
 
     // ---------- Time de agentes e modelos ----------
     api.get("/api/agents", async () => {
-      const describe = async (id: string, name: string, emoji: string, role: string, tools: typeof CTO_TOOLS) => ({
+      const describe = async (id: string, name: string, icon: string, role: string, tools: typeof CTO_TOOLS) => ({
         id,
         name,
-        emoji,
+        icon,
         role,
         model: (await resolveModel(`agent:${id}`)).model,
         tools: await Promise.all(
@@ -430,8 +574,8 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
         ),
       });
       return [
-        await describe(CTO.id, CTO.name, CTO.emoji, CTO.role, CTO_TOOLS),
-        ...(await Promise.all(SPECIALISTS.map((s) => describe(s.id, s.name, s.emoji, s.role, s.tools)))),
+        await describe(CTO.id, CTO.name, CTO.icon, CTO.role, CTO_TOOLS),
+        ...(await Promise.all(SPECIALISTS.map((s) => describe(s.id, s.name, s.icon, s.role, s.tools)))),
       ];
     });
 
@@ -504,43 +648,6 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message });
       }
-    });
-
-    // ---------- Playground: conversar com o agente pelo dashboard ----------
-    api.post<{ Body: { text?: string; image?: { base64: string; mimetype: string }; file?: { base64: string; mimetype: string; fileName?: string }; reset?: boolean } }>("/api/playground", async (req) => {
-      const user = await one(
-        `INSERT INTO users (phone, name, status) VALUES ($1, 'Playground', 'active') ON CONFLICT (phone) DO UPDATE SET status = 'active' RETURNING *`,
-        [PLAYGROUND_PHONE],
-      );
-      const conv = await upsertConversation(user.id, "playground", "playground");
-      if (req.body.reset) {
-        await query("DELETE FROM messages WHERE conversation_id = $1", [conv.id]);
-        await clearShort(conv.id);
-        await query("UPDATE conversations SET summary = NULL, summary_until = 0 WHERE id = $1", [conv.id]);
-        return { ok: true };
-      }
-      const externalId = `pg-in-${Date.now()}`;
-      const file: { base64: string; mimetype: string; fileName?: string } | undefined = req.body.file ?? req.body.image;
-      const mt = file?.mimetype ?? "";
-      const kind = !file ? "text" : mt.startsWith("image/") ? "image" : mt.startsWith("audio/") ? "audio" : mt.startsWith("video/") ? "video" : "document";
-      await query(
-        `INSERT INTO messages (conversation_id, role, content, external_id, media, meta) VALUES ($1, 'user', $2, $3, $4, $5)`,
-        [conv.id, req.body.text ?? "", externalId, file ?? null, { kind, fileName: file?.fileName ?? null }],
-      );
-      const channel = new PlaygroundChannel();
-      const r = await processConversation(conv.id, { trigger: "playground", channel });
-      return {
-        executionId: r.executionId,
-        sent: channel.sent.map((s) =>
-          s.type === "image" ? { type: "image", kind: s.image?.kind ?? "image", src: s.image?.base64 ? `data:${s.image.mimetype ?? "image/png"};base64,${s.image.base64}` : s.image?.url, caption: s.image?.caption } : s,
-        ),
-      };
-    });
-
-    api.get("/api/playground/history", async () => {
-      const conv = await one(`SELECT c.id FROM conversations c WHERE c.channel = 'playground' AND c.remote_jid = 'playground'`);
-      if (!conv) return [];
-      return many(`SELECT id, role, content, meta, created_at FROM messages WHERE conversation_id = $1 ORDER BY id DESC LIMIT 60`, [conv.id]).then((r) => r.reverse());
     });
 
   });

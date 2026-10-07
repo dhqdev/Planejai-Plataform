@@ -1,4 +1,4 @@
-import { getCredentials } from "../../integrations/registry.js";
+import { GH_HEADERS, getCredentials } from "../../integrations/registry.js";
 import { defineTool, obj } from "./types.js";
 
 async function notion(path: string, body?: unknown, method = "POST") {
@@ -9,8 +9,8 @@ async function notion(path: string, body?: unknown, method = "POST") {
     headers: { Authorization: `Bearer ${c.token}`, "Notion-Version": "2022-06-28", "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
-  const j: any = await res.json();
-  if (!res.ok) throw new Error(`Notion: ${j.message}`);
+  const j: any = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`Notion ${res.status}: ${j.message ?? j.code ?? "erro"}`);
   return j;
 }
 
@@ -79,9 +79,9 @@ async function github(path: string, init: RequestInit = {}) {
   if (!c) throw new Error("GitHub não conectado");
   const res = await fetch(`https://api.github.com${path}`, {
     ...init,
-    headers: { Authorization: `Bearer ${c.token}`, "User-Agent": "planejai", Accept: "application/vnd.github+json", ...(init.headers ?? {}) },
+    headers: { ...GH_HEADERS(c.token!), ...(init.body ? { "Content-Type": "application/json" } : {}), ...(init.headers ?? {}) },
   });
-  const j: any = await res.json();
+  const j: any = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`GitHub: ${j.message}`);
   return j;
 }
@@ -92,8 +92,16 @@ export const githubSearchIssues = defineTool<{ query: string }>({
   integration: "github",
   parameters: obj({ query: { type: "string" } }, ["query"]),
   async run(args) {
-    const j = await github(`/search/issues?q=${encodeURIComponent(args.query)}&per_page=15`);
-    return j.items.map((i: any) => ({ number: i.number, title: i.title, state: i.state, url: i.html_url, pr: Boolean(i.pull_request), updated: i.updated_at }));
+    // A busca do GitHub exige is:issue ou is:pr na query (422 sem isso): sem o filtro, busca os dois e junta.
+    const q = args.query.trim();
+    const typed = /\b(is|type):(issue|pr|pull-request)\b/i.test(q);
+    const queries = typed ? [q] : [`${q} is:issue`, `${q} is:pr`];
+    const pages = await Promise.all(queries.map((x) => github(`/search/issues?q=${encodeURIComponent(x)}&per_page=15`)));
+    return pages
+      .flatMap((j) => j.items ?? [])
+      .sort((a: any, b: any) => String(b.updated_at).localeCompare(String(a.updated_at)))
+      .slice(0, 15)
+      .map((i: any) => ({ number: i.number, title: i.title, state: i.state, url: i.html_url, pr: Boolean(i.pull_request), updated: i.updated_at }));
   },
 });
 
@@ -118,8 +126,9 @@ async function linear(queryText: string, variables: Record<string, unknown> = {}
     headers: { Authorization: c.api_key!, "Content-Type": "application/json" },
     body: JSON.stringify({ query: queryText, variables }),
   });
-  const j: any = await res.json();
-  if (j.errors) throw new Error(`Linear: ${j.errors[0]?.message}`);
+  const j: any = await res.json().catch(() => ({}));
+  if (j.errors?.length) throw new Error(`Linear: ${j.errors[0]?.message}`);
+  if (!res.ok || !j.data) throw new Error(`Linear respondeu ${res.status}`);
   return j.data;
 }
 

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { Icon } from "./icons";
 
 export function PageHead({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
@@ -36,13 +38,17 @@ export function Status({ status }: { status: string }) {
 }
 
 /**
- * Modal que no celular vira "bottom sheet": sobe de baixo, tem alça, fecha arrastando para baixo,
- * tocando fora ou com Esc, e trava a rolagem do fundo enquanto está aberto.
+ * Modal arrastável. No computador e no iPad, segure o cabeçalho para mover a janela.
+ * No celular vira "bottom sheet": sobe de baixo, tem alça e fecha arrastando para baixo.
+ * Fecha também tocando fora ou com Esc, e trava a rolagem do fundo enquanto está aberto.
  */
-export function Modal({ title, icon, onClose, children, footer }: { title: string; icon?: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+export function Modal({ title, icon, onClose, children, footer, wide }: { title: string; icon?: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   const sheet = useRef<HTMLDivElement>(null);
   const drag = useRef<{ y: number; dy: number } | null>(null);
+  const move = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const offset = useRef({ x: 0, y: 0 });
   const [closing, setClosing] = useState(false);
+  const isPhone = () => matchMedia("(max-width: 767px)").matches;
 
   const close = useCallback(() => {
     setClosing(true);
@@ -60,8 +66,30 @@ export function Modal({ title, icon, onClose, children, footer }: { title: strin
     };
   }, [close]);
 
+  // mover a janela pelo cabeçalho (fora do celular)
+  const onHeadDown = (e: React.PointerEvent) => {
+    if (isPhone() || (e.target as Element).closest("button")) return;
+    move.current = { x: e.clientX, y: e.clientY, ox: offset.current.x, oy: offset.current.y };
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+  };
+  const onHeadMove = (e: React.PointerEvent) => {
+    if (!move.current || !sheet.current) return;
+    const r = sheet.current.getBoundingClientRect();
+    const maxX = (innerWidth - r.width) / 2 + r.width - 80;
+    const maxY = (innerHeight - r.height) / 2 + r.height - 60;
+    const x = Math.max(-maxX, Math.min(maxX, move.current.ox + e.clientX - move.current.x));
+    const y = Math.max(-((innerHeight - r.height) / 2) - 0, Math.min(maxY, move.current.oy + e.clientY - move.current.y));
+    offset.current = { x, y };
+    sheet.current.style.animation = "none";
+    sheet.current.style.transform = `translate(${x}px, ${y}px)`;
+  };
+  const onHeadUp = () => {
+    move.current = null;
+  };
+
+  // celular: arrastar para baixo fecha
   const onTouchStart = (e: React.TouchEvent) => {
-    // só arrasta pela alça/cabeçalho ou com o conteúdo no topo
+    if (!isPhone()) return;
     const body = sheet.current?.querySelector(".modal-body");
     if (body && body.contains(e.target as Node) && body.scrollTop > 0) return;
     drag.current = { y: e.touches[0]!.clientY, dy: 0 };
@@ -81,26 +109,27 @@ export function Modal({ title, icon, onClose, children, footer }: { title: strin
     if (dy > 110) {
       sheet.current.style.setProperty("--drag", `translateY(${dy}px)`);
       close();
-    }
-    else sheet.current.style.transform = "";
+    } else sheet.current.style.transform = "";
   };
 
-  return (
+  // vai direto no <body>: nada da página (animações, transform) muda a posição do modal
+  return createPortal(
     <div className={`modal-bg ${closing ? "closing" : ""}`} onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div className="card modal" role="dialog" aria-modal="true" aria-label={title} ref={sheet} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+      <div className={`card modal ${wide ? "wide" : ""}`} role="dialog" aria-modal="true" aria-label={title} ref={sheet} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
         <div className="sheet-handle" />
-        <div className="modal-head">
+        <div className="modal-head" onPointerDown={onHeadDown} onPointerMove={onHeadMove} onPointerUp={onHeadUp} onPointerCancel={onHeadUp}>
           {icon}
           <strong>{title}</strong>
           <span className="spacer" />
-          <button className="btn btn-ghost btn-sm" onClick={close} aria-label="Fechar">
-            ✕
+          <button className="icon-btn" onClick={close} aria-label="Fechar">
+            <Icon name="x" size={16} />
           </button>
         </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -123,34 +152,86 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 const ICONS: Record<string, string> = {
-  google: "G",
-  notion: "N",
-  github: "🐙",
-  linear: "◐",
-  slack: "#",
-  search: "🔎",
-  browser: "🌐",
-  payment: "💳",
-  shop: "🛒",
+  google: "calendar",
+  notion: "bookmark",
+  github: "github",
+  linear: "target",
+  slack: "hash",
+  search: "search",
+  browser: "globe",
+  payment: "card",
+  shop: "shop",
 };
 
 export function IntegrationIcon({ icon }: { icon: string }) {
-  return <div className="logo">{ICONS[icon] ?? "🔌"}</div>;
+  return (
+    <div className="logo">
+      <Icon name={ICONS[icon] ?? "plug"} size={20} />
+    </div>
+  );
 }
 
 export const AGENT_LABEL: Record<string, string> = {
-  cto: "🧠 CTO",
-  pesquisador: "🔎 Pesquisador",
-  agenda: "📅 Agenda",
-  financeiro: "💰 Financeiro",
-  comunicacao: "✉️ Comunicação",
-  produtividade: "🗂️ Produtividade",
+  cto: "CTO",
+  pesquisador: "Pesquisador",
+  agenda: "Agenda",
+  financeiro: "Financeiro",
+  comunicacao: "Comunicação",
+  produtividade: "Produtividade",
 };
+
+export const AGENT_ICON: Record<string, string> = {
+  cto: "brain",
+  pesquisador: "search",
+  agenda: "calendar",
+  financeiro: "wallet",
+  comunicacao: "mail",
+  produtividade: "folder",
+};
+
+/** Nome do agente com ícone (agentes de cliente vêm como c_<slug>). */
+export function AgentTag({ id, name }: { id: string; name?: string }) {
+  return (
+    <span className="row" style={{ gap: 6, display: "inline-flex" }}>
+      <Icon name={AGENT_ICON[id] ?? (id.startsWith("c_") ? "sparkle" : "circle")} size={14} />
+      {name ?? AGENT_LABEL[id] ?? id.replace(/^c_/, "")}
+    </span>
+  );
+}
+
+/** Caixa com texto para copiar (links de convite etc.). */
+export function CopyField({ value }: { value: string }) {
+  const [ok, setOk] = useState(false);
+  return (
+    <div className="copy">
+      <code>{value}</code>
+      <button
+        className="icon-btn"
+        aria-label="Copiar"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(value);
+          } catch {
+            /* sem permissão */
+          }
+          setOk(true);
+          setTimeout(() => setOk(false), 1400);
+        }}
+      >
+        <Icon name={ok ? "check" : "copy"} size={15} />
+      </button>
+    </div>
+  );
+}
 
 export function Stat({ label, value, sub, icon, tone }: { label: string; value: ReactNode; sub?: ReactNode; icon?: string; tone?: "ok" | "info" | "warn" }) {
   return (
     <div className={`card card-pad stat ${tone ?? ""}`}>
-      {icon && <div className="stat-ico">{icon}</div>}
+      {icon && (
+        <div className="stat-ico">
+          <Icon name={icon} size={16} />
+        </div>
+      )}
       <div className="label">{label}</div>
       <div className="value">{value}</div>
       {sub && <div className="sub">{sub}</div>}
@@ -158,7 +239,8 @@ export function Stat({ label, value, sub, icon, tone }: { label: string; value: 
   );
 }
 
-export const CATEGORY_COLORS = ["#ff6d5a", "#5b6cff", "#24a148", "#f5a524", "#9b5bff", "#00a3c4", "#e5484d", "#ff8ac2", "#7c8b2e", "#8d6e63", "#3fb68b", "#c27c0e", "#6e6e7d", "#2b6cb0"];
+/** Tons de cinza (visual monocromático), do mais forte ao mais claro. */
+export const CATEGORY_COLORS = ["var(--text)", "#6b6b6b", "#9a9a9a", "#c4c4c4", "#4a4a4a", "#808080", "#b0b0b0", "#2e2e2e", "#d6d6d6", "#5a5a5a", "#8c8c8c", "#a8a8a8", "#3c3c3c", "#bcbcbc"];
 
 /** Rosca SVG simples (sem biblioteca) para gastos por categoria. */
 export function Donut({ items, size = 150, center }: { items: { label: string; value: number }[]; size?: number; center?: ReactNode }) {

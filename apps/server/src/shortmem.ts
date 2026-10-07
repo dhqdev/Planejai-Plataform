@@ -37,6 +37,18 @@ function redis(): Redis | null {
   return client;
 }
 
+/** Redis respondendo agora? (decide se dá para não guardar a mensagem no Postgres) */
+export async function redisAlive(): Promise<boolean> {
+  const r = redis();
+  if (!r) return false;
+  try {
+    return (await r.ping()) === "PONG";
+  } catch {
+    failedAt = Date.now();
+    return false;
+  }
+}
+
 export function shortMemoryEnabled() {
   return Boolean(config.REDIS_URL);
 }
@@ -68,6 +80,94 @@ export async function recentShort(conversationId: string, limit: number): Promis
     return raw.map((s) => JSON.parse(s) as ShortEntry).filter((e) => e.ts >= cutoff);
   } catch {
     failedAt = Date.now();
+    return null;
+  }
+}
+
+/** Todas as entradas guardadas da conversa (para resumir antes de expirar). */
+export async function allShort(conversationId: string): Promise<ShortEntry[] | null> {
+  return recentShort(conversationId, MAX_ENTRIES);
+}
+
+// ---------------- Cache reaproveitável ----------------
+// Resultado de pesquisa, página lida, interpretação de mídia, texto de documento: guardado com validade e
+// reaproveitado quando alguém (a mesma pessoa ou outra) precisar de novo. Cada acerto é token economizado.
+
+const CACHE_PREFIX = "pj:cache:";
+
+export async function cacheGet<T>(key: string): Promise<T | null> {
+  const r = redis();
+  if (!r) return null;
+  try {
+    const raw = await r.get(CACHE_PREFIX + key);
+    if (raw == null) return null;
+    void r.incr("pj:stats:cache_hits").catch(() => {});
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function cacheSet(key: string, value: unknown, ttlSeconds: number) {
+  const r = redis();
+  if (!r) return;
+  try {
+    const raw = JSON.stringify(value);
+    if (raw.length > 512_000) return; // nada gigante no Redis
+    await r.set(CACHE_PREFIX + key, raw, "EX", Math.max(1, Math.round(ttlSeconds)));
+    void r.incr("pj:stats:cache_writes").catch(() => {});
+  } catch {
+    /* sem cache, segue */
+  }
+}
+
+/** Busca no cache ou calcula e guarda. */
+export async function cached<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T> {
+  const hit = await cacheGet<T>(key);
+  if (hit != null) return hit;
+  const value = await fn();
+  if (value != null) await cacheSet(key, value, ttlSeconds);
+  return value;
+}
+
+/** Marca algo como visto; devolve false se já tinha sido visto dentro da validade (dedupe barato). */
+export async function markSeen(key: string, ttlSeconds: number): Promise<boolean | null> {
+  const r = redis();
+  if (!r) return null;
+  try {
+    return (await r.set(`pj:seen:${key}`, "1", "EX", ttlSeconds, "NX")) === "OK";
+  } catch {
+    return null;
+  }
+}
+
+/** Conta eventos numa janela (ritmo de mensagens). null = Redis indisponível. */
+export async function countInWindow(key: string, windowSeconds: number): Promise<number | null> {
+  const r = redis();
+  if (!r) return null;
+  try {
+    const k = `pj:rate:${key}`;
+    const [[, n]] = (await r.multi().incr(k).expire(k, windowSeconds, "NX").exec()) as [[unknown, number]];
+    return n;
+  } catch {
+    return null;
+  }
+}
+
+export async function cacheStats() {
+  const r = redis();
+  if (!r) return null;
+  try {
+    const [hits, writes] = await r.mget("pj:stats:cache_hits", "pj:stats:cache_writes");
+    let keys = 0;
+    let cursor = "0";
+    do {
+      const [next, batch] = await r.scan(cursor, "MATCH", `${CACHE_PREFIX}*`, "COUNT", 500);
+      cursor = next;
+      keys += batch.length;
+    } while (cursor !== "0" && keys < 50_000);
+    return { hits: Number(hits ?? 0), writes: Number(writes ?? 0), keys };
+  } catch {
     return null;
   }
 }
