@@ -105,20 +105,6 @@ function adminNav(tabs: AppTabs | null): NavItem[] {
   ];
 }
 
-/** Abas da barra inferior no celular; o resto fica em "Mais". */
-const SUPER_TABS = [
-  { to: "/", label: "Painel", icon: "home" },
-  { to: "/clients", label: "Clientes", icon: "users" },
-  { to: "/executions", label: "Execuções", icon: "activity" },
-  { to: "/agents", label: "Agentes", icon: "brain" },
-];
-const ADMIN_TABS = [
-  { to: "/", label: "Início", icon: "home" },
-  { to: "/agenda", label: "Agenda", icon: "calendar" },
-  { to: "/finance", label: "Finanças", icon: "wallet" },
-  { to: "/watches", label: "De olho", icon: "eye" },
-];
-
 export function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? "light");
@@ -126,6 +112,12 @@ export function App() {
   const [installable, setInstallable] = useState(canInstall());
   const loc = useLocation();
   const mainRef = useRef<HTMLElement>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  // barra de baixo: a aba aberta desliza para o meio (dá para rolar para os lados)
+  useEffect(() => {
+    const el = tabsRef.current?.querySelector<HTMLElement>(".tab.active");
+    el?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [loc.pathname]);
   const [update, setUpdate] = useState(false);
   useEffect(() => onUpdateAvailable(setUpdate), []);
   // trocou de tela: começa do topo
@@ -259,16 +251,20 @@ export function App() {
       )}
 
       <nav className="tabbar" aria-label="Navegação">
-        {(isSuper ? SUPER_TABS : ADMIN_TABS).map((t) => (
-          <NavLink key={t.to} to={t.to} end={t.to === "/"} className="tab">
-            <span className="tab-ico"><Icon name={t.icon} size={22} /></span>
-            <span>{t.label}</span>
-          </NavLink>
-        ))}
-        <button className={`tab ${menu ? "active" : ""}`} onClick={() => setMenu(true)}>
-          <span className="tab-ico"><Icon name="menu" size={22} /></span>
-          <span>Mais</span>
-        </button>
+        <div className="tabbar-pill">
+          <div className="tabbar-scroll" ref={tabsRef}>
+            {NAV.filter((i): i is Exclude<NavItem, { section: string }> => "to" in i).map((t) => (
+              <NavLink key={t.to} to={t.to} end={t.to === "/"} className="tab">
+                <span className="tab-ico"><Icon name={t.icon} size={21} /></span>
+                <span className="tab-label">{t.short ?? t.label}</span>
+              </NavLink>
+            ))}
+          </div>
+          <button className={`tab tab-more ${menu ? "active" : ""}`} onClick={() => setMenu(true)}>
+            <span className="tab-ico"><Icon name="more" size={21} /></span>
+            <span className="tab-label">Mais</span>
+          </button>
+        </div>
       </nav>
 
       {menu && (

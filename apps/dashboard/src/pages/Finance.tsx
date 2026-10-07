@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api, brl, day } from "../api";
-import { CATEGORY_COLORS, Empty, ErrorBox, Loading, Modal } from "../components";
+import { CATEGORY_COLORS, Donut, Empty, ErrorBox, Loading, Modal } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
@@ -78,60 +78,137 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
   const budgetOf = new Map(everyone ? [] : budgets.filter((b) => b.category).map((b) => [b.category!, b]));
   const go = (n: number) => { haptic(6); setCat(null); setMonth(shift(month, n)); };
 
+  const [tab, setTab] = useState<"overview" | "list">("overview");
+  const totalBudget = everyone ? undefined : budgets.find((b) => !b.category);
+  const today = new Date();
+  const elapsed = isCurrent ? today.getDate() : daysIn;
+  const reminders = useApi<{ events: any[] }>(
+    `/api/calendar?from=${new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()}&to=${new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14).toISOString()}${user ? `&user=${user}` : ""}`,
+  );
+  const upcoming = (reminders.data?.events ?? []).filter((e) => e.kind === "reminder").slice(0, 4);
+  const periodLabel = `1 - ${daysIn} de ${monthName(month).slice(0, 3)}, ${month.slice(0, 4)}`;
+  const insight = buildInsight(cats, expenses, prevCat, budgets, monthName(month));
+
   return (
     <div className="page fin-page">
       <div className="fin-top">
-        <div className="fin-month">
-          <button className="icon-btn" aria-label="Mês anterior" onClick={() => go(-1)}><Icon name="chevron-left" size={18} /></button>
-          <strong>{monthName(month).replace(/^./, (c) => c.toUpperCase())} <span className="muted">{month.slice(0, 4)}</span></strong>
-          <button className="icon-btn" aria-label="Próximo mês" disabled={isCurrent} onClick={() => go(1)}><Icon name="chevron-right" size={18} /></button>
+        <div className="fin-tabs">
+          <button className={tab === "overview" ? "active" : ""} onClick={() => { haptic(5); setTab("overview"); }}><Icon name="layout" size={16} /> Visão geral</button>
+          <button className={tab === "list" ? "active" : ""} onClick={() => { haptic(5); setTab("list"); }}><Icon name="receipt" size={16} /> Lançamentos</button>
         </div>
+        <span className="muted hide-phone fin-month-label">{cap(monthName(month))} de {month.slice(0, 4)}</span>
         <span className="spacer" />
+        <div className="fin-period">
+          <button className="icon-btn round" aria-label="Mês anterior" onClick={() => go(-1)}><Icon name="chevron-left" size={16} /></button>
+          <span className="fin-range"><Icon name="calendar" size={15} /> {periodLabel}</span>
+          <button className="icon-btn round" aria-label="Próximo mês" disabled={isCurrent} onClick={() => go(1)}><Icon name="chevron-right" size={16} /></button>
+        </div>
         {isSuper && (
-          <select className="select fin-person" value={user} onChange={(e) => setUser(e.target.value)}>
-            <option value="">Todas as pessoas</option>
-            {(people.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name ?? `+${p.phone}`}</option>)}
-          </select>
+          <div className="fin-people">
+            <button className={!user ? "active" : ""} onClick={() => setUser("")}>Todos</button>
+            {(people.data ?? []).map((p) => (
+              <button key={p.id} className={user === p.id ? "active" : ""} onClick={() => { haptic(5); setUser(p.id); }}>{(p.name ?? `+${p.phone}`).split(" ")[0]}</button>
+            ))}
+          </div>
         )}
-        <button className="btn btn-primary" onClick={() => setAdding(true)}>
+        <button className="btn btn-brand fin-add" onClick={() => setAdding(true)}>
           <Icon name="plus" size={16} /> <span className="hide-phone">Lançamento</span>
         </button>
       </div>
       <ErrorBox error={error} />
-      {!data ? <Loading /> : (
+      {!data ? <Loading /> : tab === "overview" ? (
         <>
-          <div className="card fin-hero">
-            <div className="muted">Gastos em {monthName(month)}</div>
-            <div className="fin-total">{brl(expenses)}</div>
-            {diff != null && (
-              <div className={`fin-diff ${diff > 0 ? "up" : "down"}`}>
-                <Icon name={diff > 0 ? "arrow-up" : "arrow-down"} size={14} />
-                {brl(Math.abs(diff))} {diff > 0 ? "a mais" : "a menos"} que em {monthName(shift(month, -1))}
-              </div>
+          <div className="card fin-kpis">
+            <div><small>Entradas</small><strong className="pos">{brl(income)}</strong><span>no período</span></div>
+            <div><small>Saídas</small><strong className="neg">{brl(expenses)}</strong><span>{income ? `${Math.round((expenses / income) * 100)}% das entradas` : diff != null ? `${diff > 0 ? "+" : "−"}${brl(Math.abs(diff))} vs ${monthName(shift(month, -1)).slice(0, 3)}` : "no período"}</span></div>
+            <div><small>Saldo</small><strong className={income - expenses < 0 ? "neg" : ""}>{brl(income - expenses)}</strong><span>{income - expenses < 0 ? "negativo" : "positivo"}</span></div>
+            {totalBudget ? (
+              <div><small>Limite do mês</small><strong className={totalBudget.spent > totalBudget.limit ? "neg" : ""}>{brl(Math.max(0, totalBudget.limit - totalBudget.spent))}</strong><span>restante de {brl(totalBudget.limit)}</span></div>
+            ) : (
+              <div><small>Média por dia</small><strong>{brl(expenses / Math.max(1, elapsed))}</strong><span>{data.totals.count} lançamentos</span></div>
             )}
-            {cats.length > 0 && (
-              <div className="fin-stack" aria-hidden="true">
-                {cats.map((c: any, i: number) => (
-                  <span key={c.label} style={{ flex: c.value, background: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} title={`${c.label}: ${brl(c.value)}`} />
-                ))}
-              </div>
-            )}
-            <div className="fin-mini">
-              <div><small className="muted">Receitas</small><strong className="amount-in">{brl(income)}</strong></div>
-              <div><small className="muted">Saldo</small><strong style={{ color: income - expenses < 0 ? "var(--err)" : "var(--ok)" }}>{brl(income - expenses)}</strong></div>
-              <div><small className="muted">Lançamentos</small><strong>{data.totals.count}</strong></div>
-            </div>
           </div>
 
-          {(
-            <>
-              <div className="fin-section-head">
-                <h3>Limites do mês</h3>
-                <button className="btn btn-sm" onClick={() => setBudget({ category: !everyone && budgets.some((b) => !b.category) ? (cats[0]?.label ?? "Alimentação") : null, user: user || undefined })}>
-                  <Icon name="plus" size={14} /> Limite
-                </button>
+          <div className="fin-overview">
+            <div className="fin-col">
+              <div className="card fin-insight">
+                <div className="fin-card-head">
+                  <h3>Insight do mês</h3>
+                  <span className="chip-mini">automático</span>
+                  <span className="spacer" />
+                  <button className="icon-btn" aria-label="Atualizar" onClick={() => void reload()}><Icon name="refresh" size={15} /></button>
+                </div>
+                <small className="muted">{cap(today.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }))}</small>
+                <p className="fin-insight-text">{insight}</p>
+                {cats[0] && (
+                  <>
+                    <div className="fin-insight-meta">
+                      <span className="fin-pill" style={{ ["--c" as any]: CATEGORY_COLORS[0] }}><Icon name={CAT_ICON[cats[0].label] ?? "hash"} size={13} /> {cats[0].label}</span>
+                      <strong>{brl(cats[0].value)}</strong> <span className="muted">gasto</span>
+                      <strong>{expenses ? ((cats[0].value / expenses) * 100).toFixed(1).replace(".", ",") : 0}%</strong> <span className="muted">do total</span>
+                    </div>
+                    <div className="fin-insight-bar"><i style={{ width: `${expenses ? (cats[0].value / expenses) * 100 : 0}%` }} /></div>
+                  </>
+                )}
               </div>
-              <div className="card card-pad" style={{ marginBottom: 18, paddingTop: 6, paddingBottom: 6 }}>
+
+              <div className="card fin-donut-card">
+                <div className="fin-card-head">
+                  <span className="tone-ico" style={{ ["--c" as any]: "var(--brand-3)" }}><Icon name="target" size={15} /></span>
+                  <div>
+                    <h3>Gastos por categoria</h3>
+                    <small className="muted">Toque numa categoria para ver os lançamentos</small>
+                  </div>
+                </div>
+                {cats.length ? (
+                  <div className="fin-donut">
+                    <Donut items={cats} size={150} center={<div><small className="muted">Total</small><div style={{ fontWeight: 700, fontSize: 13 }}>{brl(expenses)}</div></div>} />
+                    <div className="fin-legend">
+                      {cats.map((c: any, i: number) => {
+                        const b = budgetOf.get(c.label);
+                        return (
+                          <button key={c.label} style={{ ["--c" as any]: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} onClick={() => { haptic(5); setCat(c.label); setTab("list"); }}>
+                            <span className="dot" />
+                            <span className="name">{c.label}</span>
+                            <span className="muted val">{brl(c.value)}</span>
+                            <strong>{expenses ? Math.round((c.value / expenses) * 100) : 0}%</strong>
+                            <span className="bar"><i style={{ width: `${expenses ? (c.value / expenses) * 100 : 0}%` }} /></span>
+                            {b && <small className={`lim ${c.value >= b.limit ? "over" : ""}`}>{Math.round((c.value / b.limit) * 100)}% do limite de {brl(b.limit)}</small>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <Empty>Sem gastos em {monthName(month)}. No WhatsApp é só dizer "gastei 32 no almoço" ou mandar a foto do comprovante.</Empty>
+                )}
+              </div>
+
+              <div className="card card-pad">
+                <div className="fin-card-head"><h3>Últimos meses</h3></div>
+                <div className="fin-months">
+                  {months.map((m: any) => (
+                    <button key={m.month} className={m.month === month ? "active" : ""} onClick={() => { haptic(5); setCat(null); setMonth(m.month); }} title={`${m.month}: ${brl(m.expenses)}`}>
+                      <span className="fin-month-bar"><i style={{ height: `${(Number(m.expenses) / maxMonth) * 100}%` }} /></span>
+                      <small>{monthName(m.month).slice(0, 3)}</small>
+                    </button>
+                  ))}
+                </div>
+                <h3 style={{ marginTop: 18 }}>Dia a dia</h3>
+                <div className="bars" style={{ height: 56 }}>
+                  {days.map((d) => <div key={d.day} className={`bar ${d.expenses ? "spent" : ""}`} title={`dia ${d.day}: ${brl(d.expenses)}`} style={{ height: `${(d.expenses / maxDay) * 100}%` }} />)}
+                </div>
+              </div>
+            </div>
+
+            <div className="fin-col">
+              <div className="card fin-side-card">
+                <div className="fin-card-head">
+                  <span className="tone-ico" style={{ ["--c" as any]: "var(--brand-2)" }}><Icon name="target" size={15} /></span>
+                  <h3>Limites do mês</h3>
+                  <span className="spacer" />
+                  <button className="link-btn" onClick={() => setBudget({ category: !everyone && budgets.some((b) => !b.category) ? (cats[0]?.label ?? "Alimentação") : null, user: user || undefined })}>Novo limite <Icon name="chevron-right" size={13} /></button>
+                </div>
                 {budgets.map((b) => {
                   const pct = b.limit ? b.spent / b.limit : 0;
                   return (
@@ -143,14 +220,32 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                   );
                 })}
                 {!budgets.length && (
-                  <p className="muted" style={{ margin: "8px 0" }}>
-                    Sem limites. Crie aqui ou diga no WhatsApp "meu limite de mercado é 800". Ele avisa ao chegar em 80% e quando estourar.
-                  </p>
+                  <div className="fin-empty-side">
+                    <p className="muted">Nenhum limite ainda. Ele avisa no WhatsApp ao chegar em 80% e quando estourar.</p>
+                    <button className="btn btn-brand btn-sm" onClick={() => setBudget({ category: null, user: user || undefined })}><Icon name="plus" size={14} /> Criar limite</button>
+                  </div>
                 )}
               </div>
-            </>
-          )}
 
+              <div className="card fin-side-card">
+                <div className="fin-card-head">
+                  <span className="tone-ico" style={{ ["--c" as any]: "var(--brand-4)" }}><Icon name="bell" size={15} /></span>
+                  <h3>Próximos lembretes</h3>
+                </div>
+                {upcoming.map((e) => (
+                  <div key={e.id} className="fin-rem">
+                    <span className="fin-rem-date"><strong>{new Date(e.start).getDate()}</strong><small>{monthName(new Date(e.start).toISOString().slice(0, 7)).slice(0, 3)}</small></span>
+                    <span className="ellipsis" style={{ flex: 1 }}>{e.title}</span>
+                    <small className="muted">{new Date(e.start).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small>
+                  </div>
+                ))}
+                {reminders.data && !upcoming.length && <p className="muted fin-empty-side">Nenhum lembrete nos próximos 14 dias.</p>}
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
           <div className="fin-section-head">
             <h3>Por categoria</h3>
             {cat && <button className="btn btn-sm btn-ghost" onClick={() => setCat(null)}><Icon name="x" size={14} /> {cat}</button>}
@@ -166,11 +261,6 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                     <span className="fin-cat-name">{c.label}</span>
                     <strong className="fin-cat-value">{brl(c.value)}</strong>
                     <span className="fin-cat-bar"><i style={{ width: `${expenses ? (c.value / expenses) * 100 : 0}%` }} /></span>
-                    {budgetOf.get(c.label) && (
-                      <span className={`fin-cat-limit ${c.value >= budgetOf.get(c.label)!.limit ? "over" : ""}`}>
-                        {Math.round((c.value / budgetOf.get(c.label)!.limit) * 100)}% do limite de {brl(budgetOf.get(c.label)!.limit)}
-                      </span>
-                    )}
                     <small className="muted">
                       {expenses ? Math.round((c.value / expenses) * 100) : 0}% · {c.count} {c.count === 1 ? "gasto" : "gastos"}
                       {d != null && Math.abs(d) >= 1 && <span className={d > 0 ? "trend-up" : "trend-down"}> · {d > 0 ? "+" : "−"}{brl(Math.abs(d))}</span>}
@@ -180,51 +270,29 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
               })}
             </div>
           ) : (
-            <div className="card"><Empty>Sem gastos em {monthName(month)}. No WhatsApp é só dizer "gastei 32 no almoço" ou mandar a foto do comprovante.</Empty></div>
+            <div className="card"><Empty>Sem gastos em {monthName(month)}.</Empty></div>
           )}
-
-          <div className="fin-grid">
-            <div>
-              <div className="fin-section-head"><h3>{cat ? `Lançamentos em ${cat}` : "Lançamentos"}</h3></div>
-              <div className="card fin-list">
-                {groups.map(([k, items]) => {
-                  const total = items.filter((t) => t.kind === "expense").reduce((a, t) => a + Number(t.amount), 0);
-                  return (
-                    <div key={k}>
-                      <div className="fin-day"><span>{dayLabel(items[0].occurred_at)}</span>{total > 0 && <span>{brl(total)}</span>}</div>
-                      {items.map((t: any) => (
-                        <button key={t.id} className="fin-tx" onClick={() => setDetail(t)}>
-                          <span className="fin-tx-ico"><Icon name={t.kind === "income" ? "arrow-down" : CAT_ICON[t.category] ?? "hash"} size={16} /></span>
-                          <span className="fin-tx-text">
-                            <span className="ellipsis">{t.description ?? t.merchant ?? t.category}</span>
-                            <small className="muted ellipsis">{t.category}{t.merchant && t.description ? ` · ${t.merchant}` : ""}{isSuper ? ` · ${t.user_name ?? `+${t.phone}`}` : ""}</small>
-                          </span>
-                          <strong className={t.kind === "income" ? "amount-in" : ""}>{t.kind === "income" ? "+" : "−"}{brl(t.amount)}</strong>
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })}
-                {!list.length && <Empty>Nada lançado {cat ? `em ${cat} ` : ""}neste mês.</Empty>}
-              </div>
-            </div>
-            <div>
-              <div className="fin-section-head"><h3>Últimos meses</h3></div>
-              <div className="card card-pad">
-                <div className="fin-months">
-                  {months.map((m: any) => (
-                    <button key={m.month} className={m.month === month ? "active" : ""} onClick={() => { haptic(5); setCat(null); setMonth(m.month); }} title={`${m.month}: ${brl(m.expenses)}`}>
-                      <span className="fin-month-bar"><i style={{ height: `${(Number(m.expenses) / maxMonth) * 100}%` }} /></span>
-                      <small>{monthName(m.month).slice(0, 3)}</small>
+          <div className="fin-section-head"><h3>{cat ? `Lançamentos em ${cat}` : "Lançamentos"}</h3></div>
+          <div className="card fin-list">
+            {groups.map(([k, items]) => {
+              const total = items.filter((t) => t.kind === "expense").reduce((a, t) => a + Number(t.amount), 0);
+              return (
+                <div key={k}>
+                  <div className="fin-day"><span>{dayLabel(items[0].occurred_at)}</span>{total > 0 && <span>{brl(total)}</span>}</div>
+                  {items.map((t: any) => (
+                    <button key={t.id} className="fin-tx" onClick={() => setDetail(t)}>
+                      <span className="fin-tx-ico" style={{ ["--c" as any]: CATEGORY_COLORS[Math.max(0, cats.findIndex((c: any) => c.label === t.category)) % CATEGORY_COLORS.length] }}><Icon name={t.kind === "income" ? "arrow-down" : CAT_ICON[t.category] ?? "hash"} size={16} /></span>
+                      <span className="fin-tx-text">
+                        <span className="ellipsis">{t.description ?? t.merchant ?? t.category}</span>
+                        <small className="muted ellipsis">{t.category}{t.merchant && t.description ? ` · ${t.merchant}` : ""}{isSuper ? ` · ${t.user_name ?? `+${t.phone}`}` : ""}</small>
+                      </span>
+                      <strong className={t.kind === "income" ? "amount-in" : ""}>{t.kind === "income" ? "+" : "−"}{brl(t.amount)}</strong>
                     </button>
                   ))}
                 </div>
-                <h3 style={{ marginTop: 18 }}>Dia a dia</h3>
-                <div className="bars" style={{ height: 56 }}>
-                  {days.map((d) => <div key={d.day} className={`bar ${d.expenses ? "spent" : ""}`} title={`dia ${d.day}: ${brl(d.expenses)}`} style={{ height: `${(d.expenses / maxDay) * 100}%` }} />)}
-                </div>
-              </div>
-            </div>
+              );
+            })}
+            {!list.length && <Empty>Nada lançado {cat ? `em ${cat} ` : ""}neste mês.</Empty>}
           </div>
         </>
       )}
@@ -254,6 +322,23 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
       )}
     </div>
   );
+}
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Insight sem IA (não gasta token): maior categoria, comparação com o mês anterior e limites perto do fim. */
+function buildInsight(cats: { label: string; value: number }[], total: number, prev: Map<string, number>, budgets: { category: string | null; limit: number; spent: number; user_name?: string }[], month: string) {
+  if (!cats.length) return `Nenhum gasto em ${month} ainda. Mande no WhatsApp o que gastou e eu organizo por categoria.`;
+  const top = cats[0]!;
+  const pct = Math.round((top.value / Math.max(total, 1)) * 100);
+  const parts = [pct >= 99 ? `Todo o gasto de ${month} foi com ${top.label}.` : `${top.label} é ${pct}% dos seus gastos em ${month}.`];
+  const before = prev.get(top.label);
+  if (before != null && Math.abs(top.value - before) >= 1)
+    parts.push(top.value > before ? `São ${brl(top.value - before)} a mais que no mês passado.` : `São ${brl(before - top.value)} a menos que no mês passado.`);
+  const hot = budgets.filter((b) => b.limit && b.spent / b.limit >= 0.8).sort((a, b) => b.spent / b.limit - a.spent / a.limit)[0];
+  if (hot) parts.push(`${hot.category ?? "O total do mês"} já está em ${Math.round((hot.spent / hot.limit) * 100)}% do limite${hot.user_name ? ` (${hot.user_name})` : ""}.`);
+  else if (cats.length > 1) parts.push(`Depois vem ${cats[1]!.label}, com ${brl(cats[1]!.value)}.`);
+  return parts.join(" ");
 }
 
 function shift(month: string, delta: number) {

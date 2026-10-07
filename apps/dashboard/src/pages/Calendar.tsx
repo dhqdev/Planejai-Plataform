@@ -5,11 +5,16 @@ import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
 
-/** Calendário no estilo Google Agenda: mês, semana e lista, com os lembretes do assistente e o Google Agenda conectado. */
+/**
+ * Agenda no estilo Google Agenda: painel lateral (Criar, minicalendário, agendas), mês com número da
+ * semana, semana, dia e lista. No celular: pílulas Lista/Dia/Semana/Mês e botão + flutuante.
+ * Agendas: lembretes do assistente, Google Agenda conectado e feriados nacionais (calculados aqui, sem API).
+ */
 
+type Kind = "reminder" | "google" | "holiday";
 type Ev = {
   id: string;
-  kind: "reminder" | "google";
+  kind: Kind;
   reminderId?: string;
   title: string;
   start: string;
@@ -20,7 +25,7 @@ type Ev = {
   location?: string | null;
   link?: string | null;
 };
-type View = "month" | "week" | "list";
+type View = "day" | "week" | "month" | "list";
 
 const WEEKDAYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
@@ -34,21 +39,75 @@ const key = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const isPhone = () => matchMedia("(max-width: 767px)").matches;
+/** Semana começa na segunda, como no Google Agenda em português. */
+const weekStart = (d: Date) => addDays(startOfDay(d), -((d.getDay() + 6) % 7));
 
 function monthGrid(anchor: Date) {
-  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-  const start = addDays(first, -first.getDay());
+  const start = weekStart(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
   return Array.from({ length: 42 }, (_, i) => addDays(start, i));
 }
 
+/** Número da semana (ISO 8601). */
+function isoWeek(d: Date) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return Math.ceil(((t.getTime() - y0.getTime()) / 86400000 + 1) / 7);
+}
+
+/** Feriados nacionais do Brasil (fixos + os que dependem da Páscoa). */
+function holidays(year: number): Ev[] {
+  // Páscoa (algoritmo de Meeus/Jones/Butcher)
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100, d = Math.floor(b / 4), e = b % 4;
+  const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const easter = new Date(year, Math.floor((h + l - 7 * m + 114) / 31) - 1, ((h + l - 7 * m + 114) % 31) + 1);
+  const list: [Date, string][] = [
+    [new Date(year, 0, 1), "Confraternização Universal"],
+    [addDays(easter, -48), "Carnaval"],
+    [addDays(easter, -47), "Carnaval"],
+    [addDays(easter, -2), "Sexta-feira Santa"],
+    [easter, "Páscoa"],
+    [new Date(year, 3, 21), "Tiradentes"],
+    [new Date(year, 4, 1), "Dia do Trabalho"],
+    [addDays(easter, 60), "Corpus Christi"],
+    [new Date(year, 8, 7), "Independência do Brasil"],
+    [new Date(year, 9, 12), "Nossa Senhora Aparecida"],
+    [new Date(year, 10, 2), "Finados"],
+    [new Date(year, 10, 15), "Proclamação da República"],
+    [new Date(year, 10, 20), "Dia da Consciência Negra"],
+    [new Date(year, 11, 25), "Natal"],
+  ];
+  return list.map(([dt, title]) => ({ id: `h-${key(dt)}-${title}`, kind: "holiday" as const, title, start: dt.toISOString(), allDay: true }));
+}
+
+const CALENDARS: { id: Kind; label: string; color: string; group: "mine" | "other" }[] = [
+  { id: "reminder", label: "Lembretes", color: "var(--brand-2)", group: "mine" },
+  { id: "google", label: "Google Agenda", color: "#2F7BEA", group: "mine" },
+  { id: "holiday", label: "Feriados no Brasil", color: "#12A150", group: "other" },
+];
+
+function loadHidden(): Kind[] {
+  try {
+    return JSON.parse(localStorage.getItem("pj-cal-hidden") ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
 export function CalendarPage({ isSuper }: { isSuper: boolean }) {
+  const [phone, setPhone] = useState(isPhone());
   const [view, setView] = useState<View>("month");
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
   const [selected, setSelected] = useState(() => startOfDay(new Date()));
   const [open, setOpen] = useState<Ev | null>(null);
   const [creating, setCreating] = useState<Date | null>(null);
   const [person, setPerson] = useState("");
-  const [phone, setPhone] = useState(isPhone());
+  const [side, setSide] = useState(true);
+  const [hidden, setHidden] = useState<Kind[]>(loadHidden);
+  const [search, setSearch] = useState<string | null>(null);
+  const [picker, setPicker] = useState(false);
   const people = useApi<any[]>(isSuper ? "/api/people" : null);
 
   useEffect(() => {
@@ -58,40 +117,77 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
     return () => mq.removeEventListener("change", on);
   }, []);
 
-  const weekDays = phone ? 3 : 7;
+  const toggleCal = (k: Kind) => {
+    haptic(5);
+    const next = hidden.includes(k) ? hidden.filter((x) => x !== k) : [...hidden, k];
+    setHidden(next);
+    try {
+      localStorage.setItem("pj-cal-hidden", JSON.stringify(next));
+    } catch {
+      /* sem storage */
+    }
+  };
+
   const range = useMemo(() => {
     if (view === "month") {
       const g = monthGrid(cursor);
       return { from: g[0]!, to: addDays(g[41]!, 1) };
     }
     if (view === "week") {
-      const from = phone ? cursor : addDays(cursor, -cursor.getDay());
-      return { from, to: addDays(from, weekDays) };
+      const from = weekStart(cursor);
+      return { from, to: addDays(from, 7) };
     }
+    if (view === "day") return { from: startOfDay(cursor), to: addDays(startOfDay(cursor), 1) };
     return { from: startOfDay(new Date()), to: addDays(startOfDay(new Date()), 45) };
-  }, [view, cursor, phone, weekDays]);
+  }, [view, cursor]);
 
   const path = `/api/calendar?from=${range.from.toISOString()}&to=${range.to.toISOString()}${person ? `&user=${person}` : ""}`;
   const { data, error, reload } = useApi<{ events: Ev[] }>(path, { poll: 30000 });
-  const events = data?.events ?? [];
+  const events = useMemo(() => {
+    const years = new Set([range.from.getFullYear(), addDays(range.to, -1).getFullYear()]);
+    const hol = [...years].flatMap(holidays).filter((h) => {
+      const t = new Date(h.start);
+      return t >= range.from && t < range.to;
+    });
+    const q = search?.trim().toLowerCase();
+    return [...hol, ...(data?.events ?? [])].filter((e) => !hidden.includes(e.kind) && (!q || e.title.toLowerCase().includes(q)));
+  }, [data, range, hidden, search]);
   const byDay = useMemo(() => {
     const m = new Map<string, Ev[]>();
     for (const e of events) {
       const k = key(new Date(e.start));
       m.set(k, [...(m.get(k) ?? []), e]);
     }
+    // dia todo (feriados) primeiro, depois por horário
+    for (const [k, list] of m) m.set(k, list.sort((a, b) => Number(!a.allDay) - Number(!b.allDay) || a.start.localeCompare(b.start)));
     return m;
   }, [events]);
 
   const step = (dir: number) => {
     haptic(6);
     if (view === "month") setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + dir, 1));
-    else if (view === "week") setCursor(addDays(cursor, dir * weekDays));
+    else if (view === "week") setCursor(addDays(cursor, dir * 7));
+    else if (view === "day") {
+      setCursor(addDays(cursor, dir));
+      setSelected(addDays(cursor, dir));
+    }
   };
   const today = () => {
+    haptic(6);
     const t = startOfDay(new Date());
     setCursor(t);
     setSelected(t);
+  };
+  const pick = (d: Date) => {
+    haptic(5);
+    setSelected(d);
+    setCursor(d);
+    setPicker(false);
+  };
+  const changeView = (v: View) => {
+    haptic(5);
+    setView(v);
+    if (v !== "month") setCursor(selected);
   };
 
   // arrastar um lembrete para outro dia/horário
@@ -108,10 +204,12 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
 
   const title =
     view === "month"
-      ? `${cap(MONTHS[cursor.getMonth()]!)} ${cursor.getFullYear()}`
+      ? `${cap(MONTHS[cursor.getMonth()]!)} ${phone ? "" : "de "}${cursor.getFullYear()}`
       : view === "week"
         ? weekTitle(range.from, addDays(range.to, -1))
-        : "Próximos dias";
+        : view === "day"
+          ? cap(cursor.toLocaleDateString("pt-BR", { weekday: phone ? "short" : "long", day: "numeric", month: "long" })).replace(".", "")
+          : "Próximos dias";
 
   // deslizar para os lados troca o período
   const swipe = useRef<{ x: number; y: number } | null>(null);
@@ -124,78 +222,121 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
     if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) step(dx < 0 ? 1 : -1);
   };
 
-  const dayEvents = byDay.get(key(selected)) ?? [];
+  const VIEWS: [View, string][] = [["list", "Lista"], ["day", "Dia"], ["week", "Semana"], ["month", "Mês"]];
+  const calendars = CALENDARS.filter((c) => c.id !== "google" || isSuper || (data?.events ?? []).some((e) => e.kind === "google"));
 
   return (
-    <div className="page cal-page">
-      <div className="cal-toolbar">
-        <div className="cal-title">
-          <h1>{title}</h1>
-        </div>
-        <div className="cal-nav">
-          <button className="icon-btn" aria-label="Anterior" onClick={() => step(-1)} disabled={view === "list"}>
-            <Icon name="chevron-left" size={18} />
+    <div className={`page cal-page ${side && !phone ? "with-side" : ""}`}>
+      {!phone && side && (
+        <aside className="cal-side">
+          <button className="cal-create" onClick={() => setCreating(withTime(selected))}>
+            <Icon name="plus" size={20} /> Criar
           </button>
-          <button className="btn btn-sm" onClick={today}>Hoje</button>
-          <button className="icon-btn" aria-label="Próximo" onClick={() => step(1)} disabled={view === "list"}>
-            <Icon name="chevron-right" size={18} />
-          </button>
-        </div>
-        <div className="seg">
-          {(["month", "week", "list"] as View[]).map((v) => (
-            <button key={v} className={view === v ? "active" : ""} onClick={() => { haptic(5); setView(v); if (v === "week") setCursor(selected); }}>
-              {v === "month" ? "Mês" : v === "week" ? (phone ? "3 dias" : "Semana") : "Lista"}
-            </button>
-          ))}
-        </div>
-        {isSuper && (
-          <select className="select cal-person" value={person} onChange={(e) => setPerson(e.target.value)}>
-            <option value="">Todas as pessoas</option>
-            {(people.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name ?? `+${p.phone}`}</option>)}
-          </select>
-        )}
-        <button className="btn btn-primary cal-new" onClick={() => setCreating(withTime(selected))}>
-          <Icon name="plus" size={16} /> <span>Lembrete</span>
-        </button>
-      </div>
-      <ErrorBox error={error} />
+          <MiniMonth selected={selected} onPick={pick} />
+          <CalendarList title="Minhas agendas" items={calendars.filter((c) => c.group === "mine")} hidden={hidden} onToggle={toggleCal} />
+          <CalendarList title="Outras agendas" items={calendars.filter((c) => c.group === "other")} hidden={hidden} onToggle={toggleCal} />
+          {isSuper && (
+            <div className="cal-side-block">
+              <h4>Pessoa</h4>
+              <select className="select" value={person} onChange={(e) => setPerson(e.target.value)}>
+                <option value="">Todas as pessoas</option>
+                {(people.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name ?? `+${p.phone}`}</option>)}
+              </select>
+            </div>
+          )}
+        </aside>
+      )}
 
-      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        {view === "month" && (
-          <div className="cal-month-wrap">
+      <div className="cal-main">
+        {phone ? (
+          <div className="cal-bar-top">
+            <button className="icon-btn" aria-label="Hoje" onClick={today}><Icon name="calendar" size={20} /></button>
+            <button className="icon-btn" aria-label="Anterior" onClick={() => step(-1)} disabled={view === "list"}><Icon name="chevron-left" size={18} /></button>
+            <button className="icon-btn" aria-label="Próximo" onClick={() => step(1)} disabled={view === "list"}><Icon name="chevron-right" size={18} /></button>
+            <button className="cal-title-btn" onClick={() => { haptic(5); setPicker((v) => !v); }}>
+              {title} <Icon name="chevron-right" size={14} style={{ transform: `rotate(${picker ? -90 : 90}deg)` }} />
+            </button>
+            <span className="spacer" />
+            <button className="icon-btn" aria-label="Buscar" onClick={() => setSearch(search == null ? "" : null)}><Icon name={search == null ? "search" : "x"} size={19} /></button>
+          </div>
+        ) : (
+          <div className="cal-bar-top">
+            <button className="icon-btn" aria-label="Mostrar ou esconder o painel" onClick={() => setSide((v) => !v)}><Icon name="menu" size={19} /></button>
+            <button className="btn btn-pill" onClick={today}>Hoje</button>
+            <button className="icon-btn" aria-label="Anterior" onClick={() => step(-1)} disabled={view === "list"}><Icon name="chevron-left" size={18} /></button>
+            <button className="icon-btn" aria-label="Próximo" onClick={() => step(1)} disabled={view === "list"}><Icon name="chevron-right" size={18} /></button>
+            <h1 className="cal-h1">{title}</h1>
+            <span className="spacer" />
+            {search != null ? (
+              <input className="input cal-search" autoFocus placeholder="Buscar na agenda" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setSearch(null)} />
+            ) : null}
+            <button className="icon-btn" aria-label="Buscar" onClick={() => setSearch(search == null ? "" : null)}><Icon name={search == null ? "search" : "x"} size={19} /></button>
+            <select className="select cal-view" value={view} onChange={(e) => changeView(e.target.value as View)}>
+              {VIEWS.slice().reverse().map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+            {!side && (
+              <button className="btn btn-brand" onClick={() => setCreating(withTime(selected))}><Icon name="plus" size={16} /> Criar</button>
+            )}
+          </div>
+        )}
+
+        {phone && (
+          <>
+            {search != null && <input className="input cal-search" autoFocus placeholder="Buscar na agenda" value={search} onChange={(e) => setSearch(e.target.value)} style={{ marginBottom: 10 }} />}
+            {picker && (
+              <div className="card cal-picker">
+                <MiniMonth selected={selected} onPick={pick} />
+                <CalendarList title="Agendas" items={calendars} hidden={hidden} onToggle={toggleCal} />
+                {isSuper && (
+                  <select className="select" style={{ marginTop: 10 }} value={person} onChange={(e) => setPerson(e.target.value)}>
+                    <option value="">Todas as pessoas</option>
+                    {(people.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name ?? `+${p.phone}`}</option>)}
+                  </select>
+                )}
+              </div>
+            )}
+            <div className="cal-pills">
+              {VIEWS.map(([v, l]) => (
+                <button key={v} className={view === v ? "active" : ""} onClick={() => changeView(v)}>{l}</button>
+              ))}
+            </div>
+          </>
+        )}
+        <ErrorBox error={error} />
+
+        <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+          {view === "month" && (
             <MonthView
               cursor={cursor}
               selected={selected}
               byDay={byDay}
               compact={phone}
-              onSelect={(d) => { haptic(5); setSelected(d); }}
+              onSelect={(d) => {
+                haptic(5);
+                setSelected(d);
+                // no celular, tocar no dia abre o dia (como no Google Agenda)
+                if (phone) {
+                  setCursor(d);
+                  setView("day");
+                }
+              }}
               onCreate={(d) => setCreating(withTime(d))}
               onOpen={setOpen}
               onMove={(ev, d) => { const s = new Date(ev.start); d.setHours(s.getHours(), s.getMinutes()); void move(ev, d); }}
             />
-            <aside className="card cal-day">
-              <div className="cal-day-head">
-                <div>
-                  <div className="muted" style={{ fontSize: 12 }}>{cap(WEEKDAYS[selected.getDay()]!)}</div>
-                  <strong style={{ fontSize: 18 }}>{selected.getDate()} de {MONTHS[selected.getMonth()]}</strong>
-                </div>
-                <button className="icon-btn" aria-label="Novo lembrete neste dia" onClick={() => setCreating(withTime(selected))}>
-                  <Icon name="plus" size={18} />
-                </button>
-              </div>
-              {dayEvents.length ? (
-                dayEvents.map((e) => <EventRow key={e.id} ev={e} onOpen={setOpen} />)
-              ) : (
-                <p className="muted cal-empty">Nada marcado. Toque em + ou peça no WhatsApp: "me lembra amanhã às 9h de ligar pro dentista".</p>
-              )}
-            </aside>
-          </div>
-        )}
-        {view === "week" && (
-          <WeekView from={range.from} days={weekDays} byDay={byDay} onOpen={setOpen} onCreate={(d) => setCreating(d)} onMove={move} />
-        )}
-        {view === "list" && <ListView from={range.from} byDay={byDay} onOpen={setOpen} />}
+          )}
+          {(view === "week" || view === "day") && (
+            <WeekView from={range.from} days={view === "day" ? 1 : 7} byDay={byDay} onOpen={setOpen} onCreate={(d) => setCreating(d)} onMove={move} />
+          )}
+          {view === "list" && <ListView from={range.from} byDay={byDay} onOpen={setOpen} />}
+        </div>
       </div>
+
+      {phone && (
+        <button className="cal-fab" aria-label="Novo lembrete" onClick={() => { haptic(10); setCreating(withTime(selected)); }}>
+          <Icon name="plus" size={24} />
+        </button>
+      )}
 
       {open && <EventDetail ev={open} onClose={() => setOpen(null)} onChanged={() => { setOpen(null); void reload(); }} />}
       {creating && (
@@ -207,6 +348,51 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
           onClose={(saved) => { setCreating(null); if (saved) void reload(); }}
         />
       )}
+    </div>
+  );
+}
+
+function CalendarList({ title, items, hidden, onToggle }: { title: string; items: typeof CALENDARS; hidden: Kind[]; onToggle: (k: Kind) => void }) {
+  if (!items.length) return null;
+  return (
+    <div className="cal-side-block">
+      <h4>{title}</h4>
+      {items.map((c) => (
+        <label key={c.id} className="cal-check" style={{ ["--c" as any]: c.color }}>
+          <input type="checkbox" checked={!hidden.includes(c.id)} onChange={() => onToggle(c.id)} />
+          <span className="box"><Icon name="check" size={13} /></span>
+          {c.label}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function MiniMonth({ selected, onPick }: { selected: Date; onPick: (d: Date) => void }) {
+  const [anchor, setAnchor] = useState(() => new Date(selected.getFullYear(), selected.getMonth(), 1));
+  useEffect(() => setAnchor(new Date(selected.getFullYear(), selected.getMonth(), 1)), [selected]);
+  const days = monthGrid(anchor);
+  const today = new Date();
+  return (
+    <div className="cal-mini">
+      <div className="cal-mini-head">
+        <strong>{cap(MONTHS[anchor.getMonth()]!)} de {anchor.getFullYear()}</strong>
+        <span className="spacer" />
+        <button className="icon-btn sm" aria-label="Mês anterior" onClick={() => setAnchor(new Date(anchor.getFullYear(), anchor.getMonth() - 1, 1))}><Icon name="chevron-left" size={15} /></button>
+        <button className="icon-btn sm" aria-label="Próximo mês" onClick={() => setAnchor(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1))}><Icon name="chevron-right" size={15} /></button>
+      </div>
+      <div className="cal-mini-grid">
+        {["S", "T", "Q", "Q", "S", "S", "D"].map((w, i) => <span key={i} className="wd">{w}</span>)}
+        {days.map((d) => (
+          <button
+            key={key(d)}
+            className={[d.getMonth() !== anchor.getMonth() && "out", sameDay(d, today) && "today", sameDay(d, selected) && "sel"].filter(Boolean).join(" ")}
+            onClick={() => onPick(d)}
+          >
+            {d.getDate()}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -304,31 +490,27 @@ function MonthView(p: {
 }) {
   const days = monthGrid(p.cursor);
   const today = new Date();
+  const max = p.compact ? 2 : 3;
   const drag = useDrag((ev, t) => {
     const [y, m, d] = t.dataset.drop!.split("-").map(Number) as [number, number, number];
     p.onMove(ev, new Date(y, m - 1, d));
   });
+  const weeks = Array.from({ length: 6 }, (_, i) => days.slice(i * 7, i * 7 + 7));
   return (
     <div className={`card cal-month ${p.compact ? "compact" : ""}`}>
-      {WEEKDAYS.map((w) => <div key={w} className="cal-wd">{p.compact ? w.charAt(0).toUpperCase() : w}</div>)}
-      {days.map((d) => {
-        const evs = p.byDay.get(key(d)) ?? [];
-        const out = d.getMonth() !== p.cursor.getMonth();
-        const cls = ["cal-cell", out && "out", sameDay(d, today) && "today", sameDay(d, p.selected) && "sel"].filter(Boolean).join(" ");
-        return (
-          <div
-            key={key(d)}
-            className={cls}
-            data-drop={key(d)}
-            onClick={() => p.onSelect(d)}
-            onDoubleClick={() => p.onCreate(d)}
-          >
-            <span className="cal-num">{d.getDate()}</span>
-            {p.compact ? (
-              <span className="cal-dots">{evs.slice(0, 3).map((e) => <i key={e.id} className={e.kind} />)}</span>
-            ) : (
+      {!p.compact && <div className="cal-wd wk" />}
+      {[1, 2, 3, 4, 5, 6, 0].map((w) => <div key={w} className="cal-wd">{p.compact ? WEEKDAYS[w]!.charAt(0).toUpperCase() : `${WEEKDAYS[w]}.`}</div>)}
+      {weeks.map((week) => [
+        !p.compact && <div key={`w${key(week[0]!)}`} className="cal-wk">{isoWeek(week[0]!)}</div>,
+        ...week.map((d) => {
+          const evs = p.byDay.get(key(d)) ?? [];
+          const out = d.getMonth() !== p.cursor.getMonth();
+          const cls = ["cal-cell", out && "out", sameDay(d, today) && "today", sameDay(d, p.selected) && "sel"].filter(Boolean).join(" ");
+          return (
+            <div key={key(d)} className={cls} data-drop={key(d)} onClick={() => p.onSelect(d)} onDoubleClick={() => p.onCreate(d)}>
+              <span className="cal-num">{d.getDate() === 1 && !p.compact ? `1 de ${MONTHS[d.getMonth()]!.slice(0, 3)}` : d.getDate()}</span>
               <div className="cal-chips">
-                {evs.slice(0, 3).map((e) => (
+                {evs.slice(0, max).map((e) => (
                   <button
                     key={e.id}
                     className={`cal-chip ${e.kind} ${e.recurring ? "rec" : ""}`}
@@ -336,15 +518,15 @@ function MonthView(p: {
                     onClick={(c) => { c.stopPropagation(); p.onOpen(e); }}
                     title={e.title}
                   >
-                    {!e.allDay && <b>{hhmm(new Date(e.start))}</b>} {e.title}
+                    {!e.allDay && !p.compact && <b>{hhmm(new Date(e.start))}</b>} {e.title}
                   </button>
                 ))}
-                {evs.length > 3 && <span className="cal-more">+{evs.length - 3}</span>}
+                {evs.length > max && <span className="cal-more">+{evs.length - max}</span>}
               </div>
-            )}
-          </div>
-        );
-      })}
+            </div>
+          );
+        }),
+      ])}
     </div>
   );
 }
@@ -454,7 +636,7 @@ function EventRow({ ev, onOpen }: { ev: Ev; onOpen: (e: Ev) => void }) {
       <span className="cal-row-text">
         <span className="ellipsis">{ev.title}</span>
         <small className="muted">
-          {ev.kind === "google" ? "Google Agenda" : ev.recurring ? "Lembrete recorrente" : "Lembrete"}
+          {ev.kind === "google" ? "Google Agenda" : ev.kind === "holiday" ? "Feriado nacional" : ev.recurring ? "Lembrete recorrente" : "Lembrete"}
           {ev.person ? ` · ${ev.person}` : ""}
         </small>
       </span>
@@ -468,8 +650,8 @@ function EventDetail({ ev, onClose, onChanged }: { ev: Ev; onClose: () => void; 
   const [busy, setBusy] = useState(false);
   return (
     <Modal
-      title={ev.kind === "google" ? "Evento" : "Lembrete"}
-      icon={<Icon name={ev.kind === "google" ? "calendar" : "bell"} />}
+      title={ev.kind === "google" ? "Evento" : ev.kind === "holiday" ? "Feriado" : "Lembrete"}
+      icon={<Icon name={ev.kind === "reminder" ? "bell" : "calendar"} />}
       onClose={onClose}
       footer={
         ev.kind === "reminder" ? (
