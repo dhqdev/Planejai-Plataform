@@ -35,8 +35,8 @@ const strip = (s: string) =>
 /** Endereço no WhatsApp: no Baileys pergunta ao WhatsApp qual variante (com ou sem o 9) existe. */
 export async function jidFor(phone: string, channel: Channel): Promise<string> {
   if (channel.id !== "baileys") return phone;
-  const sock = whatsapp.sock;
-  if (sock?.user) {
+  const sock = whatsapp.connected ? whatsapp.sock : null;
+  if (sock) {
     for (const v of phoneVariants(phone)) {
       try {
         const [r] = (await sock.onWhatsApp(`${v}@s.whatsapp.net`)) ?? [];

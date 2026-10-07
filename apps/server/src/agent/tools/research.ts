@@ -137,6 +137,66 @@ export const screenshotUrl = defineTool<{ url: string; full_page?: boolean; capt
   },
 });
 
+// ---------- Mapas (rota com print do Google Maps) ----------
+
+const TRAVEL = { onibus: "transit", transporte: "transit", carro: "driving", pe: "walking", bike: "bicycling" } as const;
+
+/** Link do Google Maps: rota (com origem) ou o lugar (só destino). */
+export function mapsUrl(destination: string, origin?: string, mode: keyof typeof TRAVEL = "onibus") {
+  if (!origin) return `https://www.google.com/maps/search/?${new URLSearchParams({ api: "1", query: destination, hl: "pt-BR" })}`;
+  return `https://www.google.com/maps/dir/?${new URLSearchParams({ api: "1", origin, destination, travelmode: TRAVEL[mode] ?? "transit", hl: "pt-BR" })}`;
+}
+
+export const mapRoute = defineTool<{ destination: string; origin?: string; mode?: keyof typeof TRAVEL }>({
+  name: "map_route",
+  description:
+    "Mostra no Google Maps como chegar (linha de ônibus/metrô, carro, a pé, bike) ou onde fica um lugar, e devolve um PRINT do mapa (media_id), o link e as opções resumidas. " +
+    "Use para 'qual ônibus pego para X', 'como chego em Y', 'onde fica Z'. Responda com 1 ou 2 linhas curtas (linha, horário, tempo) + [[media:ID]] + o link; nada de textão. " +
+    "origin: de onde a pessoa sai (endereço, bairro ou cidade; use a localização que ela mandou ou o que você sabe dela; se não souber, mostre só o destino).",
+  parameters: obj(
+    {
+      destination: { type: "string", description: "Para onde (endereço, lugar, bairro + cidade)" },
+      origin: { type: "string", description: "De onde (opcional)" },
+      mode: { type: "string", enum: Object.keys(TRAVEL), description: "Padrão onibus (transporte público)" },
+    },
+    ["destination"],
+  ),
+  async run(args, ctx) {
+    const url = mapsUrl(args.destination, args.origin, args.mode ?? "onibus");
+    let b: BrowserSession | null = null;
+    try {
+      b = await BrowserSession.open(false);
+      await b.page.setViewport({ width: 1100, height: 760 });
+      await b.goto(url);
+      // aviso de cookies do Google (aparece em alguns servidores)
+      if (/consent\./.test(b.page.url())) {
+        await b.page
+          .evaluate(() => {
+            const btn = [...document.querySelectorAll("button")].find((x) => /aceitar tudo|accept all|rejeitar tudo|reject all/i.test(x.textContent ?? ""));
+            btn?.click();
+          })
+          .catch(() => {});
+        await b.page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15_000 }).catch(() => {});
+      }
+      const tripSel = 'div[id^="section-directions-trip-"]';
+      if (args.origin) await b.page.waitForSelector(tripSel, { timeout: 20_000 }).catch(() => {});
+      else await b.page.waitForSelector('h1, [role="main"]', { timeout: 15_000 }).catch(() => {});
+      await new Promise((r) => setTimeout(r, 2500)); // mapa termina de desenhar
+      const options: string[] = await b.page
+        .$$eval(tripSel, (els) => els.slice(0, 3).map((e) => (e as HTMLElement).innerText.replace(/\s*\n\s*/g, " · ").slice(0, 220)))
+        .catch(() => []);
+      const base64 = await b.screenshot();
+      const id = ctx.outbox.addMedia({ base64, mimetype: "image/jpeg", caption: args.origin ? `${args.origin} → ${args.destination}` : args.destination, fileName: "mapa.jpg" });
+      return { media_id: id, link: url, options, how_to_send: `Mande [[media:${id}]] com 1 ou 2 linhas curtas e o link.` };
+    } catch (e) {
+      // sem navegador: pelo menos o link do Maps
+      return { link: url, error: `Não deu para tirar o print (${(e as Error).message}). Mande só o link.` };
+    } finally {
+      await b?.close().catch(() => {});
+    }
+  },
+});
+
 // ---------- Computador (navegador controlado pelo agente, com gravação) ----------
 
 async function saveMediaFile(ctx: ToolContext, kind: string, mimetype: string, data: Buffer, fileName: string) {

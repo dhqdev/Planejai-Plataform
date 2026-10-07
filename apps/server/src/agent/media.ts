@@ -188,6 +188,8 @@ export async function preprocessMedia(pending: any[], channel: Channel, tracer: 
       if (!media) throw new Error("Não foi possível baixar a mídia");
       // foto fica em memória só durante esta resposta, para poder ser encaminhada a um contato
       if (kind === "image") m.inboundImage = { base64: media.base64, mimetype: media.mimetype };
+      // documento ou foto também pode ir para a pasta de Documentos (document_save), só nesta rodada
+      if (kind === "image" || kind === "document") m.inboundFile = { base64: media.base64, mimetype: media.mimetype, fileName: m.media.fileName ?? m.meta.fileName ?? undefined };
       // a mesma mídia já interpretada antes (encaminhada, reenviada): reaproveita do cache, sem gastar token
       const hash = createHash("sha256").update(media.base64).digest("hex").slice(0, 40);
       const memo = await cacheGet<Record<string, unknown>>(`media:${kind}:${hash}`);

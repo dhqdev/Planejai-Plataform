@@ -7,6 +7,7 @@ import { useApi } from "../hooks";
 const LABEL: Record<string, [string, string]> = {
   connected: ["badge-ok", "Conectado"],
   connecting: ["badge-warn", "Conectando…"],
+  reconnecting: ["badge-warn", "Reconectando…"],
   qr: ["badge-info", "Aguardando leitura do QR code"],
   pairing: ["badge-info", "Aguardando o código no celular"],
   disconnected: ["badge-err", "Desconectado"],
@@ -56,7 +57,7 @@ export function WhatsAppPage() {
         title="WhatsApp"
         subtitle="Conexão própria do agente com o WhatsApp, sem serviço externo. Use um número só para o assistente."
         actions={
-          s.status === "connected" ? (
+          s.status === "connected" || s.status === "reconnecting" ? (
             <>
               <button className="btn" disabled={busy} onClick={() => act("/api/whatsapp/restart")}>Reiniciar conexão</button>
               <button className="btn btn-danger" disabled={busy} onClick={() => confirm("Desconectar este número do agente?") && act("/api/whatsapp/logout")}>Desconectar</button>
@@ -108,6 +109,16 @@ export function WhatsAppPage() {
           )}
 
           {s.status === "connecting" && <p className="muted">Abrindo conexão com o WhatsApp…</p>}
+
+          {s.status === "reconnecting" && (
+            <div>
+              <div className="notice notice-warn" style={{ marginBottom: 12 }}>
+                A conexão caiu{s.down_since ? ` ${ago(s.down_since)}` : ""} e está voltando sozinha, com a sessão salva (não precisa de QR code).
+                Mensagens enviadas nesse meio-tempo esperam a conexão voltar.
+              </div>
+              {s.last_error && <p className="muted" style={{ fontSize: 12 }}>Motivo: {s.last_error}</p>}
+            </div>
+          )}
 
           {(s.status === "disconnected" || s.status === "qr" || s.status === "pairing") && (
             <div style={{ marginTop: 12 }}>

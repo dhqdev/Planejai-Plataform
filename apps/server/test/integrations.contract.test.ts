@@ -136,8 +136,37 @@ describe("Google (OAuth, Gmail, Agenda)", () => {
 
     await agenda.calendarCreateEvent.run({ title: "Dentista", start: "2026-10-10T14:00", end: "2026-10-10T15:00" }, ctx);
     const p = calls.find((c) => c.method === "POST")!;
-    expect(new URL(p.url).searchParams.get("sendUpdates")).toBe("all");
+    expect(new URL(p.url).searchParams.get("sendUpdates")).toBe("none");
     expect(p.body).toMatchObject({ summary: "Dentista", start: { dateTime: "2026-10-10T17:00:00.000Z", timeZone: "America/Sao_Paulo" } });
+    expect(p.body.conferenceData).toBeUndefined();
+  });
+
+  it("agenda: reunião via Meet com convidado (convite e lembrete pelo Google)", async () => {
+    on(host("www.googleapis.com", "/calendar/v3/calendars/primary/events"), () =>
+      json({ id: "e2", htmlLink: "https://cal/e2", hangoutLink: "https://meet.google.com/abc-defg-hij" }),
+    );
+    // convidado sem confirmação: não cria
+    const ask: any = await agenda.calendarCreateEvent.run({ title: "Reunião", start: "2026-10-10T10:00", attendees: ["darlos@gmail.com"], meet: true }, ctx);
+    expect(ask.needs_confirmation).toBe(true);
+    expect(calls.length).toBe(0);
+    const bad: any = await agenda.calendarCreateEvent.run({ title: "Reunião", start: "2026-10-10T10:00", attendees: ["carlos"], confirmed_by_user: true }, ctx);
+    expect(bad.ok).toBe(false);
+
+    const r: any = await agenda.calendarCreateEvent.run(
+      { title: "Reunião com Carlos", start: "2026-10-10T10:00", attendees: ["Darlos@Gmail.com "], meet: true, confirmed_by_user: true },
+      ctx,
+    );
+    expect(r).toMatchObject({ ok: true, meet_link: "https://meet.google.com/abc-defg-hij", invited: ["darlos@gmail.com"] });
+    const p = calls.find((c) => c.method === "POST")!;
+    const u = new URL(p.url);
+    expect(u.searchParams.get("conferenceDataVersion")).toBe("1");
+    expect(u.searchParams.get("sendUpdates")).toBe("all");
+    expect(p.body.attendees).toEqual([{ email: "darlos@gmail.com" }]);
+    expect(p.body.conferenceData.createRequest.conferenceSolutionKey).toEqual({ type: "hangoutsMeet" });
+    expect(p.body.conferenceData.createRequest.requestId).toMatch(/^pj-/);
+    // sem fim informado: 1 hora
+    expect(p.body.end.dateTime).toBe("2026-10-10T14:00:00.000Z");
+    expect(p.body.reminders.useDefault).toBe(false);
   });
 });
 

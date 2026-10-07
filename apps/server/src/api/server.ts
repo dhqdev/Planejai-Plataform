@@ -15,6 +15,10 @@ import { getSettings } from "../settings.js";
 import { registerDashboardRoutes } from "./routes/dashboard.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { registerInternalRoutes } from "./routes/internal.js";
+import { registerNotificationRoutes } from "./routes/notifications.js";
+import { DEVICE_COOKIE, isTrustedDevice, startChallenge, trustDevice, verifyChallenge } from "../logincode.js";
+import { notify } from "../notifications.js";
+import { QUEUES, getBoss } from "../queue/boss.js";
 
 const COOKIE = "pj_session";
 
@@ -99,17 +103,44 @@ export async function buildServer() {
     if (!email || !password) return fail();
     if (email === config.ADMIN_EMAIL.toLowerCase()) {
       if (!safeEqual(password, config.ADMIN_PASSWORD)) return fail();
-      const owner = await ownerAccount();
-      setSession(reply, owner);
-      return publicAccount(owner);
+      return finishLogin(req, reply, await ownerAccount());
     }
     const row = await one("SELECT * FROM accounts WHERE email = $1", [email]);
     if (!row || !verifyPassword(password, row.password_hash)) return fail();
     if (row.status === "pending") return reply.code(403).send({ error: "Seu cadastro está aguardando aprovação do administrador." });
     if (row.status === "disabled") return reply.code(403).send({ error: "Conta desativada." });
-    await query("UPDATE accounts SET last_login_at = now() WHERE id = $1", [row.id]);
-    setSession(reply, toAccount(row));
-    return publicAccount(toAccount(row));
+    return finishLogin(req, reply, toAccount(row));
+  });
+
+  // Senha certa: navegador conhecido entra direto; navegador novo recebe um código no WhatsApp
+  async function finishLogin(req: FastifyRequest, reply: FastifyReply, account: Account) {
+    if (!(await isTrustedDevice(account.id, req.cookies[DEVICE_COOKIE]))) {
+      const ch = await startChallenge(account, (phone, text) =>
+        getBoss().then((b) => b.send(QUEUES.outbound, { type: "send", userId: null, phone, channel: "whatsapp", text }, { retryLimit: 1 })),
+      );
+      if (ch.needs_code) return { needs_code: true, challenge: ch.challenge, to: ch.to };
+    }
+    return completeLogin(req, reply, account, false);
+  }
+
+  async function completeLogin(req: FastifyRequest, reply: FastifyReply, account: Account, newDevice: boolean) {
+    if (!account.owner) await query("UPDATE accounts SET last_login_at = now() WHERE id = $1", [account.id]);
+    if (newDevice) {
+      const token = await trustDevice(account.id, req.headers["user-agent"]);
+      reply.setCookie(DEVICE_COOKIE, token, { path: "/", httpOnly: true, sameSite: "lax", secure: config.PUBLIC_URL.startsWith("https"), maxAge: 365 * 86_400 });
+      await notify({ userId: account.owner ? null : account.userId, kind: "seguranca", title: "Novo acesso ao painel", body: `Navegador novo confirmado pelo código do WhatsApp (${String(req.headers["user-agent"] ?? "").slice(0, 80)}).` });
+    }
+    setSession(reply, account);
+    return publicAccount(account);
+  }
+
+  app.post<{ Body: { challenge?: string; code?: string } }>("/api/auth/login/verify", async (req, reply) => {
+    if ((await hit(`login:verify:${req.ip}`, LOGIN_WINDOW)) > LOGIN_IP_MAX) return tooMany(reply);
+    const r = await verifyChallenge(String(req.body?.challenge ?? ""), String(req.body?.code ?? ""));
+    if (!r.ok) return reply.code(401).send({ error: r.error });
+    const account = await loadAccount(r.accountId);
+    if (!account || account.status !== "active") return reply.code(403).send({ error: "Conta indisponível." });
+    return completeLogin(req, reply, account, true);
   });
 
   // Convite público: dados para a tela de cadastro (/convite/:code)
@@ -205,6 +236,7 @@ export async function buildServer() {
   await registerWebhookRoutes(app);
   await registerInternalRoutes(app);
   await registerDashboardRoutes(app);
+  await registerNotificationRoutes(app);
 
   // Dashboard (SPA) servido pelo mesmo container
   const publicDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "public");

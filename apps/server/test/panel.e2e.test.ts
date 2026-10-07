@@ -1,0 +1,188 @@
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+/**
+ * Painel novo ponta a ponta (Postgres real): notificações com bolinha, documentos guardados,
+ * código no WhatsApp ao entrar de navegador novo e link do Google Maps.
+ */
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
+// este arquivo liga o código de login (os outros testes rodam com LOGIN_CODE=false)
+process.env.LOGIN_CODE = "true";
+process.env.WHATSAPP_PROVIDER = "evolution";
+
+describe("link do Google Maps", () => {
+  it("rota de ônibus vira modo transit; sem origem mostra só o lugar", async () => {
+    const { mapsUrl } = await import("../src/agent/tools/research.js");
+    const u = new URL(mapsUrl("Unicamp", "Rodoviária de Campinas", "onibus"));
+    expect(u.pathname).toBe("/maps/dir/");
+    expect(u.searchParams.get("travelmode")).toBe("transit");
+    expect(u.searchParams.get("origin")).toBe("Rodoviária de Campinas");
+    expect(new URL(mapsUrl("Unicamp")).searchParams.get("query")).toBe("Unicamp");
+  });
+});
+
+describe.skipIf(!enabled)("painel: notificações, documentos e login (e2e)", () => {
+  let db: typeof import("../src/db/pool.js");
+  let app: any;
+  let ana: any;
+  let bia: any;
+  const cookieOf = (res: any, name = "pj_session") =>
+    ([] as string[]).concat(res.headers["set-cookie"] ?? []).map((c) => c.split(";")[0]!).find((c) => c.startsWith(`${name}=`))!;
+
+  beforeAll(async () => {
+    db = await import("../src/db/pool.js");
+    await db.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+    await (await import("../src/db/migrate.js")).migrate(() => {});
+    const { upsertUser } = await import("../src/ingest.js");
+    ana = await upsertUser("5519911110001", "Ana");
+    bia = await upsertUser("5519911110002", "Bia");
+    const { hashPassword } = await import("../src/accounts.js");
+    for (const [email, u] of [["ana@x.com", ana], ["bia@x.com", bia]] as const)
+      await db.query("INSERT INTO accounts (email, name, password_hash, role, status, user_id, phone) VALUES ($1, $2, $3, 'admin', 'active', $4, $5)", [email, u.name, hashPassword("senha-forte-1"), u.id, u.phone]);
+    const { buildServer } = await import("../src/api/server.js");
+    app = await buildServer();
+  });
+  afterAll(async () => {
+    await app?.close();
+  });
+
+  /** Entra passando pelo código: o código sai do envio (que na vida real vai pelo WhatsApp). */
+  async function loginWithCode(email: string) {
+    const { startChallenge, verifyChallenge } = await import("../src/logincode.js");
+    const { loadAccount } = await import("../src/accounts.js");
+    void verifyChallenge;
+    const row = await db.one("SELECT id FROM accounts WHERE email = $1", [email]);
+    let code = "";
+    const ch: any = await startChallenge((await loadAccount(row.id))!, async (_p, text) => (code = text.match(/\d{6}/)![0]));
+    const r = await app.inject({ method: "POST", url: "/api/auth/login/verify", payload: { challenge: ch.challenge, code } });
+    expect(r.statusCode).toBe(200);
+    return { session: cookieOf(r), device: cookieOf(r, "pj_dev") };
+  }
+
+  it("navegador novo recebe código no WhatsApp; errado não entra; depois o navegador fica conhecido", async () => {
+    await db.query("UPDATE wa_sessions SET status = 'connected', heartbeat_at = now()").catch(() => {});
+    const first = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "ana@x.com", password: "senha-forte-1" } });
+    expect(first.statusCode).toBe(200);
+    const body = first.json();
+    expect(body).toMatchObject({ needs_code: true });
+    expect(body.to).toContain("0001");
+    expect(cookieOf(first)).toBeUndefined();
+    // o código foi para a fila de saída, para o número da conta
+    const job = await db.one("SELECT data FROM pgboss.job WHERE name = 'outbound.send' ORDER BY created_on DESC LIMIT 1");
+    expect(job.data).toMatchObject({ type: "send", phone: "5519911110001", channel: "whatsapp" });
+    expect(job.data.text).toMatch(/\d{6}/);
+
+    for (let i = 0; i < 5; i++)
+      expect((await app.inject({ method: "POST", url: "/api/auth/login/verify", payload: { challenge: body.challenge, code: "000000" } })).statusCode).toBe(401);
+    // 5 erros: nem o código certo vale mais
+    const real = job.data.text.match(/\d{6}/)[0];
+    const locked = await app.inject({ method: "POST", url: "/api/auth/login/verify", payload: { challenge: body.challenge, code: real } });
+    expect(locked.statusCode).toBe(401);
+
+    const { session, device } = await loginWithCode("ana@x.com");
+    expect(session).toBeTruthy();
+    expect(device).toBeTruthy();
+    const again = await app.inject({ method: "POST", url: "/api/auth/login", headers: { cookie: device }, payload: { email: "ana@x.com", password: "senha-forte-1" } });
+    expect(again.json().needs_code).toBeUndefined();
+    expect(cookieOf(again)).toBeTruthy();
+    // aparelho novo gera notificação de segurança para a própria pessoa
+    const n = await app.inject({ method: "GET", url: "/api/notifications", headers: { cookie: session } });
+    expect(n.json().items.some((i: any) => i.kind === "seguranca")).toBe(true);
+  });
+
+  it("código usado não vale de novo e sem WhatsApp conectado entra só com a senha", async () => {
+    const { startChallenge, verifyChallenge } = await import("../src/logincode.js");
+    const { loadAccount } = await import("../src/accounts.js");
+    const row = await db.one("SELECT id FROM accounts WHERE email = 'bia@x.com'");
+    let code = "";
+    const ch: any = await startChallenge((await loadAccount(row.id))!, async (_p, t) => (code = t.match(/\d{6}/)![0]));
+    expect(await verifyChallenge(ch.challenge, code)).toMatchObject({ ok: true });
+    expect(await verifyChallenge(ch.challenge, code)).toMatchObject({ ok: false });
+    // daqui em diante: WhatsApp embutido (Baileys) e desconectado
+    const { config } = await import("../src/config.js");
+    (config as any).WHATSAPP_PROVIDER = "baileys";
+    await db.query("UPDATE wa_sessions SET status = 'disconnected'");
+    const r = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "bia@x.com", password: "senha-forte-1" } });
+    expect(r.json().needs_code).toBeUndefined();
+    expect(cookieOf(r)).toBeTruthy();
+  });
+
+  it("notificações: cada um vê as suas, bolinha conta as não lidas e some ao ler", async () => {
+    const { notify } = await import("../src/notifications.js");
+    await notify({ userId: ana.id, kind: "lembrete", title: "Lembrete da Ana", link: "/agenda" });
+    await notify({ userId: bia.id, kind: "lembrete", title: "Lembrete da Bia" });
+    await notify({ userId: null, kind: "cliente", title: "Só para o dono" });
+    await db.query("UPDATE wa_sessions SET status = 'disconnected'");
+    const ana1 = cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "ana@x.com", password: "senha-forte-1" } }));
+    const list = (await app.inject({ method: "GET", url: "/api/notifications", headers: { cookie: ana1 } })).json();
+    const titles = list.items.map((i: any) => i.title);
+    expect(titles).toContain("Lembrete da Ana");
+    expect(titles).not.toContain("Lembrete da Bia");
+    expect(titles).not.toContain("Só para o dono");
+    const before = (await app.inject({ method: "GET", url: "/api/notifications/unread", headers: { cookie: ana1 } })).json().unread;
+    expect(before).toBeGreaterThan(0);
+    const one = list.items.find((i: any) => i.title === "Lembrete da Ana");
+    await app.inject({ method: "POST", url: "/api/notifications/read", headers: { cookie: ana1 }, payload: { ids: [one.id] } });
+    expect((await app.inject({ method: "GET", url: "/api/notifications/unread", headers: { cookie: ana1 } })).json().unread).toBe(before - 1);
+    await app.inject({ method: "POST", url: "/api/notifications/read", headers: { cookie: ana1 }, payload: {} });
+    expect((await app.inject({ method: "GET", url: "/api/notifications/unread", headers: { cookie: ana1 } })).json().unread).toBe(0);
+    // dono vê as do sistema
+    const owner = cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } }));
+    const o = (await app.inject({ method: "GET", url: "/api/notifications", headers: { cookie: owner } })).json();
+    expect(o.items.map((i: any) => i.title)).toContain("Só para o dono");
+    // sem login, nada
+    expect((await app.inject({ method: "GET", url: "/api/notifications/unread" })).statusCode).toBe(401);
+  });
+
+  it("documentos: envia, baixa, a outra pessoa não vê, o dono vê com o nome, apagar some", async () => {
+    await db.query("UPDATE wa_sessions SET status = 'disconnected'");
+    const login = async (email: string) => cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email, password: "senha-forte-1" } }));
+    const a = await login("ana@x.com");
+    const b = await login("bia@x.com");
+    const pdf = Buffer.from("%PDF-1.4 contrato de teste");
+    const up = await app.inject({ method: "POST", url: "/api/documents", headers: { cookie: a }, payload: { name: "Contrato/aluguel", mimetype: "application/pdf", base64: pdf.toString("base64"), folder: "Casa" } });
+    expect(up.statusCode).toBe(200);
+    const doc = up.json();
+    expect(doc.name).toBe("Contrato aluguel.pdf");
+    expect(doc.size).toBe(pdf.length);
+
+    const file = await app.inject({ method: "GET", url: `/api/documents/${doc.id}/file`, headers: { cookie: a } });
+    expect(file.statusCode).toBe(200);
+    expect(file.headers["content-type"]).toContain("application/pdf");
+    expect(file.headers["content-disposition"]).toContain("attachment");
+    expect(file.rawPayload.equals(pdf)).toBe(true);
+
+    expect((await app.inject({ method: "GET", url: `/api/documents/${doc.id}/file`, headers: { cookie: b } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: "/api/documents", headers: { cookie: b } })).json().items).toHaveLength(0);
+    expect((await app.inject({ method: "DELETE", url: `/api/documents/${doc.id}`, headers: { cookie: b } })).statusCode).toBe(404);
+
+    const owner = cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } }));
+    const all = (await app.inject({ method: "GET", url: "/api/documents", headers: { cookie: owner } })).json().items;
+    expect(all[0]).toMatchObject({ id: doc.id, owner_name: "Ana" });
+
+    const mine = (await app.inject({ method: "GET", url: "/api/documents?q=aluguel", headers: { cookie: a } })).json();
+    expect(mine.items).toHaveLength(1);
+    expect(mine.usage).toMatchObject({ count: 1, bytes: pdf.length });
+
+    expect((await app.inject({ method: "DELETE", url: `/api/documents/${doc.id}`, headers: { cookie: a } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/api/documents", headers: { cookie: a } })).json().items).toHaveLength(0);
+  });
+
+  it("assistente guarda o arquivo recebido e manda de volta quando pedem", async () => {
+    const docs = await import("../src/agent/tools/documents.js");
+    const media: any[] = [];
+    const ctx: any = {
+      user: { id: ana.id, phone: ana.phone, name: "Ana" },
+      timezone: "America/Sao_Paulo",
+      inboundFiles: [{ base64: Buffer.from("%PDF boleto").toString("base64"), mimetype: "application/pdf", fileName: "boleto.pdf" }],
+      outbox: { addMedia: (m: any) => (media.push(m), `m${media.length}`) },
+    };
+    const saved: any = await docs.documentSave.run({ name: "Boleto da luz", folder: "Contas" } as any, ctx);
+    expect(saved.ok).toBe(true);
+    const listed: any = await docs.documentList.run({ query: "luz" } as any, ctx);
+    const id = (listed.documents ?? listed)[0].id;
+    const sent: any = await docs.documentSend.run({ id } as any, ctx);
+    expect(media[0]).toMatchObject({ kind: "document", mimetype: "application/pdf" });
+    expect(JSON.stringify(sent)).toContain("m1");
+    vi.restoreAllMocks();
+  });
+});

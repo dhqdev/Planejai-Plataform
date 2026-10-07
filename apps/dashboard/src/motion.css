@@ -14,7 +14,9 @@
 }
 
 /* ---------- botões ---------- */
-.btn, .icon-btn, .fab, .more-tile, .cal-fab { position: relative; overflow: hidden; isolation: isolate; }
+.btn, .icon-btn, .fab, .more-tile { position: relative; overflow: hidden; isolation: isolate; }
+/* o + da Agenda fica preso no canto da tela (fixed), não pode virar relative */
+.cal-fab { overflow: hidden; isolation: isolate; }
 .btn { transition: background .15s, border-color .15s, color .15s, opacity .15s, transform .32s var(--spring), box-shadow .2s; }
 .btn:hover:not(:disabled) { transform: translateY(-1px); }
 .btn:active:not(:disabled) { transform: scale(.95); transition-duration: .08s; }

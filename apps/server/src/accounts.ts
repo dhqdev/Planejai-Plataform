@@ -1,6 +1,6 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { config } from "./config.js";
-import { one } from "./db/pool.js";
+import { one, query } from "./db/pool.js";
 
 export type Role = "superadmin" | "admin";
 
@@ -61,6 +61,8 @@ export async function ownerAccount(): Promise<Account> {
 
 /** Derruba todos os logins da conta (troca de senha, desativação, "sair de todos os aparelhos"). */
 export async function bumpSession(accountId: string) {
+  // navegadores confiáveis também caem: o próximo login pede o código do WhatsApp de novo
+  await query("DELETE FROM login_devices WHERE account_id = $1", [accountId]).catch(() => {});
   if (accountId === OWNER_ID) {
     await one(
       `INSERT INTO settings (key, value, updated_at) VALUES ('owner_session_version', '2'::jsonb, now())

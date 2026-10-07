@@ -26,7 +26,11 @@ apps/server/src/
   maintenance.ts           de hora em hora: resume e apaga mensagens > 24h, logs e gravações antigas
   channels/                baileys.ts (padrão), evolution.ts, cloud.ts (Meta), PlaygroundChannel; wa-message.ts parseia WAMessage
   whatsapp/                session.ts (conexão Baileys: QR, pareamento, reconexão, LISTEN wa_command; aluguel holder/lease_until
-                           renovado a cada 15s, vence em 45s, para o worker novo assumir depois de redeploy)
+                           renovado a cada 15s, vence em 45s, para o worker novo assumir depois de redeploy).
+                           Pareado = creds.account + me (registered só vale no código de pareamento!). Queda de sessão
+                           pareada vira status 'reconnecting' + backoff 2s..60s sem desistir; só loggedOut/403 pede QR.
+                           Vigia na batida derruba socket meio-aberto (sem tráfego 90s); envio espera religar (ready()).
+                           Teste com socket falso: test/whatsapp-reconnect.e2e.test.ts
                            auth-state.ts (credenciais/chaves Signal na tabela wa_auth)
   agent/
     orchestrator.ts        processConversation: mídia, contexto (Redis), memórias, CTO, entrega em balões; resumo/compactação
@@ -197,3 +201,10 @@ Sem WhatsApp, teste pelos e2e (canal playground) e veja os passos em **Execuçõ
 - **Automações de clientes** (`agent/tools/automations.ts`, tabela `automations`): `automation_save` recebe nós e ligações em formato curto e `buildWorkflow` monta o JSON do n8n. Para quem não é dono: só `CLIENT_NODES`, sem `$env`/código/credenciais, HTTP/RSS só com URL pública fixa, webhook com prefixo `pj-<user>`, e `planejai.notify`/`planejai.agent` viram HTTP para a própria pessoa (user_id fixado no servidor). `ownerOnly: false` libera a ferramenta mesmo sendo da integração n8n. Limite `AUTOMATIONS_PER_USER`; apagar conta apaga os fluxos.
 - **Ferramentas do assistente** (`agent/tools/n8n.ts`, com o especialista Produtividade): `n8n_workflows`, `n8n_executions`, `n8n_trigger` (pede confirmação; Basic Auth opcional dos webhooks). Só o dono (OWNER_PHONES) pode usar.
 - Fluxos prontos para importar no n8n: `/mnt/project-files/planejai-deploy/n8n/` (auxiliares convertidos da Evolution para a API interna e fluxo de eventos).
+- **Notificações** (`notifications.ts`, `api/routes/notifications.ts`, tabela `notifications`): `notify({userId|null, kind, title, body, link})`; null = para o dono. `events.ts` gera as de cliente, limite, lembrete e Telegram; automações, login novo e WhatsApp deslogado também chamam `notify`. O painel consulta `/api/notifications/unread` a cada 30 s (`dashboard/src/notify.ts`) e mostra a bolinha no menu, na barra de baixo e no sino.
+- **Documentos** (`documents.ts`, tabela `documents`, bytea): ferramentas `document_save/list/send/delete` no CTO usam `ctx.inboundFiles` (arquivo recebido na mensagem). Painel em `/documentos`; super admin vê todos.
+- **Código de login** (`logincode.ts`): navegador sem cookie `pj_dev` conhecido recebe código pela fila `outbound.send`. Testes rodam com `LOGIN_CODE=false`, exceto `test/panel.e2e.test.ts`.
+- **Agenda com Meet**: `calendar_create_event` com `meet=true` manda `conferenceDataVersion=1`; convidados recebem convite pelo Google (`sendUpdates=all`).
+- **Mapa**: `map_route` abre o Google Maps no navegador headless, devolve print + link + opções; no CTO direto.
+- **Carregando**: `BlockLoader` (16 blocos em onda, CSS puro em styles.css); `index.html` mostra o mesmo loader antes do JS.
+

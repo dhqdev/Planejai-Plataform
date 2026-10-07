@@ -76,11 +76,13 @@ PWA instalável no celular e no notebook, com tema claro e escuro, puxar para at
   - Agenda, no estilo Google Agenda.
   - Finanças: visão geral, lançamentos e limites.
   - De olho.
+  - Documentos: PDFs, fotos e planilhas guardados (pelo painel ou mandando no WhatsApp com "guarda esse documento"); até 15 MB por arquivo e 200 MB por pessoa.
+  - Notificações: sino com bolinha no menu (cliente novo, limite de gastos, lembrete, WhatsApp caído, acesso novo, automação criada). Pode avisar também pelo navegador.
   - Minha conta: perfil, senha, conexões, sair de todos os aparelhos e apagar a conta.
   - Abas extras (Convites, Memórias, Meu time e abas sob medida) são liberadas pela reunião noturna ou pelo dono.
 - **Só para o dono da stack (super admin):**
   - Clientes: cadastro, uso, abas, custo por pessoa por dia e apagar dados.
-  - Execuções: canvas do fluxo e entrada e saída de cada passo.
+  - Execuções: números do período, filtros por pessoa, agente e gatilho, e o detalhe como história (quem chamou quem) ou canvas.
   - Filas, Agentes, Time, Integrações, Modelos, WhatsApp e Configurações (travas de segurança).
 
 O dono é a conta de `ADMIN_EMAIL` e é o único super admin. Quem entra por convite vira admin e vê apenas os próprios dados. Isso é garantido no servidor, não só escondido na tela.
@@ -151,6 +153,7 @@ A lista completa, com comentários, está em [`.env.example`](.env.example). As 
 | `INTERNAL_API_KEY` | para o n8n (≥24) | Chave da API interna. Vazia deixa a API desligada |
 | `N8N_URL` / `N8N_API_KEY` | para o n8n | n8n na mesma rede (`http://n8n-interno:5678`) e chave da API dele, para o assistente criar fluxos |
 | `AUTOMATIONS_PER_USER` | não | Automações no n8n por cliente (5) |
+| `LOGIN_CODE` | não | Código no WhatsApp ao entrar de navegador novo (`true`) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | sim | Conta do dono (super admin) |
 | `OPENROUTER_API_KEY` | sim | Modelos de IA |
 | `WHATSAPP_PROVIDER` | sim | `baileys` (padrão), `evolution`, `cloud` ou `none` |
@@ -196,7 +199,7 @@ As integrações (Google, Notion, GitHub, Linear, Slack, Tavily, Brave, Mercado 
 
 - **Automações pedidas pelos clientes.** O especialista Produtividade cria fluxos no n8n quando alguém pede ("me avisa todo dia às 8h das notícias de IA", "me avisa quando esse site mudar"). Ferramentas: `automation_save`, `automation_list` e `automation_manage`.
   - Para clientes o fluxo é seguro por construção: só nós simples (agenda, webhook, RSS, HTTP para endereço público fixo, filtros e transformação), sem código, sem credenciais e sem `$env`. O aviso sempre vai para a própria pessoa.
-  - Cada cliente tem até `AUTOMATIONS_PER_USER` automações (padrão 5). Os fluxos aparecem no n8n como "Cliente · Nome · …" e somem quando a pessoa apaga a conta.
+  - Cada cliente tem até `AUTOMATIONS_PER_USER` automações (padrão 5). Os fluxos aparecem no n8n como "[Cliente] Nome · …" com a etiqueta "Planejai Cliente" (os do dono como "[Dono] …"), separados dos fluxos do sistema "[Sistema] Planejai · …" (etiqueta "Planejai Sistema"), que só o dono edita e somem quando a pessoa apaga a conta.
   - O dono pode usar qualquer nó.
 - **Telegram.** Cadastre o bot do dono em Integrações > Telegram. Cada pessoa liga a própria conta em Minha conta > Conexões. Lembretes e avisos saem no canal em que a pessoa está falando.
 - **API interna para o n8n.** Toda chamada leva o cabeçalho `X-Planejai-Key: {INTERNAL_API_KEY}`. Endpoints:
@@ -219,6 +222,7 @@ As integrações (Google, Notion, GitHub, Linear, Slack, Tavily, Brave, Mercado 
 - Compras, pagamentos e mensagens para terceiros exigem confirmação explícita.
 - **Login:**
   - Limite de tentativas por IP e por e-mail.
+  - Navegador novo: depois da senha, chega um código de 6 dígitos no WhatsApp da pessoa (o dono recebe no primeiro número de `OWNER_PHONES`). Vale 10 minutos e 5 tentativas; o navegador fica conhecido depois. Se o WhatsApp estiver desconectado, entra só com a senha e fica uma notificação. Desligue com `LOGIN_CODE=false`. "Sair de todos os aparelhos" também esquece os navegadores conhecidos.
   - A sessão pode ser revogada: trocar a senha, desativar a conta ou usar "Sair de todos os aparelhos" derruba os outros logins.
   - Senhas com scrypt; credenciais com AES-256-GCM.
 - **Travas por pessoa** (Configurações > Travas de segurança): ritmo por minuto, mensagens e custo em 24h, e corte de texto longo.

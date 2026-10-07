@@ -32,9 +32,10 @@ export async function api<T = any>(path: string, init: RequestInit & { json?: un
   return data as T;
 }
 
+/** Custo em dólar, igual ao OpenRouter (o valor já é o custo real que ele devolve em usage.cost). */
 export const usd = (v: number | string | null | undefined) => {
   const n = Number(v ?? 0);
-  return n < 0.01 && n > 0 ? `$${n.toFixed(5)}` : `$${n.toFixed(2)}`;
+  return n < 0.01 && n > 0 ? `US$ ${n.toFixed(5)}` : `US$ ${n.toFixed(2)}`;
 };
 
 export const ms = (v: number | null | undefined) => {

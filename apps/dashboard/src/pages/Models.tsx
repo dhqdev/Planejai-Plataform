@@ -3,7 +3,7 @@ import { api } from "../api";
 import { ErrorBox, Loading, PageHead } from "../components";
 import { useApi } from "../hooks";
 
-const price = (m: any) => (m ? `$${m.promptPerM.toFixed(3)} / $${m.completionPerM.toFixed(3)}` : "–");
+const price = (m: any) => (m ? `US$ ${m.promptPerM.toFixed(3)} / US$ ${m.completionPerM.toFixed(3)}` : "–");
 
 export function ModelsPage() {
   const routes = useApi<any[]>("/api/models/routes");

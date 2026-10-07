@@ -93,46 +93,76 @@ export const calendarListEvents = defineTool<{ from: string; to: string; query?:
   },
 });
 
+const EMAIL = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
+
 export const calendarCreateEvent = defineTool<{
   title: string;
   start: string;
-  end: string;
+  end?: string;
   description?: string;
   location?: string;
   attendees?: string[];
+  meet?: boolean;
+  remind_minutes?: number;
   confirmed_by_user?: boolean;
 }>({
   name: "calendar_create_event",
-  description: "Cria um evento no Google Agenda. Se tiver convidados, exige confirmação da pessoa.",
+  description:
+    "Cria um evento no Google Agenda, com link do Google Meet (meet=true) e convidados por e-mail (o Google manda o convite e os lembretes para eles). " +
+    "Convidado exige confirmação: se a pessoa já escreveu o e-mail do convidado neste mesmo pedido, isso já é a confirmação.",
   integration: "google",
   parameters: obj(
     {
       title: { type: "string" },
       start: { type: "string", description: "AAAA-MM-DDTHH:MM local" },
-      end: { type: "string", description: "AAAA-MM-DDTHH:MM local" },
+      end: { type: "string", description: "AAAA-MM-DDTHH:MM local (padrão: 1 hora depois do início)" },
       description: { type: "string" },
       location: { type: "string" },
-      attendees: { type: "array", items: { type: "string" }, description: "e-mails" },
+      attendees: { type: "array", items: { type: "string" }, description: "e-mails dos convidados" },
+      meet: { type: "boolean", description: "true para criar a sala do Google Meet (reunião online, 'via meet')" },
+      remind_minutes: { type: "number", description: "aviso do Google antes do evento, em minutos (padrão 30)" },
       ...CONFIRM_PARAM,
     },
-    ["title", "start", "end"],
+    ["title", "start"],
   ),
   async run(args, ctx) {
-    if (args.attendees?.length) {
-      const c = requireConfirmation(args, `convidar ${args.attendees.join(", ")} para "${args.title}"`);
+    const attendees = [...new Set((args.attendees ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean))];
+    const bad = attendees.filter((e) => !EMAIL.test(e));
+    if (bad.length) return { ok: false, error: `E-mail inválido: ${bad.join(", ")}. Peça o e-mail certo.` };
+    if (attendees.length) {
+      const c = requireConfirmation(args, `convidar ${attendees.join(", ")} para "${args.title}"`);
       if (c) return c;
     }
-    const e = await googleApi(`${CAL}?sendUpdates=all`, {
+    const start = parseLocalDateTime(args.start, ctx.timezone);
+    const end = args.end ? parseLocalDateTime(args.end, ctx.timezone) : new Date(start.getTime() + 3_600_000);
+    if (end <= start) return { ok: false, error: "O fim precisa ser depois do início." };
+    const remind = Math.max(0, Math.min(40320, Math.round(args.remind_minutes ?? 30)));
+    const params = new URLSearchParams({ sendUpdates: attendees.length ? "all" : "none" });
+    if (args.meet) params.set("conferenceDataVersion", "1");
+    const e = await googleApi(`${CAL}?${params}`, {
       method: "POST",
       body: JSON.stringify({
         summary: args.title,
         description: args.description,
         location: args.location,
-        start: { dateTime: parseLocalDateTime(args.start, ctx.timezone).toISOString(), timeZone: ctx.timezone },
-        end: { dateTime: parseLocalDateTime(args.end, ctx.timezone).toISOString(), timeZone: ctx.timezone },
-        attendees: args.attendees?.map((email) => ({ email })),
+        start: { dateTime: start.toISOString(), timeZone: ctx.timezone },
+        end: { dateTime: end.toISOString(), timeZone: ctx.timezone },
+        attendees: attendees.length ? attendees.map((email) => ({ email })) : undefined,
+        reminders: { useDefault: false, overrides: [{ method: "popup", minutes: remind }, ...(remind < 60 ? [{ method: "email", minutes: 60 }] : [])] },
+        conferenceData: args.meet
+          ? { createRequest: { requestId: `pj-${ctx.user.id.slice(0, 8)}-${start.getTime()}`, conferenceSolutionKey: { type: "hangoutsMeet" } } }
+          : undefined,
       }),
     });
-    return { ok: true, id: e.id, link: e.htmlLink };
+    const meetLink = e.hangoutLink ?? e.conferenceData?.entryPoints?.find((p: any) => p.entryPointType === "video")?.uri ?? null;
+    return {
+      ok: true,
+      id: e.id,
+      link: e.htmlLink,
+      meet_link: meetLink,
+      meet_pending: Boolean(args.meet && !meetLink && e.conferenceData?.createRequest?.status?.statusCode === "pending"),
+      invited: attendees,
+      reminder: `${remind} min antes`,
+    };
   },
 });

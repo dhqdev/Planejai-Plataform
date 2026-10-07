@@ -3,6 +3,7 @@ import { many, one, query } from "../../db/pool.js";
 import { isOwner } from "../../ingest.js";
 import { getCredentials } from "../../integrations/registry.js";
 import { BlockedUrlError, assertPublicUrl } from "../../net.js";
+import { notify } from "../../notifications.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 /**
@@ -39,6 +40,30 @@ const VERSIONS: Record<string, number> = {
   xml: 1,
 };
 const CLIENT_NODES = new Set(Object.keys(VERSIONS));
+
+/**
+ * Nomes no n8n: fluxos do sistema (feitos à mão, ninguém de fora mexe) começam com "[Sistema]";
+ * os que o assistente cria começam com "[Cliente] Nome ·" ou "[Dono]", e ganham a etiqueta certa.
+ */
+export const TAG_CLIENT = "Planejai Cliente";
+export const TAG_OWNER = "Planejai Dono";
+export function flowName(owner: boolean, who: string, label: string) {
+  return owner ? `[Dono] ${label}` : `[Cliente] ${who} · ${label}`;
+}
+
+/** Etiqueta o fluxo (cria a etiqueta se não existir). Falhar aqui não derruba a automação. */
+async function tagWorkflow(api: (m: string, p: string, b?: unknown) => Promise<any>, workflowId: string, tag: string) {
+  try {
+    const all = await api("GET", "/tags?limit=250");
+    let t = (all?.data ?? []).find((x: any) => x.name === tag);
+    if (!t) t = await api("POST", "/tags", { name: tag });
+    const cur = await api("GET", `/workflows/${workflowId}/tags`).catch(() => []);
+    const ids = new Set([...(Array.isArray(cur) ? cur : []).map((x: any) => x.id), t.id]);
+    await api("PUT", `/workflows/${workflowId}/tags`, [...ids].map((id) => ({ id })));
+  } catch {
+    /* n8n antigo sem etiquetas na API */
+  }
+}
 const PLANEJAI_NODES = new Set(["planejai.notify", "planejai.agent"]);
 /** Nada que leia segredo da instância ou rode código fora do sandbox das expressões. */
 const FORBIDDEN = /\$env|\$vars|\$secrets|process\.|require\s*\(|constructor|__proto__|\$getWorkflowStaticData|\$execution\.customData/i;
@@ -225,7 +250,7 @@ export const automationSave = defineTool<{
     const label = String(args.name).trim().slice(0, 80) || "Automação";
     const who = String(ctx.user.name ?? ctx.user.phone).split(" ")[0];
     const body = {
-      name: owner ? label : `Cliente · ${who} · ${label}`,
+      name: flowName(owner, who, label),
       nodes: built.nodes,
       connections: built.connections,
       settings: {
@@ -236,6 +261,7 @@ export const automationSave = defineTool<{
       },
     };
     const wf = existing ? await api("PUT", `/workflows/${existing.workflow_id}`, body) : await api("POST", "/workflows", body);
+    await tagWorkflow(api, String(wf.id), owner ? TAG_OWNER : TAG_CLIENT);
     await query(
       `INSERT INTO automations (workflow_id, user_id, name, description) VALUES ($1, $2, $3, $4)
        ON CONFLICT (workflow_id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, updated_at = now()`,
@@ -252,6 +278,11 @@ export const automationSave = defineTool<{
       }
     }
     await query("UPDATE automations SET active = $2, updated_at = now() WHERE workflow_id = $1", [String(wf.id), active]);
+    if (!existing) {
+      const who = ctx.user.name ?? `+${ctx.user.phone}`;
+      await notify({ userId: ctx.user.id, kind: "automacao", title: `Automação criada: ${label}`, body: args.description ?? null });
+      if (!isOwner(ctx.user.phone)) await notify({ userId: null, kind: "automacao", title: `${who} criou uma automação`, body: label, link: "/clients" });
+    }
     const webhooks = built.nodes
       .filter((n: any) => n.type === "n8n-nodes-base.webhook")
       .map((n: any) => `/webhook/${n.parameters.path}`);

@@ -65,4 +65,10 @@ describe("automações no n8n", () => {
     for (const t of [a.automationSave, a.automationList, a.automationManage]) expect(isOwnerOnly(t), t.name).toBe(false);
     for (const t of [n.n8nWorkflows, n.n8nTrigger]) expect(isOwnerOnly(t), t.name).toBe(true);
   });
+
+  it("nome no n8n separa fluxo de cliente do fluxo do dono (os do sistema são [Sistema])", async () => {
+    const { flowName } = await import("../src/agent/tools/automations.js");
+    expect(flowName(false, "Maria", "Notícias às 8h")).toBe("[Cliente] Maria · Notícias às 8h");
+    expect(flowName(true, "David", "Backup")).toBe("[Dono] Backup");
+  });
 });

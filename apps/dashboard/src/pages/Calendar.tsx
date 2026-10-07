@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { ErrorBox, Modal } from "../components";
@@ -332,10 +333,11 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
         </div>
       </div>
 
-      {phone && (
+      {phone && createPortal(
         <button className="cal-fab" aria-label="Novo lembrete" onClick={() => { haptic(10); setCreating(withTime(selected)); }}>
           <Icon name="plus" size={24} />
-        </button>
+        </button>,
+        document.body,
       )}
 
       {open && <EventDetail ev={open} onClose={() => setOpen(null)} onChanged={() => { setOpen(null); void reload(); }} />}

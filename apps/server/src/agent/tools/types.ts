@@ -52,6 +52,8 @@ export interface ToolContext {
   guard?: Guard;
   /** fotos que chegaram nesta rodada (só em memória), para encaminhar a um contato */
   inboundImages?: { base64: string; mimetype: string }[];
+  /** arquivos (documentos e fotos) que chegaram nesta rodada, só em memória, para guardar em Documentos */
+  inboundFiles?: { base64: string; mimetype: string; fileName?: string }[];
   /** avisos de andamento e "digitando..." para a pessoa enquanto o time trabalha */
   progress?: import("../progress.js").Progress;
 }

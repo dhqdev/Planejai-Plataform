@@ -197,7 +197,7 @@ function CostsCard({ onOpen }: { onOpen: (id: string) => void }) {
     <div className="card card-pad costs-card">
       <div className="row" style={{ alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 180 }}>
-          <div className="costs-label">Custo de IA</div>
+          <div className="costs-label">Custo de IA (US$)</div>
           <div className="costs-total">{usd(data.total)}</div>
           <div className="muted" style={{ fontSize: 12 }}>
             {hover ? `${fmtDay(shown.day)}: ${usd(shown.cost)} · ${shown.executions} respostas` : `últimos ${days} dias · ${data.clients.length} clientes`}

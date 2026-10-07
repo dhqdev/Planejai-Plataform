@@ -16,6 +16,8 @@ export default defineConfig({
       // os testes sobem servidores falsos em 127.0.0.1; a trava de SSRF tem teste próprio (unit.test.ts)
       ALLOW_PRIVATE_URLS: "true",
       INVITE_GAP_SECONDS: "0",
+      // código no WhatsApp ao entrar de navegador novo tem teste próprio (logincode.test.ts)
+      LOGIN_CODE: "false",
     },
   },
 });

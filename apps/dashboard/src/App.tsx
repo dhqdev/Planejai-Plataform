@@ -38,11 +38,15 @@ const WatchesPage = lazy(() => import("./pages/Watches").then((m) => ({ default:
 const QueuesPage = lazy(() => import("./pages/Queues").then((m) => ({ default: m.QueuesPage })));
 const TeamPage = lazy(() => import("./pages/Team").then((m) => ({ default: m.TeamPage })));
 const CustomTabPage = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.CustomTabPage })));
+const NotificationsPage = lazy(() => import("./pages/Notifications").then((m) => ({ default: m.NotificationsPage })));
+const DocumentsPage = lazy(() => import("./pages/Documents").then((m) => ({ default: m.DocumentsPage })));
 const WhatsAppPage = lazy(() => import("./pages/WhatsApp").then((m) => ({ default: m.WhatsAppPage })));
 import { clearApiCache, prefetchApi, useApi } from "./hooks";
 import { PullToRefresh } from "./PullToRefresh";
 import { applyUpdate, onUpdateAvailable } from "./update";
-import { Icon, Logo } from "./icons";
+import { Icon } from "./icons";
+import { useUnread } from "./notify";
+import { BlockLoader } from "./BlockLoader";
 import { openWardrobe } from "./mochi/state";
 import { MochiButton, MochiIcon, WardrobeHost } from "./mochi/Wardrobe";
 
@@ -64,6 +68,7 @@ type NavItem = { section: string } | { to: string; label: string; icon: string; 
 const SUPER_NAV: NavItem[] = [
   { section: "Visão geral" },
   { to: "/", label: "Painel", icon: "home" },
+  { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
   { to: "/executions", label: "Execuções", icon: "activity" },
   { to: "/queues", label: "Filas", icon: "list" },
   { section: "Pessoas" },
@@ -78,6 +83,7 @@ const SUPER_NAV: NavItem[] = [
   { to: "/finance", label: "Finanças", icon: "wallet" },
   { to: "/agenda", label: "Agenda", icon: "calendar" },
   { to: "/watches", label: "Acompanhamentos", icon: "eye", short: "De olho" },
+  { to: "/documentos", label: "Documentos", icon: "file" },
   { to: "/memories", label: "Memórias", icon: "bookmark" },
   { section: "Sistema" },
   { to: "/settings", label: "Configurações", icon: "settings" },
@@ -105,8 +111,10 @@ function adminNav(tabs: AppTabs | null): NavItem[] {
     { to: "/agenda", label: "Agenda", icon: "calendar" },
     { to: "/finance", label: "Finanças", icon: "wallet" },
     { to: "/watches", label: "Acompanhamentos", icon: "eye", short: "De olho" },
+    { to: "/documentos", label: "Documentos", icon: "file" },
     ...(extra.length ? [{ section: "Feito para você" }, ...extra] : []),
     { section: "Conta" },
+    { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
     { to: "/profile", label: "Minha conta", icon: "user" },
   ];
 }
@@ -145,6 +153,7 @@ export function App() {
   const nav = useNavigate();
   useEffect(() => onInstallAvailable(() => setInstallable(true)), []);
   const tabs = useApi<AppTabs>(me ? `/api/me/tabs?for=${me.id}` : null);
+  const unread = useUnread(!!me);
 
   useEffect(() => {
     api<Me>("/api/auth/me").then(setMe, () => setMe(null));
@@ -166,7 +175,7 @@ export function App() {
 
   // termos e privacidade abrem sem login (link do cadastro e do convite no WhatsApp)
   if (loc.pathname === "/privacidade") return <PrivacyPage />;
-  if (me === undefined) return <Loading />;
+  if (me === undefined) return <BlockLoader full />;
   if (!me) return <AuthPage onLogin={setMe} />;
 
   const isSuper = me.role === "superadmin";
@@ -178,6 +187,10 @@ export function App() {
         <MochiButton size={50} />
         <strong className="topbar-title">{titleFor(loc.pathname, NAV)}</strong>
         <span className="spacer" />
+        <button className="icon-btn" onClick={() => { haptic(); nav("/notificacoes"); }} aria-label={unread ? `${unread} notificações não lidas` : "Notificações"}>
+          <Icon name="bell" />
+          {unread > 0 && <span className="bell-dot" />}
+        </button>
         <button className="icon-btn" onClick={toggleTheme} aria-label="Trocar tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button>
       </header>
       <aside className="sidebar">
@@ -188,7 +201,7 @@ export function App() {
             <small>{isSuper ? "Super admin" : "Painel"}</small>
           </div>
         </div>
-        <Nav items={NAV} isSuper={isSuper} />
+        <Nav items={NAV} isSuper={isSuper} unread={unread} />
         <div className="sidebar-foot">
           <div className="me">
             <div className="avatar">{(me.name ?? me.email).slice(0, 1).toUpperCase()}</div>
@@ -234,6 +247,8 @@ export function App() {
           ) : (
             <Route path="/profile" element={<ProfilePage me={me} />} />
           )}
+          <Route path="/notificacoes" element={<NotificationsPage />} />
+          <Route path="/documentos" element={<DocumentsPage isSuper={isSuper} />} />
           <Route path="/" element={<DashboardPage me={me} theme={theme} onTheme={toggleTheme} />} />
           {has("convites") && <Route path="/invites" element={<InvitesPage isSuper={isSuper} />} />}
           {has("meu_time") && <Route path="/time" element={<TeamPage />} />}
@@ -265,13 +280,13 @@ export function App() {
           <div className="tabbar-scroll" ref={tabsRef}>
             {NAV.filter((i): i is Exclude<NavItem, { section: string }> => "to" in i).map((t) => (
               <NavLink key={t.to} to={t.to} end={t.to === "/"} className="tab">
-                <span className="tab-ico"><Icon name={t.icon} size={21} /></span>
+                <span className="tab-ico"><Icon name={t.icon} size={21} />{t.badge === "notif" && unread > 0 && <span className="tab-dot" />}</span>
                 <span className="tab-label">{t.short ?? t.label}</span>
               </NavLink>
             ))}
           </div>
           <button className={`tab tab-more ${menu ? "active" : ""}`} onClick={() => setMenu(true)}>
-            <span className="tab-ico"><Icon name="more" size={21} /></span>
+            <span className="tab-ico"><Icon name="more" size={21} />{unread > 0 && <span className="tab-dot" />}</span>
             <span className="tab-label">Mais</span>
           </button>
         </div>
@@ -281,7 +296,7 @@ export function App() {
         <Modal title="Menu" onClose={() => setMenu(false)} className="more-sheet">
           {!isStandalone() && (installable || isIos()) && (
             <div className="install-card">
-              <div className="brand-logo"><Logo size={26} /></div>
+              <img className="brand-logo app-icon" src="/icons/logo-256.png" alt="" width={40} height={40} />
               <div style={{ flex: 1 }}>
                 <strong>Instalar o Planejai</strong>
                 <div className="muted" style={{ fontSize: 12 }}>
@@ -330,7 +345,7 @@ function titleFor(path: string, items: NavItem[]) {
   return hit?.label ?? "Planejai";
 }
 
-function Nav({ items, isSuper }: { items: NavItem[]; isSuper: boolean }) {
+function Nav({ items, isSuper, unread }: { items: NavItem[]; isSuper: boolean; unread: number }) {
   const clients = useApi<any[]>(isSuper ? "/api/clients" : null, { poll: 60000 });
   const pending = (clients.data ?? []).filter((c) => c.status === "pending" || c.account_status === "pending").length;
   return (
@@ -345,6 +360,7 @@ function Nav({ items, isSuper }: { items: NavItem[]; isSuper: boolean }) {
             <Icon name={item.icon} />
             <span className="label">{item.label}</span>
             {item.badge === "clients" && pending > 0 && <span className="count">{pending}</span>}
+            {item.badge === "notif" && unread > 0 && <span className="nav-dot" aria-label={`${unread} não lidas`} />}
           </NavLink>
         ),
       )}

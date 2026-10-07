@@ -4,6 +4,7 @@ import * as core from "./tools/core.js";
 import * as finance from "./tools/finance.js";
 import * as images from "./tools/images.js";
 import * as automations from "./tools/automations.js";
+import * as documents from "./tools/documents.js";
 import * as n8n from "./tools/n8n.js";
 import * as prod from "./tools/productivity.js";
 import * as research from "./tools/research.js";
@@ -69,6 +70,7 @@ export const SPECIALISTS: AgentDef[] = [
     tools: [
       research.webSearch,
       research.fetchUrl,
+      research.mapRoute,
       research.screenshotUrl,
       research.browserOpen,
       research.browserAction,
@@ -89,7 +91,8 @@ export const SPECIALISTS: AgentDef[] = [
     role: "Lembretes (únicos ou recorrentes), compromissos e Google Agenda: criar, listar, cancelar, ver o que tem no dia.",
     instructions:
       "Converta pedidos de tempo relativo com cuidado usando a data/hora atual informada. Para 'daqui X minutos' use in_minutes. " +
-      "O intent do lembrete deve ter contexto suficiente para o CTO escrever uma mensagem natural na hora (quem pediu, o porquê, detalhes).",
+      "O intent do lembrete deve ter contexto suficiente para o CTO escrever uma mensagem natural na hora (quem pediu, o porquê, detalhes). " +
+      "Reunião 'via meet' ou online: calendar_create_event com meet=true; e-mail de alguém no pedido vira attendees (o Google convida e lembra a pessoa).",
     tools: [
       agenda.scheduleReminder,
       agenda.listRemindersTool,
@@ -181,7 +184,13 @@ export const CTO_TOOLS: Tool[] = [
   finance.setBudget,
   finance.makeChart,
   images.makeImage,
+  research.mapRoute,
+  documents.documentSave,
+  documents.documentList,
+  documents.documentSend,
+  documents.documentDelete,
   agenda.scheduleReminder,
+  agenda.calendarCreateEvent,
   social.sendToContact,
   social.listContactsTool,
   social.invitePerson,

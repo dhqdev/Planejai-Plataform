@@ -74,7 +74,7 @@ async function serverReady(): Promise<string | null> {
 function overlay() {
   const el = document.createElement("div");
   el.className = "pj-updating";
-  el.innerHTML = '<div class="pj-updating-dot"></div><div>Atualizando</div>';
+  el.innerHTML = `<div class="pj-loader">${'<div class="block"></div>'.repeat(16)}</div><div>Atualizando</div>`;
   document.body.appendChild(el);
 }
 

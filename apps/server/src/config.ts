@@ -47,6 +47,11 @@ const schema = z.object({
   N8N_API_KEY: z.string().default(""),
   N8N_EVENTS_URL: z.string().default(""),
   // automações que cada cliente pode ter ativas no n8n (criadas pelo assistente)
+  // Login em navegador novo pede um código no WhatsApp da pessoa (desligue com LOGIN_CODE=false)
+  LOGIN_CODE: z
+    .string()
+    .default("true")
+    .transform((v) => !["0", "false", "no", "nao", "não"].includes(v.trim().toLowerCase())),
   AUTOMATIONS_PER_USER: z.coerce.number().int().min(0).max(50).default(5),
 
   // Números (só dígitos, com DDI) que podem falar com o agente sem aprovação.

@@ -258,7 +258,7 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     await app.inject({ method: "PATCH", url: `/api/accounts/${ana.id}`, headers: { cookie: sup }, payload: { role: "superadmin" } });
     expect((await app.inject({ method: "GET", url: "/api/auth/me", headers: { cookie: adm } })).json()).toMatchObject({ role: "admin" });
     expect((await app.inject({ method: "GET", url: "/api/me/tabs", headers: { cookie: adm } })).json()).toMatchObject({ all: false, modules: [] });
-    for (const url of ["/api/integrations", "/api/settings", "/api/executions", "/api/people", "/api/accounts", "/api/overview", "/api/queues", "/api/costs", `/api/clients/${ana.user_id ?? ana.id}/usage`]) {
+    for (const url of ["/api/integrations", "/api/settings", "/api/executions", "/api/executions/summary", "/api/people", "/api/accounts", "/api/overview", "/api/queues", "/api/costs", `/api/clients/${ana.user_id ?? ana.id}/usage`]) {
       expect((await app.inject({ method: "GET", url, headers: { cookie: adm } })).statusCode).toBe(403);
     }
     const supFin = (await app.inject({ method: "GET", url: "/api/finance?month=2026-03", headers: { cookie: sup } })).json();

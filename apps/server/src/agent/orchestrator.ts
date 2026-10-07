@@ -267,6 +267,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       callChain: ["cto"],
       guard,
       inboundImages: pending.map((m) => m.inboundImage).filter(Boolean),
+      inboundFiles: pending.map((m) => m.inboundFile).filter(Boolean),
       // lembrete agendado não ganha "já vou ver": a pessoa não perguntou nada agora
       progress: opts.trigger === "reminder" ? undefined : progress,
     };

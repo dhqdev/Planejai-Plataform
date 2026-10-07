@@ -591,29 +591,72 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     });
 
     // ---------- Execuções (logs) ----------
-    api.get<{ Querystring: { status?: string; trigger?: string; before?: string; limit?: string; conversation?: string } }>("/api/executions", async (req) => {
+    // filtros: status, gatilho, pessoa, agente, período (horas), busca no texto e paginação por data (before)
+    api.get<{ Querystring: { status?: string; trigger?: string; before?: string; limit?: string; conversation?: string; user?: string; agent?: string; since?: string; q?: string } }>("/api/executions", async (req) => {
       const limit = Math.min(Number(req.query.limit ?? 50), 200);
+      const since = Number(req.query.since ?? 0);
+      const q = String(req.query.q ?? "").trim().slice(0, 100);
       return many(
-        `SELECT e.id, e.trigger, e.status, e.input, e.output, e.content_purged, e.error, e.tokens_in, e.tokens_out, e.cost_usd, e.started_at, e.duration_ms,
-                u.name AS user_name, u.phone, e.conversation_id,
+        `SELECT e.id, e.trigger, e.status, left(e.input, 400) AS input, left(e.output, 400) AS output, e.content_purged, left(e.error, 400) AS error,
+                e.tokens_in, e.tokens_out, e.cost_usd, e.started_at, e.duration_ms,
+                e.user_id, u.name AS user_name, u.phone, e.conversation_id, c.channel,
                 (SELECT COUNT(*) FROM execution_steps s WHERE s.execution_id = e.id) AS steps,
+                (SELECT COUNT(*) FROM execution_steps s WHERE s.execution_id = e.id AND s.type = 'llm')::int AS llm_calls,
+                (SELECT COUNT(*) FROM execution_steps s WHERE s.execution_id = e.id AND s.type IN ('tool', 'delegate'))::int AS tool_calls,
+                (SELECT s.model FROM execution_steps s WHERE s.execution_id = e.id AND s.model IS NOT NULL GROUP BY s.model ORDER BY COUNT(*) DESC LIMIT 1) AS model,
                 (SELECT array_agg(DISTINCT s.agent) FROM execution_steps s WHERE s.execution_id = e.id) AS agents
-           FROM executions e LEFT JOIN users u ON u.id = e.user_id
+           FROM executions e LEFT JOIN users u ON u.id = e.user_id LEFT JOIN conversations c ON c.id = e.conversation_id
           WHERE ($1::text IS NULL OR e.status = $1) AND ($2::text IS NULL OR e.trigger = $2)
             AND ($3::timestamptz IS NULL OR e.started_at < $3) AND ($5::uuid IS NULL OR e.conversation_id = $5)
+            AND ($6::uuid IS NULL OR e.user_id = $6)
+            AND ($7::text IS NULL OR EXISTS (SELECT 1 FROM execution_steps s WHERE s.execution_id = e.id AND s.agent = $7))
+            AND ($8::int = 0 OR e.started_at > now() - make_interval(hours => $8))
+            AND ($9::text IS NULL OR e.input ILIKE '%' || $9 || '%' OR e.output ILIKE '%' || $9 || '%' OR e.error ILIKE '%' || $9 || '%' OR u.name ILIKE '%' || $9 || '%' OR u.phone LIKE '%' || $9 || '%')
           ORDER BY e.started_at DESC LIMIT $4`,
-        [req.query.status || null, req.query.trigger || null, req.query.before || null, limit, req.query.conversation || null],
+        [req.query.status || null, req.query.trigger || null, req.query.before || null, limit, req.query.conversation || null,
+          req.query.user || null, req.query.agent || null, Number.isFinite(since) ? Math.max(0, Math.min(Math.round(since), 24 * 365)) : 0, q ? q.replace(/[%_\\]/g, "\\$&") : null],
       );
     });
 
+    // Resumo do topo da tela (últimas N horas) e as opções dos filtros (pessoas e agentes que aparecem nos logs)
+    api.get<{ Querystring: { since?: string } }>("/api/executions/summary", async (req) => {
+      const hours = Math.max(1, Math.min(Number(req.query.since ?? 24) || 24, 24 * 365));
+      const kpis = await one(
+        `SELECT COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE status = 'error')::int AS errors,
+                COUNT(*) FILTER (WHERE status = 'running')::int AS running,
+                COALESCE(AVG(duration_ms) FILTER (WHERE status <> 'running'), 0)::int AS avg_ms,
+                COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) FILTER (WHERE duration_ms IS NOT NULL), 0)::int AS p95_ms,
+                COALESCE(SUM(cost_usd), 0)::float AS cost_usd,
+                COALESCE(SUM(tokens_in + tokens_out), 0)::bigint AS tokens
+           FROM executions WHERE started_at > now() - make_interval(hours => $1)`,
+        [hours],
+      );
+      const people = await many(
+        `SELECT u.id, u.name, u.phone, COUNT(*)::int AS n FROM executions e JOIN users u ON u.id = e.user_id
+          WHERE e.started_at > now() - interval '30 days' GROUP BY u.id ORDER BY n DESC LIMIT 50`,
+      );
+      const agents = await many(
+        `SELECT s.agent, COUNT(DISTINCT s.execution_id)::int AS n FROM execution_steps s
+          WHERE s.started_at > now() - interval '30 days' GROUP BY s.agent ORDER BY n DESC LIMIT 30`,
+      );
+      return { hours, ...kpis, tokens: Number(kpis?.tokens ?? 0), people, agents };
+    });
+
     api.get<{ Params: { id: string } }>("/api/executions/:id", async (req, reply) => {
+      if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return reply.code(404).send({ error: "não encontrada" });
       const exec = await one(
-        `SELECT e.*, u.name AS user_name, u.phone FROM executions e LEFT JOIN users u ON u.id = e.user_id WHERE e.id = $1`,
+        `SELECT e.*, u.name AS user_name, u.phone, c.channel FROM executions e LEFT JOIN users u ON u.id = e.user_id
+           LEFT JOIN conversations c ON c.id = e.conversation_id WHERE e.id = $1`,
         [req.params.id],
       );
       if (!exec) return reply.code(404).send({ error: "não encontrada" });
       const steps = await many("SELECT * FROM execution_steps WHERE execution_id = $1 ORDER BY id", [req.params.id]);
-      return { ...exec, steps };
+      // agentes criados para a pessoa (c_<slug>): nome e carinha para a linha do tempo
+      const clientAgents = exec.user_id
+        ? await many("SELECT 'c_' || slug AS id, name, persona, face FROM client_agents WHERE user_id = $1", [exec.user_id])
+        : [];
+      return { ...exec, steps, client_agents: clientAgents };
     });
 
     api.delete<{ Querystring: { older_than_days?: string } }>("/api/executions", async (req) => {
@@ -926,7 +969,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
 
     // ---------- WhatsApp embutido (Baileys) ----------
     api.get("/api/whatsapp", async () => {
-      const session = await one("SELECT status, qr, pairing_code, phone, name, last_error, updated_at, heartbeat_at, last_message_at, COALESCE(heartbeat_at > now() - interval '60 seconds', false) AS listening FROM wa_sessions WHERE id = $1", [SESSION_ID]);
+      const session = await one("SELECT status, qr, pairing_code, phone, name, last_error, updated_at, heartbeat_at, last_message_at, down_since, COALESCE(heartbeat_at > now() - interval '60 seconds', false) AS listening FROM wa_sessions WHERE id = $1", [SESSION_ID]);
       return { provider: config.WHATSAPP_PROVIDER, session };
     });
     api.post<{ Body: { phone?: string } }>("/api/whatsapp/connect", async (req, reply) => {
