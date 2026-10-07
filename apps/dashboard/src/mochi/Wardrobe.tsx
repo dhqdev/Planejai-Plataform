@@ -83,7 +83,7 @@ function Wardrobe({ onClose }: { onClose: () => void }) {
       <div className="mochi-grid">
         {MOODS.map((m) => (
           <MochiTile key={m.id} label={m.label} active={preview === m.id} onClick={() => { haptic(6); setPreview(m.id); }}>
-            <Mochi size={64} mood={m.id} outfit={outfit} still={preview !== m.id} />
+            <Mochi size={64} mood={m.id} outfit={{ ...outfit, eyes: undefined }} still={preview !== m.id} />
           </MochiTile>
         ))}
       </div>
