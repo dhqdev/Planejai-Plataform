@@ -1,12 +1,17 @@
 /* Service worker do Planejai: abre instantâneo e funciona com internet ruim.
    - arquivos do app (/assets, ícones): cache primeiro (têm hash no nome, nunca mudam)
    - páginas: rede primeiro, cai para o app em cache se estiver offline
-   - /api e /webhooks: nunca passam pelo cache (dados sempre frescos e privados) */
+   - /api, /webhooks e /version.json: nunca passam pelo cache (dados sempre frescos e privados)
+   O VERSION abaixo é trocado a cada build (vite.config.ts), então cada deploy instala um SW novo. */
 const VERSION = "planejai-v2";
 const SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener("message", (e) => {
+  if (e.data === "skip-waiting") self.skipWaiting();
 });
 
 self.addEventListener("activate", (e) => {
@@ -19,7 +24,7 @@ self.addEventListener("fetch", (e) => {
   const req = e.request;
   const url = new URL(req.url);
   if (req.method !== "GET" || url.origin !== location.origin) return;
-  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/webhooks/") || url.pathname === "/health") return;
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/webhooks/") || url.pathname === "/health" || url.pathname === "/version.json") return;
 
   if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/icons/")) {
     e.respondWith(

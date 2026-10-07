@@ -4,9 +4,11 @@ import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import "./styles.css";
 import { installTouchFeedback, registerServiceWorker } from "./touch";
+import { watchForUpdates } from "./update";
 
 installTouchFeedback();
 registerServiceWorker();
+watchForUpdates();
 
 try {
   const saved = localStorage.getItem("pj-theme");

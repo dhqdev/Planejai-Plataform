@@ -31,11 +31,15 @@ interface WidgetDef {
 
 const SIZE_LABEL: Record<Size, string> = { s: "Pequeno", m: "Médio", l: "Grande", xl: "Largura toda" };
 
+/** Cada número do painel ganha uma cor da paleta (sempre a mesma para o mesmo indicador). */
+const TONES = ["#FF7A1A", "#FF4458", "#E23382", "#B830C8", "#8B2BE2", "#5B45E8", "#2F7BEA", "#16A3A3"];
+const tone = (key: string) => TONES[[...key].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % TONES.length]!;
+
 function Num({ label, value, sub, icon }: { label: string; value: ReactNode; sub?: ReactNode; icon: string }) {
   return (
-    <div className="card card-pad stat" style={{ height: "100%" }}>
+    <div className="card card-pad stat" style={{ height: "100%", ["--c" as any]: tone(label) }}>
       <div className="label">
-        <Icon name={icon} size={14} /> {label}
+        <span className="tone-ico"><Icon name={icon} size={14} /></span> {label}
       </div>
       <div className="value">{value}</div>
       {sub && <div className="sub">{sub}</div>}
@@ -46,8 +50,8 @@ function Num({ label, value, sub, icon }: { label: string; value: ReactNode; sub
 function Box({ title, icon, to, children }: { title: string; icon: string; to?: string; children: ReactNode }) {
   return (
     <div className="card card-pad" style={{ height: "100%" }}>
-      <div className="widget-head">
-        <Icon name={icon} size={16} />
+      <div className="widget-head" style={{ ["--c" as any]: tone(title) }}>
+        <span className="tone-ico"><Icon name={icon} size={15} /></span>
         <h3>{title}</h3>
         <span className="spacer" />
         {to && (
@@ -489,7 +493,7 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
               <button className="btn" onClick={() => setEditing(true)}>
                 <Icon name="layout" size={16} /> Editar<span className="hide-phone"> painel</span>
               </button>
-              <button className="btn btn-primary phone-only" onClick={() => setModal("invite")}>
+              <button className="btn btn-brand phone-only" onClick={() => setModal("invite")}>
                 <Icon name="user-plus" size={16} /> Convidar
               </button>
             </div>

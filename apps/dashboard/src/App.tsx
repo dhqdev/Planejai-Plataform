@@ -1,11 +1,25 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
 import { Loading, Modal } from "./components";
 import { AuthPage } from "./pages/Login";
 import { canInstall, haptic, isIos, isStandalone, onInstallAvailable, promptInstall } from "./touch";
 
-// Cada tela é carregada só quando abre: o app inicia leve no celular
+// Cada tela é carregada só quando abre (o app inicia leve no celular) e, logo depois, baixada em segundo plano
+const PAGE_LOADERS = [
+  () => import("./pages/Dashboard"),
+  () => import("./pages/Finance"),
+  () => import("./pages/Calendar"),
+  () => import("./pages/Watches"),
+  () => import("./pages/Invites"),
+  () => import("./pages/Team"),
+  () => import("./pages/Memories"),
+  () => import("./pages/Profile"),
+  () => import("./pages/Agents"),
+  () => import("./pages/Clients"),
+  () => import("./pages/Executions"),
+  () => import("./pages/Queues"),
+];
 const AgentsPage = lazy(() => import("./pages/Agents").then((m) => ({ default: m.AgentsPage })));
 const ClientsPage = lazy(() => import("./pages/Clients").then((m) => ({ default: m.ClientsPage })));
 const DashboardPage = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.DashboardPage })));
@@ -24,7 +38,9 @@ const QueuesPage = lazy(() => import("./pages/Queues").then((m) => ({ default: m
 const TeamPage = lazy(() => import("./pages/Team").then((m) => ({ default: m.TeamPage })));
 const CustomTabPage = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.CustomTabPage })));
 const WhatsAppPage = lazy(() => import("./pages/WhatsApp").then((m) => ({ default: m.WhatsAppPage })));
-import { useApi } from "./hooks";
+import { clearApiCache, prefetchApi, useApi } from "./hooks";
+import { PullToRefresh } from "./PullToRefresh";
+import { applyUpdate, onUpdateAvailable } from "./update";
 import { Icon, Logo } from "./icons";
 
 export interface Me {
@@ -109,6 +125,25 @@ export function App() {
   const [menu, setMenu] = useState(false);
   const [installable, setInstallable] = useState(canInstall());
   const loc = useLocation();
+  const mainRef = useRef<HTMLElement>(null);
+  const [update, setUpdate] = useState(false);
+  useEffect(() => onUpdateAvailable(setUpdate), []);
+  // trocou de tela: começa do topo
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [loc.pathname]);
+  // conta nova: nada do cache da anterior; depois esquenta as telas que mais se abre e baixa o código delas
+  useEffect(() => {
+    clearApiCache();
+    if (!me) return;
+    const d = new Date();
+    const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const t = setTimeout(() => {
+      ["/api/me/overview", `/api/finance?month=${month}`, "/api/watches", "/api/me/dashboard"].forEach(prefetchApi);
+      for (const load of PAGE_LOADERS) load().catch(() => {});
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [me?.id]);
   const nav = useNavigate();
   useEffect(() => onInstallAvailable(() => setInstallable(true)), []);
   const tabs = useApi<AppTabs>(me ? `/api/me/tabs?for=${me.id}` : null);
@@ -179,7 +214,8 @@ export function App() {
           </div>
         </div>
       </aside>
-      <main className="main">
+      <main className="main" ref={mainRef}>
+        <PullToRefresh target={mainRef} />
         <Suspense fallback={<Loading />}>
         <div className="route-fade" key={loc.pathname}>
         <Routes>
@@ -214,6 +250,13 @@ export function App() {
         </div>
         </Suspense>
       </main>
+
+      {update && (
+        <div className="update-pill" role="status">
+          <span>Nova versão do Planejai</span>
+          <button className="btn btn-sm btn-brand" onClick={() => { haptic(10); void applyUpdate(); }}>Atualizar</button>
+        </div>
+      )}
 
       <nav className="tabbar" aria-label="Navegação">
         {(isSuper ? SUPER_TABS : ADMIN_TABS).map((t) => (

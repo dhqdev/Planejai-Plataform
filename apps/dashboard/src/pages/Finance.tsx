@@ -158,8 +158,8 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                 const prev = prevCat.get(c.label);
                 const d = prev != null ? c.value - prev : null;
                 return (
-                  <button key={c.label} className={`card fin-cat ${cat === c.label ? "active" : ""} ${cat && cat !== c.label ? "dim" : ""}`} onClick={() => { haptic(5); setCat(cat === c.label ? null : c.label); }}>
-                    <span className="fin-cat-ico" style={{ ["--c" as any]: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}><Icon name={CAT_ICON[c.label] ?? "hash"} size={18} /></span>
+                  <button key={c.label} style={{ ["--c" as any]: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} className={`card fin-cat ${cat === c.label ? "active" : ""} ${cat && cat !== c.label ? "dim" : ""}`} onClick={() => { haptic(5); setCat(cat === c.label ? null : c.label); }}>
+                    <span className="fin-cat-ico"><Icon name={CAT_ICON[c.label] ?? "hash"} size={18} /></span>
                     <span className="fin-cat-name">{c.label}</span>
                     <strong className="fin-cat-value">{brl(c.value)}</strong>
                     <span className="fin-cat-bar"><i style={{ width: `${expenses ? (c.value / expenses) * 100 : 0}%` }} /></span>
