@@ -10,6 +10,7 @@ async function main() {
   const app = await buildServer();
   const log = app.log;
 
+  await waitForDatabase(log);
   await migrate((m) => log.info(m));
   if (!config.OPENROUTER_API_KEY) log.warn("OPENROUTER_API_KEY não configurada: o agente não vai responder");
   if (!config.WEBHOOK_SECRET) log.warn("WEBHOOK_SECRET vazio: qualquer um que souber a URL pode enviar mensagens falsas ao webhook");
@@ -33,6 +34,23 @@ async function main() {
   };
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGINT", () => void shutdown("SIGINT"));
+}
+
+/**
+ * No Swarm o app e o worker podem subir antes do Postgres aceitar conexões (atualização da stack,
+ * reinício do servidor). Espera o banco em vez de sair com erro e marcar a atualização como falha.
+ */
+async function waitForDatabase(log: { warn: (msg: string) => void }) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await pool.query("SELECT 1");
+      return;
+    } catch (err) {
+      if (attempt >= 45) throw err;
+      log.warn(`banco ainda não respondeu (${(err as Error).message}); tentando de novo em 2s`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
 }
 
 main().catch((err) => {
