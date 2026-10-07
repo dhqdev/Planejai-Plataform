@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom";
 import { AgentFace, CORE_FACES } from "./faces";
 import { Icon } from "./icons";
+import { MochiLoading } from "./mochi/Loading";
 
 export function PageHead({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
@@ -161,7 +162,7 @@ export function Json({ value }: { value: unknown }) {
 }
 
 export function Loading() {
-  return <div className="empty">Carregando…</div>;
+  return <MochiLoading />;
 }
 
 export function ErrorBox({ error }: { error: string | null }) {

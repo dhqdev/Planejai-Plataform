@@ -6,12 +6,23 @@ export class ApiError extends Error {
 
 export async function api<T = any>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const { json, ...rest } = init;
-  const res = await fetch(path, {
-    credentials: "include",
-    ...rest,
-    headers: { ...(json !== undefined ? { "Content-Type": "application/json" } : {}), ...(rest.headers ?? {}) },
-    body: json !== undefined ? JSON.stringify(json) : rest.body,
-  });
+  // o Mochi reage quando algo é salvo (trabalhando, pronto ou erro)
+  const loud = !!rest.method && rest.method !== "GET" && !(rest.headers as Record<string, string> | undefined)?.["x-pj-quiet"];
+  const mood = (phase: string) => loud && window.dispatchEvent(new CustomEvent("pj:api", { detail: { phase } }));
+  mood("start");
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      credentials: "include",
+      ...rest,
+      headers: { ...(json !== undefined ? { "Content-Type": "application/json" } : {}), ...(rest.headers ?? {}) },
+      body: json !== undefined ? JSON.stringify(json) : rest.body,
+    });
+  } catch (e) {
+    mood("error");
+    throw e;
+  }
+  mood(res.ok ? "ok" : "error");
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (res.status === 401 && !path.startsWith("/api/auth")) {

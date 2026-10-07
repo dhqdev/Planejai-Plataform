@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Me } from "../App";
 import { ErrorBox } from "../components";
-import { Logo } from "../icons";
+import { Mochi } from "../mochi/Mochi";
 
 interface Invite {
   name: string | null;
@@ -68,7 +68,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
     <div className="auth">
       <section className="auth-hero">
         <div className="brand" style={{ padding: 0 }}>
-          <Logo size={34} />
+          <Mochi size={44} crop mood={busy ? "working" : "greeting"} />
           planejai
         </div>
         <div>
@@ -85,7 +85,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
       </section>
       <section className="auth-form">
         <form className="card" onSubmit={submit}>
-          <div className="auth-logo"><Logo size={44} /></div>
+          <div className="auth-logo"><Mochi size={96} crop mood={error ? "error" : busy ? "working" : done ? "finished" : "greeting"} follow /></div>
           {done ? (
             <>
               <h1>Quase lá</h1>

@@ -1,0 +1,154 @@
+/* Mochi: animações do mascote (só CSS, roda leve no celular) */
+.mochi { display: block; overflow: visible; color: var(--muted, #888); flex-shrink: 0; }
+.mochi * { transform-box: fill-box; transform-origin: center; }
+.mochi .m-move, .mochi .m-pop, .mochi .m-squish { transform-box: view-box; transform-origin: 60px 106px; }
+.mochi .m-look { transition: transform 0.18s ease-out; }
+.mochi .m-eyes { transition: transform 0.4s ease; }
+.mochi .m-tint-stop { transition: stop-color 0.5s ease; }
+
+/* respiração / flutuar */
+.mochi .m-move { animation: m-bob 3.4s ease-in-out infinite; }
+.mochi .m-shadow { animation: m-shadow 3.4s ease-in-out infinite; }
+.mochi .m-pop { animation: m-change 0.42s cubic-bezier(.3, 1.6, .5, 1) both; }
+.mochi .m-blink { animation: m-blink 4.8s infinite; }
+
+@keyframes m-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes m-shadow { 0%, 100% { transform: scale(1); opacity: 0.22; } 50% { transform: scale(0.88); opacity: 0.15; } }
+@keyframes m-change { 0% { transform: scale(0.94, 1.06); } 60% { transform: scale(1.04, 0.96); } 100% { transform: none; } }
+@keyframes m-blink { 0%, 93%, 100% { transform: scaleY(1); } 95.5% { transform: scaleY(0.12); } }
+
+/* trabalhando: pulinhos rápidos */
+.mochi.m-working .m-move { animation: m-hopsmall 0.9s ease-in-out infinite; }
+.mochi.m-working .m-shadow { animation: m-shadow 0.9s ease-in-out infinite; }
+@keyframes m-hopsmall { 0%, 100% { transform: translateY(0) scale(1.03, 0.97); } 50% { transform: translateY(-4px) scale(0.98, 1.02); } }
+
+/* digitando (badge de três pontinhos) */
+.mochi .m-typing { animation: m-typing 1.1s ease-in-out infinite; }
+@keyframes m-typing { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-1px); } }
+.mochi .m-badge { animation: m-badge-in 0.35s cubic-bezier(.3, 1.6, .5, 1) both; }
+@keyframes m-badge-in { from { transform: scale(0); } to { transform: scale(1); } }
+
+/* pensando: inclina devagar */
+.mochi.m-thinking .m-squish { animation: m-tilt 3s ease-in-out infinite; }
+@keyframes m-tilt { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+
+/* pesquisando: olhos procuram de um lado para o outro */
+.mochi.m-searching .m-eyes { animation: m-scan 2s ease-in-out infinite; }
+@keyframes m-scan { 0%, 100% { transform: translateX(-3.5px); } 45%, 55% { transform: translateX(3.5px); } }
+
+/* pergunta: cabeça de lado */
+.mochi.m-question .m-squish { transform: rotate(-6deg); }
+
+/* pronto: pulo feliz */
+.mochi.m-finished .m-move { animation: m-jump 1.3s cubic-bezier(.4, 0, .4, 1) infinite; }
+.mochi.m-finished .m-shadow { animation: m-shadow-jump 1.3s cubic-bezier(.4, 0, .4, 1) infinite; }
+@keyframes m-jump {
+  0%, 100% { transform: translateY(0) scale(1.06, 0.94); }
+  15% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-9px) scale(0.97, 1.03); }
+  65% { transform: translateY(0) scale(1.05, 0.95); }
+  80% { transform: translateY(0) scale(1); }
+}
+@keyframes m-shadow-jump { 0%, 15%, 65%, 100% { transform: scale(1); } 40% { transform: scale(0.75); opacity: 0.12; } }
+.mochi .m-twinkle { animation: m-twinkle 1.6s ease-in-out infinite; }
+@keyframes m-twinkle { 0%, 100% { transform: scale(0.3) rotate(0); opacity: 0; } 50% { transform: scale(1) rotate(45deg); opacity: 1; } }
+
+/* erro: treme */
+.mochi.m-error .m-move { animation: m-shake 2.2s ease-in-out infinite; }
+@keyframes m-shake { 0%, 30%, 100% { transform: translateX(0); } 5%, 15%, 25% { transform: translateX(-2.5px); } 10%, 20% { transform: translateX(2.5px); } }
+
+/* no limite: murcha */
+.mochi.m-ratelimit .m-squish { animation: m-droop 3.6s ease-in-out infinite; }
+@keyframes m-droop { 0%, 100% { transform: scale(1.03, 0.96); } 50% { transform: scale(1.06, 0.92); } }
+
+/* dormindo e bocejo: respira devagar e solta zzz */
+.mochi.m-sleeping .m-move { animation: none; }
+.mochi.m-sleeping .m-squish, .mochi.m-yawn .m-squish { animation: m-breathe 3.6s ease-in-out infinite; }
+.mochi.m-sleeping .m-blink, .mochi.m-yawn .m-blink { animation: none; }
+@keyframes m-breathe { 0%, 100% { transform: scale(1.03, 0.97); } 50% { transform: scale(0.99, 1.02); } }
+.mochi .m-zzz text { animation: m-z 2.7s ease-in infinite; opacity: 0; }
+.mochi .m-zzz text:nth-child(2) { animation-delay: 0.9s; }
+.mochi .m-zzz text:nth-child(3) { animation-delay: 1.8s; }
+@keyframes m-z { 0% { opacity: 0; transform: translate(0, 4px) scale(0.6); } 30% { opacity: 0.9; } 100% { opacity: 0; transform: translate(4px, -8px) scale(1.1); } }
+.mochi .m-yawn { animation: m-yawn 3.6s ease-in-out infinite; }
+@keyframes m-yawn { 0%, 100% { transform: scale(0.4); } 40%, 60% { transform: scale(1.15); } }
+
+/* tonto: olhos em espiral girando e corpo balançando */
+.mochi .m-spin { animation: m-spin 1.3s linear infinite; }
+@keyframes m-spin { to { transform: rotate(360deg); } }
+.mochi.m-dizzy .m-squish { animation: m-wobble 1.6s ease-in-out infinite; }
+@keyframes m-wobble { 0%, 100% { transform: rotate(-5deg) translateX(-1px); } 50% { transform: rotate(5deg) translateX(1px); } }
+
+/* oi: mãozinha acenando */
+.mochi .m-nub-r { transform-box: view-box; transform-origin: 96px 78px; }
+.mochi.m-greeting .m-nub-r { animation: m-wave 1s ease-in-out infinite; }
+@keyframes m-wave { 0%, 100% { transform: rotate(-14deg); } 50% { transform: rotate(18deg); } }
+.mochi .m-nub { animation: m-nub-in 0.4s cubic-bezier(.3, 1.6, .5, 1) both; }
+@keyframes m-nub-in { from { opacity: 0; transform: scale(0.2); } }
+
+/* amor: coração batendo e corações subindo */
+.mochi .m-beat { animation: m-beat 0.9s ease-in-out infinite; }
+@keyframes m-beat { 0%, 100% { transform: scale(1); } 25% { transform: scale(1.25); } 45% { transform: scale(0.95); } }
+.mochi .m-float-heart { animation: m-rise 2.4s ease-out infinite; opacity: 0; }
+@keyframes m-rise { 0% { opacity: 0; transform: translateY(6px) scale(0.5); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px) scale(1.1); } }
+
+/* surpreso: susto */
+.mochi.m-surprised .m-move { animation: m-startle 2.6s ease-out infinite; }
+@keyframes m-startle { 0% { transform: translateY(0) scale(1); } 8% { transform: translateY(-6px) scale(0.95, 1.07); } 20%, 100% { transform: translateY(0) scale(1); } }
+
+/* orgulhoso: estrelas girando, peito estufado */
+.mochi .m-twirl { animation: m-twirl 3s ease-in-out infinite; }
+@keyframes m-twirl { 0%, 100% { transform: rotate(-12deg) scale(1); } 50% { transform: rotate(12deg) scale(1.12); } }
+.mochi.m-proud .m-squish { transform: scale(1.03, 1.0); }
+
+/* bravinho: olha de canto */
+.mochi.m-annoyed .m-eyes { animation: m-side 4s ease-in-out infinite; }
+@keyframes m-side { 0%, 100% { transform: translateX(0); } 30%, 70% { transform: translateX(2.5px); } }
+
+/* enviando: cartãozinho sobe */
+.mochi .m-card { animation: m-card 1.6s ease-in-out infinite; }
+@keyframes m-card { 0% { opacity: 0; transform: translateY(8px); } 30%, 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-8px); } }
+
+/* dançando */
+.mochi.m-dancing .m-move { animation: m-dance 1s ease-in-out infinite; }
+.mochi.m-dancing .m-nub-l { animation: m-wave 0.5s ease-in-out infinite alternate; transform-box: view-box; transform-origin: 26px 92px; }
+.mochi.m-dancing .m-nub-r { animation: m-wave 0.5s ease-in-out infinite alternate-reverse; }
+@keyframes m-dance { 0%, 100% { transform: rotate(-8deg) translateX(-3px); } 25% { transform: rotate(0) translateY(-4px); } 50% { transform: rotate(8deg) translateX(3px); } 75% { transform: rotate(0) translateY(-4px); } }
+
+/* miniaturas paradas */
+.mochi.m-still *, .mochi.m-still { animation: none !important; }
+.mochi.m-still .m-float-heart, .mochi.m-still .m-twinkle, .mochi.m-still .m-zzz text, .mochi.m-still .m-card { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mochi *, .mochi { animation: none !important; transition: none !important; }
+  .mochi .m-float-heart, .mochi .m-twinkle, .mochi .m-zzz text, .mochi .m-card { opacity: 1; }
+}
+
+/* ---------- onde ele aparece ---------- */
+.mochi-badge { appearance: none; border: 0; background: none; padding: 0; margin: -4px 0; cursor: pointer; display: grid; place-items: center; color: var(--muted); -webkit-tap-highlight-color: transparent; transition: transform 0.15s; }
+.mochi-badge:active { transform: scale(0.92); }
+.mochi-loading { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 36px 16px; color: var(--muted); font-size: 13px; }
+
+/* ---------- guarda-roupa ---------- */
+.mochi-stage {
+  position: relative; display: grid; place-items: center; padding: 18px 0 10px; margin: -16px -16px 14px;
+  background: radial-gradient(60% 70% at 50% 45%, #2a2a30 0%, #141416 70%, #0e0e10 100%);
+  color: #9a9aa4; overflow: hidden;
+}
+.mochi-stage::after { content: ""; position: absolute; inset: auto 0 0; height: 1px; background: var(--border); }
+.mochi-stage-label { text-align: center; color: #d8d8de; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; margin-top: -4px; }
+.mochi-stage-label small { display: block; text-align: center; font-weight: 450; color: #8d8d96; font-size: 11.5px; }
+.mochi-section { margin: 14px 0 8px; font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.mochi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px; }
+@media (max-width: 767px) { .mochi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; } .mochi-tile { border-radius: 14px; } .mochi-tile-label { font-size: 9.5px; } }
+.mochi-tile {
+  appearance: none; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px 8px; border-radius: 16px; cursor: pointer;
+  border: 1px solid #26262b; background: linear-gradient(180deg, #1c1c20, #141417); color: #9a9aa4; font: inherit; transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+.mochi-tile:hover { border-color: #3a3a42; }
+.mochi-tile:active { transform: scale(0.95); }
+.mochi-tile.active { border-color: #d8d8de; box-shadow: 0 0 0 1px #d8d8de inset, 0 6px 18px rgba(0, 0, 0, 0.25); }
+.mochi-tile-art { display: grid; place-items: center; height: 62px; }
+.mochi-tile-label { font-family: var(--mono); font-size: 10.5px; color: #a6a6b0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.mochi-tile.active .mochi-tile-label { color: #f1f1f4; }
+.mochi-none { font-size: 22px; color: #55555e; height: 62px; display: grid; place-items: center; }

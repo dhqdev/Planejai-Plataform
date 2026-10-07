@@ -42,6 +42,8 @@ import { clearApiCache, prefetchApi, useApi } from "./hooks";
 import { PullToRefresh } from "./PullToRefresh";
 import { applyUpdate, onUpdateAvailable } from "./update";
 import { Icon, Logo } from "./icons";
+import { openWardrobe } from "./mochi/state";
+import { MochiButton, MochiIcon, WardrobeHost } from "./mochi/Wardrobe";
 
 export interface Me {
   id: string;
@@ -167,14 +169,14 @@ export function App() {
   return (
     <div className="layout">
       <header className="topbar">
-        <Logo size={28} />
+        <MochiButton size={38} />
         <strong className="topbar-title">{titleFor(loc.pathname, NAV)}</strong>
         <span className="spacer" />
         <button className="icon-btn" onClick={toggleTheme} aria-label="Trocar tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button>
       </header>
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-logo"><Logo size={26} /></div>
+          <MochiButton size={42} />
           <div>
             planejai
             <small>{isSuper ? "Super admin" : "Painel"}</small>
@@ -243,6 +245,8 @@ export function App() {
         </Suspense>
       </main>
 
+      <WardrobeHost />
+
       {update && (
         <div className="update-pill" role="status">
           <span>Nova versão do Planejai</span>
@@ -295,6 +299,10 @@ export function App() {
                 <span>{item.short ?? item.label}</span>
               </button>
             ))}
+            <button className="more-tile" onClick={() => { setMenu(false); openWardrobe(); }}>
+              <MochiIcon size={40} />
+              <span>Mochi</span>
+            </button>
             <button className="more-tile" onClick={toggleTheme}>
               <Icon name={theme === "dark" ? "sun" : "moon"} size={26} />
               <span>{theme === "dark" ? "Tema claro" : "Tema escuro"}</span>

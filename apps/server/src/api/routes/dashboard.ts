@@ -273,6 +273,26 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       return { ok: true };
     });
 
+    // ---------- Mochi, o mascote: roupinha escolhida por cada conta ----------
+    base.get("/api/me/mascot", async (req) => {
+      if (req.account.owner) return (await one("SELECT value FROM settings WHERE key = 'owner_mascot'"))?.value ?? null;
+      return (await one("SELECT mascot FROM accounts WHERE id = $1", [req.account.id]))?.mascot ?? null;
+    });
+    base.put<{ Body: { outfit?: Record<string, unknown> } }>("/api/me/mascot", async (req, reply) => {
+      const raw = req.body?.outfit;
+      if (!raw || typeof raw !== "object") return reply.code(400).send({ error: "roupinha inválida" });
+      const outfit: Record<string, string> = {};
+      for (const slot of ["head", "eyes", "neck", "costume"]) {
+        const v = (raw as Record<string, unknown>)[slot];
+        if (typeof v === "string" && /^[a-z_]{1,24}$/.test(v)) outfit[slot] = v;
+      }
+      const value = JSON.stringify({ outfit });
+      if (req.account.owner) {
+        await query("INSERT INTO settings (key, value, updated_at) VALUES ('owner_mascot', $1, now()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = now()", [value]);
+      } else await query("UPDATE accounts SET mascot = $2 WHERE id = $1", [req.account.id, value]);
+      return { ok: true };
+    });
+
     // ---------- Abas do app: essencial para todo mundo, o resto liberado pela reunião noturna ----------
     base.get("/api/me/tabs", async (req) => {
       if (req.account.role === "superadmin") return { all: true, essential: ESSENTIAL, modules: Object.keys(OPTIONAL), custom: [], catalog: OPTIONAL };
