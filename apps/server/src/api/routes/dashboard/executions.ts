@@ -109,6 +109,7 @@ export function executionRoutes(api: FastifyInstance) {
     const kpis = await one(
       `SELECT COUNT(*)::int AS total,
               COUNT(*) FILTER (WHERE status = 'error')::int AS errors,
+              COUNT(*) FILTER (WHERE status = 'partial')::int AS partial,
               COUNT(*) FILTER (WHERE status = 'running')::int AS running,
               COALESCE(AVG(duration_ms) FILTER (WHERE status <> 'running'), 0)::int AS avg_ms,
               COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) FILTER (WHERE duration_ms IS NOT NULL), 0)::int AS p95_ms,

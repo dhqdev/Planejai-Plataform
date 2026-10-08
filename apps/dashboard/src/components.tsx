@@ -21,6 +21,7 @@ export function Status({ status }: { status: string }) {
   const map: Record<string, [string, string]> = {
     success: ["badge-ok", "Sucesso"],
     error: ["badge-err", "Erro"],
+    partial: ["badge-warn", "Parcial"],
     running: ["badge-warn", "Rodando"],
     active: ["badge-ok", "Ativo"],
     pending: ["badge-warn", "Aguardando aprovação"],
@@ -31,7 +32,7 @@ export function Status({ status }: { status: string }) {
     failed: ["badge-err", "Falhou"],
   };
   const [cls, label] = map[status] ?? ["", status];
-  const dot = status === "success" || status === "active" || status === "done" ? "dot-ok" : status === "error" || status === "failed" ? "dot-err" : status === "running" ? "dot-warn" : "";
+  const dot = status === "success" || status === "active" || status === "done" ? "dot-ok" : status === "error" || status === "failed" ? "dot-err" : status === "running" || status === "partial" ? "dot-warn" : "";
   return (
     <span className={`badge ${cls}`}>
       {dot && <span className={`dot ${dot}`} />}

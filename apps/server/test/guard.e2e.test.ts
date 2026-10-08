@@ -91,7 +91,24 @@ describe.skipIf(!enabled)("travas de segurança (e2e)", () => {
     expect(texts.join(" ")).toContain("passou do meu limite de 1 s");
     const steps = await db.many("SELECT name FROM execution_steps WHERE execution_id = $1", [r.executionId]);
     expect(steps.map((s) => s.name)).toContain("trava: tempo máximo");
+    // respondeu, mas pela metade: em Execuções aparece "Parcial" com o motivo, não "Sucesso"
+    const exec = await db.one("SELECT status, error FROM executions WHERE id = $1", [r.executionId]);
+    expect(exec.status).toBe("partial");
+    expect(exec.error).toMatch(/tempo máximo/);
     await settings.saveSettings({ maxExecutionMinutes: 8 });
+  });
+
+  it("execução que morreu com o processo não fica 'rodando' para sempre", async () => {
+    const old = await db.one("INSERT INTO executions (trigger, started_at) VALUES ('message', now() - interval '1 hour') RETURNING id");
+    const fresh = await db.one("INSERT INTO executions (trigger) VALUES ('message') RETURNING id");
+    await db.query("INSERT INTO execution_steps (execution_id, agent, type, name) VALUES ($1, 'cto', 'llm', 'x')", [old.id]);
+    const { closeOrphanRuns } = await import("../src/maintenance.js");
+    await closeOrphanRuns();
+    const rows = await db.many("SELECT id, status, error FROM executions WHERE id = ANY($1)", [[old.id, fresh.id]]);
+    expect(rows.find((x) => x.id === old.id)).toMatchObject({ status: "error", error: expect.stringMatching(/reiniciou/) });
+    expect(rows.find((x) => x.id === fresh.id)?.status).toBe("running");
+    expect((await db.one("SELECT status FROM execution_steps WHERE execution_id = $1", [old.id])).status).toBe("error");
+    await db.query("DELETE FROM executions WHERE id = ANY($1)", [[old.id, fresh.id]]);
   });
 
   it("limite de ações corta o loop de ferramentas e o time responde com o que tem", async () => {
@@ -101,6 +118,7 @@ describe.skipIf(!enabled)("travas de segurança (e2e)", () => {
     expect(texts).toEqual(["parei no limite"]);
     const tools = await db.many("SELECT status FROM execution_steps WHERE execution_id = $1 AND type = 'tool'", [r.executionId]);
     expect(tools.filter((t) => t.status === "success").length).toBe(5);
+    expect((await db.one("SELECT status FROM executions WHERE id = $1", [r.executionId])).status).toBe("partial");
     await settings.saveSettings({ maxToolCalls: 40 });
   });
 

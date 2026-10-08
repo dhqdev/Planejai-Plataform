@@ -44,7 +44,7 @@ interface RedisStats {
 interface Overview {
   generatedAt: string;
   processes: Proc[];
-  machine: { host: string; platform: string; cpus: number; load: number[]; memTotal: number; memFree: number; uptime: number };
+  machine: { host: string; platform: string; cpus: number; load: number[]; memTotal: number; memFree: number; uptime: number; cpuPct?: number | null };
   disk: { total: number; used: number; free: number } | null;
   postgres: {
     size: number;
@@ -262,7 +262,7 @@ export function ServerPage() {
           meter={<Meter value={ram} total={ramLimit ?? m.memTotal} label="Memória do app" />}
           sub={ramLimit ? `de ${bytes(ramLimit)} de limite` : `de ${bytes(m.memTotal)} da máquina`}
         />
-        <Kpi label="Processador" value={`${nf(cpu, 1)}%`} meter={<Meter value={cpu} total={m.cpus * 100} label="Processador" />} sub={`de ${m.cpus} ${m.cpus === 1 ? "núcleo" : "núcleos"}, carga ${nf(m.load[0] ?? 0, 2)}`} />
+        <Kpi label="Processador do app" value={`${nf(cpu, 1)}%`} meter={<Meter value={cpu} total={m.cpus * 100} label="Processador" />} sub={`de ${m.cpus} ${m.cpus === 1 ? "núcleo" : "núcleos"}, carga ${nf(m.load[0] ?? 0, 2)}`} />
         <Kpi label="Banco de dados" value={bytes(pg.size)} meter={<Meter value={pg.connections} total={pg.max_connections} label="Conexões" />} sub={`${pg.connections} de ${pg.max_connections} conexões`} />
         <Kpi
           label="Redis"
@@ -320,6 +320,13 @@ export function ServerPage() {
               <strong className="mono-num">{bytes(m.memTotal - m.memFree)} <span className="muted">de {bytes(m.memTotal)}</span></strong>
               <Meter value={m.memTotal - m.memFree} total={m.memTotal} label="Memória da máquina" />
             </div>
+            {m.cpuPct != null && (
+              <div className="srv-bar-row">
+                <span title="Uso de CPU da máquina toda, com navegador, banco e Redis">Processador da máquina</span>
+                <strong className="mono-num">{nf(m.cpuPct, 1)}%</strong>
+                <Meter value={m.cpuPct} total={100} label="Processador da máquina" />
+              </div>
+            )}
             <div className="srv-proc-meta muted mono-num">
               <span>{m.cpus} {m.cpus === 1 ? "núcleo" : "núcleos"}</span>
               <span title="carga média em 1, 5 e 15 minutos">carga {m.load.map((l) => nf(l, 2)).join(" ")}</span>

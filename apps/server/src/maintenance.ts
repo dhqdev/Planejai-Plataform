@@ -1,6 +1,7 @@
 import { summarizeConversation } from "./agent/orchestrator.js";
 import { config } from "./config.js";
 import { many, query } from "./db/pool.js";
+import { getSettings } from "./settings.js";
 import { redisAlive } from "./shortmem.js";
 
 /**
@@ -49,6 +50,7 @@ export async function purgeOld(log?: { info: (...a: any[]) => void; error: (...a
      UPDATE execution_steps s SET input = NULL, output = NULL FROM old WHERE s.execution_id = old.id`,
     [config.LOG_CONTENT_HOURS],
   );
+  await closeOrphanRuns();
   const execs = await query("DELETE FROM executions WHERE started_at < now() - make_interval(days => $1)", [config.EXECUTION_RETENTION_DAYS]);
   const files = await query("DELETE FROM media_files WHERE created_at < now() - make_interval(days => $1)", [config.EXECUTION_RETENTION_DAYS]);
   // lembrete que já passou ou foi cancelado não serve mais para nada
@@ -56,4 +58,22 @@ export async function purgeOld(log?: { info: (...a: any[]) => void; error: (...a
   const out = { messages: msgs.rowCount ?? 0, logSteps: scrubbed.rowCount ?? 0, executions: execs.rowCount ?? 0, files: files.rowCount ?? 0, reminders: rems.rowCount ?? 0 };
   log?.info(out, "limpeza de dados antigos");
   return out;
+}
+
+/**
+ * Execução que ficou "rodando" depois do prazo máximo morreu junto com o processo (deploy, queda):
+ * sem isso ela aparecia para sempre como "rodando agora" em Execuções e fora das médias.
+ */
+export async function closeOrphanRuns() {
+  const { maxExecutionMinutes } = await getSettings();
+  const r = await query(
+    `WITH dead AS (
+       UPDATE executions SET status = 'error', error = 'Interrompida: o processo reiniciou no meio (deploy ou queda)', finished_at = now(),
+              duration_ms = LEAST((EXTRACT(EPOCH FROM (now() - started_at)) * 1000)::bigint, 2147483647)::int
+        WHERE status = 'running' AND started_at < now() - make_interval(mins => $1) RETURNING id
+     )
+     UPDATE execution_steps s SET status = 'error', error = 'Interrompido junto com a execução' FROM dead WHERE s.execution_id = dead.id AND s.status = 'running'`,
+    [Math.ceil(maxExecutionMinutes) + 10],
+  );
+  return r.rowCount ?? 0;
 }

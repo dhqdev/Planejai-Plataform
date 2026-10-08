@@ -357,6 +357,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     if (result.timedOut || (guard.expired && !result.text)) {
       const step = await tracer.step({ agent: "cto", type: "info", name: "trava: tempo máximo", input: { minutos: guard.minutes, acoes: guard.toolCalls } });
       await step.ok({ stopped: true });
+      ctx.room.partial = `Parou no tempo máximo (${fmtMinutes(guard.minutes)}), com ${guard.toolCalls} ações`;
       result.text =
         `Isso passou do meu limite de ${fmtMinutes(guard.minutes)} e parei aqui pra não te deixar esperando. ` +
         "Quer que eu tente de um jeito mais simples ou dividido em partes?";
@@ -379,7 +380,8 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     await query("UPDATE conversations SET updated_at = now() WHERE id = $1", [conversationId]);
     const sentTexts = [...progress.sent, ...bubbles.filter((b): b is { type: "text"; text: string } => b.type === "text").map((b) => b.text)];
     if (sentTexts.length) await pushShort(conversationId, [{ id: Date.now(), role: "assistant", text: sentTexts.join("\n"), ts: Date.now() }]);
-    await tracer.finish(silent ? "[[silencio]]" : result.text);
+    if (!ctx.room.partial && guard.toolCalls >= guard.maxToolCalls) ctx.room.partial = `Bateu o limite de ${guard.maxToolCalls} ações`;
+    await tracer.finish(silent ? "[[silencio]]" : result.text, ctx.room.partial);
     return { executionId: tracer.executionId, bubbles, outbox };
   } catch (err) {
     await tracer.error(err);
@@ -498,7 +500,7 @@ export async function summarizeConversation(conversationId: string, opts: { upTo
     const transcript = old
       .map((e) => `${e.role === "assistant" ? "Assistente" : e.role === "event" ? "Evento" : "Pessoa"}: ${e.text.slice(0, 1500)}`)
       .join("\n");
-    const summary = await writeSummary(conv.summary, transcript);
+    const summary = await writeSummary(conv, transcript, old.length);
     if (summary) await query("UPDATE conversations SET summary = $2, summary_ts = $3 WHERE id = $1", [conversationId, summary, old.at(-1)!.ts]);
     return;
   }
@@ -516,21 +518,33 @@ export async function summarizeConversation(conversationId: string, opts: { upTo
   const transcript = old
     .map((m) => `${m.role === "assistant" ? "Assistente" : m.role === "event" ? "Evento" : "Pessoa"}: ${describeMessage(m).slice(0, 1500)}`)
     .join("\n");
-  const summary = await writeSummary(conv.summary, transcript);
+  const summary = await writeSummary(conv, transcript, old.length);
   if (summary) await query("UPDATE conversations SET summary = $2, summary_until = $3 WHERE id = $1", [conversationId, summary, old.at(-1)!.id]);
 }
 
-async function writeSummary(current: string | null, transcript: string) {
-  const r = await chatCompletion(await resolveModel("summary"), {
-    messages: [
-      {
-        role: "system",
-        content:
-          "Atualize o resumo da conversa entre uma pessoa e seu assistente. Mantenha fatos, decisões, pendências, compromissos e preferências. " +
-          "Descarte conversa fiada. Máximo 15 linhas, em português, em tópicos curtos.",
-      },
-      { role: "user", content: `Resumo atual:\n${current ?? "(vazio)"}\n\nNovas mensagens:\n${transcript.slice(0, 40_000)}` },
-    ],
-  });
+/** Resumo da conversa (modelo barato). Passa pelo Tracer: é gasto de IA e tem que aparecer em Execuções e no custo. */
+async function writeSummary(conv: ConversationRow, transcript: string, count: number) {
+  const tracer = await Tracer.start({ trigger: "summary", userId: conv.user_id, conversationId: conv.id, input: `Resumir ${count} mensagens antigas` });
+  const step = await tracer.step({ agent: "cto", type: "llm", name: "resumo da conversa" });
+  let r;
+  try {
+    r = await chatCompletion(await resolveModel("summary"), {
+      messages: [
+        {
+          role: "system",
+          content:
+            "Atualize o resumo da conversa entre uma pessoa e seu assistente. Mantenha fatos, decisões, pendências, compromissos e preferências. " +
+            "Descarte conversa fiada. Máximo 15 linhas, em português, em tópicos curtos.",
+        },
+        { role: "user", content: `Resumo atual:\n${conv.summary ?? "(vazio)"}\n\nNovas mensagens:\n${transcript.slice(0, 40_000)}` },
+      ],
+    });
+  } catch (err) {
+    await step.fail(err);
+    await tracer.error(err);
+    throw err;
+  }
+  await step.ok(r.message.content, { model: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut, costUsd: r.costUsd });
+  await tracer.finish(r.message.content);
   return r.message.content?.trim() || null;
 }

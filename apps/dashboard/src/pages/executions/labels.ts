@@ -5,10 +5,10 @@ import { firstWords } from "./format";
 
 /* Rótulos das Execuções: como o painel chama, em português, gatilhos, canais, ferramentas e agentes. */
 
-export const TRIGGER_LABEL: Record<string, string> = { message: "Mensagem", reminder: "Lembrete", playground: "Teste", watch: "De olho", improve: "Reunião noturna" };
-export const TRIGGER_ICON: Record<string, string> = { message: "send", reminder: "bell", playground: "play", watch: "eye", improve: "sparkle" };
+export const TRIGGER_LABEL: Record<string, string> = { message: "Mensagem", reminder: "Lembrete", playground: "Teste", watch: "De olho", improve: "Reunião noturna", summary: "Resumo", errand: "Recado" };
+export const TRIGGER_ICON: Record<string, string> = { message: "send", reminder: "bell", playground: "play", watch: "eye", improve: "sparkle", summary: "book", errand: "send" };
 /** Quando não há texto de entrada, o que disparou a execução. */
-export const TRIGGER_FALLBACK: Record<string, string> = { message: "Mensagem recebida", reminder: "Lembrete disparado", playground: "Teste no painel", watch: "Conferência do De olho", improve: "Reunião noturna do time" };
+export const TRIGGER_FALLBACK: Record<string, string> = { message: "Mensagem recebida", reminder: "Lembrete disparado", playground: "Teste no painel", watch: "Conferência do De olho", improve: "Reunião noturna do time", summary: "Resumo da conversa antiga", errand: "Resposta de um estabelecimento" };
 const CHANNEL_LABEL: Record<string, string> = { baileys: "WhatsApp", evolution: "WhatsApp", cloud: "WhatsApp", telegram: "Telegram", playground: "Painel" };
 
 /** Ferramentas em português, como a pessoa entenderia o que o time fez. */

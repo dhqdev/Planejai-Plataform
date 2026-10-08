@@ -5,7 +5,7 @@ import { haptic } from "../../touch";
 /* Filtros da lista de Execuções: o que a pessoa escolheu, a URL em dia e a consulta para a API. */
 
 export const PERIODS: [string, string][] = [["", "Todo período"], ["1", "Última hora"], ["24", "Últimas 24 h"], ["168", "Últimos 7 dias"], ["720", "Últimos 30 dias"]];
-export const STATUSES: [string, string][] = [["", "Todos"], ["success", "OK"], ["error", "Erro"], ["running", "Rodando"]];
+export const STATUSES: [string, string][] = [["", "Todos"], ["success", "OK"], ["partial", "Parcial"], ["error", "Erro"], ["running", "Rodando"]];
 
 export interface Filters { status: string; user: string; agent: string; since: string; trigger: string; search: string }
 

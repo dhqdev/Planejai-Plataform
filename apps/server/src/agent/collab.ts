@@ -51,6 +51,8 @@ export class TeamRoom {
   browser?: BrowserSession;
   /** quanto do navegador esta execução já usou (cada abertura e clique custa segundos e memória da máquina) */
   usage = { browserOpens: 0, browserActions: 0, mapPrints: 0 };
+  /** por que esta execução respondeu pela metade (vira "Parcial" em Execuções) */
+  partial?: string;
   private locks = new Map<string, Promise<unknown>>();
 
   constructor(team: AgentDef[] = SPECIALISTS) {
@@ -132,6 +134,7 @@ export function delegationTool(def: AgentDef): Tool<{ message: string }> {
         try {
           const r = await runToolLoop({ agent: def.id, task: def.task ?? `agent:${def.id}`, ctx: { ...ctx, guard, agent: def.id, callChain: chain }, tools: all, maxSteps: 7, messages: thread });
           ctx.room.threads.set(def.id, r.messages);
+          if (r.timedOut) ctx.room.partial ??= `${def.persona ?? def.name} parou no prazo dele e devolveu o que tinha`;
           return { report: r.text || partialReport(r.messages, r.timedOut) };
         } finally {
           guard?.dispose();

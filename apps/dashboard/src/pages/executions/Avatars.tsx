@@ -18,8 +18,8 @@ export function PersonAvatar({ name, size = 30 }: { name?: string | null; size?:
 
 export function StatusIcon({ status, size = 28 }: { status: string; size?: number }) {
   return (
-    <span className={`ex-st st-${status}`} style={{ width: size, height: size }} aria-label={status === "success" ? "ok" : status === "error" ? "erro" : "rodando"}>
-      {status === "running" ? <span className="ex-spin" /> : <Icon name={status === "success" ? "check" : "x"} size={Math.round(size * 0.5)} />}
+    <span className={`ex-st st-${status}`} style={{ width: size, height: size }} aria-label={status === "success" ? "ok" : status === "error" ? "erro" : status === "partial" ? "parcial" : "rodando"}>
+      {status === "running" ? <span className="ex-spin" /> : <Icon name={status === "success" || status === "partial" ? "check" : "x"} size={Math.round(size * 0.5)} />}
     </span>
   );
 }

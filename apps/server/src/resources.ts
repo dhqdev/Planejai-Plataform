@@ -43,6 +43,27 @@ let lastCpu = process.cpuUsage();
 let lastAt = process.hrtime.bigint();
 let cpuPct = 0;
 
+/** CPU da máquina inteira (todos os contêineres: navegador, banco...), pela diferença dos tempos de os.cpus(). */
+let lastHost = hostTimes();
+let hostPct: number | null = null;
+function hostTimes() {
+  let idle = 0;
+  let total = 0;
+  for (const c of os.cpus()) {
+    const t = c.times;
+    idle += t.idle;
+    total += t.user + t.nice + t.sys + t.idle + t.irq;
+  }
+  return { idle, total };
+}
+export function measureHostCpu() {
+  const now = hostTimes();
+  const total = now.total - lastHost.total;
+  if (total > 0) hostPct = Math.round((1 - (now.idle - lastHost.idle) / total) * 1000) / 10;
+  lastHost = now;
+  return hostPct;
+}
+
 function measureCpu() {
   const now = process.hrtime.bigint();
   const used = process.cpuUsage(lastCpu);
@@ -64,9 +85,28 @@ async function readNumber(path: string): Promise<number | null> {
   }
 }
 
+/** Um campo do memory.stat do cgroup (v2: inactive_file; v1: total_inactive_file). */
+async function memStat(key: string): Promise<number | null> {
+  for (const [path, k] of [["/sys/fs/cgroup/memory.stat", key], ["/sys/fs/cgroup/memory/memory.stat", `total_${key}`]] as const) {
+    try {
+      const line = (await readFile(path, "utf8")).split("\n").find((l) => l.startsWith(`${k} `));
+      if (line) return Number(line.split(" ")[1]);
+    } catch {
+      /* tenta o outro formato */
+    }
+  }
+  return null;
+}
+
+/**
+ * Memória do contêiner como o `docker stats` e o Portainer mostram: o total do cgroup menos o cache de arquivo
+ * que o kernel devolve quando precisa (inactive_file). Sem descontar, o número aparecia bem maior que o deles.
+ */
 async function containerMemory() {
-  const used = (await readNumber("/sys/fs/cgroup/memory.current")) ?? (await readNumber("/sys/fs/cgroup/memory/memory.usage_in_bytes"));
+  const raw = (await readNumber("/sys/fs/cgroup/memory.current")) ?? (await readNumber("/sys/fs/cgroup/memory/memory.usage_in_bytes"));
   const limit = (await readNumber("/sys/fs/cgroup/memory.max")) ?? (await readNumber("/sys/fs/cgroup/memory/memory.limit_in_bytes"));
+  const cache = raw == null ? null : await memStat("inactive_file");
+  const used = raw == null ? null : Math.max(0, raw - (cache != null && cache < raw ? cache : 0));
   return { used, limit };
 }
 
@@ -96,6 +136,7 @@ export async function sampleSelf(): Promise<ProcSample> {
 export function startProcessBeat() {
   const beat = async () => {
     measureCpu();
+    measureHostCpu();
     const r = redisHandles().main;
     if (!r) return;
     try {
@@ -167,6 +208,8 @@ function machine() {
     platform: `${os.platform()} ${os.arch()}`,
     cpus: os.cpus().length,
     load: os.loadavg().map((n) => Math.round(n * 100) / 100),
+    /** % de uso de CPU da máquina toda desde a última leitura (null antes da primeira) */
+    cpuPct: hostPct ?? measureHostCpu(),
     memTotal: os.totalmem(),
     memFree: os.freemem(),
     uptime: Math.round(os.uptime()),

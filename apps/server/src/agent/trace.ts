@@ -110,11 +110,12 @@ export class Tracer {
     };
   }
 
-  async finish(output: string | null) {
+  /** Fim da execução. `partial` = respondeu, mas parou no meio (o motivo aparece em Execuções como "Parcial"). */
+  async finish(output: string | null, partial?: string | null) {
     await query(
-      `UPDATE executions SET status = 'success', output = $2, finished_at = now(),
+      `UPDATE executions SET status = $3, output = $2, error = $4, finished_at = now(),
          duration_ms = (EXTRACT(EPOCH FROM (now() - started_at)) * 1000)::int WHERE id = $1`,
-      [this.executionId, output == null ? null : maskPersonal(output)],
+      [this.executionId, output == null ? null : maskPersonal(output), partial ? "partial" : "success", partial ?? null],
     );
   }
 

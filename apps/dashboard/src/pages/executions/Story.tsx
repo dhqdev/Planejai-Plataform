@@ -56,13 +56,14 @@ export function Story({ data, steps, clientAgents }: { data: any; steps: Step[];
         </div>
       ) : (
         <div className="tl-item tl-end">
-          <div className="tl-rail"><StatusIcon status="success" size={30} /></div>
+          <div className="tl-rail"><StatusIcon status={data.status === "partial" ? "partial" : "success"} size={30} /></div>
           <div className="tl-body">
             <div className="tl-head static">
-              <span className="tl-title">{silent ? "Concluída só com a reação" : "Resposta final"}</span>
+              <span className="tl-title">{silent ? "Concluída só com a reação" : data.status === "partial" ? "Respondeu com o que tinha" : "Resposta final"}</span>
               <span className="spacer" />
               <span className="tl-time mono">em {dur(data.duration_ms)}</span>
             </div>
+            {data.status === "partial" && data.error && <div className="tl-sub tl-partial">{data.error}</div>}
             {!silent && !data.content_purged && data.output && !sent && <div className="bubble out">{data.output}</div>}
             {!silent && sent > 0 && <div className="tl-sub">Enviada acima, em {sent} balão(ões).</div>}
           </div>

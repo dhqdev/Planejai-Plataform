@@ -58,7 +58,7 @@ export function ExecutionsPage() {
         <div>
           <small>Taxa de erro</small>
           <strong className={s?.errors ? "neg" : ""}>{s ? pct(s.errors, s.total) : "–"}</strong>
-          <span>{s ? (s.errors ? `${s.errors} com erro` : "nenhum erro") : " "}</span>
+          <span>{s ? `${s.errors ? `${s.errors} com erro` : "nenhum erro"}${s.partial ? ` · ${s.partial} pela metade` : ""}` : " "}</span>
         </div>
         <div>
           <small>Duração média</small>
@@ -197,7 +197,7 @@ function ExecRow({ e, onOpen }: { e: any; onOpen: () => void }) {
           {e.model && <span className="mono ex-model">{shortModel(e.model)}</span>}
           <span className="ex-phone-nums mono">{dur(e.duration_ms)} · {usdBR(e.cost_usd)}</span>
         </span>
-        {e.status === "error" && e.error && <span className="ex-err-line">{firstWords(e.error.split("\n")[0], 20)}</span>}
+        {(e.status === "error" || e.status === "partial") && e.error && <span className={`ex-err-line ${e.status}`}>{firstWords(e.error.split("\n")[0], 20)}</span>}
       </span>
       <span className="ex-c-team ex-faces">
         {agents.slice(0, 4).map((a) => <AgentAvatar key={a} meta={agentMeta(a)} size={24} />)}
