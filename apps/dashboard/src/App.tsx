@@ -100,6 +100,12 @@ function preload(to: string) {
   ROUTE_CHUNK[to]?.().catch(() => {});
 }
 
+/** Barra de status do celular na cor do fundo do tema escolhido (as duas metas: claro e escuro do sistema). */
+export function syncThemeColor() {
+  const color = document.documentElement.dataset.theme === "dark" ? "#0a0a0b" : "#fafaf9";
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", color));
+}
+
 /** Versão do app (package.json), igual à release vX.Y.Z no GitHub. */
 declare const __APP_VERSION__: string;
 
@@ -262,6 +268,7 @@ export function App() {
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
+    syncThemeColor();
     try {
       localStorage.setItem("pj-theme", next);
     } catch {
@@ -284,17 +291,15 @@ export function App() {
     <UnreadProvider>
     <div className="layout">
       <header className="topbar">
-        <MochiButton size={50} />
         <strong className="topbar-title">{titleFor(loc.pathname, NAV)}</strong>
         <span className="spacer" />
         <BellButton />
-        <button className="icon-btn" onClick={toggleTheme} aria-label="Trocar tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button>
       </header>
       <aside className="sidebar">
         <div className="brand">
-          <MochiButton size={42} />
+          <MochiButton size={30} />
           <div>
-            planejai
+            Planejai
             <small>{isSuper ? "Super admin" : "Painel"}</small>
           </div>
         </div>
@@ -302,25 +307,26 @@ export function App() {
         <div className="sidebar-foot">
           <div className="me">
             <div className="avatar">{(me.name ?? me.email).slice(0, 1).toUpperCase()}</div>
-            <div style={{ minWidth: 0 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <div className="me-name">{me.name ?? me.email}</div>
               <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · <span className="app-version">v{__APP_VERSION__}</span></div>
             </div>
-          </div>
-          <div className="row">
-            <button className="btn btn-sm" style={{ flex: 1 }} onClick={toggleTheme} aria-label="Trocar tema">
-              <Icon name={theme === "dark" ? "sun" : "moon"} size={15} /> <span className="label">{theme === "dark" ? "Claro" : "Escuro"}</span>
-            </button>
-            <button
-              className="btn btn-sm"
-              onClick={async () => {
-                await api("/api/auth/logout", { method: "POST" });
-                setMe(null);
-              }}
-              aria-label="Sair"
-            >
-              <Icon name="logout" size={15} /> <span className="label">Sair</span>
-            </button>
+            <div className="me-actions">
+              <button className="icon-btn sm ghost" onClick={toggleTheme} aria-label={theme === "dark" ? "Tema claro" : "Tema escuro"} title={theme === "dark" ? "Tema claro" : "Tema escuro"}>
+                <Icon name={theme === "dark" ? "sun" : "moon"} size={15} />
+              </button>
+              <button
+                className="icon-btn sm ghost"
+                onClick={async () => {
+                  await api("/api/auth/logout", { method: "POST" });
+                  setMe(null);
+                }}
+                aria-label="Sair"
+                title="Sair"
+              >
+                <Icon name="logout" size={15} />
+              </button>
+            </div>
           </div>
         </div>
       </aside>
@@ -375,19 +381,17 @@ export function App() {
       )}
 
       <nav className="tabbar" aria-label="Navegação">
-        <div className="tabbar-pill" style={{ ["--i" as any]: tabIndex }}>
-          {/* fundo que desliza até a aba ativa */}
-          <span className="tab-glider" aria-hidden />
+        <div className="tabbar-pill">
           <div className="tabbar-scroll" ref={tabsRef}>
             {phoneTabs.map((t, i) => (
               <NavLink key={t.to} to={t.to} end={t.to === "/"} aria-label={t.short ?? t.label} title={t.short ?? t.label} className={`tab${tabIndex === i ? " active" : ""}`} onClick={() => haptic(6)} onPointerEnter={() => preload(t.to)}>
-                <span className="tab-ico" key={tabIndex === i ? "on" : "off"}><Icon name={t.icon} size={23} />{t.badge === "notif" && <UnreadDot className="tab-dot" />}</span>
+                <span className="tab-ico" key={tabIndex === i ? "on" : "off"}><Icon name={t.icon} size={22} />{t.badge === "notif" && <UnreadDot className="tab-dot" />}</span>
                 <span className="tab-label">{t.short ?? t.label}</span>
               </NavLink>
             ))}
           </div>
           <button className={`tab tab-more${tabIndex === phoneTabs.length ? " active" : ""}`} aria-label="Mais" title="Mais" onClick={() => { haptic(); setMenu(true); }}>
-            <span className="tab-ico" key={tabIndex === phoneTabs.length ? "on" : "off"}><Icon name="apps" size={23} /><UnreadDot className="tab-dot" /></span>
+            <span className="tab-ico" key={tabIndex === phoneTabs.length ? "on" : "off"}><Icon name="apps" size={22} /><UnreadDot className="tab-dot" /></span>
             <span className="tab-label">Mais</span>
           </button>
         </div>
@@ -418,28 +422,30 @@ export function App() {
             const items = sec.items.filter((it) => !PHONE_TABS.includes(it.to));
             const last = sec.title === "Conta";
             if (!items.length && !last) return null;
+            const go = (to: string) => { setMenu(false); nav(to); };
             return (
               <section key={sec.title} className="more-section">
                 <h4>{sec.title}</h4>
-                <div className="more-grid">
+                <div className="more-list">
                   {items.map((item) => (
-                    <button key={item.to} className={`more-tile ${isOn(loc.pathname, item.to) ? "active" : ""}`} onClick={() => { setMenu(false); nav(item.to); }}>
-                      <span className="tab-ico"><Icon name={item.icon} size={24} />{item.badge === "notif" && <UnreadDot className="tab-dot" />}</span>
-                      <span>{item.short ?? item.label}</span>
+                    <button key={item.to} className={`sheet-item ${isOn(loc.pathname, item.to) ? "active" : ""}`} onClick={() => go(item.to)}>
+                      <span className="ico-box tab-ico"><Icon name={item.icon} size={18} />{item.badge === "notif" && <UnreadDot className="tab-dot" />}</span>
+                      <span>{item.label}</span>
+                      <Icon name="chevron-right" size={16} className="chev" />
                     </button>
                   ))}
                   {last && (
                     <>
-                      <button className="more-tile" onClick={() => { setMenu(false); openWardrobe(); }}>
-                        <MochiIcon size={24} />
-                        <span>Mochi</span>
+                      <button className="sheet-item" onClick={() => { setMenu(false); openWardrobe(); }}>
+                        <span className="ico-box"><MochiIcon size={22} /></span>
+                        <span>Roupinha do Mochi</span>
                       </button>
-                      <button className="more-tile" onClick={toggleTheme}>
-                        <Icon name={theme === "dark" ? "sun" : "moon"} size={24} />
+                      <button className="sheet-item" onClick={toggleTheme}>
+                        <span className="ico-box"><Icon name={theme === "dark" ? "sun" : "moon"} size={18} /></span>
                         <span>{theme === "dark" ? "Tema claro" : "Tema escuro"}</span>
                       </button>
-                      <button className="more-tile" onClick={async () => { await api("/api/auth/logout", { method: "POST" }); setMenu(false); setMe(null); }}>
-                        <Icon name="logout" size={24} />
+                      <button className="sheet-item danger" onClick={async () => { await api("/api/auth/logout", { method: "POST" }); setMenu(false); setMe(null); }}>
+                        <span className="ico-box"><Icon name="logout" size={18} /></span>
                         <span>Sair</span>
                       </button>
                     </>

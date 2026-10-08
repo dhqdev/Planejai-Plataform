@@ -1,18 +1,12 @@
 /* Movimento do Planejai: cada tipo de componente tem um jeito próprio de reagir, sempre curto e discreto.
    - botões: afundam ao apertar e soltam com mola; onda a partir do dedo (motion.ts)
-   - botão da marca: o degradê corre ao passar o mouse
-   - cards clicáveis: sobem um pouco; cards da página entram em cascata
+   - cards clicáveis: a borda escurece; cards da página entram em cascata
    - abas: o traço nasce do centro
    - menu lateral: ícone dá um passinho; item ativo ganha a barrinha crescendo
    - campos: o anel de foco abre em vez de aparecer
    Regras: só transform e opacity se movem; nada de interface passa de 300 ms; efeito de hover só com mouse
    (no toque ele ficaria preso depois do tap); o que responde a clique repetido é transition, não keyframes.
    Com "reduzir movimento" o deslocamento sai e ficam só cor e opacidade (bloco no fim). */
-
-:root {
-  --spring: cubic-bezier(.34, 1.56, .64, 1);
-  --soft: cubic-bezier(.2, .9, .25, 1);
-}
 
 /* ---------- botões ---------- */
 .btn, .icon-btn, .fab, .more-tile { position: relative; overflow: hidden; isolation: isolate; }
@@ -23,11 +17,8 @@
 .btn:active:not(:disabled) { transform: scale(.97); transition-duration: .08s; }
 .btn .ico { transition: transform .2s var(--soft); }
 
-/* degradê vivo: corre no hover */
-.btn-brand { background-size: 180% 100%; background-position: 0 50%; transition: background-position .3s var(--soft), transform .24s var(--spring), box-shadow .2s; }
-
 /* onda do toque (motion.ts coloca o span) */
-.pj-ripple { position: absolute; border-radius: 50%; pointer-events: none; background: currentColor; opacity: .16; transform: scale(0); animation: pj-ripple .45s var(--soft) forwards; z-index: -1; }
+.pj-ripple { position: absolute; border-radius: 50%; pointer-events: none; background: currentColor; opacity: .1; transform: scale(0); animation: pj-ripple .45s var(--soft) forwards; z-index: -1; }
 @keyframes pj-ripple { to { transform: scale(1); opacity: 0; } }
 
 .icon-btn { transition: transform .24s var(--spring), border-color .15s, background .15s; }
@@ -39,7 +30,7 @@
 .fab:active, .cal-fab:active { transform: scale(.94); transition-duration: .08s; }
 
 /* ---------- cards ---------- */
-.card.clickable { transition: transform .2s var(--soft), box-shadow .2s, border-color .15s; }
+.card.clickable { transition: transform .2s var(--soft), border-color .15s; }
 
 /* entrada em cascata dos blocos da página (uma vez por tela e curta: troca-se de tela o dia todo) */
 .route-fade .grid > *, .route-fade .grid-2 > *, .route-fade .grid-3 > *, .route-fade .grid-4 > *,
@@ -52,13 +43,10 @@
 
 /* números dos indicadores sobem ao aparecer */
 .stat .value { animation: pj-num .28s var(--soft) .04s backwards; }
-@keyframes pj-num { from { opacity: 0; transform: translateY(6px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes pj-num { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-/* ---------- abas e segmentos ---------- */
-.tabs button { position: relative; transition: color .15s, opacity .15s; }
-.tabs button::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--text); transform: scaleX(0); transition: transform .22s var(--soft); }
-.tabs button.active { border-bottom-color: transparent; }
-.tabs button.active::after { transform: scaleX(1); }
+/* ---------- abas e segmentos (o traço das abas está em styles.css) ---------- */
+.tabs button { transition: color .15s, opacity .15s; }
 
 /* o "pop" do segmento é a volta do :active (transition): trocar rápido não reinicia nada */
 .seg button { transition: color .15s, background .15s, box-shadow .15s, transform .24s var(--spring); }
@@ -74,14 +62,12 @@
 
 /* ---------- listas ---------- */
 .list-item { transition: background .15s, box-shadow .2s var(--soft); }
-.list-item.active { box-shadow: inset 2px 0 0 var(--text); }
 .more-tile { transition: transform .24s var(--spring), background .15s, border-color .15s; }
 .more-tile:active { transform: scale(.95); transition-duration: .08s; }
 .more-tile > :first-child { transition: transform .2s var(--soft); }
 
 /* ---------- campos ---------- */
 .input, .textarea, select.input { transition: border-color .15s, box-shadow .2s var(--soft); }
-.input:focus, .textarea:focus { box-shadow: 0 0 0 4px color-mix(in srgb, var(--text) 8%, transparent); }
 input[type="checkbox"]:not([switch]), input[type="radio"] { transition: transform .2s var(--spring); }
 input[type="checkbox"]:not([switch]):active, input[type="radio"]:active { transform: scale(.88); transition-duration: .08s; }
 
@@ -92,19 +78,8 @@ input[type="checkbox"]:not([switch]):active, input[type="radio"]:active { transf
 
 /* ---------- hover: só onde existe mouse ---------- */
 @media (hover: hover) and (pointer: fine) {
-  .btn:hover:not(:disabled) { transform: translateY(-1px); }
-  .btn-primary:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(0, 0, 0, .14); }
-  .btn:hover:not(:disabled) .ico { transform: translateX(1px); }
-  .btn-brand:hover:not(:disabled) { background-position: 100% 50%; box-shadow: 0 8px 22px color-mix(in srgb, var(--violet) 34%, transparent); }
-  .icon-btn:hover:not(:disabled) .ico { transform: scale(1.08); }
   .fab:hover .ico, .cal-fab:hover .ico { transform: rotate(90deg); }
-  .card.clickable:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0, 0, 0, .08); }
-  :root[data-theme="dark"] .card.clickable:hover { box-shadow: 0 10px 28px rgba(0, 0, 0, .4); }
   .tabs button:hover:not(.active) { color: var(--text); }
-  .nav a:hover .ico { transform: translateX(2px); }
-  .list-item:hover { box-shadow: inset 2px 0 0 var(--text); }
-  .more-tile:hover { transform: translateY(-2px); border-color: var(--border-2); }
-  .more-tile:hover > :first-child { transform: scale(1.06); }
   /* apertar ganha do hover */
   .btn:active:not(:disabled) { transform: scale(.97); }
   .card.clickable:active { transform: scale(.98); }
