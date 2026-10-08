@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { getCredentials, rawCredentials, saveCredentials } from "./registry.js";
+import { getCredentials, rawCredentials, saveCredentials, savePersonalCredentials } from "./registry.js";
 
 export const GOOGLE_SCOPES = [
   "openid",
@@ -26,7 +26,8 @@ export async function googleAuthUrl(state: string) {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
-export async function googleExchangeCode(code: string) {
+/** Troca o código do OAuth pelo refresh_token. Com userId, é a conta pessoal de um cliente (Minha conta). */
+export async function googleExchangeCode(code: string, userId?: string) {
   const creds = await rawCredentials("google");
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -47,19 +48,20 @@ export async function googleExchangeCode(code: string) {
     const payload = JSON.parse(Buffer.from(String(json.id_token).split(".")[1]!, "base64url").toString());
     email = payload.email ?? "";
   }
-  await saveCredentials("google", { refresh_token: json.refresh_token, email });
-  tokenCache = { token: json.access_token, exp: Date.now() + (json.expires_in - 60) * 1000 };
+  if (userId) await savePersonalCredentials("google", userId, { refresh_token: json.refresh_token, email }, email || null);
+  else await saveCredentials("google", { refresh_token: json.refresh_token, email });
+  tokenCache.set(json.refresh_token, { token: json.access_token, exp: Date.now() + (json.expires_in - 60) * 1000 });
 }
 
-let tokenCache: { token: string; exp: number } | null = null;
+/** Token de acesso por conta (refresh_token): cada pessoa tem a sua; desconectar some com a credencial e o token não é mais achado. */
+const tokenCache = new Map<string, { token: string; exp: number }>();
 
 async function accessToken() {
+  // de quem é a conta vem da conversa (getCredentials lê a pessoa atual)
   const creds = await getCredentials("google");
-  if (!creds) {
-    tokenCache = null; // desconectado no dashboard: não reaproveita token antigo
-    throw new Error("Google Workspace não está conectado");
-  }
-  if (tokenCache && tokenCache.exp > Date.now()) return tokenCache.token;
+  if (!creds?.refresh_token) throw new Error("Google não está conectado para esta pessoa");
+  const hit = tokenCache.get(creds.refresh_token);
+  if (hit && hit.exp > Date.now()) return hit.token;
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -72,8 +74,9 @@ async function accessToken() {
   });
   const json: any = await res.json();
   if (!res.ok) throw new Error(`Google: falha ao renovar token (${json.error})`);
-  tokenCache = { token: json.access_token, exp: Date.now() + (json.expires_in - 60) * 1000 };
-  return tokenCache.token;
+  if (tokenCache.size > 500) tokenCache.clear();
+  tokenCache.set(creds.refresh_token, { token: json.access_token, exp: Date.now() + (json.expires_in - 60) * 1000 });
+  return json.access_token as string;
 }
 
 export async function googleApi(url: string, init: RequestInit = {}) {

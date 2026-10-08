@@ -5,19 +5,22 @@ import { googleAuthUrl, googleExchangeCode, googleRedirectUri } from "../../../i
 import { mercadolivreAuthUrl, mercadolivreExchangeCode } from "../../../integrations/mercadolivre.js";
 import { disconnect, getCredentials, getDef, isConnected, listIntegrations, rawCredentials, saveCredentials, setEnabled } from "../../../integrations/registry.js";
 import { setupTelegram } from "../../../telegram.js";
-import { isOauthState, newOauthState } from "./shared.js";
+import { isOauthState, newOauthState, oauthStateUser } from "./shared.js";
 
 /** Callbacks de OAuth: públicos, sem cookie de API garantido; valem pelo state assinado. */
 export function integrationCallbackRoutes(app: FastifyInstance) {
   // Callback do OAuth do Google vem do navegador sem cookie de API garantido: valida pelo state assinado.
   app.get<{ Querystring: { code?: string; state?: string; error?: string } }>("/api/integrations/google/oauth/callback", async (req, reply) => {
-    if (req.query.error) return reply.redirect(`/integrations?error=${encodeURIComponent(req.query.error)}`);
     if (!isOauthState(req.query.state)) return reply.code(400).send("state inválido");
+    // conexão pessoal de um cliente volta para Minha conta; a da plataforma, para Integrações
+    const userId = oauthStateUser(req.query.state);
+    const page = userId ? "/profile" : "/integrations";
+    if (req.query.error) return reply.redirect(`${page}?error=${encodeURIComponent(req.query.error)}`);
     try {
-      await googleExchangeCode(req.query.code ?? "");
-      return reply.redirect("/integrations?connected=google");
+      await googleExchangeCode(req.query.code ?? "", userId ?? undefined);
+      return reply.redirect(`${page}?connected=google`);
     } catch (err) {
-      return reply.redirect(`/integrations?error=${encodeURIComponent((err as Error).message)}`);
+      return reply.redirect(`${page}?error=${encodeURIComponent((err as Error).message)}`);
     }
   });
 

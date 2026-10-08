@@ -1,7 +1,8 @@
 import { many, query } from "../db/pool.js";
 import type { ChatMessage } from "../llm/types.js";
 import { isOwner } from "../ingest.js";
-import { isOwnerOnly } from "./runner.js";
+import { asPerson } from "../integrations/person.js";
+import { isOwnerOnly, personOf } from "./runner.js";
 import { CLIENT_AGENT_TOOLS, CTO_TOOLS, SPECIALISTS } from "./team.js";
 import type { Tool, ToolContext } from "./tools/types.js";
 
@@ -90,7 +91,7 @@ export async function resolvePending(pending: PendingAction[], userTexts: string
       continue;
     }
     try {
-      const out: any = await tool.run(p.args, { ...ctx, agent: p.agent, approvedAction: true, toolCall: { name: p.tool, args: p.args }, parentStepId: step.id });
+      const out: any = await asPerson(personOf(ctx.user), () => tool.run(p.args, { ...ctx, agent: p.agent, approvedAction: true, toolCall: { name: p.tool, args: p.args }, parentStepId: step.id }));
       if (out && typeof out === "object") delete out._usage;
       await step.ok(out);
       const failed = out && typeof out === "object" && ("error" in out || out.ok === false);

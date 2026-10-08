@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import { decryptJson, decryptJsonWithInfo, encryptJson } from "../crypto.js";
 import { many, one, query } from "../db/pool.js";
+import { currentPerson } from "./person.js";
 
 export interface IntegrationField {
   key: string;
@@ -456,8 +457,62 @@ export function getDef(id: string) {
   return INTEGRATIONS.find((i) => i.id === id);
 }
 
-/** Credenciais decriptadas de uma integração conectada e habilitada (ou null). */
+/**
+ * Contas pessoais: cada cliente conecta a dele (user_integrations) e nunca cai na do dono.
+ * O dono continua usando as da plataforma (tela Integrações).
+ */
+export const PERSONAL_INTEGRATIONS = new Set(["google", "notion", "github", "linear", "slack"]);
+
+/** Campos que o cliente preenche: no Google o app OAuth é da plataforma, ele só autoriza a conta dele. */
+export function personalFields(def: IntegrationDef) {
+  return def.oauth ? [] : def.fields;
+}
+
+/** Credenciais da conta que a própria pessoa conectou (Google: + client do app OAuth da plataforma). */
+export async function personalCredentials(id: string, userId: string): Promise<Record<string, string> | null> {
+  const key = `${id}:${userId}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < 10_000) return hit.creds;
+  const row = await one("SELECT credentials_enc FROM user_integrations WHERE user_id = $1 AND integration_id = $2", [userId, id]);
+  let creds: Record<string, string> | null = row ? decryptJson(row.credentials_enc) : null;
+  if (creds && getDef(id)?.oauth) {
+    const app = await platformCredentials(id, { requireToken: false });
+    creds = app?.client_id && creds.refresh_token ? { client_id: app.client_id, client_secret: app.client_secret ?? "", ...creds } : null;
+  }
+  cache.set(key, { at: Date.now(), creds });
+  return creds;
+}
+
+export async function savePersonalCredentials(id: string, userId: string, creds: Record<string, string>, label?: string | null) {
+  await query(
+    `INSERT INTO user_integrations (user_id, integration_id, credentials_enc, label) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (user_id, integration_id) DO UPDATE SET credentials_enc = $3, label = $4, updated_at = now()`,
+    [userId, id, encryptJson(creds), label ?? null],
+  );
+  cache.delete(`${id}:${userId}`);
+}
+
+export async function disconnectPersonal(id: string, userId: string) {
+  await query("DELETE FROM user_integrations WHERE user_id = $1 AND integration_id = $2", [userId, id]);
+  cache.delete(`${id}:${userId}`);
+}
+
+/**
+ * Credenciais decriptadas de uma integração conectada e habilitada (ou null).
+ * Dentro da conversa de um cliente, integração pessoal vem só da conta dele (nunca da do dono).
+ */
 export async function getCredentials(id: string): Promise<Record<string, string> | null> {
+  const person = currentPerson();
+  if (person && !person.owner && PERSONAL_INTEGRATIONS.has(id)) return personalCredentials(id, person.userId);
+  return platformCredentials(id);
+}
+
+/** Integração da plataforma (tela Integrações do dono). */
+async function platformCredentials(id: string, opts: { requireToken?: boolean } = {}): Promise<Record<string, string> | null> {
+  if (opts.requireToken === false) {
+    const row = await one("SELECT enabled, credentials_enc FROM integrations WHERE id = $1", [id]);
+    return row?.enabled && row.credentials_enc ? decryptJson(row.credentials_enc) : null;
+  }
   const hit = cache.get(id);
   if (hit && Date.now() - hit.at < 10_000) return hit.creds;
   const row = await one("SELECT enabled, credentials_enc FROM integrations WHERE id = $1", [id]);
@@ -555,6 +610,17 @@ export async function listIntegrations() {
 export async function reencryptStale(log?: (msg: string) => void) {
   const rows = await many("SELECT id, credentials_enc FROM integrations WHERE credentials_enc IS NOT NULL");
   let n = 0;
+  // contas conectadas pelos clientes também
+  for (const r of await many("SELECT user_id, integration_id, credentials_enc FROM user_integrations").catch(() => [])) {
+    try {
+      const { value, stale } = decryptJsonWithInfo(r.credentials_enc);
+      if (!stale) continue;
+      await query("UPDATE user_integrations SET credentials_enc = $3 WHERE user_id = $1 AND integration_id = $2", [r.user_id, r.integration_id, encryptJson(value)]);
+      n++;
+    } catch (err) {
+      log?.(`credencial de ${r.integration_id} de um cliente não abriu com nenhuma chave: ${(err as Error).message}`);
+    }
+  }
   for (const r of rows) {
     try {
       const { value, stale } = decryptJsonWithInfo(r.credentials_enc);

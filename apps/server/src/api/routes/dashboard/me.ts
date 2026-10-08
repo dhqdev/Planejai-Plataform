@@ -7,7 +7,10 @@ import { getOnboarding, ONBOARDING, saveOnboarding } from "../../../onboarding.j
 import { NOBODY, selfUserId } from "../../../sharing.js";
 import { ESSENTIAL, getTabs, OPTIONAL } from "../../../tabs.js";
 import { botUsername, connections, telegramLink, unlink } from "../../../telegram.js";
+import { googleAuthUrl } from "../../../integrations/google.js";
+import { disconnectPersonal, getDef, INTEGRATIONS, PERSONAL_INTEGRATIONS, personalFields, rawCredentials, savePersonalCredentials } from "../../../integrations/registry.js";
 import { setSession } from "../../server.js";
+import { newOauthState } from "./shared.js";
 
 /** A própria conta: resumo, perfil, senha, exclusão (LGPD), layout do painel, mascote, conexões e abas. */
 export function meRoutes(base: FastifyInstance) {
@@ -163,5 +166,77 @@ export function meRoutes(base: FastifyInstance) {
     if (req.account.role === "superadmin") return { all: true, essential: ESSENTIAL, modules: Object.keys(OPTIONAL), custom: [], catalog: OPTIONAL };
     const tabs = req.account.userId ? await getTabs(req.account.userId) : { modules: [], custom: [] };
     return { all: false, essential: ESSENTIAL, ...tabs, catalog: OPTIONAL };
+  });
+
+  // ================= Contas conectadas (Google, Notion...): cada cliente usa só as dele =================
+  // o dono conecta as dele em Integrações (são as da plataforma); aqui é só para clientes
+  async function personalUser(req: { account: { userId: string | null; owner: boolean } }) {
+    return req.account.owner ? null : req.account.userId;
+  }
+
+  base.get("/api/me/integrations", async (req) => {
+    const uid = await personalUser(req);
+    if (!uid) return { owner: req.account.owner, integrations: [] };
+    const rows = await many("SELECT integration_id, label, connected_at FROM user_integrations WHERE user_id = $1", [uid]);
+    const googleApp = Boolean((await rawCredentials("google").catch(() => ({}) as Record<string, string>)).client_id);
+    return {
+      owner: false,
+      integrations: INTEGRATIONS.filter((d) => PERSONAL_INTEGRATIONS.has(d.id)).map((d) => {
+        const row = rows.find((r) => r.integration_id === d.id);
+        return {
+          id: d.id,
+          name: d.name,
+          description: d.description,
+          docsUrl: d.oauth ? null : (d.docsUrl ?? null),
+          oauth: Boolean(d.oauth),
+          // Google depende do app OAuth que o dono configurou em Integrações
+          available: d.oauth ? googleApp : true,
+          fields: personalFields(d).map(({ key, label, type, required, placeholder, help }) => ({ key, label, type, required, placeholder, help })),
+          connected: Boolean(row),
+          label: row?.label ?? null,
+          connectedAt: row?.connected_at ?? null,
+        };
+      }),
+    };
+  });
+
+  base.put<{ Params: { id: string }; Body: Record<string, string> }>("/api/me/integrations/:id", async (req, reply) => {
+    const uid = await personalUser(req);
+    if (!uid) return reply.code(403).send({ error: "Use a tela Integrações" });
+    const def = getDef(req.params.id);
+    if (!def || !PERSONAL_INTEGRATIONS.has(def.id) || def.oauth) return reply.code(404).send({ error: "integração desconhecida" });
+    const creds: Record<string, string> = {};
+    for (const f of personalFields(def)) {
+      const v = req.body?.[f.key];
+      if (v != null && String(v).trim() !== "") creds[f.key] = String(v).trim().slice(0, 500);
+      else if (f.required) return reply.code(400).send({ error: `${f.label} é obrigatório` });
+    }
+    if (creds.default_repo && !/^[\w.-]+\/[\w.-]+$/.test(creds.default_repo)) return reply.code(400).send({ error: "Repositório no formato dono/repositorio" });
+    try {
+      // só salva o que funciona: o teste já fala com o serviço usando a chave da pessoa
+      const message = def.test ? await def.test(creds) : "Conectado";
+      await savePersonalCredentials(def.id, uid, creds, message.replace(/^Conectado (como|ao workspace) /, "").slice(0, 120));
+      return { ok: true, message };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  base.post("/api/me/integrations/google/oauth", async (req, reply) => {
+    const uid = await personalUser(req);
+    if (!uid) return reply.code(403).send({ error: "Use a tela Integrações" });
+    try {
+      return { url: await googleAuthUrl(newOauthState(uid)) };
+    } catch {
+      return reply.code(400).send({ error: "O Google ainda não está disponível aqui. Fale com o responsável pelo assistente." });
+    }
+  });
+
+  base.delete<{ Params: { id: string } }>("/api/me/integrations/:id", async (req, reply) => {
+    const uid = await personalUser(req);
+    if (!uid) return reply.code(403).send({ error: "Use a tela Integrações" });
+    if (!PERSONAL_INTEGRATIONS.has(req.params.id)) return reply.code(404).send({ error: "integração desconhecida" });
+    await disconnectPersonal(req.params.id, uid);
+    return { ok: true };
   });
 }

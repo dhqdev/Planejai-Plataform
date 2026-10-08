@@ -30,7 +30,7 @@ describe("SSRF: endereços internos", () => {
 });
 
 describe("integrações do dono", () => {
-  it("convidado não recebe ferramentas de conta pessoal do dono; o dono recebe", async () => {
+  it("convidado não recebe ferramentas da stack do dono; o dono recebe", async () => {
     const { config } = await import("../src/config.js");
     const { availableTools, isOwnerOnly } = await import("../src/agent/runner.js");
     const fin = await import("../src/agent/tools/finance.js");
@@ -39,11 +39,12 @@ describe("integrações do dono", () => {
     const before = config.OWNER_PHONES;
     config.OWNER_PHONES = ["5519990000001"];
     try {
-      expect(isOwnerOnly(comm.gmailSearch)).toBe(true);
+      // Gmail é pessoal: cada um usa o próprio (teste e2e abaixo), não é ferramenta só do dono
+      expect(isOwnerOnly(comm.gmailSearch)).toBe(false);
       expect(isOwnerOnly(fin.createPaymentLink)).toBe(true);
       expect(isOwnerOnly(research.webSearch)).toBe(false);
-      expect(await availableTools([fin.createPaymentLink, fin.calculate], { phone: "5511988887777" })).toEqual([fin.calculate]);
-      expect(await availableTools([fin.createPaymentLink, fin.calculate], { phone: "5519990000001" })).toEqual([fin.createPaymentLink, fin.calculate]);
+      expect(await availableTools([fin.createPaymentLink, fin.calculate], { id: "00000000-0000-0000-0000-000000000001", phone: "5511988887777" })).toEqual([fin.calculate]);
+      expect(await availableTools([fin.createPaymentLink, fin.calculate], { id: "00000000-0000-0000-0000-000000000002", phone: "5519990000001" })).toEqual([fin.createPaymentLink, fin.calculate]);
     } finally {
       config.OWNER_PHONES = before;
     }
@@ -163,6 +164,42 @@ describe.skipIf(!enabled)("segurança e privacidade (e2e)", () => {
     expect(codes.slice(0, 8).every((c) => c === 401)).toBe(true);
     expect(codes.at(-1)).toBe(429);
   }, 30_000);
+
+  it("integração pessoal: cliente nunca usa a conta do dono, só a que ele conectou", async () => {
+    const { config } = await import("../src/config.js");
+    const { availableTools } = await import("../src/agent/runner.js");
+    const { notionSearch } = await import("../src/agent/tools/productivity.js");
+    const reg = await import("../src/integrations/registry.js");
+    const { asPerson } = await import("../src/integrations/person.js");
+    const before = config.OWNER_PHONES;
+    config.OWNER_PHONES = ["5519990001111"];
+    try {
+      await reg.saveCredentials("notion", { token: "token-do-dono" });
+      const dono = await db.one("INSERT INTO users (phone, name, status) VALUES ('5519990001111', 'Dono', 'active') RETURNING id, phone");
+      const cli = await db.one("INSERT INTO users (phone, name, status) VALUES ('5519922221111', 'Cli', 'active') RETURNING id, phone");
+      expect(await availableTools([notionSearch], dono)).toEqual([notionSearch]);
+      expect(await availableTools([notionSearch], cli)).toEqual([]);
+      expect(await asPerson({ userId: cli.id, owner: false }, () => reg.getCredentials("notion"))).toBeNull();
+      // fora de uma conversa (painel do dono, jobs) vale a da plataforma
+      expect((await reg.getCredentials("notion"))?.token).toBe("token-do-dono");
+
+      await reg.savePersonalCredentials("notion", cli.id, { token: "token-do-cliente" }, "Cli");
+      expect(await availableTools([notionSearch], cli)).toEqual([notionSearch]);
+      expect((await asPerson({ userId: cli.id, owner: false }, () => reg.getCredentials("notion")))?.token).toBe("token-do-cliente");
+      expect((await asPerson({ userId: dono.id, owner: true }, () => reg.getCredentials("notion")))?.token).toBe("token-do-dono");
+
+      // Google do cliente só existe com o app OAuth da plataforma e o refresh_token dele (nunca o do dono)
+      await reg.saveCredentials("google", { client_id: "app", client_secret: "s", refresh_token: "rt-dono" });
+      expect(await asPerson({ userId: cli.id, owner: false }, () => reg.getCredentials("google"))).toBeNull();
+      await reg.savePersonalCredentials("google", cli.id, { refresh_token: "rt-cli", email: "c@x.com" });
+      expect(await asPerson({ userId: cli.id, owner: false }, () => reg.getCredentials("google"))).toMatchObject({ client_id: "app", refresh_token: "rt-cli" });
+
+      await reg.disconnectPersonal("notion", cli.id);
+      expect(await availableTools([notionSearch], cli)).toEqual([]);
+    } finally {
+      config.OWNER_PHONES = before;
+    }
+  });
 
   it("sair de todos os aparelhos e trocar a senha derrubam tokens antigos", async () => {
     const owner = cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } }));

@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { config } from "../../../config.js";
 import { one } from "../../../db/pool.js";
 import { googleApi } from "../../../integrations/google.js";
+import { asPerson } from "../../../integrations/person.js";
 import { isConnected } from "../../../integrations/registry.js";
 import { cancelReminder, createReminder, listReminders, reminderOccurrences, rescheduleReminder } from "../../../reminders.js";
 import { NOBODY, personalUser, selfUserId } from "../../../sharing.js";
@@ -47,7 +48,7 @@ export function agendaRoutes(base: FastifyInstance) {
     }
   });
 
-  // ---------- Agenda (calendário): lembretes + Google Agenda conectado (só o dono vê) ----------
+  // ---------- Agenda (calendário): lembretes + Google Agenda conectado (de cada um, só na própria agenda) ----------
   base.get<{ Querystring: { from?: string; to?: string; user?: string } }>("/api/calendar", async (req, reply) => {
     const from = new Date(req.query.from ?? "");
     const to = new Date(req.query.to ?? "");
@@ -57,10 +58,12 @@ export function agendaRoutes(base: FastifyInstance) {
     if (!uid) return reply.code(403).send({ error: "Essa pessoa não compartilhou a agenda com você" });
     const mine = uid === (await self(req.account));
     const events: any[] = (await reminderOccurrences(from, to, uid)).map((e) => ({ ...e, kind: "reminder" }));
-    if (req.account.owner && mine && (await isConnected("google").catch(() => false))) {
+    // Google Agenda só na própria agenda: o dono vê a da plataforma, o cliente a que ele conectou em Minha conta
+    const person = { userId: uid, owner: req.account.owner };
+    if (mine && (await asPerson(person, () => isConnected("google")).catch(() => false))) {
       try {
         const params = new URLSearchParams({ timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "250" });
-        const j = await googleApi(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`);
+        const j = await asPerson(person, () => googleApi(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`));
         for (const e of j.items ?? []) {
           const allDay = !e.start?.dateTime;
           events.push({

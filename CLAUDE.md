@@ -17,6 +17,6 @@ Assistente pessoal no WhatsApp com um time de agentes (CTO + especialistas), pai
 - Nunca edite uma migração já aplicada: crie `db/migrations/0NN_descricao.sql`.
 - Toda URL vinda de usuário, modelo ou página passa por `net.ts` (`safeFetch`/`checkedUrl`). Nada de `fetch(url)` cru.
 - Segredos só por variável de ambiente ou pela tela de Integrações (criptografados). Nada de chave no código. Env nova entra em `config.ts` e `.env.example`.
-- Integração da stack é do dono: entra em `OWNER_INTEGRATIONS` (`runner.ts`) ou leva `ownerOnly: true`.
+- Integração da stack é do dono: entra em `OWNER_INTEGRATIONS` (`runner.ts`) ou leva `ownerOnly: true`. Conta pessoal (Google, Notion...) fica em `PERSONAL_INTEGRATIONS` e cada cliente usa só a dele (`asPerson`).
 - Toda chamada de LLM e de ferramenta passa pelo `Tracer` (aparece em Execuções).
 - Imagem de terceiros sempre com versão fixa; nada de dependência nativa no servidor sem ajustar o Dockerfile.

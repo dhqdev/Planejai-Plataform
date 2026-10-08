@@ -8,7 +8,8 @@ import type { ChatMessage } from "../llm/types.js";
 import { getSettings } from "../settings.js";
 import { delegationTool, TeamRoom } from "./collab.js";
 import { ctoSystemPrompt } from "./prompts.js";
-import { availableTools, OWNER_INTEGRATIONS, runToolLoop } from "./runner.js";
+import { availableTools, OWNER_INTEGRATIONS, personOf, runToolLoop } from "./runner.js";
+import { asPerson } from "../integrations/person.js";
 import { clientAgents, CTO_TOOLS, SPECIALISTS, type AgentDef } from "./team.js";
 import { TEAM_TOOLS } from "./tools/team.js";
 import { finishBrowser } from "./tools/research.js";
@@ -282,10 +283,12 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     const team: AgentDef[] = [];
     for (const s of [...SPECIALISTS, ...(await clientAgents(user.id))]) if ((await availableTools(s.tools, user)).length) team.push(s);
     const lastText = fresh.map((e) => e.text).join(" ").slice(0, 500);
-    const disconnected = [];
-    // para convidados, as contas do dono nem existem: não adianta dizer "conecte no painel"
+    const disconnected: string[] = [];
+    // para convidados, as contas da stack do dono nem existem; as pessoais (Google, Notion...) contam só se forem dele
     const owner = isOwner(user.phone);
-    for (const i of INTEGRATIONS) if ((owner || !OWNER_INTEGRATIONS.has(i.id)) && !(await isConnected(i.id))) disconnected.push(i.name);
+    await asPerson(personOf(user), async () => {
+      for (const i of INTEGRATIONS) if ((owner || !OWNER_INTEGRATIONS.has(i.id)) && !(await isConnected(i.id))) disconnected.push(i.name);
+    });
     const system = ctoSystemPrompt({
       settings,
       user,

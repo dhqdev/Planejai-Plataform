@@ -1,6 +1,7 @@
 import { chatCompletion } from "../llm/openrouter.js";
 import { resolveModel } from "../llm/router.js";
 import type { ChatMessage, ToolSpec } from "../llm/types.js";
+import { asPerson } from "../integrations/person.js";
 import { isConnected } from "../integrations/registry.js";
 import { isOwner } from "../ingest.js";
 import { cacheGet, cacheSet } from "../shortmem.js";
@@ -13,11 +14,16 @@ const QUICK_TOOLS = new Set(["react_to_message", "save_memory"]);
 const SLOW_TOOL = /^(ask_|browser_|screenshot_url)/;
 
 /**
- * Integrações que são contas pessoais do dono da stack (o e-mail, a agenda, o Notion, o caixa dele).
- * As credenciais são uma só para a plataforma inteira, então só o dono pode usar essas ferramentas:
- * um convidado pedindo "lê meus e-mails" não pode cair no Gmail do dono.
+ * Integrações que são da stack do dono (o n8n, o caixa dele): uma conta só para a plataforma inteira,
+ * então só o dono usa. Google, Notion, GitHub, Linear e Slack são pessoais (PERSONAL_INTEGRATIONS):
+ * cada cliente usa só a conta que ele mesmo conectou, nunca a do dono.
  */
-export const OWNER_INTEGRATIONS = new Set(["google", "slack", "notion", "github", "linear", "n8n", "mercadopago", "stripe"]);
+export const OWNER_INTEGRATIONS = new Set(["n8n", "mercadopago", "stripe"]);
+
+/** De quem são as credenciais pessoais (Google do cliente ou do dono) durante uma chamada. */
+export function personOf(user: { id: string; phone: string }) {
+  return { userId: user.id, owner: isOwner(user.phone) };
+}
 
 export function isOwnerOnly(t: Pick<Tool, "integration" | "ownerOnly">) {
   // ownerOnly: false libera de propósito uma ferramenta de integração do dono (ex.: automações seguras dos clientes)
@@ -25,14 +31,18 @@ export function isOwnerOnly(t: Pick<Tool, "integration" | "ownerOnly">) {
 }
 
 /** Ferramentas que esta pessoa pode usar agora: integração conectada e, se for do dono, só para o dono. */
-export async function availableTools(tools: Tool[], user?: { phone: string } | null) {
+export async function availableTools(tools: Tool[], user?: { id: string; phone: string } | null) {
   const owner = user ? isOwner(user.phone) : false;
-  const out: Tool[] = [];
-  for (const t of tools) {
-    if (isOwnerOnly(t) && !owner) continue;
-    if (!t.integration || (await isConnected(t.integration))) out.push(t);
-  }
-  return out;
+  const pick = async () => {
+    const out: Tool[] = [];
+    for (const t of tools) {
+      if (isOwnerOnly(t) && !owner) continue;
+      if (!t.integration || (await isConnected(t.integration))) out.push(t);
+    }
+    return out;
+  };
+  // integração pessoal conta como conectada só se for a conta desta pessoa
+  return user ? asPerson(personOf(user), pick) : pick();
 }
 
 export function toSpecs(tools: Tool[]): ToolSpec[] {
@@ -165,7 +175,8 @@ export async function runToolLoop(opts: {
             await toolStep.ok({ cache: true, ...((typeof hit === "object" && hit) || { value: hit }) });
             return { id: call.id, content: typeof hit === "string" ? hit : JSON.stringify(hit) };
           }
-          const run = tool.run(args, { ...ctx, parentStepId: toolStep.id, toolCall: { name: tool.name, args } });
+          // credenciais pessoais (Google, Notion...) sempre as desta pessoa, venha a chamada de onde vier
+          const run = asPerson(personOf(ctx.user), () => tool.run(args, { ...ctx, parentStepId: toolStep.id, toolCall: { name: tool.name, args } }));
           const out: any = guard ? await guard.race(run) : await run;
           if (ck && out != null && !(typeof out === "object" && ("error" in out || "media_id" in out))) {
             const { _usage, ...rest } = typeof out === "object" ? out : ({ value: out } as any);

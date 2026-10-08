@@ -3,6 +3,7 @@ import { api, phoneFmt } from "../api";
 import type { Me } from "../App";
 import { ErrorBox, PageHead, alertDialog, confirmDialog } from "../components";
 import { Connections } from "../Connections";
+import { MyIntegrations } from "../MyIntegrations";
 import { useApi } from "../hooks";
 import { haptic } from "../touch";
 
@@ -56,6 +57,7 @@ export function ProfilePage({ me }: { me: Me }) {
       {(me.linked || me.owner) && <AboutMe />}
       <Sharing />
       <Connections owner={me.owner} />
+      {me.linked && !me.owner && <MyIntegrations />}
       <Security me={me} />
       </div>
     </div>
