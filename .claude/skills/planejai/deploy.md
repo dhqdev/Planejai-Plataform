@@ -13,7 +13,7 @@ npm run dev:dashboard           # dashboard em :5173 com proxy para :3000
 npm run typecheck && npm run lint && npm test   # e2e rodam com TEST_DATABASE_URL (banco descartável); REDIS_URL e CHROME_PATH ligam os testes de Redis e navegador
 npm run build                   # dashboard vai para apps/server/public
 ```
-Sem WhatsApp, teste pelos e2e (canal playground) e veja os passos em **Execuções**.
+Sem WhatsApp, teste pelos e2e (canal playground) e veja os passos em **Execuções**. No sandbox da nuvem, Postgres e Redis já estão instalados: receita em `paralelo.md` ("Testes no sandbox"). Ordem de pull, checagens e push com outras sessões no main: também em `paralelo.md`.
 
 ## Publicar
 - Push na `main` roda `.github/workflows/ci.yml`: o job `image` só sai depois do `test` verde e publica `ghcr.io/dhqdev/planejai-plataform` (amd64 e arm64) com as tags `latest` e `sha-<curto>`, depois chama o webhook do Portainer (`PORTAINER_WEBHOOK_URL`). Rollback = trocar a tag na stack para um `sha-…` antigo. Push que só muda `.claude/`, `docs/` ou `.md` não roda o CI. Imagem privada: o Portainer puxa com token `read:packages` (`docs/operacao.md`). Não recrie um workflow de deploy separado do teste.
@@ -25,4 +25,4 @@ Sem WhatsApp, teste pelos e2e (canal playground) e veja os passos em **Execuçõ
 - O Dockerfile só roda `apk add ffmpeg` na arquitetura alvo; o resto das deps é JS puro. Não adicione dependência nativa no servidor sem ajustar isso.
 
 ## Banco
-Nova migração = novo arquivo `db/migrations/00N_descricao.sql` (nunca edite uma já aplicada). Roda sozinha no boot.
+Nova migração = novo arquivo `db/migrations/0NN_descricao.sql` (nunca edite uma já aplicada). Roda sozinha no boot. Número repetido por outra sessão: renomeie a sua antes do push (`paralelo.md`).

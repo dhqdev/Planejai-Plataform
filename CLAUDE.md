@@ -1,12 +1,12 @@
 # Planejai
 
-Assistente pessoal no WhatsApp com um time de agentes (CTO + especialistas), painel React e uma imagem só (API + worker + dashboard). Detalhes por assunto na skill `.claude/skills/planejai/` (comece pelo `SKILL.md`).
+Assistente pessoal no WhatsApp com um time de agentes (CTO + especialistas), painel React e uma imagem só (API + worker + dashboard). Detalhes por assunto na skill `.claude/skills/planejai/` (comece pelo `SKILL.md`: mapa, onde procurar cada coisa e qual arquivo ler). Várias sessões no main ao mesmo tempo: `paralelo.md`. Qual modelo/subagente usar: `modelos.md`.
 
 ## Como trabalhar aqui
 
 - Push direto na `main`, sem PR (pedido do dono). Cada push com código testa, publica a imagem e atualiza produção.
 - Antes do push: `git pull --rebase origin main`, depois `npm run typecheck && npm run lint && npm test`. Os e2e precisam de `TEST_DATABASE_URL` (banco descartável) e `REDIS_URL`; `CHROME_PATH` liga os testes de navegador.
-- Mais de uma sessão do Claude pode estar mexendo no repositório ao mesmo tempo: commits pequenos e um assunto por commit.
+- Mais de uma sessão do Claude pode estar mexendo no repositório ao mesmo tempo: commits pequenos e um assunto por commit. O hook `.claude/hooks/inicio.mjs` mostra no início o que já foi publicado; push recusado = `git pull --rebase origin main` de novo, nunca `--force`.
 - Textos para o usuário final em português do Brasil, tom natural de WhatsApp. Mensagens de commit também em português.
 - Mudou comportamento descrito na skill `planejai`? Atualize o arquivo dela no mesmo commit.
 

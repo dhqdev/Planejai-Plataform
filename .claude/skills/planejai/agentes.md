@@ -2,6 +2,32 @@
 
 Leia antes de mexer no orquestrador, no time (CTO, especialistas, agentes sob medida), em prompts, filas, modelos ou no navegador dos agentes.
 
+## O time
+| id (rota `agent:<id>`) | Apelido | Papel |
+| --- | --- | --- |
+| `cto` | Téo | conversa com a pessoa, decide, delega com `ask_*` e revisa |
+| `pesquisador` | Pipo | web, páginas, navegador, prints e gravações |
+| `agenda` | Lia | lembretes e calendário |
+| `financeiro` | Nico | lançamentos, limites, contas fixas, gráficos |
+| `comunicacao` | Bia | e-mail e Slack |
+| `produtividade` | Duda | Notion, Linear, GitHub, n8n do dono |
+| `recados` | Zeca | fala com estabelecimentos pela pessoa |
+| `c_<slug>` | da pessoa | agentes sob medida de cada cliente (rota `agent:cliente`) |
+
+A fonte é `SPECIALISTS`/`persona` em `agent/team.ts`; o painel repete os rótulos em `AGENT_LABEL` (`components.tsx`) e as carinhas em `CORE_FACES` (`faces.tsx`). Renomeou? Troque nos três e nesta tabela, e procure o nome antigo em prompts, landing e testes (`rg -n "<Nome>" apps`).
+
+## Por que o time não trava nem se perde (não quebre)
+Cada item tem teste; rode `npm test` depois de mexer em `orchestrator.ts`, `runner.ts`, `collab.ts` ou `guard.ts`.
+- **Prazo único**: um `Guard` por execução (`maxExecutionMinutes`, padrão 8, e `maxToolCalls`) é passado a todo o time por `ctx.guard`. Perto do fim (`wrapUp`) o runner manda responder com o que tem; no prazo, a pessoa recebe aviso e a execução fecha como `partial` (`guard.e2e.test.ts`).
+- **Prazo de especialista**: `ask_*` roda com `guard.sub(90 s)` e `consult_*` com `guard.sub(45 s)`. Se parar sem relatório, `partialReport` devolve o que as ferramentas já trouxeram, e o CTO responde com dado em vez de "passou do limite".
+- **Passos limitados**: `maxSteps` do loop (CTO 10, `ask_*` 7, `consult_*` 5, recados 4). O último passo é forçado a responder em texto.
+- **Sem ciclo entre agentes**: `consult_*` leva a cadeia (`callChain`); ninguém consulta quem já está na cadeia e a cadeia para em `MAX_CHAIN` (3). O agente no fim da cadeia não recebe mais ferramentas de consulta.
+- **Uma rodada por conversa**: o job tem `singletonKey` da conversa e o worker roda com `wait: false`; conversa ocupada volta para a fila em 5 s em vez de prender a vaga.
+- **Ninguém fica "rodando" para sempre**: `closeOrphanRuns` (job de limpeza) fecha execução que passou do prazo + 10 min, morta com o processo.
+- **Sem mentira de "fiz"**: `unbackedClaim` (`agent/claims.ts`) compara a resposta com as ferramentas que deram certo (`ctx.room.done`); se disser que fez sem ter feito, uma rodada de correção e, se não resolver, resposta honesta (`unit.test.ts`).
+- **Pedido velho não volta**: o CTO ignora pedido antigo já atendido no histórico; especialistas recebem a mídia já descrita, nunca crua.
+- **Erro passageiro do LLM** só repete a rodada se nenhuma ferramenta com efeito rodou (`sideEffectsDone`), para não lançar nada duas vezes.
+
 ## Confirmação de ação sensível
 - Ação com dinheiro, mensagem para terceiro ou apagar chama `requireConfirmation(args, resumo, ctx)` (`agent/tools/types.ts`). Ela NÃO executa: guarda em `pending_actions` e devolve o resumo para o agente perguntar. Quem libera é a próxima mensagem da pessoa, lida sem IA em `agent/confirm.ts` (`confirmationAnswer`): "sim" executa exatamente o que foi guardado (com mais de uma pendência, só a mais recente; as outras viram `expired` e o CTO pergunta de novo, uma por vez), "não" descarta todas, outra coisa deixa o pedido cair. O campo `confirmed_by_user` não libera nada.
 - Apagar pede o sim quando é em massa (mais de um item ou por filtro) ou quando atinge outra pessoa: `delete_transaction` com 2+ ids ou filtro, `document_delete`, `automation_manage` (delete). Apagar um item da própria pessoa segue direto: `delete_transaction` com 1 id, `forget_memory`, `cancel_reminder`, `bill_delete`, `watch_cancel`, `errand_cancel`.
@@ -44,6 +70,5 @@ Leia antes de mexer no orquestrador, no time (CTO, especialistas, agentes sob me
 - Tudo passa pelo pg-boss (`queue/boss.ts`): mensagem vira job `conversation.process` (prioridade 10), lembretes, resumos, convites, De olho e reunião noturna têm fila própria com retry. `WORKER_CONCURRENCY` (padrão 4) = jobs em paralelo por réplica do worker; para escalar, aumente isso ou suba réplicas (a conexão do WhatsApp continua em um só processo pelo lock).
 - Tela **Filas** (super admin, `GET /api/queues`): na fila, rodando, feitos e falhas em 24h, tempo médio e de espera; falha pode ser reprocessada (`POST /api/queues/:name/:id/retry`).
 
-## Trocar modelos
-Padrões em `ROUTE_DEFAULTS` com o porquê de cada escolha e `maxTokens` por rota; em produção troque pela tela **Modelos** (grava em `model_routes`, sem redeploy). Critério: entrada barata para quem lê muito histórico (CTO, Pesquisador), saída barata para quem escreve muito, modelo omni para áudio, e sempre `fallbacks`. Confira IDs e preços no catálogo ao vivo (`GET /api/models/catalog`).
-- Token: o prompt do CTO não repete o que a descrição da ferramenta já diz (e vice-versa); `ask_*` leva só nome + papel. Passo de LLM cortado pelo `maxTokens` grava `finish_reason: "length"` na saída do passo: `SELECT count(*) FROM execution_steps WHERE output->>'finish_reason' = 'length'` mostra se o teto está apertado. `reasoning: { effort: "low" }` vai em toda chamada.
+## Modelos
+Qual modelo cada agente usa, como trocar e como medir: `modelos.md`.
