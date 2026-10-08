@@ -1156,9 +1156,10 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
   .widget.s { grid-column: span 6; } .widget.m, .widget.l, .widget.xl { grid-column: span 12; }
   .fit-stats { grid-template-columns: repeat(12, minmax(0, 1fr)); }
   .fit-stats .widget.s { grid-column: span 6; }
-  .fit-stats .widget + .widget > .card { box-shadow: none; }
-  .fit-stats .widget > .card { box-shadow: inset 0 -1px 0 var(--border); }
-  .fit-stats .widget:nth-child(odd) > .card { box-shadow: inset -1px -1px 0 var(--border); }
+  .board.fit-stats { gap: 0; }
+  .fit-stats .widget > .card, .fit-stats .widget + .widget > .card { box-shadow: none; }
+  .fit-stats .widget:nth-child(odd):not(:last-child) > .card { box-shadow: inset -1px 0 0 var(--border); }
+  .fit-stats .widget:nth-child(n + 3) > .card { border-top: 1px solid var(--border); }
   .fit-stats .stat { padding: 14px 16px; }
   .team-map { aspect-ratio: 1 / 1; min-height: 300px; }
   .team-map .agent .agent-sub { display: none; }

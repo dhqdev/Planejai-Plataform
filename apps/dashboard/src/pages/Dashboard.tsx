@@ -35,6 +35,18 @@ const SIZE_LABEL: Record<Size, string> = { s: "Pequeno", m: "Médio", l: "Grande
 const TONES = ["#FF7A1A", "#FF4458", "#E23382", "#B830C8", "#8B2BE2", "#5B45E8", "#2F7BEA", "#16A3A3"];
 const tone = (key: string) => TONES[[...key].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % TONES.length]!;
 
+/** Números pequenos em sequência viram uma faixa só (um cartão com divisórias), como no notebook. */
+function groupStats<T extends { size: string }>(list: T[]): (T | T[])[] {
+  const out: (T | T[])[] = [];
+  for (const w of list) {
+    const last = out[out.length - 1];
+    if (w.size !== "s") out.push(w);
+    else if (Array.isArray(last)) last.push(w);
+    else out.push([w]);
+  }
+  return out.map((x) => (Array.isArray(x) && x.length === 1 ? x[0] : x));
+}
+
 function Num({ label, value, sub, icon }: { label: string; value: ReactNode; sub?: ReactNode; icon: string }) {
   return (
     <div className="card card-pad stat" style={{ height: "100%", ["--c" as any]: tone(label) }}>
@@ -544,7 +556,11 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
         </div>
       ) : widgets && (
         <div ref={board} className={`board ${editing ? "editing" : ""}`} onPointerMove={onGripMove} onPointerUp={onGripUp} onPointerCancel={onGripUp}>
-          {widgets.map(renderWidget)}
+          {editing ? widgets.map(renderWidget) : groupStats(widgets).map((w) => (Array.isArray(w) ? (
+            <div key={`stats-${w[0].id}`} className="widget xl">
+              <div className="board fit-stats">{w.map(renderWidget)}</div>
+            </div>
+          ) : renderWidget(w)))}
           {!widgets.length && (
             <div className="widget xl">
               <Empty>
