@@ -151,7 +151,8 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("reconexão do WhatsApp", () => 
       await until(() => sockets.length > n && session.connected);
       expect(sockets.filter((s) => !s.ended)).toHaveLength(1);
     }
-    expect((await row()).status).toBe("connected");
+    // session.connected vira true antes da gravação de 'connected' no banco terminar (fila de status)
+    await until(async () => (await row()).status === "connected");
   });
 
   it("socket meio-aberto (sem close e sem tráfego) é derrubado pelo vigia e religado", async () => {
