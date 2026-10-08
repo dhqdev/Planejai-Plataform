@@ -115,33 +115,44 @@ export function delegationTool(def: AgentDef): Tool<{ message: string }> {
   });
 }
 
+/** Primeira frase do papel (até 160 caracteres), para a descrição da consult_ não repetir o papel inteiro. */
+function shortRole(role: string) {
+  const first = role.split(/(?<=[.!?])\s/)[0] ?? role;
+  return first.length > 160 ? `${first.slice(0, 157)}…` : first;
+}
+
 /** consult_<colega>: um especialista pergunta algo direto para outro, sem passar pelo CTO. */
 export function consultTool(def: AgentDef): Tool<{ question: string }> {
   return defineTool({
     name: `consult_${def.id}`,
-    description: `Pergunte ao colega ${def.name} (${def.role}) algo da área dele. Seja específico e dê o contexto.`,
+    // só a primeira frase do papel: cada especialista recebe uma consult_ por colega em toda chamada, e isso é pago como entrada
+    description: `Pergunte ao colega ${def.name} (${shortRole(def.role)}) algo da área dele. Seja específico e dê o contexto. Chamar de novo continua a conversa.`,
     parameters: obj({ question: { type: "string" } }, ["question"]),
     async run(args, ctx) {
       const chain = [...ctx.callChain, def.id];
       if (ctx.callChain.includes(def.id) || chain.length > MAX_CHAIN) {
         return { error: `Não dá para consultar ${def.name} agora (já está nesta cadeia de conversa). Resolva com o que tem ou devolva ao CTO.` };
       }
-      const { own, all } = await toolsFor(def, chain, ctx);
-      ctx.room.edges.push({ from: ctx.agent, to: def.id });
-      if (def.clientAgentId) void query("UPDATE client_agents SET uses = uses + 1 WHERE id = $1", [def.clientAgentId]).catch(() => {});
-      // Consulta entre colegas usa uma conversa própria (não trava a conversa do CTO com o mesmo agente)
-      const r = await runToolLoop({
-        agent: def.id,
-        task: def.task ?? `agent:${def.id}`,
-        ctx: { ...ctx, agent: def.id, callChain: chain },
-        tools: all,
-        maxSteps: 5,
-        messages: [
-          { role: "system", content: await systemFor(def, ctx, own) },
-          { role: "user", content: `[${ctx.room.nameOf(ctx.agent)}, seu colega de time, pergunta] ${args.question}${ctx.room.boardText()}` },
-        ],
+      // Consulta entre colegas usa uma conversa própria (não trava a conversa do CTO com o mesmo agente).
+      // A mesma dupla volta a conversar de onde parou: o prompt do colega não é montado e pago de novo a cada pergunta.
+      const key = `consult:${ctx.agent}>${def.id}`;
+      return ctx.room.withLock(key, async () => {
+        const { own, all } = await toolsFor(def, chain, ctx);
+        ctx.room.edges.push({ from: ctx.agent, to: def.id });
+        if (def.clientAgentId) void query("UPDATE client_agents SET uses = uses + 1 WHERE id = $1", [def.clientAgentId]).catch(() => {});
+        const thread = ctx.room.threads.get(key) ?? [{ role: "system", content: await systemFor(def, ctx, own) } as ChatMessage];
+        thread.push({ role: "user", content: `[${ctx.room.nameOf(ctx.agent)}, seu colega de time, pergunta] ${args.question}${ctx.room.boardText()}` });
+        const r = await runToolLoop({
+          agent: def.id,
+          task: def.task ?? `agent:${def.id}`,
+          ctx: { ...ctx, agent: def.id, callChain: chain },
+          tools: all,
+          maxSteps: 5,
+          messages: thread,
+        });
+        ctx.room.threads.set(key, r.messages);
+        return { answer: r.text || "(sem resposta)" };
       });
-      return { answer: r.text || "(sem resposta)" };
     },
   });
 }
