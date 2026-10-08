@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { haptic } from "../touch";
-import { Mochi } from "../mochi/Mochi";
+import { FloatingMochis, StageMochi, lookAt } from "../mochi/Parade";
 
 interface Question {
   id: string;
@@ -82,6 +82,7 @@ export function Welcome({ data, name, onDone }: { data: Onboarding; name?: strin
   const first = (name ?? "").trim().split(/\s+/)[0];
   return (
     <div className="welcome" role="dialog" aria-modal="true" aria-labelledby="welcome-q">
+      <FloatingMochis className="welcome-float" />
       <div className="welcome-top">
         <div className="welcome-progress" aria-hidden="true">
           <span style={{ width: `${((step + 1) / list.length) * 100}%` }} />
@@ -91,12 +92,12 @@ export function Welcome({ data, name, onDone }: { data: Onboarding; name?: strin
         </button>
       </div>
       <div className="welcome-body" key={q.id}>
-        {step === 0 && (
-          <div className="welcome-hello">
-            <Mochi size={56} mood="happy" />
-            <p className="muted">{first ? `Oi, ${first}! ` : "Oi! "}Umas perguntas rápidas pra eu já te conhecer quando a gente conversar no WhatsApp.</p>
-          </div>
-        )}
+        <div className="welcome-stage">
+          <StageMochi step={q.id} look={lookAt(step)} mood={busy ? "working" : error ? "error" : undefined} size={step === 0 ? 92 : 76} />
+          {step === 0 && (
+            <p className="muted welcome-hello">{first ? `Oi, ${first}! ` : "Oi! "}Umas perguntas rápidas pra eu já te conhecer quando a gente conversar no WhatsApp.</p>
+          )}
+        </div>
         <h1 id="welcome-q">{q.text}</h1>
         {q.hint && <p className="muted welcome-hint">{q.hint}</p>}
         {q.kind === "text" ? (

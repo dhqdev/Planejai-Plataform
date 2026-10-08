@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { scopeUserId } from "../../../accounts.js";
 import { many, query } from "../../../db/pool.js";
 import { myShares, selfUserId, setShare, sharedWithMe, type ShareScope } from "../../../sharing.js";
-import { createInvite, inviteLink, inviteStats, listContacts } from "../../../social.js";
+import { createInvite, createInviteCode, inviteLink, inviteStats, listContacts } from "../../../social.js";
 
 /** Convites e contatos. */
 export function inviteRoutes(base: FastifyInstance) {
@@ -29,6 +29,11 @@ export function inviteRoutes(base: FastifyInstance) {
     const a = req.account;
     if (a.role !== "superadmin" && !a.userId) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil antes de convidar." });
     try {
+      // sem telefone: convite por código (link de 24h, uso único) que a pessoa usa na landing
+      if (!String(req.body?.phone ?? "").replace(/\D/g, "")) {
+        const inv = await createInviteCode({ inviterUserId: await selfUserId(a), inviterAccountId: a.owner ? null : a.id, name: req.body?.name });
+        return { ...inv, link: inviteLink(inv.code) };
+      }
       const r = await createInvite({
         // convite do dono pelo painel também liga os dois como contatos (o WhatsApp dele vem de OWNER_PHONES)
         inviterUserId: await selfUserId(a),

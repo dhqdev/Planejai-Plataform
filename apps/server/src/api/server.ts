@@ -11,6 +11,7 @@ import { bumpSession, hashPassword, loadAccount, normalizePhone, ownerAccount, t
 import { hit, peek } from "../ratelimit.js";
 import { one, pool, query } from "../db/pool.js";
 import { phoneVariants } from "../ingest.js";
+import { cleanInviteCode } from "../social.js";
 import { getSettings } from "../settings.js";
 import { registerDashboardRoutes } from "./routes/dashboard.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
@@ -143,18 +144,21 @@ export async function buildServer() {
     return completeLogin(req, reply, account, true);
   });
 
-  // Convite público: dados para a tela de cadastro (/convite/:code)
+  // Convite público: dados para a tela de cadastro (/convite/:code ou o código digitado na landing)
   app.get<{ Params: { code: string } }>("/api/invite/:code", async (req, reply) => {
-    // códigos têm 8 letras; limitar por IP impede varrer convites atrás de nomes e telefones
+    // limitar por IP impede varrer códigos atrás de convites válidos
     if ((await hit(`invite:ip:${req.ip}`, 15 * 60)) > 60) return tooMany(reply);
     const inv = await one(
       `SELECT i.name, i.phone, i.email, i.status, i.expires_at, COALESCE(u.full_name, u.name, a.name) AS inviter
          FROM invites i LEFT JOIN users u ON u.id = i.inviter_user_id LEFT JOIN accounts a ON a.id = i.inviter_account_id WHERE i.code = $1`,
-      [String(req.params.code).toUpperCase()],
+      [cleanInviteCode(req.params.code)],
     );
-    if (!inv || inv.status === "declined" || inv.status === "expired" || new Date(inv.expires_at) < new Date()) return reply.code(404).send({ error: "Convite inválido ou expirado" });
-    const used = await one("SELECT 1 FROM accounts WHERE phone = ANY($1)", [phoneVariants(inv.phone)]);
-    return { name: inv.name, email: inv.email, phone: inv.phone, inviter: inv.inviter, used: Boolean(used) };
+    if (!inv || inv.status === "declined" || inv.status === "expired") return reply.code(404).send({ error: "Não achei esse convite. Confira o código." });
+    // convite por código serve uma vez só
+    if (!inv.phone && inv.status !== "pending") return reply.code(410).send({ error: "Esse convite já foi usado. Peça um novo a quem te convidou." });
+    if (new Date(inv.expires_at) < new Date()) return reply.code(410).send({ error: "Esse convite expirou. Os códigos valem 24 horas: peça um novo a quem te convidou." });
+    const used = inv.phone ? await one("SELECT 1 FROM accounts WHERE phone = ANY($1)", [phoneVariants(inv.phone)]) : null;
+    return { name: inv.name, email: inv.email, phone: inv.phone, inviter: inv.inviter, used: Boolean(used), expires_at: inv.expires_at };
   });
 
   // Cadastro: no modo convite (padrão) só entra quem tem o código; vira admin da própria conta, ligado ao WhatsApp
@@ -162,16 +166,18 @@ export async function buildServer() {
     if ((await hit(`register:ip:${req.ip}`, 3600)) > 20) return tooMany(reply);
     const { signupMode } = await getSettings();
     if (signupMode === "closed") return reply.code(403).send({ error: "Cadastros estão fechados." });
-    const code = String(req.body?.code ?? "").trim().toUpperCase();
-    const invite = code
+    const code = cleanInviteCode(req.body?.code);
+    const found = code
       ? await one("SELECT * FROM invites WHERE code = $1 AND status IN ('pending', 'accepted') AND expires_at > now()", [code])
       : null;
-    if (code && !invite) return reply.code(400).send({ error: "Convite inválido ou expirado" });
+    // convite por código (sem telefone) serve um cadastro só
+    const invite = found && (found.phone || found.status === "pending") ? found : null;
+    if (code && !invite) return reply.code(400).send({ error: found ? "Esse convite já foi usado. Peça um novo a quem te convidou." : "Convite inválido ou expirado" });
     if (signupMode === "invite" && !invite) return reply.code(403).send({ error: "O Planejai é só por convite. Peça um convite a quem já usa." });
     const name = String(req.body?.name ?? invite?.name ?? "").trim().slice(0, 80);
     const email = String(req.body?.email ?? "").trim().toLowerCase();
     const password = String(req.body?.password ?? "");
-    const phone = invite ? invite.phone : normalizePhone(req.body?.phone ?? "");
+    const phone = invite?.phone ? invite.phone : normalizePhone(req.body?.phone ?? "");
     if (!name) return reply.code(400).send({ error: "Informe seu nome" });
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return reply.code(400).send({ error: "E-mail inválido" });
     if (password.length < 8) return reply.code(400).send({ error: "A senha precisa ter pelo menos 8 caracteres" });
@@ -179,6 +185,14 @@ export async function buildServer() {
     if (req.body?.accept_terms !== true) return reply.code(400).send({ error: "Para criar a conta, aceite os termos de uso e a política de privacidade." });
     if (email === config.ADMIN_EMAIL.toLowerCase() || (await one("SELECT 1 FROM accounts WHERE email = $1", [email]))) {
       return reply.code(409).send({ error: "Já existe uma conta com esse e-mail" });
+    }
+    if (invite && !invite.phone) {
+      if (await one("SELECT 1 FROM accounts WHERE phone = ANY($1)", [phoneVariants(phone)])) {
+        return reply.code(409).send({ error: "Esse WhatsApp já tem conta. Entre com seu e-mail e senha." });
+      }
+      // marca o código como usado antes de criar a conta: dois cadastros ao mesmo tempo não usam o mesmo convite
+      const claimed = await one("UPDATE invites SET status = 'accepted', responded_at = now() WHERE id = $1 AND status = 'pending' RETURNING id", [invite.id]);
+      if (!claimed) return reply.code(400).send({ error: "Esse convite já foi usado. Peça um novo a quem te convidou." });
     }
     // convite vale como aprovação
     const open = signupMode === "open" || Boolean(invite);
@@ -201,7 +215,7 @@ export async function buildServer() {
       );
     }
     if (invite && invite.status === "pending") {
-      await query("UPDATE invites SET status = 'accepted', responded_at = now(), invitee_user_id = $2 WHERE id = $1", [invite.id, user.id]);
+      await query("UPDATE invites SET status = 'accepted', responded_at = COALESCE(responded_at, now()), invitee_user_id = $2 WHERE id = $1", [invite.id, user.id]);
       if (invite.inviter_user_id) {
         await query("INSERT INTO contacts (user_id, contact_id) VALUES ($1, $2), ($2, $1) ON CONFLICT DO NOTHING", [invite.inviter_user_id, user.id]);
       }

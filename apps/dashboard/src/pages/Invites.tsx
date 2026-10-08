@@ -4,22 +4,37 @@ import { CopyField, Empty, ErrorBox, Loading, Modal, PageHead } from "../compone
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 
-const STATUS: Record<string, string> = { pending: "Aguardando resposta", accepted: "Aceitou", declined: "Recusou", expired: "Expirado" };
+const STATUS: Record<string, string> = { pending: "Aguardando cadastro", accepted: "Entrou", declined: "Recusou", expired: "Expirado" };
 
-/** Formulário de convite: o Planejai manda a mensagem no WhatsApp e a pessoa responde SIM ou NÃO. */
+/** Código separado em dois blocos para ler e ditar fácil (K7Q M2X). */
+const spaced = (code: string) => (code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code);
+const expired = (i: { status: string; expires_at: string }) => i.status === "pending" && new Date(i.expires_at) < new Date();
+const left = (iso: string) => {
+  const h = Math.max(0, (new Date(iso).getTime() - Date.now()) / 3_600_000);
+  return h >= 1 ? `vale por mais ${Math.floor(h)}h` : `vale por mais ${Math.max(1, Math.round(h * 60))} min`;
+};
+
+interface Created {
+  code: string;
+  link: string;
+  name: string | null;
+  expires_at: string;
+}
+
+/** Gera um convite: link e código que valem 24h e servem para um cadastro. Quem convida manda como quiser. */
 export function InviteForm({ onDone }: { onDone?: (link: string) => void }) {
-  const [form, setForm] = useState({ name: "", phone: "", email: "" });
+  const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [link, setLink] = useState<string | null>(null);
+  const [made, setMade] = useState<Created | null>(null);
 
-  const send = async () => {
+  const make = async () => {
     setBusy(true);
     setError(null);
     try {
-      const r = await api<{ link: string }>("/api/invites", { method: "POST", json: form });
-      setLink(r.link);
-      setForm({ name: "", phone: "", email: "" });
+      const r = await api<Created>("/api/invites", { method: "POST", json: { name: name.trim() || undefined } });
+      setMade(r);
+      setName("");
       onDone?.(r.link);
     } catch (e) {
       setError((e as Error).message);
@@ -28,34 +43,41 @@ export function InviteForm({ onDone }: { onDone?: (link: string) => void }) {
     }
   };
 
-  if (link)
+  if (made) {
+    const first = made.name?.split(" ")[0];
+    const text = `${first ? `Oi, ${first}! ` : ""}Te convidei para o Planejai, um assistente no WhatsApp que organiza gastos, agenda e lembretes.\n\nEntre por este link: ${made.link}\nOu use o código ${made.code} em "Tenho um convite". Vale por 24 horas.`;
     return (
-      <div>
-        <p style={{ marginTop: 0 }}>Convite enviado no WhatsApp. Quando a pessoa responder SIM, vocês viram contatos e podem mandar coisas um para o outro.</p>
-        <CopyField value={link} />
-        <button className="btn btn-sm" style={{ marginTop: 12 }} onClick={() => setLink(null)}>
-          Convidar outra pessoa
-        </button>
+      <div className="invite-made">
+        <span className="invite-code mono" aria-label={`Código ${made.code.split("").join(" ")}`}>
+          {spaced(made.code)}
+        </span>
+        <p className="muted invite-made-note">Vale por 24 horas e serve para um cadastro. A pessoa abre o link ou digita o código em "Tenho um convite".</p>
+        <CopyField value={made.link} />
+        <div className="invite-made-actions">
+          <a className="btn btn-primary" href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">
+            <Icon name="send" size={16} /> Mandar no WhatsApp
+          </a>
+          <button className="btn" onClick={() => setMade(null)}>
+            Gerar outro
+          </button>
+        </div>
       </div>
     );
+  }
 
   return (
     <div>
       <ErrorBox error={error} />
+      <p className="muted" style={{ marginTop: 0, fontSize: 13.5 }}>
+        O Planejai gera um link e um código para a pessoa entrar. Ela preenche o próprio nome, WhatsApp e senha no cadastro.
+      </p>
       <div className="field">
-        <label>Nome</label>
-        <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Giovani Souza" />
+        <label>Para quem é (opcional)</label>
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Giovani Souza" onKeyDown={(e) => e.key === "Enter" && make()} />
+        <span className="help">Só para você saber de quem é cada convite e para dar oi pelo nome.</span>
       </div>
-      <div className="field">
-        <label>WhatsApp com DDD</label>
-        <input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="11 99999-0000" inputMode="tel" />
-      </div>
-      <div className="field">
-        <label>E-mail (opcional)</label>
-        <input className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="giovani@email.com" inputMode="email" />
-      </div>
-      <button className="btn btn-primary" style={{ width: "100%" }} disabled={busy || form.phone.replace(/\D/g, "").length < 10} onClick={send}>
-        <Icon name="send" size={16} /> {busy ? "Enviando…" : "Enviar convite"}
+      <button className="btn btn-primary" style={{ width: "100%" }} disabled={busy} onClick={make}>
+        <Icon name="link" size={16} /> {busy ? "Gerando…" : "Gerar convite"}
       </button>
     </div>
   );
@@ -72,7 +94,7 @@ export function InvitesPage({ isSuper }: { isSuper: boolean }) {
     <div className="page">
       <PageHead
         title="Convites"
-        subtitle="O Planejai só entra por convite. O convite chega no WhatsApp e a pessoa responde SIM ou NÃO."
+        subtitle="O Planejai só entra por convite. Cada convite é um link com código que vale 24 horas e serve para uma pessoa."
         actions={
           <button className="btn btn-primary" onClick={() => setOpen(true)}>
             <Icon name="user-plus" size={16} /> Convidar
@@ -93,13 +115,18 @@ export function InvitesPage({ isSuper }: { isSuper: boolean }) {
             data.invites.map((i: any) => (
               <div className="line-item" key={i.id} style={{ padding: "10px 16px" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="ellipsis"><strong>{i.name ?? phoneFmt(i.phone)}</strong></div>
+                  <div className="ellipsis">
+                    <strong>{i.name ?? (i.phone ? phoneFmt(i.phone) : "Convite por código")}</strong>
+                    {!i.phone && i.status === "pending" && !expired(i) && <span className="invite-chip mono">{spaced(i.code)}</span>}
+                  </div>
                   <div className="muted" style={{ fontSize: 12 }}>
-                    {phoneFmt(i.phone)} · {STATUS[i.status] ?? i.status} · {ago(i.created_at)}
+                    {i.phone ? `${phoneFmt(i.phone)} · ` : ""}
+                    {expired(i) ? "Expirado" : STATUS[i.status] ?? i.status}
+                    {i.status === "pending" && !expired(i) && !i.phone ? ` · ${left(i.expires_at)}` : ""} · {ago(i.created_at)}
                     {isSuper && ` · por ${i.inviter_name}`}
                   </div>
                 </div>
-                {i.status === "pending" && (
+                {i.status === "pending" && !expired(i) && (
                   <>
                     <button className="icon-btn" title="Copiar link" onClick={() => navigator.clipboard?.writeText(i.link)}>
                       <Icon name="link" size={16} />

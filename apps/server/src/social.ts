@@ -147,6 +147,38 @@ export async function createInvite(input: InviteInput) {
   return { invite, resent: false, existing };
 }
 
+/** Letras e números sem os que confundem (0/O, 1/I/L): o código é digitado na landing. */
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+export const INVITE_CODE_HOURS = 24;
+
+/** Deixa o código digitado comparável: sem espaço, hífen ou minúscula. */
+export const cleanInviteCode = (raw: unknown) => String(raw ?? "").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 16);
+
+/**
+ * Convite por código (botão Convidar do painel): gera um link e um código de 6 caracteres que valem 24h e servem
+ * para um cadastro só. Não manda nada no WhatsApp; quem convidou compartilha como quiser e o telefone vem no cadastro.
+ */
+export async function createInviteCode(input: { inviterUserId?: string | null; inviterAccountId?: string | null; name?: string | null }) {
+  if (input.inviterUserId) {
+    const me = await one("SELECT phone FROM users WHERE id = $1", [input.inviterUserId]);
+    if (me && !isOwner(me.phone)) {
+      const today = await one("SELECT COUNT(*)::int AS n FROM invites WHERE inviter_user_id = $1 AND created_at > now() - interval '24 hours'", [input.inviterUserId]);
+      if (today.n >= INVITES_PER_PERSON_DAY) throw new Error(`Limite de ${INVITES_PER_PERSON_DAY} convites por dia atingido. Amanhã dá para gerar mais.`);
+    }
+  }
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const bytes = randomBytes(6);
+    const code = Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
+    const invite = await one(
+      `INSERT INTO invites (code, inviter_user_id, inviter_account_id, name, expires_at)
+       VALUES ($1, $2, $3, $4, now() + make_interval(hours => $5)) ON CONFLICT (code) DO NOTHING RETURNING *`,
+      [code, input.inviterUserId ?? null, input.inviterAccountId ?? null, input.name?.trim().slice(0, 80) || null, INVITE_CODE_HOURS],
+    );
+    if (invite) return invite;
+  }
+  throw new Error("Não deu para gerar o código agora. Tente de novo.");
+}
+
 export function inviteLink(code: string) {
   return `${config.PUBLIC_URL.replace(/\/$/, "")}/convite/${code}`;
 }

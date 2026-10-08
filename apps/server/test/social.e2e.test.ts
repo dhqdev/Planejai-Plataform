@@ -172,6 +172,48 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     await app.close();
   });
 
+  it("convite por código: vale 24h, serve uma vez e o telefone vem no cadastro", async () => {
+    const { config } = await import("../src/config.js");
+    const owners = config.OWNER_PHONES;
+    config.OWNER_PHONES = ["5519911110000"]; // o dono é o David: o convite dele liga os dois como contatos
+    const { buildServer } = await import("../src/api/server.js");
+    const app = await buildServer();
+    const owner = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } });
+    const sup = String(owner.headers["set-cookie"]).split(";")[0]!;
+    const sentBefore = channels.playground.sent.length;
+    const created = (await app.inject({ method: "POST", url: "/api/invites", headers: { cookie: sup }, payload: { name: "Rafa Lima" } })).json();
+    expect(created.code).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
+    expect(created.link).toMatch(new RegExp(`/convite/${created.code}$`));
+    const hours = (new Date(created.expires_at).getTime() - Date.now()) / 3_600_000;
+    expect(hours).toBeGreaterThan(23.9);
+    expect(hours).toBeLessThanOrEqual(24);
+    // digitado na landing com minúscula e hífen
+    const typed = `${created.code.slice(0, 3).toLowerCase()}-${created.code.slice(3)}`;
+    expect((await app.inject({ method: "GET", url: `/api/invite/${typed}` })).json()).toMatchObject({ name: "Rafa Lima", phone: null, used: false });
+
+    const reg = await app.inject({ method: "POST", url: "/api/auth/register", payload: { code: typed, name: "Rafa Lima", email: "rafa@x.com", password: "senha-forte", phone: "19 94444-5555", accept_terms: true } });
+    expect(reg.json()).toMatchObject({ role: "admin", pending: false });
+    const rafa = await db.one("SELECT id, status, invited_by FROM users WHERE phone = '5519944445555'");
+    expect(rafa).toMatchObject({ status: "active", invited_by: david.id });
+    expect(await db.one("SELECT 1 AS ok FROM contacts WHERE user_id = $1 AND contact_id = $2", [david.id, rafa.id])).toEqual({ ok: 1 });
+    expect(channels.playground.sent.length).toBe(sentBefore); // código não manda nada no WhatsApp
+
+    // uso único
+    const again = await app.inject({ method: "POST", url: "/api/auth/register", payload: { code: created.code, name: "Outra Pessoa", email: "outra@x.com", password: "senha-forte", phone: "19 96666-7777", accept_terms: true } });
+    expect(again.statusCode).toBe(400);
+    expect(again.json().error).toContain("já foi usado");
+    expect((await app.inject({ method: "GET", url: `/api/invite/${created.code}` })).statusCode).toBe(410);
+
+    // passou de 24h
+    const old = (await app.inject({ method: "POST", url: "/api/invites", headers: { cookie: sup }, payload: {} })).json();
+    await db.query("UPDATE invites SET expires_at = now() - interval '1 minute' WHERE id = $1", [old.id]);
+    const late = await app.inject({ method: "GET", url: `/api/invite/${old.code}` });
+    expect(late.statusCode).toBe(410);
+    expect(late.json().error).toContain("24 horas");
+    config.OWNER_PHONES = owners;
+    await app.close();
+  });
+
   it("acompanhamento avisa sozinho quando aparece novidade (e não gasta IA quando não há)", async () => {
     const { saveCredentials } = await import("../src/integrations/registry.js");
     await saveCredentials("tavily", { api_key: "tvly-teste" });
