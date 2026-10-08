@@ -189,7 +189,8 @@ export async function runToolLoop(opts: {
             delete out._usage;
           }
           await toolStep.ok(out, usage);
-          if (!(out && typeof out === "object" && ("error" in out || out.ok === false))) ctx.room?.done.add(tool.name);
+          // pedido guardado esperando o "sim" ainda não foi feito: não conta para a trava de honestidade
+          if (!(out && typeof out === "object" && ("error" in out || out.ok === false || out.needs_confirmation))) ctx.room?.done.add(tool.name);
           return { id: call.id, content: typeof out === "string" ? out : JSON.stringify(out ?? { ok: true }) };
         } catch (err) {
           await toolStep.fail(err);

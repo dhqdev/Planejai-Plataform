@@ -254,6 +254,12 @@ describe("trava: dizer que fez sem ter feito", () => {
     expect(unbackedClaim("Quer que eu anote esse gasto de R$ 10?", new Set())).toBeNull();
     expect(unbackedClaim("Apaguei o uber de ontem.", new Set())).toBe("apagar ou cancelar");
     expect(unbackedClaim("Bom dia! Hoje tem reunião às 10h.", new Set())).toBeNull();
+    expect(unbackedClaim("Mandei pro Giovani 👍", new Set())).toBe("enviar mensagem");
+    expect(unbackedClaim("Mandei pro Giovani 👍", new Set(["send_to_contact"]))).toBeNull();
+    expect(unbackedClaim("Posso mandar pro Giovani?", new Set())).toBeNull();
+    expect(unbackedClaim("Convidei a Ana, agora é só ela aceitar.", new Set())).toBe("convidar");
+    expect(unbackedClaim("Gerei o link: https://mp.com/x", new Set())).toBe("gerar link de pagamento");
+    expect(unbackedClaim("Marquei com o petshop às 18h.", new Set(["errand_done"]))).toBeNull();
   });
 });
 

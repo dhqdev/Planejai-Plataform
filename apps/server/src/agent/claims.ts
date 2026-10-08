@@ -23,12 +23,27 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; tools: string[] }[] 
   {
     what: "agendar lembrete ou evento",
     says: /\b(agendei|marquei|lembrete (criado|marcado|agendado)|vou te lembrar|te lembro)\b/i,
-    tools: ["schedule_reminder", "calendar_create_event", "reschedule_reminder", "watch_create", "watch_update", "automation_save", "bill_save"],
+    tools: ["schedule_reminder", "calendar_create_event", "reschedule_reminder", "watch_create", "watch_update", "automation_save", "bill_save", "errand_start", "errand_done"],
   },
   {
     what: "guardar documento ou nota",
     says: /\b(salvei|guardei)\b/i,
     tools: ["document_save", "save_memory", "automation_save", "set_budget", "add_transaction", "bill_save", "bill_pay"],
+  },
+  {
+    what: "enviar mensagem",
+    says: /\b(mandei|enviei|encaminhei)\b/i,
+    tools: ["send_to_contact", "gmail_send", "slack_send_message", "errand_start", "errand_continue", "invite_person"],
+  },
+  {
+    what: "convidar",
+    says: /\b(convidei|convite enviado)\b/i,
+    tools: ["invite_person"],
+  },
+  {
+    what: "gerar link de pagamento",
+    says: /\b(gerei|criei) o link\b/i,
+    tools: ["create_payment_link"],
   },
 ];
 
