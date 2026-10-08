@@ -170,7 +170,7 @@ export const SPECIALISTS: AgentDef[] = [
     icon: "folder",
     role:
       "Automações no n8n para qualquer pessoa (avisos agendados, acompanhar notícias, sites e APIs, gatilhos), " +
-      "e para o dono também Notion, Linear, GitHub e os fluxos dele no n8n (listar, ver falhas, disparar).",
+      "Notion, Linear e GitHub da conta que a pessoa conectou, e para o dono os fluxos dele no n8n (listar, ver falhas, disparar).",
     instructions:
       "Retorne links diretos para o que encontrar ou criar. Para automação: confirme com o CTO o que a pessoa quer (o quê, quando, de onde vem a informação), " +
       "peça o guia do formato com automation_save nodes=[] (uma vez por tarefa), monte o fluxo mais simples possível e devolva em uma frase o que vai acontecer e quando. " +
