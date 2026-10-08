@@ -337,7 +337,7 @@ function useCurtain() {
   return { go, curtain };
 }
 
-/** Os especialistas que já vêm prontos, com o que cada um faz e como pedir. Bia (e-mail e Slack) fica de fora: é só da conta do dono. */
+/** Os especialistas que já vêm prontos, com o que cada um faz e como pedir. */
 const TEAM: { id: keyof typeof CORE_FACES; role: string; text: string; asks: string[] }[] = [
   {
     id: "cto",
@@ -368,6 +368,12 @@ const TEAM: { id: keyof typeof CORE_FACES; role: string; text: string; asks: str
     role: "Fala com quem você precisa",
     text: "Manda mensagem para um estabelecimento por você, se apresentando como seu assistente: pergunta horário, preço ou disponibilidade e marca dentro do que você liberou. Nada sai sem o seu sim.",
     asks: ["pergunta no petshop se tem banho às 18h e, se tiver, marca", "vê se o salão tem horário sábado de manhã"],
+  },
+  {
+    id: "comunicacao",
+    role: "Cuida dos seus e-mails e do Slack",
+    text: "Com o seu Gmail ou Slack conectado em Minha conta, procura, lê e resume o que chegou, separa o que é importante e escreve a resposta do seu jeito. Só envia depois do seu sim.",
+    asks: ["resume meus e-mails de hoje", "responde o João dizendo que topo a reunião"],
   },
   {
     id: "produtividade",
