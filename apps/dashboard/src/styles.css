@@ -282,25 +282,7 @@ table.table { width: 100%; border-collapse: collapse; }
 
 /* Mapa do time (centro do painel) */
 .team-map { position: relative; width: 100%; aspect-ratio: 16 / 9; min-height: 340px; max-height: 620px; }
-.team-map > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.team-map .link { stroke: var(--border-2); stroke-width: 1.4; fill: none; }
-.team-map .link.hot { stroke: var(--text); }
-.team-map .link.flow { stroke-dasharray: 4 6; animation: flow 1.4s linear infinite; }
-.team-map .agent {
-  position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer;
-  background: none; border: none; padding: 0; color: var(--text);
-}
-.team-map .agent .bubble-ico {
-  width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; background: none; border: none;
-  transition: transform 0.15s;
-}
-.team-map .agent.cto .bubble-ico { width: 80px; height: 80px; padding: 3px; background: var(--violet); }
-.team-map .agent.client .bubble-ico { width: 48px; height: 48px; }
-@media (hover: hover) and (pointer: fine) { .team-map .agent:hover .bubble-ico { transform: scale(1.06); } }
-.team-map .agent .agent-name { font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--panel); padding: 0 6px; border-radius: 6px; }
-.team-map .agent .agent-sub { font-size: 12px; color: var(--muted); margin-top: -4px; white-space: nowrap; }
-.team-map .pulse { position: absolute; inset: -6px; border-radius: inherit; border: 1px solid var(--text); opacity: 0; animation: ring 2.4s ease-out infinite; }
-@keyframes ring { 0% { opacity: .5; transform: scale(.9); } 100% { opacity: 0; transform: scale(1.3); } }
+/* o resto do mapa (quadro que arrasta, agentes, recados) fica em teammap.css */
 
 /* Execução: passos + dados */
 .exec-layout { display: grid; grid-template-columns: 360px 1fr; gap: 14px; align-items: start; }
@@ -524,8 +506,6 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
   .board { gap: 10px; }
   .widget.s { grid-column: span 6; } .widget.m, .widget.l, .widget.xl { grid-column: span 12; }
   .team-map { aspect-ratio: 3 / 4; min-height: 440px; }
-  .team-map .agent .agent-sub { display: none; }
-  .team-map .agent .agent-name { font-size: 12px; }
   .corner.tr { display: none; }
   .corner.br { bottom: calc(76px + env(safe-area-inset-bottom)); right: 16px; }
 
@@ -1027,6 +1007,9 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 /* ---------- Notebook: a tela cabe inteira, sem rolar a página (listas rolam por dentro) ---------- */
 @media (min-width: 1024px) and (min-height: 680px) {
   .route-fade:has(> .page.fit) { height: 100%; }
+  /* com as abas do grupo em cima (Agentes|Modelos...), a tela usa só o que sobra embaixo delas */
+  .main:has(> .subtabs-bar + .route-fade > .page.fit) { display: flex; flex-direction: column; }
+  .main:has(> .subtabs-bar + .route-fade > .page.fit) > .route-fade { flex: 1 1 auto; min-height: 0; height: auto; }
   .page.fit { height: 100%; display: flex; flex-direction: column; padding-top: 22px; padding-bottom: 22px; min-height: 0; }
   .page.fit > .page-head, .page.fit > .hide-phone > .page-head { margin-bottom: 14px; }
   .page.fit > * { flex-shrink: 0; }
