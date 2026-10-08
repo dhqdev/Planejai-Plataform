@@ -139,8 +139,11 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     expect(after).toMatchObject({ status: "done", sent: 2, outcome: "Banho marcado na PetCamp amanhã às 18h" });
     expect(sentTexts()).toContain("Perfeito, pode marcar o banho às 18h amanhã, por favor!");
     // lembrete 1h antes do horário marcado
-    const rem = await db.one("SELECT due_at, intent FROM reminders WHERE user_id = $1", [david.id]);
+    const rem = await db.one("SELECT due_at, intent, title, event_at, tag, color FROM reminders WHERE user_id = $1", [david.id]);
     expect(new Date(after.appointment_at).getTime() - new Date(rem.due_at).getTime()).toBe(3600_000);
+    // na agenda: bloco no horário do compromisso, com o nome do lugar e a tag do assunto
+    expect(new Date(rem.event_at).getTime()).toBe(new Date(after.appointment_at).getTime());
+    expect(rem).toMatchObject({ title: "PetCamp", tag: "Pet", color: "#e8710a" });
     expect(rem.intent).toMatch(/PetCamp/);
     expect(sentTexts().at(-1)).toMatch(/Marcado! Banho amanhã às 18h/);
     // recado fechado: nova mensagem do número volta a ser um contato desconhecido comum

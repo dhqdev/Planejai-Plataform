@@ -1,12 +1,25 @@
 import { googleApi } from "../../integrations/google.js";
-import { cancelReminder, createReminder, listReminders, rescheduleReminder } from "../../reminders.js";
+import { resolveTag } from "../../agenda-tags.js";
+import { cancelReminder, createReminder, listReminders, reminderOccurrences, rescheduleReminder } from "../../reminders.js";
 import { formatLocal, parseLocalDateTime } from "../../time.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
-export const scheduleReminder = defineTool<{ intent: string; in_minutes?: number; at?: string; cron?: string }>({
+const hm = (d: Date, tz: string) => new Intl.DateTimeFormat("pt-BR", { timeZone: tz, hour: "2-digit", minute: "2-digit" }).format(d);
+const dayOf = (d: Date, tz: string) => new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(d);
+
+export const scheduleReminder = defineTool<{
+  intent: string;
+  in_minutes?: number;
+  at?: string;
+  cron?: string;
+  title?: string;
+  event_at?: string;
+  tag?: string;
+}>({
   name: "schedule_reminder",
   description:
-    "Lembrete ou mensagem proativa: na hora o CTO escreve a mensagem a partir do intent. in_minutes, at (data/hora) ou cron (recorrente).",
+    "Lembrete ou mensagem proativa: na hora o CTO escreve a mensagem a partir do intent. in_minutes, at (data/hora) ou cron (recorrente). " +
+    "Compromisso: title curto, tag do assunto e event_at se o aviso sai antes. O resultado mostra o que já tem no dia.",
   parameters: obj(
     {
       intent: {
@@ -14,8 +27,11 @@ export const scheduleReminder = defineTool<{ intent: string; in_minutes?: number
         description: "O que lembrar, com contexto (quem pediu e por quê)",
       },
       in_minutes: { type: "number" },
-      at: { type: "string", description: "AAAA-MM-DDTHH:MM local" },
+      at: { type: "string", description: "Hora do aviso, AAAA-MM-DDTHH:MM local" },
       cron: { type: "string", description: "5 campos, fuso da pessoa, ex.: 0 8 * * 1-5" },
+      title: { type: "string", description: "Nome na agenda, 2 a 5 palavras (ex.: Veterinário do Thor)" },
+      event_at: { type: "string", description: "Hora do compromisso, se diferente do aviso" },
+      tag: { type: "string", description: "Assunto em 1 palavra (Saúde, Trabalho, Pet...); reaproveita as da pessoa" },
     },
     ["intent"],
   ),
@@ -23,6 +39,9 @@ export const scheduleReminder = defineTool<{ intent: string; in_minutes?: number
     let dueAt: Date | null = null;
     if (args.in_minutes != null) dueAt = new Date(Date.now() + args.in_minutes * 60_000);
     else if (args.at) dueAt = parseLocalDateTime(args.at, ctx.timezone);
+    const eventAt = args.event_at && !args.cron ? parseLocalDateTime(args.event_at, ctx.timezone) : null;
+    if (!dueAt && eventAt) dueAt = eventAt;
+    const tag = await resolveTag(ctx.user.id, args.tag, `${args.title ?? ""} ${args.intent}`).catch(() => null);
     const r = await createReminder({
       userId: ctx.user.id,
       conversationId: ctx.conversation.id,
@@ -30,8 +49,30 @@ export const scheduleReminder = defineTool<{ intent: string; in_minutes?: number
       dueAt,
       cron: args.cron ?? null,
       timezone: ctx.timezone,
+      title: args.title,
+      eventAt,
+      tag: tag?.name,
+      color: tag?.color,
     });
-    return { ok: true, id: r.id, first_fire_local: formatLocal(r.dueAt, ctx.timezone), recurring: Boolean(r.cron) };
+    // o que já está no dia, para avisar de choque de horário sem outra chamada
+    const at = eventAt ?? r.dueAt;
+    const day = new Date(at.getTime() - 12 * 3600_000);
+    const others = r.cron
+      ? []
+      : (await reminderOccurrences(day, new Date(at.getTime() + 12 * 3600_000), ctx.user.id).catch(() => []))
+          .filter((o) => o.reminderId !== r.id && dayOf(new Date(o.start), ctx.timezone) === dayOf(at, ctx.timezone))
+          .slice(0, 6);
+    const clash = others.find((o) => Math.abs(new Date(o.start).getTime() - at.getTime()) < 3600_000);
+    return {
+      ok: true,
+      id: r.id,
+      first_fire_local: formatLocal(r.dueAt, ctx.timezone),
+      ...(eventAt ? { event_local: formatLocal(eventAt, ctx.timezone) } : {}),
+      recurring: Boolean(r.cron),
+      tag: tag ? `${tag.name}${tag.created ? " (nova)" : ""}` : null,
+      ...(others.length ? { same_day: others.map((o) => `${hm(new Date(o.start), ctx.timezone)} ${o.title.slice(0, 40)}`) } : {}),
+      ...(clash ? { clash: `Choca com ${clash.title.slice(0, 40)}` } : {}),
+    };
   },
 });
 
@@ -45,6 +86,9 @@ export const listRemindersTool = defineTool<Record<string, never>>({
     return rows.map((r) => ({
       id: r.id,
       intent: r.intent,
+      ...(r.title ? { title: r.title } : {}),
+      ...(r.tag ? { tag: r.tag } : {}),
+      ...(r.event_at ? { event_local: formatLocal(new Date(r.event_at), ctx.timezone) } : {}),
       status: r.status,
       cron: r.cron,
       next_local: r.due_at ? formatLocal(new Date(r.due_at), ctx.timezone) : null,
@@ -64,7 +108,10 @@ export const cancelReminderTool = defineTool<{ id: string }>({
 export const rescheduleReminderTool = defineTool<{ id: string; at: string }>({
   name: "reschedule_reminder",
   description: "Muda o horário de um lembrete único (id de list_reminders). Recorrente: cancele e crie de novo com o cron novo.",
-  parameters: obj({ id: { type: "string" }, at: { type: "string", description: "Nova data/hora local AAAA-MM-DDTHH:MM" } }, ["id", "at"]),
+  parameters: obj(
+    { id: { type: "string" }, at: { type: "string", description: "Nova data/hora local AAAA-MM-DDTHH:MM (do compromisso, se tiver; o aviso anda junto)" } },
+    ["id", "at"],
+  ),
   async run(args, ctx) {
     const at = parseLocalDateTime(args.at, ctx.timezone);
     const ok = await rescheduleReminder(args.id, at, ctx.user.id);

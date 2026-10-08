@@ -409,6 +409,9 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     const cal = (await app.inject({ method: "GET", url: `/api/calendar?${range}`, headers: { cookie: adm } })).json();
     const ev = cal.events.find((e: any) => e.title.startsWith("Levar o cachorro"));
     expect(Math.abs(new Date(ev.start).getTime() - later.getTime())).toBeLessThan(60_000);
+    // sem tag escolhida, o assunto vira tag com cor (cachorro/veterinário = Pet)
+    expect(ev).toMatchObject({ tag: "Pet", color: "#e8710a" });
+    expect(cal.tags).toEqual([{ name: "Pet", color: "#e8710a" }]);
     expect(cal.events.every((e: any) => e.person === "Ana")).toBe(true);
 
     // aprovar a conta liberou o número no WhatsApp

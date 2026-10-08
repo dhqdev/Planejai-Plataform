@@ -71,6 +71,7 @@ Cada item tem teste; rode `npm test` depois de mexer em `orchestrator.ts`, `runn
 - No trigger `message`, texto vazio do CTO (que não seja `[[silencio]]` explícito) ganha uma rodada extra sem ferramentas; se ainda vier vazio, a pessoa recebe "Me perdi aqui no meio..." e a execução fica Parcial (`orchestrator.ts`, "trava: resposta vazia").
 
 ## Lembretes com teto
+- Agenda com tags (`agenda-tags.ts`, tabela `agenda_tags`): o lembrete guarda `title` curto, `event_at` (horário do compromisso; o aviso `due_at` pode sair antes e anda junto quando ele é movido), `tag` e `color`. `schedule_reminder` recebe `title`, `event_at` e `tag`; `resolveTag` reaproveita a tag do mesmo nome ou assunto (`SUBJECTS`, sem IA) e só cria se não houver, e o resultado traz `same_day`/`clash` com o que já tem no dia. Recado que marca horário cria o compromisso com o nome do lugar e a tag do assunto.
 - `createReminder` (`reminders.ts`) recusa cron mais frequente que `MIN_REMINDER_INTERVAL_MIN` (15) e mais de `MAX_ACTIVE_REMINDERS` (30) ativos por pessoa; a regra do cron mora em `cron-limits.ts` (a mesma das automações de cliente). Lembrete de quem passou do `dailyCostLimitUsd` sai como texto pronto (`plainText`), sem IA.
 
 ## Filas (como o modo fila do n8n)

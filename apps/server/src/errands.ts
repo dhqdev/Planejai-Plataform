@@ -5,6 +5,7 @@ import type { InboundMessage } from "./channels/types.js";
 import { many, one, query } from "./db/pool.js";
 import { isOwner, phoneVariants } from "./ingest.js";
 import { QUEUES, getBoss } from "./queue/boss.js";
+import { resolveTag } from "./agenda-tags.js";
 import { createReminder } from "./reminders.js";
 import { markSeen } from "./shortmem.js";
 import { jidFor, notifyUser, outboundChannel } from "./social.js";
@@ -180,12 +181,18 @@ export async function finishErrand(errandId: string, opts: { status: "done" | "f
     const ahead = opts.appointmentAt.getTime() - Date.now();
     const lead = ahead > 2 * 3600_000 ? 3600_000 : ahead > 30 * 60_000 ? 15 * 60_000 : 0;
     const due = new Date(opts.appointmentAt.getTime() - lead);
+    // na agenda: bloco no horário do compromisso, com o nome do lugar e a tag do assunto
+    const tag = await resolveTag(e.user_id, null, `${e.place} ${e.goal}`).catch(() => null);
     const r = await createReminder({
       userId: e.user_id,
       conversationId: e.conversation_id,
       intent: `Compromisso marcado pelo assistente com ${e.place} às ${formatLocal(opts.appointmentAt, opts.timezone)}: ${opts.outcome}`,
       dueAt: due,
       timezone: opts.timezone,
+      title: e.place,
+      eventAt: opts.appointmentAt,
+      tag: tag?.name,
+      color: tag?.color,
     }).catch(() => null);
     if (r) reminder = formatLocal(due, opts.timezone);
   }

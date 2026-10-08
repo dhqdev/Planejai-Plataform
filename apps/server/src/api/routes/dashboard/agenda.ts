@@ -4,7 +4,8 @@ import { one } from "../../../db/pool.js";
 import { googleApi } from "../../../integrations/google.js";
 import { asPerson } from "../../../integrations/person.js";
 import { isConnected } from "../../../integrations/registry.js";
-import { cancelReminder, createReminder, listReminders, reminderOccurrences, rescheduleReminder } from "../../../reminders.js";
+import { isColor, listTags, resolveTag } from "../../../agenda-tags.js";
+import { cancelReminder, createReminder, listReminders, reminderOccurrences, rescheduleReminder, updateReminderLook } from "../../../reminders.js";
 import { NOBODY, personalUser, selfUserId } from "../../../sharing.js";
 import { parseLocalDateTime } from "../../../time.js";
 import { conversationOf } from "../../../social.js";
@@ -21,7 +22,7 @@ export function agendaRoutes(base: FastifyInstance) {
   base.delete<{ Params: { id: string } }>("/api/reminders/:id", async (req) => ({ ok: await cancelReminder(req.params.id, await self(req.account)) }));
 
   // novo lembrete pelo painel (calendário): vai para a conversa mais recente da própria pessoa
-  base.post<{ Body: { intent?: string; at?: string } }>("/api/reminders", async (req, reply) => {
+  base.post<{ Body: { intent?: string; at?: string; tag?: string; color?: string } }>("/api/reminders", async (req, reply) => {
     const uid = await selfUserId(req.account);
     const intent = String(req.body.intent ?? "").trim();
     if (!uid) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil para criar lembretes" });
@@ -32,17 +33,44 @@ export function agendaRoutes(base: FastifyInstance) {
     if (!conv) return reply.code(400).send({ error: "Mande um oi no WhatsApp do assistente antes de criar o primeiro lembrete" });
     const tz = u.timezone ?? config.DEFAULT_TIMEZONE;
     try {
-      return await createReminder({ userId: uid, conversationId: conv.id, intent: `${intent} (criado pelo painel)`, dueAt: parseLocalDateTime(req.body.at!, tz), timezone: tz });
+      // tag escolhida na tela fica com o nome escrito; sem tag, tenta o assunto pelo texto
+      const tag = await resolveTag(uid, req.body.tag, intent, { color: req.body.color, exact: Boolean(req.body.tag?.trim()) });
+      return await createReminder({
+        userId: uid,
+        conversationId: conv.id,
+        intent: `${intent} (criado pelo painel)`,
+        dueAt: parseLocalDateTime(req.body.at!, tz),
+        timezone: tz,
+        title: intent.length <= 80 ? intent : null,
+        tag: tag?.name,
+        color: isColor(req.body.color) ? req.body.color : tag?.color,
+      });
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
   });
 
-  base.patch<{ Params: { id: string }; Body: { at?: string } }>("/api/reminders/:id", async (req, reply) => {
-    const at = req.body.at ? new Date(req.body.at) : null;
+  // mover (at) ou trocar título, tag e cor
+  base.patch<{ Params: { id: string }; Body: { at?: string; title?: string; tag?: string | null; color?: string } }>("/api/reminders/:id", async (req, reply) => {
+    const b = req.body ?? {};
+    const me = await self(req.account);
+    if (b.title !== undefined || b.tag !== undefined || b.color !== undefined) {
+      if (b.color !== undefined && !isColor(b.color)) return reply.code(400).send({ error: "Cor inválida" });
+      const tag = b.tag ? await resolveTag(me, b.tag, "", { color: b.color, exact: true }) : null;
+      if (b.tag && !tag) return reply.code(400).send({ error: "Limite de tags atingido" });
+      const ok = await updateReminderLook(req.params.id, me, {
+        title: b.title,
+        tag: b.tag === undefined ? undefined : tag?.name ?? null,
+        // trocar a tag leva a cor dela, a não ser que a cor também tenha vindo
+        color: b.color ?? (b.tag === undefined ? undefined : tag?.color ?? null),
+      });
+      if (!ok) return reply.code(404).send({ error: "Lembrete não encontrado ou já enviado" });
+      if (!b.at) return { ok };
+    }
+    const at = b.at ? new Date(b.at) : null;
     if (!at || Number.isNaN(at.getTime())) return reply.code(400).send({ error: "Data inválida" });
     try {
-      return { ok: await rescheduleReminder(req.params.id, at, await self(req.account)) };
+      return { ok: await rescheduleReminder(req.params.id, at, me) };
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
@@ -81,7 +109,7 @@ export function agendaRoutes(base: FastifyInstance) {
         /* Google fora do ar: mostra só os lembretes */
       }
     }
-    return { events, readonly: !mine };
+    return { events, readonly: !mine, tags: await listTags(uid) };
   });
 
   // ---------- Acompanhamentos (o agente fica de olho e avisa sozinho) ----------

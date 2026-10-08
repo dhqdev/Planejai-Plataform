@@ -25,7 +25,16 @@ type Ev = {
   person?: string | null;
   location?: string | null;
   link?: string | null;
+  /** compromisso: tag (assunto), cor, o texto completo e quando sai o aviso no WhatsApp */
+  tag?: string | null;
+  color?: string | null;
+  intent?: string;
+  remindAt?: string;
 };
+type Tag = { name: string; color: string };
+/** Mesmas cores do servidor (agenda-tags.ts): todas com texto branco legível. */
+const TAG_COLORS = ["#e03150", "#e8710a", "#b45309", "#0c8040", "#0f8b8d", "#0369a1", "#2a6fdb", "#4f46e5", "#7c3aed", "#d63384", "#475569"];
+const evStyle = (e: Ev) => (e.kind === "reminder" && e.color ? ({ ["--ev" as any]: e.color } as React.CSSProperties) : undefined);
 type View = "day" | "week" | "month" | "list";
 
 const WEEKDAYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
@@ -89,7 +98,7 @@ const CALENDARS: { id: Kind; label: string; color: string; group: "mine" | "othe
   { id: "holiday", label: "Feriados no Brasil", color: "var(--cal-holiday)", group: "other" },
 ];
 
-function loadHidden(): Kind[] {
+function loadHidden(): string[] {
   try {
     return JSON.parse(localStorage.getItem("pj-cal-hidden") ?? "[]");
   } catch {
@@ -106,7 +115,8 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
   const [creating, setCreating] = useState<Date | null>(null);
   const [person, setPerson] = useState("");
   const [side, setSide] = useState(true);
-  const [hidden, setHidden] = useState<Kind[]>(loadHidden);
+  // agendas e tags escondidas ("reminder", "google", "tag:Saúde"...)
+  const [hidden, setHidden] = useState<string[]>(loadHidden);
   const [search, setSearch] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
   // particular: a agenda de um contato só aparece se ele compartilhou (e só para ver)
@@ -120,7 +130,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
     return () => mq.removeEventListener("change", on);
   }, []);
 
-  const toggleCal = (k: Kind) => {
+  const toggleCal = (k: string) => {
     haptic(5);
     const next = hidden.includes(k) ? hidden.filter((x) => x !== k) : [...hidden, k];
     setHidden(next);
@@ -145,7 +155,8 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
   }, [view, cursor]);
 
   const path = `/api/calendar?from=${range.from.toISOString()}&to=${range.to.toISOString()}${person ? `&user=${person}` : ""}`;
-  const { data, error, reload } = useApi<{ events: Ev[]; readonly?: boolean }>(path, { poll: 30000 });
+  const { data, error, reload } = useApi<{ events: Ev[]; readonly?: boolean; tags?: Tag[] }>(path, { poll: 30000 });
+  const tags = data?.tags ?? [];
   const readonly = Boolean(data?.readonly);
   const create = (d: Date) => { if (!readonly) setCreating(d); };
   const events = useMemo(() => {
@@ -158,7 +169,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
     // evento do Google pode vir sem título
     return [...hol, ...(data?.events ?? [])]
       .map((e) => (e.title?.trim() ? e : { ...e, title: "(sem título)" }))
-      .filter((e) => !hidden.includes(e.kind) && (!q || e.title.toLowerCase().includes(q)));
+      .filter((e) => !hidden.includes(e.kind) && !(e.tag && hidden.includes(`tag:${e.tag}`)) && (!q || `${e.title} ${e.tag ?? ""}`.toLowerCase().includes(q)));
   }, [data, range, hidden, search]);
   const byDay = useMemo(() => {
     const m = new Map<string, Ev[]>();
@@ -242,6 +253,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
           </button>
           <MiniMonth selected={selected} onPick={pick} />
           <CalendarList title="Minhas agendas" items={calendars.filter((c) => c.group === "mine")} hidden={hidden} onToggle={toggleCal} />
+          <CalendarList title="Tags" items={tagItems(tags)} hidden={hidden} onToggle={toggleCal} />
           <CalendarList title="Outras agendas" items={calendars.filter((c) => c.group === "other")} hidden={hidden} onToggle={toggleCal} />
           {owners.length > 0 && (
             <div className="cal-side-block">
@@ -295,6 +307,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
               <div className="card cal-picker">
                 <MiniMonth selected={selected} onPick={pick} />
                 <CalendarList title="Agendas" items={calendars} hidden={hidden} onToggle={toggleCal} />
+                <CalendarList title="Tags" items={tagItems(tags)} hidden={hidden} onToggle={toggleCal} />
                 {owners.length > 0 && (
                   <select className="select" aria-label="De quem" style={{ marginTop: 10 }} value={person} onChange={(e) => setPerson(e.target.value)}>
                     <option value="">Minha agenda</option>
@@ -350,10 +363,11 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
         document.body,
       )}
 
-      {open && <EventDetail ev={open} onClose={() => setOpen(null)} onChanged={() => { setOpen(null); void reload(); }} />}
+      {open && <EventDetail ev={open} tags={tags} readonly={readonly} onClose={() => setOpen(null)} onChanged={() => { setOpen(null); void reload(); }} />}
       {creating && (
         <NewReminder
           at={creating}
+          tags={tags}
           onClose={(saved) => { setCreating(null); if (saved) void reload(); }}
         />
       )}
@@ -361,7 +375,9 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
   );
 }
 
-function CalendarList({ title, items, hidden, onToggle }: { title: string; items: typeof CALENDARS; hidden: Kind[]; onToggle: (k: Kind) => void }) {
+const tagItems = (tags: Tag[]) => tags.map((t) => ({ id: `tag:${t.name}`, label: t.name, color: t.color }));
+
+function CalendarList({ title, items, hidden, onToggle }: { title: string; items: { id: string; label: string; color: string }[]; hidden: string[]; onToggle: (k: string) => void }) {
   if (!items.length) return null;
   return (
     <div className="cal-side-block">
@@ -550,6 +566,7 @@ function MonthView(p: {
                   <button
                     key={e.id}
                     className={`cal-chip ${e.kind} ${e.recurring ? "rec" : ""}`}
+                    style={evStyle(e)}
                     onPointerDown={drag(e)}
                     onClick={(c) => { c.stopPropagation(); p.onOpen(e); }}
                     title={e.title}
@@ -627,13 +644,14 @@ function WeekView(p: { from: Date; days: number; byDay: Map<string, Ev[]>; onOpe
                 return (
                   <button
                     key={e.id}
-                    className={`cal-block ${e.kind} ${e.recurring ? "rec" : ""}`}
-                    style={{ top, height: h, ...side }}
-                    title={`${hhmm(s)} ${e.title}`}
+                    className={`cal-block ${e.kind} ${e.recurring ? "rec" : ""} ${h >= 70 ? "tall" : ""}`}
+                    style={{ top, height: h, ...side, ...evStyle(e) }}
+                    title={`${hhmm(s)} ${e.title}${e.tag ? ` · ${e.tag}` : ""}`}
                     onPointerDown={drag(e)}
                     onClick={(c) => { c.stopPropagation(); p.onOpen(e); }}
                   >
-                    <b>{hhmm(s)}</b> {e.title}
+                    <span className="t">{e.title}</span>
+                    <small>{hhmm(s)}{e.end && e.kind === "reminder" ? ` a ${hhmm(end)}` : ""}{e.tag ? ` · ${e.tag}` : ""}</small>
                   </button>
                 );
               })}
@@ -670,11 +688,11 @@ function EventRow({ ev, onOpen }: { ev: Ev; onOpen: (e: Ev) => void }) {
   return (
     <button className="cal-row" onClick={() => onOpen(ev)}>
       <span className="cal-row-time">{ev.allDay ? "dia todo" : hhmm(s)}</span>
-      <span className={`cal-bar ${ev.kind}`} />
+      <span className={`cal-bar ${ev.kind}`} style={ev.color ? { background: ev.color } : undefined} />
       <span className="cal-row-text">
         <span className="ellipsis" title={ev.title}>{ev.title}</span>
         <small className="muted">
-          {ev.kind === "google" ? "Google Agenda" : ev.kind === "holiday" ? "Feriado nacional" : ev.recurring ? "Lembrete recorrente" : "Lembrete"}
+          {ev.kind === "google" ? "Google Agenda" : ev.kind === "holiday" ? "Feriado nacional" : ev.tag ?? (ev.recurring ? "Lembrete recorrente" : ev.remindAt ? "Compromisso" : "Lembrete")}
           {ev.person ? ` · ${ev.person}` : ""}
         </small>
       </span>
@@ -683,67 +701,139 @@ function EventRow({ ev, onOpen }: { ev: Ev; onOpen: (e: Ev) => void }) {
   );
 }
 
-function EventDetail({ ev, onClose, onChanged }: { ev: Ev; onClose: () => void; onChanged: () => void }) {
+/** Escolher a tag (as que a pessoa já tem ou uma nova) e a cor do compromisso. */
+function TagPicker({ tags, tag, color, onChange }: { tags: Tag[]; tag: string; color: string | null; onChange: (tag: string, color: string | null) => void }) {
+  const known = tags.some((t) => t.name === tag);
+  const [typing, setTyping] = useState(Boolean(tag) && !known);
+  return (
+    <div className="field">
+      <label>Tag</label>
+      <div className="tag-pick">
+        {tags.map((t) => (
+          <button
+            key={t.name}
+            type="button"
+            className={`chip ${!typing && tag === t.name ? "active" : ""}`}
+            onClick={() => { haptic(5); setTyping(false); onChange(tag === t.name ? "" : t.name, tag === t.name ? null : t.color); }}
+          >
+            <span className="tag-dot" style={{ background: t.color }} />
+            {t.name}
+          </button>
+        ))}
+        <button type="button" className={`chip ${typing ? "active" : ""}`} onClick={() => { haptic(5); setTyping(true); onChange("", color); }}>
+          <Icon name="plus" size={13} /> Nova
+        </button>
+      </div>
+      {typing && (
+        <input className="input" name="tag" aria-label="Nome da tag" maxLength={24} autoFocus placeholder="Ex.: Academia" value={tag} onChange={(e) => onChange(e.target.value, color)} style={{ marginTop: 8 }} />
+      )}
+      <div className="tag-colors" role="radiogroup" aria-label="Cor">
+        {TAG_COLORS.map((c) => (
+          <button key={c} type="button" role="radio" aria-checked={color === c} aria-label={`Cor ${c}`} className={color === c ? "on" : ""} style={{ background: c }} onClick={() => { haptic(5); onChange(tag, c); }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EventDetail({ ev, tags, readonly, onClose, onChanged }: { ev: Ev; tags: Tag[]; readonly: boolean; onClose: () => void; onChanged: () => void }) {
   const s = new Date(ev.start);
   const [busy, setBusy] = useState(false);
+  const editable = ev.kind === "reminder" && !readonly;
+  const [look, setLook] = useState({ title: ev.title, tag: ev.tag ?? "", color: ev.color ?? null });
+  const dirty = look.title.trim() !== ev.title || look.tag.trim() !== (ev.tag ?? "") || look.color !== (ev.color ?? null);
+  const save = async () => {
+    setBusy(true);
+    try {
+      const json: Record<string, unknown> = {};
+      if (look.title.trim() !== ev.title) json.title = look.title.trim();
+      if (look.tag.trim() !== (ev.tag ?? "")) json.tag = look.tag.trim() || null;
+      if (look.color && look.color !== ev.color) json.color = look.color;
+      await api(`/api/reminders/${ev.reminderId}`, { method: "PATCH", json });
+      haptic(12);
+      onChanged();
+    } catch (e) {
+      setBusy(false);
+      void alertDialog("Não deu para salvar", (e as Error).message);
+    }
+  };
   return (
     <Modal
-      title={ev.kind === "google" ? "Evento" : ev.kind === "holiday" ? "Feriado" : "Lembrete"}
+      title={ev.kind === "google" ? "Evento" : ev.kind === "holiday" ? "Feriado" : ev.remindAt ? "Compromisso" : "Lembrete"}
       icon={<Icon name={ev.kind === "reminder" ? "bell" : "calendar"} />}
       onClose={onClose}
       footer={
-        ev.kind === "reminder" ? (
-          <button
-            className="btn btn-danger"
-            disabled={busy}
-            onClick={async () => {
-              const ok = await confirmDialog({
-                title: ev.recurring ? "Cancelar todas as repetições?" : "Cancelar este lembrete?",
-                body: ev.recurring ? `“${ev.title}” deixa de repetir e nenhum aviso futuro é enviado.` : `“${ev.title}” não será mais enviado no WhatsApp.`,
-                confirmLabel: "Cancelar lembrete",
-                cancelLabel: "Manter",
-                danger: true,
-              });
-              if (!ok) return;
-              setBusy(true);
-              try {
-                await api(`/api/reminders/${ev.reminderId}`, { method: "DELETE" });
-                onChanged();
-              } catch (e) {
-                setBusy(false);
-                void alertDialog("Não deu para cancelar", (e as Error).message);
-              }
-            }}
-          >
-            <Icon name="trash" size={16} /> Cancelar lembrete
-          </button>
+        editable ? (
+          <>
+            <button
+              className="btn btn-danger"
+              disabled={busy}
+              onClick={async () => {
+                const ok = await confirmDialog({
+                  title: ev.recurring ? "Cancelar todas as repetições?" : "Cancelar este lembrete?",
+                  body: ev.recurring ? `“${ev.title}” deixa de repetir e nenhum aviso futuro é enviado.` : `“${ev.title}” não será mais enviado no WhatsApp.`,
+                  confirmLabel: "Cancelar lembrete",
+                  cancelLabel: "Manter",
+                  danger: true,
+                });
+                if (!ok) return;
+                setBusy(true);
+                try {
+                  await api(`/api/reminders/${ev.reminderId}`, { method: "DELETE" });
+                  onChanged();
+                } catch (e) {
+                  setBusy(false);
+                  void alertDialog("Não deu para cancelar", (e as Error).message);
+                }
+              }}
+            >
+              <Icon name="trash" size={16} /> Cancelar
+            </button>
+            {dirty && <button className="btn btn-primary" disabled={busy || !look.title.trim()} onClick={save}>{busy ? "Salvando…" : "Salvar"}</button>}
+          </>
         ) : ev.link ? (
           <a className="btn" href={ev.link} target="_blank" rel="noreferrer"><Icon name="external" size={16} /> Abrir no Google</a>
         ) : undefined
       }
     >
-      <p className="cal-detail-title">{ev.title}</p>
+      {editable ? (
+        <div className="field">
+          <label htmlFor="ev-title">Título</label>
+          <input id="ev-title" name="title" className="input" maxLength={80} value={look.title} onChange={(e) => setLook({ ...look, title: e.target.value })} />
+        </div>
+      ) : (
+        <p className="cal-detail-title">
+          {ev.color && <span className="tag-dot" style={{ background: ev.color }} />} {ev.title}
+        </p>
+      )}
       <dl className="kv">
         <dt>Quando</dt>
-        <dd>{cap(s.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }))}{ev.allDay ? ", dia todo" : `, ${hhmm(s)}`}</dd>
+        <dd>
+          {cap(s.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }))}
+          {ev.allDay ? ", dia todo" : `, ${hhmm(s)}${ev.end && ev.kind === "reminder" ? ` a ${hhmm(new Date(ev.end))}` : ""}`}
+        </dd>
+        {ev.remindAt && (<><dt>Aviso</dt><dd>no WhatsApp às {hhmm(new Date(ev.remindAt))}{sameDay(new Date(ev.remindAt), s) ? "" : ` de ${new Date(ev.remindAt).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}`}</dd></>)}
         {ev.recurring && (<><dt>Repete</dt><dd>sim, esta é a próxima</dd></>)}
+        {!editable && ev.tag && (<><dt>Tag</dt><dd>{ev.tag}</dd></>)}
         {ev.person && (<><dt>Pessoa</dt><dd>{ev.person}</dd></>)}
         {ev.location && (<><dt>Local</dt><dd>{ev.location}</dd></>)}
+        {ev.intent && ev.intent !== ev.title && (<><dt>Detalhes</dt><dd>{ev.intent.replace(/ \(criado pelo painel\)$/, "")}</dd></>)}
       </dl>
-      {ev.kind === "reminder" && !ev.recurring && <p className="muted" style={{ fontSize: 13 }}>Para mudar o horário, arraste o lembrete no calendário (no celular, segure e arraste).</p>}
+      {editable && <TagPicker tags={tags} tag={look.tag} color={look.color} onChange={(tag, color) => setLook({ ...look, tag, color })} />}
+      {editable && !ev.recurring && <p className="muted" style={{ fontSize: 13, margin: 0 }}>Para mudar o horário, arraste no calendário (no celular, segure e arraste).</p>}
     </Modal>
   );
 }
 
-function NewReminder({ at, onClose }: { at: Date; onClose: (saved: boolean) => void }) {
-  const [f, setF] = useState({ intent: "", date: key(at), time: hhmm(at) });
+function NewReminder({ at, tags, onClose }: { at: Date; tags: Tag[]; onClose: (saved: boolean) => void }) {
+  const [f, setF] = useState({ intent: "", date: key(at), time: hhmm(at), tag: "", color: null as string | null });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true);
     setError(null);
     try {
-      await api("/api/reminders", { method: "POST", json: { intent: f.intent, at: `${f.date}T${f.time}` } });
+      await api("/api/reminders", { method: "POST", json: { intent: f.intent, at: `${f.date}T${f.time}`, tag: f.tag.trim() || undefined, color: f.color ?? undefined } });
       haptic(12);
       onClose(true);
     } catch (e) {
@@ -767,7 +857,8 @@ function NewReminder({ at, onClose }: { at: Date; onClose: (saved: boolean) => v
         <div className="field"><label htmlFor="rm-date">Dia</label><input id="rm-date" name="date" className="input" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></div>
         <div className="field"><label htmlFor="rm-time">Hora</label><input id="rm-time" name="time" className="input" type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} /></div>
       </div>
-      <p className="muted" style={{ fontSize: 13, margin: 0 }}>Na hora, o assistente manda a mensagem no WhatsApp do jeito dele, com o contexto.</p>
+      <TagPicker tags={tags} tag={f.tag} color={f.color} onChange={(tag, color) => setF({ ...f, tag, color })} />
+      <p className="muted" style={{ fontSize: 13, margin: 0 }}>Sem tag, o assistente escolhe pelo assunto. Na hora, ele manda a mensagem no WhatsApp com o contexto.</p>
     </Modal>
   );
 }

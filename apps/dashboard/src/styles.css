@@ -866,12 +866,20 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .cal-num { align-self: center; width: auto; min-width: 26px; padding: 0 6px; border-radius: 99px; font-size: 12.5px; font-weight: 650; }
 .cal-cell.today .cal-num { background: var(--grad); color: var(--on-ink); box-shadow: none; }
 .cal-cell.sel:not(.today) .cal-num { background: var(--panel-2); color: var(--text); }
-.cal-chip { background: var(--cal-reminder); color: #fff; box-shadow: none; font-weight: 600; border-radius: 5px; }
-.cal-chip.rec { background: var(--brand-4); color: #fff; box-shadow: none; }
+.cal-chip { background: var(--ev, var(--cal-reminder)); color: #fff; box-shadow: none; font-weight: 600; border-radius: 5px; }
+.cal-chip.rec { background: var(--ev, var(--brand-4)); color: #fff; box-shadow: none; }
 .cal-chip.google { background: var(--cal-google); color: #fff; box-shadow: none; }
 .cal-chip.holiday { background: var(--cal-holiday); color: #fff; box-shadow: none; }
-.cal-block { background: var(--cal-reminder); color: #fff; box-shadow: none; }
-.cal-block.rec { background: var(--brand-4); color: #fff; box-shadow: none; }
+.cal-block { background: var(--ev, var(--cal-reminder)); color: #fff; box-shadow: none; display: flex; flex-direction: column; gap: 1px; }
+.cal-block.rec { background: var(--ev, var(--brand-4)); color: #fff; box-shadow: none; }
+.cal-block .t { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; word-break: normal; flex-shrink: 0; }
+.cal-block.tall .t { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.cal-block small { font-size: 11px; opacity: .88; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tag-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.tag-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag-colors { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.tag-colors button { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--border); cursor: pointer; padding: 0; }
+.tag-colors button.on { box-shadow: 0 0 0 2px var(--text); }
 .cal-block.google { background: var(--cal-google); color: #fff; box-shadow: none; }
 .cal-bar.holiday { background: var(--cal-holiday); }
 .cal-bar.google { background: var(--cal-google); }
