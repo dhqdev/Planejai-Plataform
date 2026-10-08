@@ -8,8 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <meta name="theme-color" content="#f6f6f4" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f6f2eb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#171512" media="(prefers-color-scheme: dark)" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -46,21 +46,21 @@
     </script>
     <style>
       /* blocos em onda enquanto o app baixa (o React troca isso pela tela) */
-      .pj-boot { position: fixed; inset: 0; display: grid; place-content: center; background: #f6f6f4; }
+      .pj-boot { position: fixed; inset: 0; display: grid; place-content: center; background: #f6f2eb; }
       .pj-boot .pj-loader { width: 80px; height: 100px; }
-      .pj-boot .block { position: relative; float: left; margin: 0 10px 10px 0; width: 12px; height: 12px; border-radius: 3px; background: #141414; }
+      .pj-boot .block { position: relative; float: left; margin: 0 10px 10px 0; width: 12px; height: 12px; border-radius: 3px; background: #3a332b; }
       .pj-boot .block:nth-child(4n+1) { animation: pj-boot-wave 2s ease 0s infinite; }
       .pj-boot .block:nth-child(4n+2) { animation: pj-boot-wave 2s ease .2s infinite; }
       .pj-boot .block:nth-child(4n+3) { animation: pj-boot-wave 2s ease .4s infinite; }
       .pj-boot .block:nth-child(4n+4) { animation: pj-boot-wave 2s ease .6s infinite; margin-right: 0; }
       @keyframes pj-boot-wave { 0% { top: 0; opacity: 1; } 50% { top: 30px; opacity: .2; } 100% { top: 0; opacity: 1; } }
-      @media (prefers-color-scheme: dark) { .pj-boot { background: #111; } .pj-boot .block { background: #fff; } }
-      :root[data-theme="dark"] .pj-boot { background: #111; } :root[data-theme="dark"] .pj-boot .block { background: #fff; }
-      :root[data-theme="light"] .pj-boot { background: #f6f6f4; } :root[data-theme="light"] .pj-boot .block { background: #141414; }
-      .pj-rescue { position: fixed; inset: 0; display: grid; place-content: center; gap: 14px; text-align: center; font: 15px/1.4 Inter, system-ui, sans-serif; color: #74746f; background: #f6f6f4; z-index: 9999; }
+      @media (prefers-color-scheme: dark) { .pj-boot { background: #171512; } .pj-boot .block { background: #e9e0d2; } }
+      :root[data-theme="dark"] .pj-boot { background: #171512; } :root[data-theme="dark"] .pj-boot .block { background: #e9e0d2; }
+      :root[data-theme="light"] .pj-boot { background: #f6f2eb; } :root[data-theme="light"] .pj-boot .block { background: #3a332b; }
+      .pj-rescue { position: fixed; inset: 0; display: grid; place-content: center; gap: 14px; text-align: center; font: 15px/1.4 Inter, system-ui, sans-serif; color: #7a7064; background: #f6f2eb; z-index: 9999; }
       .pj-rescue p { margin: 0; }
-      .pj-rescue button { justify-self: center; border: 0; border-radius: 999px; padding: 12px 26px; font: 600 15px Inter, system-ui, sans-serif; background: #141414; color: #fff; cursor: pointer; }
-      @media (prefers-color-scheme: dark) { .pj-rescue { background: #111; color: #9a9a94; } .pj-rescue button { background: #f1f1ee; color: #111; } }
+      .pj-rescue button { justify-self: center; border: 0; border-radius: 999px; padding: 12px 26px; font: 600 15px Inter, system-ui, sans-serif; background: #3a332b; color: #fff; cursor: pointer; }
+      @media (prefers-color-scheme: dark) { .pj-rescue { background: #171512; color: #a59b8d; } .pj-rescue button { background: #e9e0d2; color: #1f1c18; } }
     </style>
     <script type="module" src="/src/main.tsx"></script>
   </body>

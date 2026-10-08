@@ -1,16 +1,16 @@
 /* Planejai: preto e branco. A paleta do Mochi aparece só em pontos escolhidos (marca, bolinhas de novidade, hoje na agenda, o CTO no mapa do time, perguntas de boas-vindas); as cores que informam (status, agendas, categorias) continuam. Celular, iPad e desktop. */
 :root {
-  --bg: #f6f6f4;
-  --panel: #ffffff;
-  --panel-2: #f2f2ef;
-  --border: #e6e6e2;
-  --border-2: #d6d6d0;
-  --text: #141414;
-  --muted: #686863;
-  --ink: #141414;
-  --on-ink: #ffffff;
-  --accent: #141414;
-  --accent-soft: #ececE8;
+  --bg: #f6f2eb;
+  --panel: #fffdf9;
+  --panel-2: #f0eadf;
+  --border: #e7dfd2;
+  --border-2: #d8cebd;
+  --text: #2b2621;
+  --muted: #7a7064;
+  --ink: #3a332b;
+  --on-ink: #fffdf9;
+  --accent: #3a332b;
+  --accent-soft: #ede6da;
   --ok: #2a7047;
   --ok-soft: #e8f2ec;
   --err: #c0392b;
@@ -19,7 +19,7 @@
   --warn-soft: #f6efe1;
   --info: #3b5bb5;
   --info-soft: #e9edf7;
-  --canvas-dot: #dcdcd6;
+  --canvas-dot: #ddd3c3;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.14);
   --radius: 16px;
@@ -47,17 +47,17 @@
   color-scheme: light;
 }
 :root[data-theme="dark"] {
-  --bg: #111111;
-  --panel: #191919;
-  --panel-2: #212121;
-  --border: #2a2a2a;
-  --border-2: #3a3a3a;
-  --text: #f1f1ee;
-  --muted: #9a9a94;
-  --ink: #f1f1ee;
-  --on-ink: #111111;
-  --accent: #f1f1ee;
-  --accent-soft: #262626;
+  --bg: #171512;
+  --panel: #1f1c18;
+  --panel-2: #29251f;
+  --border: #332e27;
+  --border-2: #443d34;
+  --text: #f1ebe1;
+  --muted: #a59b8d;
+  --ink: #e9e0d2;
+  --on-ink: #1f1c18;
+  --accent: #e9e0d2;
+  --accent-soft: #2b2620;
   --ok: #6cc28f;
   --ok-soft: #17261d;
   --err: #ef7a6c;
@@ -66,7 +66,7 @@
   --warn-soft: #2a2316;
   --info: #8ea6f0;
   --info-soft: #1b2133;
-  --canvas-dot: #2c2c2c;
+  --canvas-dot: #352f28;
   --shadow: none;
   --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.5);
   --violet: #8c4bff;
@@ -1348,25 +1348,26 @@ button.chip { cursor: pointer; color: var(--text); }
   .docs-usage .docs-meter { max-width: none; }
 }
 
-/* ---------- Menu lateral e barra do celular em preto ----------
-   O menu é um painel flutuante preto; a aba ativa é uma "almofada" branca com o ícone em preto.
+/* ---------- Menu lateral e barra do celular em bege ----------
+   O menu é um painel flutuante bege, um tom abaixo do fundo; a aba ativa é uma "almofada" creme com o ícone em tinta.
    Mesma linguagem no celular. (Os nomes --night/--marsh ficaram da versão roxa.) */
 :root {
-  --night: #111111;
-  --night-2: #1d1d1d;
-  --night-line: rgba(255, 255, 255, .1);
-  --night-text: #fafafa;
-  --night-muted: #a3a3a3;
-  --marsh: #ffffff;
-  --marsh-ink: #111111;
+  --night: #ece4d6;
+  --night-2: #e4dacb;
+  --night-line: rgba(58, 51, 43, .12);
+  --night-hover: rgba(58, 51, 43, .06);
+  --night-text: #2b2621;
+  --night-muted: #75695b;
+  --marsh: #fffdf9;
+  --marsh-ink: #2b2621;
+  --night-shadow: rgba(90, 70, 40, .16);
 }
-:root[data-theme="dark"] { --night: #050505; --night-2: #161616; --night-line: rgba(255, 255, 255, .1); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --night: #050505; --night-2: #161616; } }
+:root[data-theme="dark"] { --night: #221e1a; --night-2: #2b2621; --night-line: rgba(241, 235, 225, .1); --night-hover: rgba(241, 235, 225, .06); --night-text: #f1ebe1; --night-muted: #a59b8d; --marsh: #3a332b; --marsh-ink: #f1ebe1; --night-shadow: rgba(0, 0, 0, .4); }
 
 @media (min-width: 768px) {
   .sidebar {
     margin: 10px 0 10px 10px; border: none; border-radius: 24px; background: var(--night); color: var(--night-text);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, .06) inset, 0 18px 40px -18px rgba(0, 0, 0, .4);
+    box-shadow: inset 0 0 0 1px var(--night-line), 0 18px 40px -22px var(--night-shadow);
     padding: 18px 12px 14px;
   }
   .sidebar .brand { color: var(--night-text); padding-bottom: 18px; }
@@ -1375,7 +1376,7 @@ button.chip { cursor: pointer; color: var(--text); }
   .sidebar .nav-section { color: var(--night-muted); opacity: .8; letter-spacing: 0; font-size: 12px; padding: 18px 12px 6px; }
   .sidebar .nav a { color: var(--night-muted); border-radius: 14px; padding: 9px 12px; font-weight: 500; box-shadow: none; transition: background .18s, color .18s, transform .12s; }
   .sidebar .nav a .ico { transition: transform .25s cubic-bezier(.34, 1.56, .5, 1), color .18s; }
-  .sidebar .nav a.active { background: var(--marsh); color: var(--night); font-weight: 650; box-shadow: 0 1px 0 #fff inset, 0 6px 16px -6px rgba(0, 0, 0, .45); }
+  .sidebar .nav a.active { background: var(--marsh); color: var(--marsh-ink); font-weight: 650; box-shadow: 0 1px 2px var(--night-shadow), inset 0 0 0 1px var(--night-line); }
   .sidebar .nav a.active .ico { color: var(--marsh-ink); transform: scale(1.06); }
   .sidebar .nav a.active::before { display: none; }
   .sidebar .nav .count { background: var(--magenta); color: #fff; }
@@ -1388,9 +1389,9 @@ button.chip { cursor: pointer; color: var(--text); }
   .sidebar::-webkit-scrollbar { display: none; }
 }
 @media (min-width: 768px) and (hover: hover) and (pointer: fine) {
-  .sidebar .nav a:not(.active):hover { background: rgba(255, 255, 255, .07); color: var(--night-text); }
+  .sidebar .nav a:not(.active):hover { background: var(--night-hover); color: var(--night-text); }
   .sidebar .nav a:not(.active):hover .ico { transform: translateX(1px) scale(1.06); }
-  .sidebar-foot .btn:hover { background: rgba(255, 255, 255, .07); color: var(--night-text); }
+  .sidebar-foot .btn:hover { background: var(--night-hover); color: var(--night-text); }
 }
 @media (max-width: 1180px) and (min-width: 768px) {
   .sidebar .nav a { width: 50px; height: 46px; padding: 0; }
@@ -1402,12 +1403,12 @@ button.chip { cursor: pointer; color: var(--text); }
   .tabbar-pill {
     padding: 7px; border-radius: 30px; border: none; background: var(--night);
     -webkit-backdrop-filter: none; backdrop-filter: none;
-    box-shadow: 0 1px 0 rgba(255, 255, 255, .08) inset, 0 16px 34px -10px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .2);
+    box-shadow: inset 0 0 0 1px var(--night-line), 0 16px 34px -14px var(--night-shadow), 0 2px 6px var(--night-shadow);
   }
   .tabbar-scroll .tab, .tab-more { height: 58px; border-radius: 23px; }
   .tab-glider {
     top: 7px; bottom: 7px; left: 7px; width: calc((100% - 14px) / 4); border-radius: 23px;
-    background: var(--marsh); box-shadow: 0 1px 0 #fff inset, 0 8px 18px -8px rgba(0, 0, 0, .55);
+    background: var(--marsh); box-shadow: 0 1px 3px var(--night-shadow), inset 0 0 0 1px var(--night-line);
   }
   .tabbar .tab .tab-ico { color: var(--night-muted); }
   .tabbar .tab .tab-ico svg { width: 27px; height: 27px; stroke-width: 1.9; }
