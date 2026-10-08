@@ -4,6 +4,8 @@ export default defineConfig({
   test: {
     fileParallelism: false,
     testTimeout: 30_000,
+    // limpa contadores (login, convite) e memória curta do Redis de teste antes de cada arquivo
+    setupFiles: ["./test/setup.ts"],
     env: {
       DATABASE_URL: process.env.TEST_DATABASE_URL ?? "postgres://localhost:5432/planejai_test_unavailable",
       APP_SECRET: "test-secret-test-secret-test-secret-xx",

@@ -244,7 +244,8 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(c2.budget_alert).toBeUndefined();
     const c3: any = await fin.addTransaction.run({ kind: "expense", amount: 20, description: "lanche" }, ctx);
     expect(c3.budget_alert).toMatch(/Estourou o limite de Alimentação/);
-    // gráfico: PNG de verdade, pronto para o WhatsApp
+    // gráfico: PNG de verdade, pronto para o WhatsApp (só com navegador; sem CHROME_PATH o resto do teste já valeu)
+    if (!process.env.CHROME_PATH) return;
     const g: any = await fin.makeChart.run({ kind: "categorias" }, ctx);
     const img = ctx.outbox.media.get(g.media_id);
     expect(Buffer.from(img.base64, "base64").subarray(1, 4).toString()).toBe("PNG");
