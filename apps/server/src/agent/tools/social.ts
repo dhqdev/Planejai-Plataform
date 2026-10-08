@@ -7,7 +7,7 @@ export const invitePerson = defineTool<{ name: string; phone: string; message_af
   name: "invite_person",
   description:
     "Convida alguém para o Planejai pelo WhatsApp (a pessoa responde SIM ou NÃO). Quem aceita vira contato e vocês podem mandar coisas um pro outro. " +
-    "É mensagem para terceiro: só com confirmed_by_user=true depois que a pessoa confirmar nome e número. " +
+    "É mensagem para terceiro: o sistema só manda depois do \"sim\" da pessoa para nome e número. " +
     "Se ela quer dizer algo a essa pessoa ('convida o Jonathan e chama ele pro cinema'), passe em message_after_accept: é entregue sozinho quando o convite for aceito, ou na hora se já forem contatos. " +
     "Quem já usa o Planejai recebe só um pedido de contato, não o convite de novo.",
   parameters: obj(
@@ -20,7 +20,7 @@ export const invitePerson = defineTool<{ name: string; phone: string; message_af
     ["name", "phone"],
   ),
   async run(args, ctx) {
-    const gate = requireConfirmation(args, `Convidar ${args.name} (${args.phone}) para o Planejai pelo WhatsApp`);
+    const gate = await requireConfirmation(args, `Convidar ${args.name} (${args.phone}) para o Planejai pelo WhatsApp`, ctx);
     if (gate) return gate;
     const msg = args.message_after_accept?.trim();
     const r = await createInvite({ inviterUserId: ctx.user.id, name: args.name, phone: args.phone, afterAccept: msg });

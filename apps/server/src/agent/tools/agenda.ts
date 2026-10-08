@@ -121,7 +121,7 @@ export const calendarCreateEvent = defineTool<{
   name: "calendar_create_event",
   description:
     "Cria um evento no Google Agenda, com link do Google Meet (meet=true) e convidados por e-mail (o Google manda o convite e os lembretes para eles). " +
-    "Convidado exige confirmação: se a pessoa já escreveu o e-mail do convidado neste mesmo pedido, isso já é a confirmação.",
+    "Convidado exige confirmação: se a pessoa já escreveu o e-mail do convidado neste mesmo pedido, isso já vale; senão o sistema pede o sim dela.",
   integration: "google",
   parameters: obj(
     {
@@ -141,8 +141,10 @@ export const calendarCreateEvent = defineTool<{
     const attendees = [...new Set((args.attendees ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean))];
     const bad = attendees.filter((e) => !EMAIL.test(e));
     if (bad.length) return { ok: false, error: `E-mail inválido: ${bad.join(", ")}. Peça o e-mail certo.` };
-    if (attendees.length) {
-      const c = requireConfirmation(args, `convidar ${attendees.join(", ")} para "${args.title}"`);
+    // e-mail do convidado escrito pela própria pessoa nesta mensagem já é a confirmação (conferido no texto dela, não no modelo)
+    const said = (ctx.inboundText ?? "").toLowerCase();
+    if (attendees.some((e) => !said.includes(e))) {
+      const c = await requireConfirmation(args, `convidar ${attendees.join(", ")} para "${args.title}"`, ctx);
       if (c) return c;
     }
     const start = parseLocalDateTime(args.start, ctx.timezone);

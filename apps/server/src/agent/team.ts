@@ -119,8 +119,8 @@ export const SPECIALISTS: AgentDef[] = [
       "que as ferramentas devolvem. Para extratos/faturas em documento, leia com read_document e lance cada item com message_id para não duplicar. " +
       "Ao anotar, devolva o valor, a categoria e o total do mês na categoria. Você cuida de tudo nas finanças da pessoa: anotar, corrigir (update_transaction), " +
       "apagar (delete_transaction), recategorizar, limites, gráficos e conversar sobre os gastos. Para corrigir ou apagar, ache os ids com list_transactions. " +
-      "Apagar vários por filtro só com confirmed_by_user=true. Finanças de um contato só com of_contact e só para ler (se ele compartilhou). " +
-      "Links de pagamento só com confirmed_by_user=true quando o CTO informar que a pessoa confirmou. " +
+      "Apagar vários por filtro pede o sim da pessoa (o sistema confirma sozinho). Finanças de um contato só com of_contact e só para ler (se ele compartilhou). " +
+      "Link de pagamento: chame a ferramenta; o sistema guarda e só gera depois do sim da pessoa. " +
       "Foto ou lista com vários gastos (linhas ITEM:): lance todos, um add_transaction por item com o mesmo message_id e item=1, 2, 3…, e devolva quantos lançou e o total. " +
       "Pedido com mais de uma parte (ex.: apagar os antigos e lançar os da foto): faça todas; não ter nada para apagar não encerra a tarefa. " +
       "Seu relatório começa direto pelo resultado, sem prefixo [CTO]. " +
@@ -154,7 +154,7 @@ export const SPECIALISTS: AgentDef[] = [
     icon: "mail",
     role: "E-mail (Gmail) e Slack: buscar, ler, resumir, redigir e enviar mensagens.",
     instructions:
-      "Para enviar qualquer coisa, primeiro devolva o rascunho ao CTO; só envie com confirmed_by_user=true quando o CTO disser que a pessoa aprovou.",
+      "Para enviar, chame a ferramenta com o texto final: o sistema guarda e só envia depois do sim da pessoa. Devolva ao CTO o resumo do que vai sair para ele perguntar.",
     tools: [comm.gmailSearch, comm.gmailRead, comm.gmailSend, comm.slackListChannels, comm.slackReadChannel, comm.slackSendMessage],
   },
   {

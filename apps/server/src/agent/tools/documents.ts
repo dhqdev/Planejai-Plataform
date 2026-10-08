@@ -56,12 +56,12 @@ export const documentSend = defineTool<{ id: string; caption?: string }>({
 
 export const documentDelete = defineTool<{ id: string; confirmed_by_user?: boolean }>({
   name: "document_delete",
-  description: "Apaga um documento guardado. Só com confirmed_by_user=true.",
+  description: "Apaga um documento guardado. Pede o \"sim\" da pessoa (o sistema confirma sozinho).",
   parameters: obj({ id: { type: "string" }, ...CONFIRM_PARAM }, ["id"]),
   async run(args, ctx) {
     const d = await getDocument(args.id, ctx.user.id);
     if (!d) return { error: "Documento não encontrado" };
-    const blocked = requireConfirmation(args, `apagar o documento ${d.name}`);
+    const blocked = await requireConfirmation(args, `apagar o documento ${d.name}`, ctx);
     if (blocked) return blocked;
     await deleteDocument(args.id, ctx.user.id);
     return { ok: true, deleted: d.name };

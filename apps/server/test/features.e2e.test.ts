@@ -216,7 +216,7 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     const ask: any = await fin.deleteTransaction.run({ search: "uber" }, ctx);
     expect(ask).toMatchObject({ needs_confirmation: true, count: 2, total: "R$ 55,00" });
     expect((await fin.listTransactions.run({}, ctx) as any).count).toBe(3);
-    expect(await fin.deleteTransaction.run({ search: "uber", confirmed_by_user: true }, ctx)).toMatchObject({ ok: true, deleted: 2 });
+    expect(await fin.deleteTransaction.run({ search: "uber" }, { ...ctx, approvedAction: true })).toMatchObject({ ok: true, deleted: 2 });
     // um item apontado sai sem confirmação
     expect(await fin.deleteTransaction.run({ id: bread.items[0].id }, ctx)).toMatchObject({ ok: true, deleted: 1 });
     // finanças de um contato só se ele compartilhou

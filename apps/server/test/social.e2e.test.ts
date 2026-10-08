@@ -108,6 +108,10 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
 
   it("convite sai pelo WhatsApp, a pessoa responde SIM e os dois viram contatos", async () => {
     await say("convida o Giovani, 19 92222-3333");
+    // o modelo mandou confirmed_by_user=true sozinho: não vale, o pedido fica guardado esperando o "sim" da pessoa
+    expect(await db.one("SELECT * FROM invites WHERE inviter_user_id = $1", [david.id])).toBeUndefined();
+    expect(await db.one("SELECT tool, status FROM pending_actions WHERE conversation_id = $1", [davidConv])).toMatchObject({ tool: "invite_person", status: "pending" });
+    await say("sim, pode");
     const inv = await db.one("SELECT * FROM invites WHERE inviter_user_id = $1", [david.id]);
     expect(inv).toMatchObject({ phone: "5519922223333", name: "Giovani Silva", status: "pending" });
     await social.sendInvite(inv.id);

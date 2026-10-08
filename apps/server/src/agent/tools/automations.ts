@@ -363,7 +363,7 @@ export const automationList = defineTool<{ all?: boolean }>({
 
 export const automationManage = defineTool<{ workflow_id: string; action: "activate" | "deactivate" | "delete"; confirmed_by_user?: boolean }>({
   name: "automation_manage",
-  description: "Liga, desliga ou apaga uma automação da pessoa (workflow_id de automation_list). Apagar só com confirmed_by_user=true.",
+  description: "Liga, desliga ou apaga uma automação da pessoa (workflow_id de automation_list). Apagar pede o \"sim\" da pessoa (o sistema confirma sozinho).",
   integration: "n8n",
   ownerOnly: false,
   parameters: obj(
@@ -373,7 +373,7 @@ export const automationManage = defineTool<{ workflow_id: string; action: "activ
   async run(args, ctx) {
     const row = await ownAutomation(args.workflow_id, ctx);
     if (args.action === "delete") {
-      const blocked = requireConfirmation(args, `apagar a automação ${row.name}`);
+      const blocked = await requireConfirmation(args, `apagar a automação ${row.name}`, ctx);
       if (blocked) return blocked;
     }
     const api = await n8nApi();

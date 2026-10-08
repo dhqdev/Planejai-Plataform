@@ -64,7 +64,7 @@ export const n8nTrigger = defineTool<{ path: string; method?: "POST" | "GET"; da
   name: "n8n_trigger",
   description:
     "Dispara um fluxo do n8n do dono pelo webhook (path vem de n8n_workflows) enviando data em JSON. " +
-    "Como pode mandar mensagens ou mexer em dados, só com confirmed_by_user=true. Só funciona para o dono.",
+    "Como pode mandar mensagens ou mexer em dados, só roda depois do \"sim\" da pessoa (o sistema confirma sozinho). Só funciona para o dono.",
   integration: "n8n",
   parameters: obj(
     {
@@ -77,7 +77,7 @@ export const n8nTrigger = defineTool<{ path: string; method?: "POST" | "GET"; da
     ["path"],
   ),
   async run(args, ctx) {
-    const blocked = requireConfirmation(args, `disparar o fluxo ${args.path} no n8n`);
+    const blocked = await requireConfirmation(args, `disparar o fluxo ${args.path} no n8n`, ctx);
     if (blocked) return blocked;
     const { base, auth } = await n8n(ctx);
     const path = args.path.replace(/^\/+/, "").replace(/^webhook(-test)?\//, "");

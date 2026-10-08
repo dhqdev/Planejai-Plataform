@@ -114,7 +114,7 @@ describe("Google (OAuth, Gmail, Agenda)", () => {
 
   it("gmail_send envia raw RFC 2822 em base64url via POST", async () => {
     on(host("gmail.googleapis.com", "/gmail/v1/users/me/messages/send"), () => json({ id: "s1" }));
-    await communication.gmailSend.run({ to: "x@y.com", subject: "Olá", body: "corpo", confirmed_by_user: true }, ctx);
+    await communication.gmailSend.run({ to: "x@y.com", subject: "Olá", body: "corpo" }, { ...ctx, approvedAction: true });
     const c = callTo((c) => c.url.endsWith("/messages/send"));
     expect(c.method).toBe("POST");
     const raw = Buffer.from(c.body.raw, "base64url").toString();
@@ -149,12 +149,12 @@ describe("Google (OAuth, Gmail, Agenda)", () => {
     const ask: any = await agenda.calendarCreateEvent.run({ title: "Reunião", start: "2026-10-10T10:00", attendees: ["darlos@gmail.com"], meet: true }, ctx);
     expect(ask.needs_confirmation).toBe(true);
     expect(calls.length).toBe(0);
-    const bad: any = await agenda.calendarCreateEvent.run({ title: "Reunião", start: "2026-10-10T10:00", attendees: ["carlos"], confirmed_by_user: true }, ctx);
+    const bad: any = await agenda.calendarCreateEvent.run({ title: "Reunião", start: "2026-10-10T10:00", attendees: ["carlos"] }, { ...ctx, approvedAction: true });
     expect(bad.ok).toBe(false);
 
     const r: any = await agenda.calendarCreateEvent.run(
-      { title: "Reunião com Carlos", start: "2026-10-10T10:00", attendees: ["Darlos@Gmail.com "], meet: true, confirmed_by_user: true },
-      ctx,
+      { title: "Reunião com Carlos", start: "2026-10-10T10:00", attendees: ["Darlos@Gmail.com "], meet: true },
+      { ...ctx, approvedAction: true },
     );
     expect(r).toMatchObject({ ok: true, meet_link: "https://meet.google.com/abc-defg-hij", invited: ["darlos@gmail.com"] });
     const p = calls.find((c) => c.method === "POST")!;
@@ -270,7 +270,7 @@ describe("Slack", () => {
     expect(await getDef("slack")!.test!(CREDS.slack!)).toBe("Conectado ao workspace Time");
     expect(await communication.slackListChannels.run({}, ctx)).toEqual([{ id: "C1", name: "geral" }]);
     expect(await communication.slackReadChannel.run({ channel: "C1", limit: 5 }, ctx)).toHaveLength(1);
-    expect(await communication.slackSendMessage.run({ channel: "C1", text: "olá", confirmed_by_user: true }, ctx)).toEqual({ ok: true, ts: "2" });
+    expect(await communication.slackSendMessage.run({ channel: "C1", text: "olá" }, { ...ctx, approvedAction: true })).toEqual({ ok: true, ts: "2" });
     for (const c of calls) expect(c.headers.get("authorization")).toBe("Bearer xoxb-x");
     for (const c of calls.slice(1)) {
       expect(c.method).toBe("POST");
@@ -373,7 +373,7 @@ describe("Pagamentos", () => {
     on(host("api.mercadopago.com", "/users/me"), () => json({ nickname: "VEND" }));
     on(host("api.mercadopago.com", "/checkout/preferences"), () => json({ id: "pref1", init_point: "https://mp/pay" }, 201));
     expect(await getDef("mercadopago")!.test!(CREDS.mercadopago!)).toBe("Conectado como VEND");
-    const out = await finance.createPaymentLink.run({ title: "Aula", amount: 50.5, quantity: 2, confirmed_by_user: true }, ctx);
+    const out = await finance.createPaymentLink.run({ title: "Aula", amount: 50.5, quantity: 2 }, { ...ctx, approvedAction: true });
     expect(out).toEqual({ provider: "mercadopago", url: "https://mp/pay", id: "pref1" });
     const c = calls[1]!;
     expect(c.method).toBe("POST");
@@ -386,7 +386,7 @@ describe("Pagamentos", () => {
     on(host("api.stripe.com", "/v1/checkout/sessions"), () => json({ id: "cs_1", url: "https://checkout.stripe.com/x", data: [] }));
     expect(await getDef("stripe")!.test!(CREDS.stripe!)).toBe("Conectado (teste)");
     expect(calls[0]).toMatchObject({ method: "GET", url: "https://api.stripe.com/v1/checkout/sessions?limit=1" });
-    const out = await finance.createPaymentLink.run({ title: "Aula", amount: 50.5, provider: "stripe", confirmed_by_user: true }, ctx);
+    const out = await finance.createPaymentLink.run({ title: "Aula", amount: 50.5, provider: "stripe" }, { ...ctx, approvedAction: true });
     expect(out).toEqual({ provider: "stripe", url: "https://checkout.stripe.com/x", id: "cs_1" });
     const c = calls[1]!;
     expect(c.method).toBe("POST");

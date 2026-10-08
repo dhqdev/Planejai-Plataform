@@ -164,7 +164,7 @@ export async function runToolLoop(opts: {
             await toolStep.ok({ cache: true, ...((typeof hit === "object" && hit) || { value: hit }) });
             return { id: call.id, content: typeof hit === "string" ? hit : JSON.stringify(hit) };
           }
-          const run = tool.run(args, { ...ctx, parentStepId: toolStep.id });
+          const run = tool.run(args, { ...ctx, parentStepId: toolStep.id, toolCall: { name: tool.name, args } });
           const out: any = guard ? await guard.race(run) : await run;
           if (ck && out != null && !(typeof out === "object" && ("error" in out || "media_id" in out))) {
             const { _usage, ...rest } = typeof out === "object" ? out : ({ value: out } as any);

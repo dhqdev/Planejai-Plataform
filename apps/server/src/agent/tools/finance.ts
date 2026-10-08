@@ -585,7 +585,7 @@ export const deleteTransaction = defineTool<{ ids?: string[]; id?: string; from?
   name: "delete_transaction",
   description:
     "Apaga lançamentos da pessoa. Por ids (de list_transactions; 1 ou poucos itens que ela apontou, sem confirmação) " +
-    "ou por filtro (período, categoria, texto) para apagar vários de uma vez: com filtro, mostre quantos e o total e só apague com confirmed_by_user=true.",
+    "ou por filtro (período, categoria, texto) para apagar vários de uma vez: com filtro, o sistema mostra quantos e o total e só apaga depois do \"sim\" da pessoa.",
   parameters: obj({
     ids: { type: "array", items: { type: "string" } },
     from: { type: "string", description: "AAAA-MM-DD" },
@@ -607,7 +607,7 @@ export const deleteTransaction = defineTool<{ ids?: string[]; id?: string; from?
     const params = [ctx.user.id, from, to, args.category ?? null, args.search?.trim() ? `%${args.search.trim()}%` : null];
     const preview = await one(`SELECT COUNT(*)::int AS n, COALESCE(SUM(amount), 0) AS total FROM transactions WHERE ${where}`, params);
     if (!preview?.n) return { ok: false, error: "Nenhum lançamento com esse filtro" };
-    const gate = requireConfirmation(args, `apagar ${preview.n} lançamento(s) somando ${brl(cents(preview.total))}`);
+    const gate = await requireConfirmation(args, `apagar ${preview.n} lançamento(s) somando ${brl(cents(preview.total))}`, ctx);
     if (gate) return { ...gate, count: preview.n, total: brl(cents(preview.total)) };
     const r = await query(`DELETE FROM transactions WHERE ${where}`, params);
     return { ok: true, deleted: r.rowCount ?? 0, total: brl(cents(preview.total)) };
@@ -630,10 +630,10 @@ export const createPaymentLink = defineTool<{ title: string; amount: number; qua
     },
     ["title", "amount"],
   ),
-  async run(args) {
+  async run(args, ctx) {
     const qty = Math.max(1, Math.floor(args.quantity ?? 1));
     const amount = parseAmount(args.amount);
-    const c = requireConfirmation(args, `gerar link de pagamento "${args.title}" de ${brl(Math.round(amount * qty * 100) / 100)}`);
+    const c = await requireConfirmation(args, `gerar link de pagamento "${args.title}" de ${brl(Math.round(amount * qty * 100) / 100)}`, ctx);
     if (c) return c;
     const mp = args.provider !== "stripe" ? await getCredentials("mercadopago") : null;
     if (mp) {

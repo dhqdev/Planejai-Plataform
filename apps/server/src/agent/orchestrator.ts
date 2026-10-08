@@ -16,6 +16,7 @@ import { Guard, GuardTimeout, redactSecrets } from "./guard.js";
 import { isOwner } from "../ingest.js";
 import { describeMessage, preprocessMedia } from "./media.js";
 import { unbackedClaim } from "./claims.js";
+import { openPending, resolvePending } from "./confirm.js";
 import { Progress } from "./progress.js";
 import { humanize } from "./humanize.js";
 import { isAckOnly, pickReaction } from "./reaction.js";
@@ -205,9 +206,11 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       outbox.reactions.push({ messageId: lastInbound.external_id, emoji: autoReaction });
     }
 
+    // Ação sensível esperando o "sim" da pessoa: esta mensagem é a resposta (nunca vira "só reação")
+    const waiting = opts.trigger === "message" ? await openPending(conversationId) : [];
     // Só um "valeu", "ok" ou emoji: a reação já respondeu, então nem chama a IA (economia de tokens)
     const userMsgs = pending.filter((m) => m.role === "user");
-    if (opts.trigger !== "reminder" && userMsgs.length === pending.length && userMsgs.every((m) => !m.media && (!m.meta?.kind || m.meta.kind === "text"))) {
+    if (!waiting.length && opts.trigger !== "reminder" && userMsgs.length === pending.length && userMsgs.every((m) => !m.media && (!m.meta?.kind || m.meta.kind === "text"))) {
       const last = (await recentShort(conversationId, 3))?.filter((e) => e.role === "assistant").at(-1);
       if (isAckOnly(userMsgs.map((m) => m.content ?? ""), Boolean(last && /\?\s*\S{0,3}\s*$/.test(last.text)))) {
         const step = await tracer.step({ agent: "cto", type: "info", name: "só reação, sem IA", input: { reacao: autoReaction } });
@@ -294,9 +297,15 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       progress: opts.trigger === "reminder" ? undefined : progress,
     };
     const tools = [...(await availableTools(CTO_TOOLS, user)), ...TEAM_TOOLS, ...team.map(delegationTool)];
+    // "sim"/"não" da pessoa para a ação guardada: o servidor executa (ou descarta) antes do CTO responder
+    const confirmNotes = await resolvePending(
+      waiting,
+      userMsgs.filter((m) => !m.media && (!m.meta?.kind || m.meta.kind === "text")).map((m) => m.content ?? ""),
+      ctx,
+    );
     let result;
     try {
-      result = await runToolLoop({ agent: "cto", task: "agent:cto", ctx, tools, messages: [{ role: "system", content: system }, ...messages], maxSteps: 10 });
+      result = await runToolLoop({ agent: "cto", task: "agent:cto", ctx, tools, messages: [{ role: "system", content: system }, ...messages, ...confirmNotes], maxSteps: 10 });
     } finally {
       // navegador esquecido aberto: fecha e, se a pessoa pediu a gravação, manda junto
       if (ctx.room.browser) await finishBrowser(ctx).catch(() => {});

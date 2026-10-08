@@ -256,3 +256,14 @@ describe("trava: dizer que fez sem ter feito", () => {
     expect(unbackedClaim("Bom dia! Hoje tem reunião às 10h.", new Set())).toBeNull();
   });
 });
+
+describe("confirmação de ação sensível (servidor, sem IA)", () => {
+  it("só o sim da pessoa libera; não recusa; o resto não decide", async () => {
+    const { confirmationAnswer } = await import("../src/agent/confirm.js");
+    for (const t of ["sim", "Sim!", "pode mandar", "pode sim", "👍", "ok", "confirmo", "sim, por favor"]) expect(confirmationAnswer([t])).toBe("yes");
+    for (const t of ["não", "nao, espera", "cancela", "deixa pra lá", "melhor não"]) expect(confirmationAnswer([t])).toBe("no");
+    for (const t of ["muda o assunto para Reunião amanhã", "quanto gastei hoje?", "sim mas troca o e-mail para outro@x.com"]) expect(confirmationAnswer([t])).toBeNull();
+    // vale a última coisa que ela disse
+    expect(confirmationAnswer(["sim", "não, espera"])).toBe("no");
+  });
+});

@@ -47,11 +47,11 @@ export const gmailRead = defineTool<{ id: string }>({
 
 export const gmailSend = defineTool<{ to: string; subject: string; body: string; confirmed_by_user?: boolean }>({
   name: "gmail_send",
-  description: "Envia um e-mail pelo Gmail da pessoa. Sempre mostre o rascunho e peça confirmação antes.",
+  description: "Envia um e-mail pelo Gmail da pessoa. Chame com o texto final: o sistema guarda e só envia depois do \"sim\" da pessoa.",
   integration: "google",
   parameters: obj({ to: { type: "string" }, subject: { type: "string" }, body: { type: "string" }, ...CONFIRM_PARAM }, ["to", "subject", "body"]),
-  async run(args) {
-    const c = requireConfirmation(args, `enviar e-mail para ${args.to} com assunto "${args.subject}"`);
+  async run(args, ctx) {
+    const c = await requireConfirmation(args, `enviar e-mail para ${args.to} com assunto "${args.subject}"`, ctx);
     if (c) return c;
     const subject = `=?UTF-8?B?${Buffer.from(args.subject).toString("base64")}?=`;
     const raw = [`To: ${args.to}`, `Subject: ${subject}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "", args.body].join("\r\n");
@@ -98,11 +98,11 @@ export const slackReadChannel = defineTool<{ channel: string; limit?: number }>(
 
 export const slackSendMessage = defineTool<{ channel: string; text: string; confirmed_by_user?: boolean }>({
   name: "slack_send_message",
-  description: "Envia mensagem num canal do Slack. Peça confirmação antes.",
+  description: "Envia mensagem num canal do Slack. O sistema guarda e só envia depois do \"sim\" da pessoa.",
   integration: "slack",
   parameters: obj({ channel: { type: "string" }, text: { type: "string" }, ...CONFIRM_PARAM }, ["channel", "text"]),
-  async run(args) {
-    const c = requireConfirmation(args, `enviar no Slack (${args.channel}): "${args.text.slice(0, 80)}"`);
+  async run(args, ctx) {
+    const c = await requireConfirmation(args, `enviar no Slack (${args.channel}): "${args.text.slice(0, 80)}"`, ctx);
     if (c) return c;
     const j = await slack("chat.postMessage", { channel: args.channel, text: args.text });
     return { ok: true, ts: j.ts };
