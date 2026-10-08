@@ -27,12 +27,17 @@ export interface InboundMessage {
 
 export interface OutboundImage {
   /** padrão "image" */
-  kind?: "image" | "video" | "document";
+  kind?: "image" | "video" | "document" | "audio";
   base64?: string;
   url?: string;
   mimetype?: string;
   caption?: string;
   fileName?: string;
+  /** áudio: true = mensagem de voz (bolinha do WhatsApp), Ogg/Opus */
+  ptt?: boolean;
+  seconds?: number;
+  /** áudio: o texto falado, para a memória curta saber o que foi dito */
+  spoken?: string;
 }
 
 export interface Channel {

@@ -4,6 +4,7 @@ import * as core from "./tools/core.js";
 import * as finance from "./tools/finance.js";
 import * as bills from "./tools/bills.js";
 import * as images from "./tools/images.js";
+import * as audio from "./tools/audio.js";
 import * as automations from "./tools/automations.js";
 import * as documents from "./tools/documents.js";
 import * as n8n from "./tools/n8n.js";
@@ -227,6 +228,7 @@ export const CTO_TOOLS: Tool[] = [
   finance.makeChart,
   bills.billPay,
   images.makeImage,
+  audio.makeAudio,
   places.placesNearby,
   research.mapRoute,
   documents.documentSave,

@@ -124,9 +124,10 @@ export class CloudChannel implements Channel {
 
   async sendImage(to: string, image: OutboundImage) {
     const type = image.kind ?? "image";
-    const img: Record<string, unknown> = { caption: image.caption };
+    // áudio não aceita legenda; Ogg/Opus chega como mensagem de voz
+    const img: Record<string, unknown> = type === "audio" ? {} : { caption: image.caption };
     if (type === "document") img.filename = image.fileName ?? "arquivo.pdf";
-    if (image.base64) img.id = await this.upload(image.base64, image.mimetype ?? (type === "video" ? "video/mp4" : type === "document" ? "application/pdf" : "image/png"), image.fileName ?? (type === "video" ? "gravacao.mp4" : "imagem.png"));
+    if (image.base64) img.id = await this.upload(image.base64, (image.mimetype ?? (type === "video" ? "video/mp4" : type === "document" ? "application/pdf" : type === "audio" ? "audio/ogg" : "image/png")).split(";")[0]!, image.fileName ?? (type === "video" ? "gravacao.mp4" : type === "audio" ? "voz.ogg" : "imagem.png"));
     else img.link = image.url;
     const r = await this.send({ to, type, [type]: img });
     return { id: r?.messages?.[0]?.id };

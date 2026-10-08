@@ -7,6 +7,7 @@ Leia antes de mexer em WhatsApp, Telegram, n8n, API interna, eventos, notificaç
 - A API manda comandos (`connect`, `logout`, `restart`) por `pg_notify('wa_command')`; o status/QR fica em `wa_sessions`, que a tela WhatsApp lê a cada 2s.
 - Só reconecta sozinho se a sessão já foi pareada; QR novo só quando alguém pede no dashboard.
 - Áudio e foto são baixados na chegada (`downloadMediaMessage`) e o base64 sai do banco depois de transcrito/descrito.
+- **Áudio de saída** (`agent/tts.ts`, ferramenta `make_audio` em `agent/tools/audio.ts`, do CTO): o CTO escreve o texto como fala e a rota `tts` (`ROUTE_DEFAULTS`, Kokoro, a voz mais barata do OpenRouter; voz em `TTS_VOICE`, padrão `pf_dora`) gera mp3 em `POST /audio/speech`, em pedaços de até 1.200 caracteres (máx. 3.500). O ffmpeg junta em Ogg/Opus mono e sai como mensagem de voz (`kind: "audio"`, `ptt`) em todos os canais; sem ffmpeg vai como mp3. O `/audio/speech` não devolve custo: `ttsCost` calcula pelo preço do catálogo (`/models?output_modalities=speech`) e o `_usage` põe na execução da pessoa. Na memória curta o áudio entra como `[áudio] <texto>`. Regra no prompt: pediu áudio, manda direto; história/resumo longo em texto, oferece o áudio no fim.
 - Não copie código do tekvosoft (AGPL); a implementação aqui é própria, usando só a API pública do Baileys.
 
 ## Telegram, n8n e o resto

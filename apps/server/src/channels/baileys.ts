@@ -60,6 +60,8 @@ export class BaileysChannel implements Channel {
         ? s.sendMessage(jid, { document: content, caption: image.caption, mimetype: image.mimetype ?? "application/pdf", fileName: image.fileName ?? "arquivo.pdf" })
         : image.kind === "video"
         ? s.sendMessage(jid, { video: content, caption: image.caption, mimetype: image.mimetype ?? "video/mp4" })
+        : image.kind === "audio"
+        ? s.sendMessage(jid, { audio: content, mimetype: image.mimetype ?? "audio/ogg; codecs=opus", ptt: image.ptt ?? true, seconds: image.seconds || undefined })
         : s.sendMessage(jid, { image: content, caption: image.caption, mimetype: image.mimetype }),
     );
     return { id: r?.key?.id ?? undefined };

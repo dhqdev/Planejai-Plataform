@@ -428,7 +428,11 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     if (keepInDb) await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
     else await query("DELETE FROM messages WHERE id = ANY($1)", [pending.map((m) => m.id)]);
     await query("UPDATE conversations SET updated_at = now() WHERE id = $1", [conversationId]);
-    const sentTexts = [...progress.sent, ...bubbles.filter((b): b is { type: "text"; text: string } => b.type === "text").map((b) => b.text)];
+    // áudio entra na memória curta com o que foi falado, para a próxima resposta saber o que já foi dito
+    const sentTexts = [
+      ...progress.sent,
+      ...bubbles.flatMap((b) => (b.type === "text" ? [b.text] : outbox.media.get(b.id)?.spoken ? [`[áudio] ${outbox.media.get(b.id)!.spoken}`] : [])),
+    ];
     if (sentTexts.length) await pushShort(conversationId, [{ id: Date.now(), role: "assistant", text: sentTexts.join("\n"), ts: Date.now() }]);
     if (!ctx.room.partial && guard.toolCalls >= guard.maxToolCalls) ctx.room.partial = `Bateu o limite de ${guard.maxToolCalls} ações`;
     await tracer.finish(silent ? "[[silencio]]" : result.text, ctx.room.partial);
@@ -463,7 +467,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
 
 /** Ferramentas que só leem ou calculam: rodar de novo numa nova tentativa não muda nada. */
 const NO_SIDE_EFFECT =
-  /^(ask_|consult_|share_with_team$|react_to_message$|web_search|fetch_url|browser_|screenshot_url|map_route|places_nearby|make_chart|make_image|calculate|read_|list_|get_|search_)|(_list|_status|_search|_read|_summary|_events|_channels|_workflows|_executions|_catalog|_search_issues|_read_page|attach_image)$/;
+  /^(ask_|consult_|share_with_team$|react_to_message$|web_search|fetch_url|browser_|screenshot_url|map_route|places_nearby|make_chart|make_image|make_audio|calculate|read_|list_|get_|search_)|(_list|_status|_search|_read|_summary|_events|_channels|_workflows|_executions|_catalog|_search_issues|_read_page|attach_image)$/;
 
 export function sideEffectsDone(done: Set<string>) {
   return [...done].filter((n) => !NO_SIDE_EFFECT.test(n));
@@ -500,7 +504,8 @@ async function costLimitHit(userId: string, limitUsd: number) {
 
 async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: ConversationRow; outbox: Outbox; tracer: Tracer; keepInDb: boolean }) {
   for (const [i, b] of bubbles.entries()) {
-    const step = await o.tracer.step({ agent: "cto", type: "channel", name: b.type === "text" ? "enviar_texto" : "enviar_imagem", input: b.type === "text" ? { text: b.text } : { media: b.id } });
+    const name = b.type === "text" ? "enviar_texto" : o.outbox.media.get(b.id)?.kind === "audio" ? "enviar_audio" : "enviar_imagem";
+    const step = await o.tracer.step({ agent: "cto", type: "channel", name, input: b.type === "text" ? { text: b.text } : { media: b.id } });
     try {
       if (b.type === "text") {
         if (i > 0) {
@@ -524,7 +529,7 @@ async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: C
         const r = await o.channel.sendImage(o.conversation.remote_jid, img);
         if (o.keepInDb) await query(
           "INSERT INTO messages (conversation_id, role, content, external_id, media, processed) VALUES ($1, 'assistant', $2, $3, $4, true)",
-          [o.conversation.id, img.caption ?? "[imagem]", r.id ?? null, { url: img.url ?? null, mimetype: img.mimetype ?? null }],
+          [o.conversation.id, img.spoken ? `[áudio] ${img.spoken}` : img.caption ?? "[imagem]", r.id ?? null, { url: img.url ?? null, mimetype: img.mimetype ?? null }],
         );
         await step.ok(r);
       }

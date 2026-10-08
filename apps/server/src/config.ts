@@ -33,6 +33,8 @@ const schema = z.object({
 
   OPENROUTER_API_KEY: z.string().default(""),
   OPENROUTER_BASE_URL: z.string().default("https://openrouter.ai/api/v1"),
+  // voz das mensagens de áudio no Kokoro (rota "tts"): pf_dora (feminina), pm_alex ou pm_santa (masculinas), todas pt-BR
+  TTS_VOICE: z.string().default("pf_dora"),
 
   // Canal WhatsApp: "baileys" (conexão própria por QR code, embutida), "evolution" (Evolution API)
   // ou "cloud" (API oficial da Meta).

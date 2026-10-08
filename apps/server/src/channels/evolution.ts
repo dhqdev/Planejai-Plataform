@@ -49,6 +49,11 @@ export class EvolutionChannel implements Channel {
   }
 
   async sendImage(remoteJid: string, image: OutboundImage) {
+    if (image.kind === "audio") {
+      // a Evolution converte e manda como mensagem de voz
+      const r = await this.call("/message/sendWhatsAppAudio", { number: remoteJid, audio: image.base64 ?? (await checkedUrl(image.url!)) });
+      return { id: r?.key?.id };
+    }
     const r = await this.call("/message/sendMedia", {
       number: remoteJid,
       mediatype: image.kind ?? "image",

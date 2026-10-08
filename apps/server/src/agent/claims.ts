@@ -33,7 +33,7 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; tools: string[] }[] 
   {
     what: "enviar mensagem",
     says: /\b(mandei|enviei|encaminhei)\b/i,
-    tools: ["send_to_contact", "gmail_send", "slack_send_message", "errand_start", "errand_continue", "invite_person"],
+    tools: ["send_to_contact", "make_audio", "gmail_send", "slack_send_message", "errand_start", "errand_continue", "invite_person"],
   },
   {
     what: "convidar",

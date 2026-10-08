@@ -103,6 +103,13 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     maxTokens: 1500,
   },
   {
+    task: "tts",
+    label: "Voz (áudios enviados)",
+    why: "Mensagem de voz em pt-BR (história, resumo). Kokoro é a voz mais barata do OpenRouter: US$ 0,62 por milhão de caracteres (~US$ 0,0006 por minuto). Voz em TTS_VOICE.",
+    model: "hexgrad/kokoro-82m",
+    fallbacks: ["google/gemini-3.8-flash-lite-tts"],
+  },
+  {
     task: "summary",
     label: "Resumo de conversa",
     why: "Compacta conversas longas em memória; saída barata.",

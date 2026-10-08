@@ -124,7 +124,11 @@ export class TelegramChannel implements Channel {
 
   async sendImage(chatId: string, image: OutboundImage) {
     const kind = image.kind ?? "image";
-    const [method, field] = kind === "video" ? ["sendVideo", "video"] : kind === "document" ? ["sendDocument", "document"] : ["sendPhoto", "photo"];
+    const [method, field] =
+      kind === "video" ? ["sendVideo", "video"]
+      : kind === "document" ? ["sendDocument", "document"]
+      : kind === "audio" ? (image.ptt ? ["sendVoice", "voice"] : ["sendAudio", "audio"])
+      : ["sendPhoto", "photo"];
     const caption = image.caption ? toTelegramHtml(image.caption).slice(0, 1024) : undefined;
     let r: any;
     if (image.base64) {
@@ -134,7 +138,7 @@ export class TelegramChannel implements Channel {
         form.set("caption", caption);
         form.set("parse_mode", "HTML");
       }
-      const name = image.fileName ?? (kind === "video" ? "video.mp4" : kind === "document" ? "arquivo" : "imagem.png");
+      const name = image.fileName ?? (kind === "video" ? "video.mp4" : kind === "document" ? "arquivo" : kind === "audio" ? (image.ptt ? "voz.ogg" : "audio.mp3") : "imagem.png");
       form.set(field, new Blob([Buffer.from(image.base64, "base64")], { type: image.mimetype ?? "application/octet-stream" }), name);
       r = await this.call(method, form, 120_000);
     } else {
