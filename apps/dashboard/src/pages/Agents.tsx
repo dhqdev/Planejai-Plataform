@@ -63,7 +63,7 @@ export function AgentsPage() {
           <div className="card-pad"><h3 style={{ margin: 0 }}>Time fixo</h3></div>
           {data.map((a) => (
             <div key={a.id} className="line-item clickable" style={{ padding: "12px 16px" }} onClick={() => setSel(a)}>
-              <span className="face-tile"><AgentFace face={a.face} size={46} /></span>
+              <span className="face-tile"><AgentFace face={a.face} size={46} agent={a.id} live /></span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <strong>{a.persona ?? a.name}</strong> <span className="muted">· {a.name}</span>
                 <div className="muted ellipsis" style={{ fontSize: 12 }}>{a.model}</div>

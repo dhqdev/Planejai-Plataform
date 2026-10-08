@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { CLIENT_DOING, ROLE_DOING } from "../agentProps";
 import { ago } from "../api";
 import { Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
 import { AgentFace, type Face } from "../faces";
@@ -16,6 +17,21 @@ interface Member {
   kind?: string;
 }
 
+/** "Lendo o comprovante...": uma frase por vez, trocando devagar (some com movimento reduzido). */
+function Doing({ id }: { id: string }) {
+  const list = ROLE_DOING[id] ?? CLIENT_DOING;
+  const [i, setI] = useState(() => Math.floor(Math.random() * list.length));
+  useEffect(() => {
+    const t = setInterval(() => !document.hidden && setI((n) => (n + 1) % list.length), 4200 + Math.random() * 1800);
+    return () => clearInterval(t);
+  }, [list.length]);
+  return (
+    <span className="team-doing" aria-hidden="true">
+      <span key={i}>{list[i]}</span>
+    </span>
+  );
+}
+
 /** Meu time: o Maestro (CTO), os especialistas e os agentes criados só para esta pessoa, cada um com nome e carinha. */
 export function TeamPage() {
   const { data, error } = useApi<{ core: Member[]; mine: Member[]; notes?: { agent: string; note: string | null; user_note?: string | null }[] }>("/api/me/team");
@@ -26,9 +42,10 @@ export function TeamPage() {
 
   const Card = ({ m, lead }: { m: Member; lead?: boolean }) => (
     <button className={`team-card ${lead ? "lead" : ""}`} onClick={() => setSel(m)}>
-      <span className="face-tile"><AgentFace face={m.face} size={lead ? 70 : 76} /></span>
+      <span className="face-tile"><AgentFace face={m.face} size={lead ? 70 : 76} agent={m.id} live /></span>
       <strong>{m.persona ?? m.name}</strong>
       <small>{m.focus ?? m.name}</small>
+      <Doing id={m.id} />
     </button>
   );
 

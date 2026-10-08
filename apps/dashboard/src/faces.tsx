@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { AgentProp, CLIENT_MOODS, ROLE_MOODS } from "./agentProps";
 import { Mochi, type Mood, type Outfit } from "./mochi/Mochi";
 
 /**
@@ -37,14 +39,41 @@ export function outfitFor(face?: Face | null): Outfit {
   return out;
 }
 
-export function AgentFace({ face, size = 40, title }: { face?: Face | null; size?: number; title?: string }) {
+export function AgentFace({ face, size = 40, title, agent, live = false }: { face?: Face | null; size?: number; title?: string; agent?: string; live?: boolean }) {
   const f = face ?? DEFAULT;
+  const mood = useRoleMood(live ? (agent ?? "c_") : null, MOOD[f.eyes] ?? "idle");
   return (
-    <span className="agent-face" role="img" aria-label={title ?? "agente"} style={{ width: size, height: size, background: FACE_COLORS[index(f.color, FACE_COLORS.length)] }}>
-      {/* parado (sem seguir o mouse): há telas com dezenas deles */}
-      <Mochi still mood={MOOD[f.eyes] ?? "idle"} outfit={outfitFor(f)} size={Math.round(size * 0.92)} title={title} />
+    <span className={`agent-face ${live ? "live" : ""}`} role="img" aria-label={title ?? "agente"} style={{ width: size, height: size, background: FACE_COLORS[index(f.color, FACE_COLORS.length)] }}>
+      {/* parado (sem seguir o mouse) onde há dezenas deles; vivo nas telas do time */}
+      <Mochi still={!live} mood={mood} outfit={outfitFor(f)} size={Math.round(size * 0.92)} title={title} />
+      {live && agent !== undefined && <AgentProp agent={agent} />}
     </span>
   );
+}
+
+/** Troca a expressão do agente de tempos em tempos (cada um no seu ritmo), só enquanto a aba está visível. */
+function useRoleMood(agent: string | null, base: Mood): Mood {
+  const [mood, setMood] = useState<Mood>(base);
+  useEffect(() => {
+    if (agent === null || (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches)) {
+      setMood(base);
+      return;
+    }
+    const list = ROLE_MOODS[agent] ?? CLIENT_MOODS;
+    let i = Math.floor(Math.random() * list.length);
+    setMood(list[i]!);
+    let t: ReturnType<typeof setTimeout>;
+    const next = () => {
+      if (!document.hidden) {
+        i = (i + 1) % list.length;
+        setMood(list[i]!);
+      }
+      t = setTimeout(next, 2600 + Math.random() * 2600);
+    };
+    t = setTimeout(next, 1200 + Math.random() * 2400);
+    return () => clearTimeout(t);
+  }, [agent, base]);
+  return mood;
 }
 
 /** Time fixo (espelho de apps/server/src/agent/team.ts) para telas que só têm o id do agente. */

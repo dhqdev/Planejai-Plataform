@@ -1,0 +1,90 @@
+/* Agentes vivos (faces.tsx + agentProps.tsx): o Mochi muda o olhar sozinho e o objeto de cada um trabalha.
+   O corpo do Mochi não se mexe; só olhos e objeto. Nada anima com movimento reduzido. */
+.agent-face.live { position: relative; overflow: visible; }
+.agent-prop {
+  --ap-accent: #6510e0;
+  position: absolute; right: -12%; bottom: -8%; width: 46%; height: 46%; border-radius: 50%;
+  display: grid; place-items: center; padding: 6%; background: #fff; pointer-events: none;
+  box-shadow: 0 0 0 1.5px rgba(18, 18, 20, 0.08), 0 4px 10px -4px rgba(18, 18, 20, 0.35);
+  animation: ap-pop 0.5s cubic-bezier(.34, 1.56, .64, 1) both;
+}
+.agent-prop svg { overflow: visible; display: block; }
+.agent-prop * { transform-box: fill-box; }
+@keyframes ap-pop { from { transform: scale(0.3); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* Maestro: a batuta rege e as notas sobem */
+.ap-baton { transform-origin: 10px 31px; transform-box: view-box !important; animation: ap-conduct 1.6s cubic-bezier(.45, 0, .3, 1) infinite; }
+@keyframes ap-conduct { 0%, 100% { transform: rotate(-16deg); } 30% { transform: rotate(12deg); } 55% { transform: rotate(-4deg); } 75% { transform: rotate(8deg); } }
+.ap-note { transform-origin: center; animation: ap-float 2.4s ease-out infinite; opacity: 0; }
+.ap-note.n2 { animation-delay: 1.2s; }
+@keyframes ap-float { 0% { transform: translate(-4px, 6px) scale(0.6); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(3px, -8px) scale(1); opacity: 0; } }
+
+/* Lupa: a lente varre a página */
+.ap-lens { transform-box: view-box !important; animation: ap-sweep 2.8s ease-in-out infinite; }
+@keyframes ap-sweep { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(5px, -2px); } 50% { transform: translate(4px, 4px); } 75% { transform: translate(-2px, 3px); } }
+
+/* Sininho: o sino balança e soa */
+.ap-bell { transform-origin: 20px 8px; transform-box: view-box !important; animation: ap-swing 2.2s ease-in-out infinite; }
+@keyframes ap-swing { 0%, 55%, 100% { transform: rotate(0); } 62% { transform: rotate(18deg); } 70% { transform: rotate(-15deg); } 78% { transform: rotate(10deg); } 86% { transform: rotate(-6deg); } 93% { transform: rotate(2deg); } }
+.ap-clapper { transform-origin: center; animation: ap-clap 2.2s ease-in-out infinite; }
+@keyframes ap-clap { 0%, 55%, 100% { transform: none; } 66% { transform: translateX(-2px); } 74% { transform: translateX(2px); } }
+.ap-ring { opacity: 0; animation: ap-ringing 2.2s ease-out infinite; transform-origin: center; }
+@keyframes ap-ringing { 0%, 58% { opacity: 0; transform: scale(0.7); } 66% { opacity: 1; transform: none; } 92%, 100% { opacity: 0; transform: scale(1.2); } }
+
+/* Tostão: a moeda pula, gira e cai na pilha */
+.ap-coin { transform-origin: center; animation: ap-coin 1.9s cubic-bezier(.3, 0, .3, 1) infinite; }
+@keyframes ap-coin {
+  0% { transform: translateY(6px) scaleX(1); }
+  30% { transform: translateY(-4px) scaleX(0.12); }
+  50% { transform: translateY(-6px) scaleX(1); }
+  70% { transform: translateY(-3px) scaleX(0.12); }
+  100% { transform: translateY(6px) scaleX(1); }
+}
+
+/* Carta: a carta sai do envelope e volta */
+.ap-mail { transform-box: view-box !important; animation: ap-bob 2.6s ease-in-out infinite; }
+@keyframes ap-bob { 0%, 100% { transform: translateY(1px); } 50% { transform: translateY(-1.5px); } }
+.ap-letter { animation: ap-letter 2.6s cubic-bezier(.3, .8, .3, 1) infinite; }
+@keyframes ap-letter { 0%, 15%, 100% { transform: translateY(8px); } 40%, 70% { transform: translateY(-3px); } }
+.ap-flap { transform-origin: 20px 19px; transform-box: view-box !important; animation: ap-flap 2.6s ease-in-out infinite; }
+@keyframes ap-flap { 0%, 100% { transform: scaleY(1); } 18%, 80% { transform: scaleY(-0.6); } }
+
+/* Bloco: os itens vão sendo marcados */
+.ap-check { stroke-dasharray: 1; stroke-dashoffset: 1; animation: ap-tick 3s ease-out infinite; }
+.ap-check.c1 { animation-delay: 0.5s; }
+.ap-check.c2 { animation-delay: 1s; }
+@keyframes ap-tick { 0% { stroke-dashoffset: 1; } 18%, 85% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 1; } }
+
+/* Pombo: digitando o recado */
+.ap-bubble { transform-box: view-box !important; transform-origin: 11px 32px; animation: ap-talk 3.2s ease-in-out infinite; }
+@keyframes ap-talk { 0%, 100% { transform: scale(1); } 8% { transform: scale(1.06); } 16% { transform: scale(1); } }
+.ap-dot { transform-origin: center; animation: ap-typing 1.2s ease-in-out infinite; }
+.ap-dot.d1 { animation-delay: 0.15s; }
+.ap-dot.d2 { animation-delay: 0.3s; }
+@keyframes ap-typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.55; } 30% { transform: translateY(-3px); opacity: 1; } }
+
+/* agentes de cada cliente: brilho */
+.ap-spark { transform-origin: center; animation: ap-twinkle 2.4s ease-in-out infinite; }
+@keyframes ap-twinkle { 0%, 100% { transform: scale(0.82) rotate(0); } 50% { transform: scale(1.05) rotate(20deg); } }
+
+/* tema escuro: o disquinho continua claro (o objeto é desenhado em tinta) */
+:root[data-theme="dark"] .agent-prop { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.1), 0 4px 12px -4px rgba(0, 0, 0, 0.6); }
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-prop, .agent-prop * { animation: none !important; }
+  .ap-note, .ap-ring { opacity: 1; }
+  .ap-check { stroke-dashoffset: 0; }
+}
+
+/* Meu time: o que cada um está fazendo agora */
+.team-doing { display: inline-flex; align-items: center; gap: 6px; margin-top: 2px; max-width: 100%; font-size: 11.5px; color: var(--violet); min-height: 16px; white-space: nowrap; }
+.team-doing > span { overflow: hidden; text-overflow: ellipsis; }
+.team-doing::before { flex-shrink: 0; }
+.team-doing::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: ap-live 1.6s ease-in-out infinite; }
+.team-doing > span { animation: ap-doing 0.4s cubic-bezier(.2, .9, .25, 1) both; }
+@keyframes ap-doing { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes ap-live { 0%, 100% { opacity: 0.35; transform: scale(0.8); } 50% { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .team-doing, .team-doing * { animation: none !important; } .team-doing { display: none; } }
+
+/* no celular o quadradinho do rosto encolhe: o rosto vivo acompanha (o anel do Maestro fica certo) */
+@media (max-width: 767px) { .team-card .face-tile .agent-face.live { width: 100% !important; height: 100% !important; } }
