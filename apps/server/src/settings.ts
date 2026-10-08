@@ -35,6 +35,14 @@ export interface AgentSettings {
   billingReferralPercent: number;
   /** quantos dias antes do vencimento lembrar quem paga por Pix/boleto (também lembra no dia) */
   billingReminderDays: number;
+  /** Quem responde pelos dados (LGPD art. 9º e 41): aparece em /privacidade */
+  legalName: string;
+  /** CPF ou CNPJ do responsável */
+  legalDocument: string;
+  /** canal do encarregado / dúvidas sobre dados */
+  privacyEmail: string;
+  /** cidade do foro (termos de uso) */
+  legalCity: string;
 }
 
 /** Faixas aceitas para cada trava (o painel não deixa salvar fora disso) */
@@ -70,6 +78,10 @@ const defaults = (): AgentSettings => ({
   billingStartedAt: null,
   billingReferralPercent: 10,
   billingReminderDays: 3,
+  legalName: "",
+  legalDocument: "",
+  privacyEmail: "",
+  legalCity: "",
 });
 
 let cache: { at: number; value: AgentSettings } | null = null;
@@ -92,6 +104,9 @@ export async function saveSettings(patch: Partial<AgentSettings>, opts: { unchec
     if (rest.billingEnabled && !(await getSettings()).billingStartedAt) (rest as Partial<AgentSettings>).billingStartedAt = new Date().toISOString();
   }
   if (rest.billingPlanName !== undefined) rest.billingPlanName = String(rest.billingPlanName).trim().slice(0, 40) || defaults().billingPlanName;
+  for (const k of ["legalName", "legalDocument", "privacyEmail", "legalCity"] as const) {
+    if (rest[k] !== undefined) rest[k] = String(rest[k] ?? "").trim().slice(0, 120);
+  }
   for (let [k, v] of Object.entries(rest)) {
     if (!allowed.includes(k)) continue;
     if (k in GUARD_LIMITS && !opts.unchecked) {

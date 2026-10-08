@@ -238,7 +238,9 @@ export async function buildServer() {
   app.get("/api/auth/config", async () => {
     const s = await getSettings();
     const plan = s.billingEnabled ? { name: s.billingPlanName, price: Number(s.billingPrice), trialDays: Number(s.billingTrialDays) } : null;
-    return { signupMode: s.signupMode, version: VERSION, plan };
+    // quem responde pelos dados, para a página /privacidade (LGPD)
+    const legal = { name: s.legalName, document: s.legalDocument, email: s.privacyEmail, city: s.legalCity };
+    return { signupMode: s.signupMode, version: VERSION, plan, legal };
   });
 
   app.post("/api/auth/logout", async (_req, reply) => {

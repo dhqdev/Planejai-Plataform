@@ -162,6 +162,24 @@ export function SettingsPage() {
         </div>
         <BillingCard form={form} setForm={setForm} save={save} saved={saved} />
         <div className="card card-pad">
+          <h3>Responsável pelos dados</h3>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Aparece em Termos e privacidade (/privacidade). A LGPD pede que o cliente saiba quem trata os dados dele e por onde falar com o encarregado.
+          </p>
+          <div className="field"><label>Nome ou razão social</label><input className="input" value={form.legalName ?? ""} onChange={(e) => setForm({ ...form, legalName: e.target.value })} /></div>
+          <div className="field"><label>CPF ou CNPJ</label><input className="input" inputMode="numeric" value={form.legalDocument ?? ""} onChange={(e) => setForm({ ...form, legalDocument: e.target.value })} /></div>
+          <div className="field">
+            <label>E-mail para assuntos de dados</label>
+            <input className="input" type="email" value={form.privacyEmail ?? ""} onChange={(e) => setForm({ ...form, privacyEmail: e.target.value })} />
+            <div className="help">Canal do encarregado: é para onde a pessoa escreve para pedir acesso, correção ou exclusão.</div>
+          </div>
+          <div className="field"><label>Cidade do foro</label><input className="input" placeholder="Ex.: Campinas/SP" value={form.legalCity ?? ""} onChange={(e) => setForm({ ...form, legalCity: e.target.value })} /></div>
+          <div className="row">
+            <button className="btn btn-primary" onClick={save}>Salvar</button>
+            {saved && <span className="badge badge-ok">Salvo</span>}
+          </div>
+        </div>
+        <div className="card card-pad">
           <h3>Canal WhatsApp</h3>
           <p>
             Provedor: <strong>{data.channel.provider === "baileys" ? "Conexão própria (Baileys)" : data.channel.provider === "cloud" ? "WhatsApp Cloud API (Meta)" : data.channel.provider === "evolution" ? "Evolution API" : "nenhum"}</strong>{" "}
