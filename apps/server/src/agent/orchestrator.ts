@@ -194,6 +194,8 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
   const progress = new Progress({ channel, jid: conversation.remote_jid, tracer });
   // mensagens desta rodada já interpretadas (vão para a memória curta no fim, ou no erro definitivo)
   let fresh: ShortEntry[] = [];
+  // sala do time desta rodada: diz quais ferramentas já rodaram, para uma nova tentativa não repetir ação feita
+  let room: TeamRoom | undefined;
 
   try {
     if (lastInbound) channel.markRead(conversation.remote_jid, lastInbound.external_id).catch(() => {});
@@ -287,7 +289,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       timezone,
       lastInboundId: lastInbound?.external_id,
       agent: "cto",
-      room: new TeamRoom(team),
+      room: (room = new TeamRoom(team)),
       callChain: ["cto"],
       guard,
       inboundImages: pending.map((m) => m.inboundImage).filter(Boolean),
@@ -373,16 +375,29 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       return { executionId: tracer.executionId, bubbles: [], outbox };
     }
     // Erro passageiro com nova tentativa na fila: as mensagens ficam pendentes e a próxima rodada responde tudo
-    if (opts.retryable && isTransientError(err)) throw err;
+    // ...mas só se nada com efeito já rodou: refazer a rodada repetiria lembrete criado, mensagem enviada, conta paga
+    const acted = room ? sideEffectsDone(room.done) : [];
+    if (opts.retryable && isTransientError(err) && !acted.length) throw err;
     await pushShort(conversationId, fresh).catch(() => {});
     // Não deixa a pessoa no vácuo
-    await channel.sendText(conversation.remote_jid, "Tive um problema técnico aqui e não consegui terminar. Pode tentar de novo em instantes?").catch(() => {});
+    const sorry = acted.length
+      ? "Tive um problema técnico aqui no meio do caminho. O que já fiz ficou feito, mas não consegui terminar. Me fala o que faltou que eu continuo."
+      : "Tive um problema técnico aqui e não consegui terminar. Pode tentar de novo em instantes?";
+    await channel.sendText(conversation.remote_jid, sorry).catch(() => {});
     await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
     throw err;
   } finally {
     progress.stop();
     guard.dispose();
   }
+}
+
+/** Ferramentas que só leem ou calculam: rodar de novo numa nova tentativa não muda nada. */
+const NO_SIDE_EFFECT =
+  /^(ask_|consult_|share_with_team$|react_to_message$|web_search|fetch_url|browser_|screenshot_url|map_route|make_chart|make_image|calculate|read_|list_|get_|search_)|(_list|_status|_search|_read|_summary|_events|_channels|_workflows|_executions|_catalog|_search_issues|_read_page|attach_image)$/;
+
+export function sideEffectsDone(done: Set<string>) {
+  return [...done].filter((n) => !NO_SIDE_EFFECT.test(n));
 }
 
 function fmtMinutes(min: number) {

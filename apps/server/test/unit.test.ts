@@ -267,3 +267,11 @@ describe("confirmação de ação sensível (servidor, sem IA)", () => {
     expect(confirmationAnswer(["sim", "não, espera"])).toBe("no");
   });
 });
+
+describe("nova tentativa da fila", () => {
+  it("só repete a rodada se nenhuma ferramenta com efeito rodou", async () => {
+    const { sideEffectsDone } = await import("../src/agent/orchestrator.js");
+    expect(sideEffectsDone(new Set(["web_search", "ask_pesquisador", "list_transactions", "finance_summary", "gmail_read", "notion_search"]))).toEqual([]);
+    expect(sideEffectsDone(new Set(["web_search", "schedule_reminder", "send_to_contact"]))).toEqual(["schedule_reminder", "send_to_contact"]);
+  });
+});
