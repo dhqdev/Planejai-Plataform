@@ -223,6 +223,13 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(await fin.deleteTransaction.run({ search: "uber" }, { ...ctx, approvedAction: true })).toMatchObject({ ok: true, deleted: 2 });
     // um item apontado sai sem confirmação
     expect(await fin.deleteTransaction.run({ id: bread.items[0].id }, ctx)).toMatchObject({ ok: true, deleted: 1 });
+    // 2 ou mais ids: pede o sim com quantos e quanto, e só apaga aprovado
+    for (const [amount, description] of [[10, "café"], [12, "café"], [8, "café"]] as const) await fin.addTransaction.run({ kind: "expense", amount, description }, ctx);
+    const coffees: any = await fin.listTransactions.run({ search: "café" }, ctx);
+    const ids = coffees.items.map((i: any) => i.id);
+    expect(await fin.deleteTransaction.run({ ids }, ctx)).toMatchObject({ needs_confirmation: true, count: 3, total: "R$ 30,00" });
+    expect(((await fin.listTransactions.run({ search: "café" }, ctx)) as any).count).toBe(3);
+    expect(await fin.deleteTransaction.run({ ids }, { ...ctx, approvedAction: true })).toMatchObject({ ok: true, deleted: 3 });
     // finanças de um contato só se ele compartilhou
     expect(await fin.financeSummary.run({ of_contact: "Bia" }, ctx)).toMatchObject({ error: expect.stringContaining("não é contato") });
   });

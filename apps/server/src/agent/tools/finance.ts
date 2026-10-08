@@ -578,7 +578,7 @@ export const updateTransaction = defineTool<{
 export const deleteTransaction = defineTool<{ ids?: string[]; id?: string; from?: string; to?: string; category?: string; search?: string; confirmed_by_user?: boolean }>({
   name: "delete_transaction",
   description:
-    "Apaga lançamentos: por ids (poucos que ela apontou, sem confirmação) ou por filtro (período, categoria, texto), que só apaga depois do \"sim\" dela.",
+    "Apaga lançamentos: um id que ela apontou sai direto; 2 ou mais ids, ou por filtro (período, categoria, texto), só depois do \"sim\" dela.",
   parameters: obj({
     ids: { type: "array", items: { type: "string" } },
     from: { type: "string", description: "AAAA-MM-DD" },
@@ -590,6 +590,12 @@ export const deleteTransaction = defineTool<{ ids?: string[]; id?: string; from?
   async run(args, ctx) {
     const ids = [...(args.ids ?? []), ...(args.id ? [args.id] : [])].filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 200);
     if (ids.length) {
+      if (ids.length > 1) {
+        const preview = await one("SELECT COUNT(*)::int AS n, COALESCE(SUM(amount), 0) AS total FROM transactions WHERE user_id = $1 AND id = ANY($2::uuid[])", [ctx.user.id, ids]);
+        if (!preview?.n) return { ok: false, error: "Nenhum desses lançamentos é dela" };
+        const gate = await requireConfirmation(args, `apagar ${preview.n} lançamento(s) somando ${brl(cents(preview.total))}`, ctx);
+        if (gate) return { ...gate, count: preview.n, total: brl(cents(preview.total)) };
+      }
       const rows = await many("DELETE FROM transactions WHERE user_id = $1 AND id = ANY($2::uuid[]) RETURNING amount", [ctx.user.id, ids]);
       return { ok: rows.length > 0, deleted: rows.length, total: brl(cents(rows.reduce((a, r) => a + Number(r.amount), 0))) };
     }
