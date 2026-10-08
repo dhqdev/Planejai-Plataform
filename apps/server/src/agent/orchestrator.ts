@@ -9,7 +9,8 @@ import { getSettings } from "../settings.js";
 import { delegationTool, TeamRoom } from "./collab.js";
 import { ctoSystemPrompt } from "./prompts.js";
 import { availableTools, OWNER_INTEGRATIONS, runToolLoop } from "./runner.js";
-import { clientAgents, CTO_TOOLS, SPECIALISTS } from "./team.js";
+import { clientAgents, CTO_TOOLS, SPECIALISTS, type AgentDef } from "./team.js";
+import { TEAM_TOOLS } from "./tools/team.js";
 import { finishBrowser } from "./tools/research.js";
 import { Guard, GuardTimeout, redactSecrets } from "./guard.js";
 import { isOwner } from "../ingest.js";
@@ -235,7 +236,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       }
     }
     // Só entra no time quem tem pelo menos uma ferramenta utilizável (menos token e nada de delegação inútil)
-    const team = [];
+    const team: AgentDef[] = [];
     for (const s of [...SPECIALISTS, ...(await clientAgents(user.id))]) if ((await availableTools(s.tools, user)).length) team.push(s);
     const lastText = fresh.map((e) => e.text).join(" ").slice(0, 500);
     const disconnected = [];
@@ -263,7 +264,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       timezone,
       lastInboundId: lastInbound?.external_id,
       agent: "cto",
-      room: new TeamRoom(),
+      room: new TeamRoom(team),
       callChain: ["cto"],
       guard,
       inboundImages: pending.map((m) => m.inboundImage).filter(Boolean),
@@ -271,7 +272,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       // lembrete agendado não ganha "já vou ver": a pessoa não perguntou nada agora
       progress: opts.trigger === "reminder" ? undefined : progress,
     };
-    const tools = [...(await availableTools(CTO_TOOLS, user)), ...team.map(delegationTool)];
+    const tools = [...(await availableTools(CTO_TOOLS, user)), ...TEAM_TOOLS, ...team.map(delegationTool)];
     let result;
     try {
       result = await runToolLoop({ agent: "cto", task: "agent:cto", ctx, tools, messages: [{ role: "system", content: system }, ...messages], maxSteps: 10 });

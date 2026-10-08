@@ -197,7 +197,7 @@ As integrações (Google, Notion, GitHub, Linear, Slack, Tavily, Brave, Mercado 
   | Planejai · Pagamento Asaas | `/webhook/planejai-asaas` | Pagamento confirmado: cria a conta ou agradece a renovação (`ASAAS_WEBHOOK_TOKEN` opcional) |
   | Planejai · Enviar mensagem | subfluxo | Qualquer fluxo manda mensagem pelo Planejai (texto fixo ou escrito pelo assistente) |
 
-- **Automações pedidas pelos clientes.** O especialista Produtividade cria fluxos no n8n quando alguém pede ("me avisa todo dia às 8h das notícias de IA", "me avisa quando esse site mudar"). Ferramentas: `automation_save`, `automation_list` e `automation_manage`.
+- **Automações pedidas pelos clientes.** O especialista Produtividade cria fluxos no n8n quando alguém pede ("me avisa todo dia às 8h das notícias de IA", "me avisa quando esse site mudar"). Ferramentas: `automation_save`, `automation_list`, `automation_manage` e `automation_status` (mostra as últimas execuções e o motivo da falha, para o assistente consertar o fluxo sozinho). Fluxo de cliente dispara no máximo a cada 15 minutos.
   - Para clientes o fluxo é seguro por construção: só nós simples (agenda, webhook, RSS, HTTP para endereço público fixo, filtros e transformação), sem código, sem credenciais e sem `$env`. O aviso sempre vai para a própria pessoa.
   - Cada cliente tem até `AUTOMATIONS_PER_USER` automações (padrão 5). Os fluxos aparecem no n8n como "[Cliente] Nome · …" com a etiqueta "Planejai Cliente" (os do dono como "[Dono] …"), separados dos fluxos do sistema "[Sistema] Planejai · …" (etiqueta "Planejai Sistema"), que só o dono edita e somem quando a pessoa apaga a conta.
   - O dono pode usar qualquer nó.

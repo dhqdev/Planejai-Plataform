@@ -68,6 +68,36 @@ const PLANEJAI_NODES = new Set(["planejai.notify", "planejai.agent"]);
 /** Nada que leia segredo da instância ou rode código fora do sandbox das expressões. */
 const FORBIDDEN = /\$env|\$vars|\$secrets|process\.|require\s*\(|constructor|__proto__|\$getWorkflowStaticData|\$execution\.customData/i;
 
+/** Fluxo de cliente não dispara mais vezes que isso: cada disparo pode custar uma chamada de IA e uma mensagem. */
+export const MIN_CLIENT_INTERVAL_MIN = 15;
+
+/** Campo de minutos de um cron: aceita minuto fixo, lista espaçada ou "a cada N" com N grande o bastante. */
+function minuteFieldOk(f: string) {
+  const step = /^\*\/(\d+)$/.exec(f);
+  if (step) return Number(step[1]) >= MIN_CLIENT_INTERVAL_MIN;
+  if (!/^\d+(,\d+)*$/.test(f)) return false;
+  const m = f.split(",").map(Number).sort((a, b) => a - b);
+  return m.every((v, i) => (i === 0 ? v + 60 - m.at(-1)! : v - m[i - 1]!) >= MIN_CLIENT_INTERVAL_MIN || m.length === 1);
+}
+
+/** Motivo pelo qual o agendamento é frequente demais para um cliente, ou null se está bom. */
+export function scheduleTooFrequent(params: Record<string, unknown>): string | null {
+  const rules = (params.rule as any)?.interval;
+  for (const r of Array.isArray(rules) ? rules : []) {
+    const field = String(r?.field ?? "days");
+    if (field === "seconds") return "intervalo em segundos";
+    if (field === "minutes" && Number(r.minutesInterval ?? 5) < MIN_CLIENT_INTERVAL_MIN) return `a cada ${r.minutesInterval ?? 5} min`;
+    if (field === "cronExpression") {
+      const parts = String(r.expression ?? "").trim().split(/\s+/);
+      if (parts.length < 5 || parts.length > 6) return "expressão cron inválida";
+      // com 6 campos o primeiro é o segundo, que tem de ser fixo
+      if (parts.length === 6 && !/^\d+$/.test(parts[0]!)) return "cron com segundos variáveis";
+      if (!minuteFieldOk(parts[parts.length - 5]!)) return `cron "${r.expression}"`;
+    }
+  }
+  return null;
+}
+
 export interface ShortNode {
   name: string;
   type: string;
@@ -163,6 +193,10 @@ export async function buildWorkflow(input: { nodes: ShortNode[]; connections: Sh
           }
           if (params.authentication && params.authentication !== "none") throw new Error(`O nó "${n.name}" não pode usar credenciais`);
         }
+        if (short === "scheduleTrigger") {
+          const why = scheduleTooFrequent(params);
+          if (why) throw new Error(`O nó "${n.name}" dispara vezes demais (${why}). O mínimo é a cada ${MIN_CLIENT_INTERVAL_MIN} minutos.`);
+        }
         if (short === "rssFeedRead") {
           const url = String(params.url ?? "");
           if (url.includes("{{")) throw new Error(`O nó "${n.name}" precisa de uma URL fixa`);
@@ -191,6 +225,18 @@ export async function buildWorkflow(input: { nodes: ShortNode[]; connections: Sh
     while (main.length <= o) main.push([]);
     main[o]!.push({ node: l.to, type: "main", index: 0 });
   }
+  if (!owner) {
+    // fluxo de cliente tem de estar inteiro ligado: nó solto é sinal de fluxo que não faz o que a pessoa pediu
+    const isTrigger = (n: Record<string, unknown>) => /\.(scheduleTrigger|webhook)$/.test(String(n.type));
+    const seen = new Set(out.filter(isTrigger).map((n) => String(n.name)));
+    const queue = [...seen];
+    while (queue.length) {
+      for (const outs of conns[queue.pop()!]?.main ?? []) for (const l of outs) if (!seen.has(l.node)) (seen.add(l.node), queue.push(l.node));
+    }
+    const loose = [...names].filter((n) => !seen.has(n));
+    if (loose.length) throw new Error(`Nó sem ligação a partir do gatilho: ${loose.join(", ")}. Ligue todos em connections.`);
+    if (seen.size < 2) throw new Error("O fluxo só tem o gatilho: falta o que ele faz (ex.: planejai.notify ou planejai.agent)");
+  }
   return { nodes: out, connections: conns };
 }
 
@@ -209,7 +255,8 @@ const NODE_GUIDE =
   'rssFeedRead {"url":"https://g1.globo.com/rss/g1/"}; limit {"maxItems":3}; httpRequest {"url":"https://api.exemplo.com/x","method":"GET"}; ' +
   'planejai.agent {"instruction":"Resuma para a pessoa estas notícias: {{ $json.title }} {{ $json.link }}"}; ' +
   'if {"conditions":{"options":{"caseSensitive":true,"typeValidation":"loose"},"combinator":"and","conditions":[{"leftValue":"={{ $json.preco }}","rightValue":100,"operator":{"type":"number","operation":"lt"}}]}}. ' +
-  "Texto com {{ }} vira expressão do n8n. Para juntar vários itens numa mensagem, use aggregate antes do planejai.agent.";
+  "Texto com {{ }} vira expressão do n8n. Para juntar vários itens numa mensagem, use aggregate antes do planejai.agent. " +
+  `Todo nó tem de estar ligado a partir do gatilho, e o agendamento mais frequente é a cada ${MIN_CLIENT_INTERVAL_MIN} minutos.`;
 
 export const automationSave = defineTool<{
   name: string;
@@ -340,6 +387,41 @@ export const automationManage = defineTool<{ workflow_id: string; action: "activ
     await api("POST", `/workflows/${row.workflow_id}/${args.action}`);
     await query("UPDATE automations SET active = $2, updated_at = now() WHERE workflow_id = $1", [row.workflow_id, args.action === "activate"]);
     return { ok: true, name: row.name, active: args.action === "activate" };
+  },
+});
+
+export const automationStatus = defineTool<{ workflow_id: string }>({
+  name: "automation_status",
+  description:
+    "Mostra se uma automação da pessoa está rodando bem: as últimas execuções no n8n e, se alguma falhou, em que nó e por quê. " +
+    "Use depois de criar (quando já deu tempo de disparar) ou quando a pessoa disser que o aviso não chegou; com o erro em mãos, corrija com automation_save e o mesmo workflow_id.",
+  integration: "n8n",
+  ownerOnly: false,
+  parameters: obj({ workflow_id: { type: "string" } }, ["workflow_id"]),
+  async run(args, ctx) {
+    const row = await ownAutomation(args.workflow_id, ctx);
+    const api = await n8nApi();
+    const wf = await api("GET", `/workflows/${row.workflow_id}`).catch((e: Error) => {
+      if (/404/.test(e.message)) return null;
+      throw e;
+    });
+    if (!wf) return { ok: false, name: row.name, error: "O fluxo não existe mais no n8n. Crie de novo com automation_save ou apague com automation_manage." };
+    if (row.active !== undefined && Boolean(wf.active) !== Boolean(row.active))
+      await query("UPDATE automations SET active = $2, updated_at = now() WHERE workflow_id = $1", [row.workflow_id, Boolean(wf.active)]);
+    const list = await api("GET", `/executions?workflowId=${encodeURIComponent(row.workflow_id)}&limit=5`);
+    const runs = [];
+    for (const e of list?.data ?? []) {
+      const run: Record<string, unknown> = { status: e.status ?? (e.finished ? "success" : "error"), started: e.startedAt, stopped: e.stoppedAt };
+      if (run.status === "error" || run.status === "crashed") {
+        // só o motivo da falha: os dados que passaram pelo fluxo não voltam para a conversa
+        const full = await api("GET", `/executions/${e.id}?includeData=true`).catch(() => null);
+        const err = full?.data?.resultData?.error;
+        run.failed_node = full?.data?.resultData?.lastNodeExecuted ?? err?.node?.name ?? null;
+        run.error = String(err?.message ?? err?.description ?? "erro sem detalhe").slice(0, 300);
+      }
+      runs.push(run);
+    }
+    return { ok: true, name: row.name, active: Boolean(wf.active), runs, ...(runs.length ? {} : { note: "Ainda não disparou nenhuma vez." }) };
   },
 });
 

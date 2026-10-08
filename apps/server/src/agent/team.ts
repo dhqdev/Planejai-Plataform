@@ -165,6 +165,7 @@ export const SPECIALISTS: AgentDef[] = [
       automations.automationSave,
       automations.automationList,
       automations.automationManage,
+      automations.automationStatus,
     ],
   },
 ];
@@ -213,30 +214,53 @@ export function getSpecialist(id: string) {
   return SPECIALISTS.find((s) => s.id === id);
 }
 
-/** Ferramentas que a melhoria diária pode dar a um agente de cliente (só leitura/pesquisa e registros simples). */
+/** Quantos agentes sob medida uma pessoa pode ter ao mesmo tempo (criados pela reunião noturna ou a pedido dela). */
+export const MAX_CLIENT_AGENTS = 6;
+
+export const slugify = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 24);
+
+/**
+ * Ferramentas que um agente sob medida pode ter: leitura, pesquisa, registros simples e o que já é seguro
+ * por construção para qualquer pessoa (lembretes e automações dela mesma). Nada que mande mensagem a terceiros ou mova dinheiro.
+ */
 export const CLIENT_AGENT_TOOLS: Record<string, Tool> = Object.fromEntries(
   [
     research.webSearch,
     research.fetchUrl,
     research.screenshotUrl,
     research.mercadolivreSearch,
+    research.mapRoute,
     research.browserOpen,
     research.browserAction,
     research.browserClose,
     finance.listTransactions,
     finance.financeSummary,
+    finance.budgetStatusTool,
     finance.calculate,
+    finance.makeChart,
     agenda.calendarListEvents,
+    agenda.scheduleReminder,
+    agenda.listRemindersTool,
+    automations.automationSave,
+    automations.automationList,
+    automations.automationStatus,
     core.getDatetime,
     core.attachImage,
+    core.readDocument,
     images.makeImage,
   ].map((t) => [t.name, t]),
 );
 
-/** Agentes que a melhoria diária criou para esta pessoa, no formato do time. */
-export async function clientAgents(userId: string): Promise<AgentDef[]> {
-  const rows = await many("SELECT * FROM client_agents WHERE user_id = $1 AND active ORDER BY created_at", [userId]);
-  return rows.map((r) => ({
+/** Linha de client_agents no formato do time. */
+export function clientAgentDef(r: any): AgentDef {
+  return {
     id: `c_${r.slug}`,
     name: r.name,
     persona: r.persona ?? undefined,
@@ -244,8 +268,14 @@ export async function clientAgents(userId: string): Promise<AgentDef[]> {
     icon: "sparkle",
     task: "agent:cliente",
     clientAgentId: r.id,
-    role: `${r.focus} (especialista criado para esta pessoa a partir do que ela mais pede)`,
+    role: `${r.focus} (especialista criado só para esta pessoa)`,
     instructions: r.instructions,
     tools: (r.tools as string[]).map((n) => CLIENT_AGENT_TOOLS[n]).filter(Boolean) as Tool[],
-  }));
+  };
+}
+
+/** Agentes sob medida desta pessoa (criados pela reunião noturna ou por ela, na conversa). */
+export async function clientAgents(userId: string): Promise<AgentDef[]> {
+  const rows = await many("SELECT * FROM client_agents WHERE user_id = $1 AND active ORDER BY created_at", [userId]);
+  return rows.map(clientAgentDef);
 }

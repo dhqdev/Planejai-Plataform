@@ -1,4 +1,4 @@
-import { CLIENT_AGENT_TOOLS, faceFor, SPECIALISTS } from "./agent/team.js";
+import { CLIENT_AGENT_TOOLS, faceFor, slugify, SPECIALISTS } from "./agent/team.js";
 import { getTabs, OPTIONAL, saveTabs, TAB_ICONS, TAB_WIDGETS } from "./tabs.js";
 import { Tracer } from "./agent/trace.js";
 import { many, one, query } from "./db/pool.js";
@@ -37,15 +37,6 @@ export async function dailyImprovement(log?: { info: (...a: any[]) => void; erro
   log?.info(out, "melhoria diária concluída");
   return out;
 }
-
-const slugify = (s: string) =>
-  s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_|_$/g, "")
-    .slice(0, 24);
 
 export async function improveUser(userId: string) {
   const asks = await many(
@@ -91,10 +82,10 @@ export async function improveUser(userId: string) {
           '"update":[{"slug":"...","instructions":"..."}],"retire":["slug"]}\n' +
           "Regras: topics = assuntos concretos do dia (1 a 3 palavras, minúsculas), no máximo 6. " +
           "style = como falar com ele (tamanho das respostas, emojis, formalidade, apelidos), até 250 caracteres; repita o atual se nada mudou. " +
-          `agent_notes = só para agentes que trabalharam hoje (ids: ${SPECIALISTS.map((s) => s.id).join(", ")}), o que ele aprendeu sobre o cliente (preferências, cidade, marcas, onde buscar), até 300 caracteres; lista vazia se nada novo. ` +
+          `agent_notes = só para agentes que trabalharam hoje (ids: ${SPECIALISTS.map((s) => s.id).join(", ")}), o que ele aprendeu sobre o cliente (preferências, cidade, marcas, onde buscar), até 300 caracteres; a nota substitui a atual, então mantenha o que já estava nela e ainda vale (pode ter sido pedido pelo próprio cliente); lista vazia se nada novo. ` +
           `tabs.enable só se o uso pede (${Object.entries(OPTIONAL).map(([k, v]) => `${k}: ${v.desc}`).join("; ")}). ` +
           `tabs.custom só para um assunto que se repete muito e merece uma tela (máximo 1 por noite e 3 no total): ícone em ${TAB_ICONS.join(", ")}; widgets em ${TAB_WIDGETS.join(", ")}. ` +
-          `create só para assunto que já aparece em ${MIN_DAYS}+ dias nos acumulados e é recorrente hoje, e que um especialista atenderia melhor que o time geral; ` +
+          `create só para assunto que já aparece em ${MIN_DAYS}+ dias nos acumulados e é recorrente hoje, que um especialista atenderia melhor que o time geral e que nenhum agente sob medida dele já cobre; ` +
           `no máximo 1 por dia e ${MAX_AGENTS} no total. persona = apelido curto e simpático de personagem (ex.: Pipoca, Fit, Zé Viagem). instructions: 3 a 5 frases práticas com o que esse cliente costuma querer (cidade, marcas, faixa de preço, horários) e onde buscar. ` +
           "update só se aprendeu algo novo e útil sobre o gosto dele. retire agentes sem uso há muito tempo. Na dúvida, não mude: listas vazias são a resposta normal.",
       },
@@ -163,8 +154,11 @@ export async function improveUser(userId: string) {
     updated += res.rowCount ?? 0;
   }
   for (const slug of (plan.retire ?? []).slice(0, 3)) {
-    // só aposenta o que tem pelo menos uma semana (dar tempo de ser usado)
-    const res = await query("UPDATE client_agents SET active = false WHERE user_id = $1 AND slug = $2 AND created_at < now() - interval '7 days'", [userId, String(slug)]);
+    // só aposenta o que ela mesma criou e tem pelo menos uma semana; agente que a pessoa pediu só sai a pedido dela
+    const res = await query(
+      "UPDATE client_agents SET active = false WHERE user_id = $1 AND slug = $2 AND origin = 'melhoria' AND created_at < now() - interval '7 days'",
+      [userId, String(slug)],
+    );
     retired += res.rowCount ?? 0;
   }
   // como falar com a pessoa e o que cada agente aprendeu

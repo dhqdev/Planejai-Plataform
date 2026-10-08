@@ -33,6 +33,25 @@ function fakeOpenRouter(body: any) {
       if (last.role === "tool") return completion("Amanhã faz 25° e sol ☀️");
       return completion("Opa, deixa eu ver aqui rapidinho 🔎", [call("ask_pesquisador", { message: "previsão do tempo amanhã em Campinas" })]);
     }
+    if (userText.includes("agente de treino")) {
+      if (last.role === "tool") return completion("Pronto, o Fit já cuida dos seus treinos 💪");
+      return completion(null, [
+        call("team_create_agent", {
+          name: "Treino",
+          persona: "Fit",
+          focus: "treinos de corrida dela",
+          instructions: "Ela corre três vezes por semana de manhã em Campinas e quer treinos curtos. Busque planos simples e diga o treino do dia.",
+          tools: ["web_search", "get_datetime", "gmail_send"],
+          first_task: "monte o treino de hoje",
+        }),
+      ]);
+    }
+    if (userText.includes("treino de amanhã")) {
+      if (last.role === "tool") return completion("Amanhã é descanso 😴");
+      // o agente criado na mensagem anterior já faz parte do time dela
+      const has = (body.tools ?? []).some((t: any) => t.function.name === "ask_c_treino");
+      return completion(null, [call(has ? "ask_c_treino" : "ask_pesquisador", { message: "qual o treino de amanhã?" })]);
+    }
     if (last.role === "tool") {
       if (userText.includes("cinema")) {
         // CTO revisa e devolve ao Financeiro uma vez antes de responder
@@ -47,6 +66,13 @@ function fakeOpenRouter(body: any) {
     if (userText.includes("padaria")) return completion(null, [call("react_to_message", { emoji: "✅" }), call("ask_financeiro", { message: "anotar gasto de R$ 8,20 na padaria" })]);
     if (userText.includes("valeu")) return completion("[[silencio]]");
     return completion("[[silencio]]");
+  }
+
+  if (system.includes("Você é o Treino")) {
+    // agente sob medida conversa com os colegas como qualquer especialista
+    const peers = (body.tools ?? []).map((t: any) => t.function.name).filter((n: string) => n.startsWith("consult_"));
+    if (String(last.content ?? "").includes("amanhã")) return completion("Amanhã: descanso.");
+    return completion(`Treino de hoje: 5 km leve. Colegas: ${peers.join(",")}`);
   }
 
   if (system.includes("Você é o Pesquisador")) {
@@ -188,5 +214,41 @@ describe.skipIf(!enabled)("time de agentes (e2e)", () => {
     // segunda conversa com o Financeiro continuou a primeira
     const followUp = steps.filter((s) => s.name === "ask_financeiro")[1];
     expect(followUp.output).toEqual({ report: "Com pipoca (R$ 20) fica R$ 50." });
+  });
+
+  it("o CTO cria um agente só dessa pessoa na conversa e ele entra no time dela", async () => {
+    await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'cria um agente de treino pra mim', 'in6')", [convId]);
+    let channel = new channels.PlaygroundChannel();
+    let r = await mod.processConversation(convId, { trigger: "playground", channel });
+    expect(channel.sent.filter((m: any) => m.type === "text")).toEqual([{ type: "text", text: "Pronto, o Fit já cuida dos seus treinos 💪" }]);
+
+    const agent = await db.one("SELECT slug, name, persona, tools, origin, active, uses FROM client_agents");
+    // gmail_send não está entre as ferramentas que um agente sob medida pode ter
+    expect(agent).toEqual({ slug: "treino", name: "Treino", persona: "Fit", tools: ["web_search", "get_datetime"], origin: "pedido", active: true, uses: 1 });
+    let steps = await db.many("SELECT agent, type, name, output FROM execution_steps WHERE execution_id = $1 ORDER BY id", [r.executionId]);
+    expect(steps.filter((s) => s.type !== "channel").map((s) => `${s.agent}:${s.type}:${s.name}`)).toEqual([
+      "cto:llm:cto · passo 1",
+      "cto:tool:team_create_agent",
+      "c_treino:llm:c_treino · passo 1",
+      "cto:llm:cto · passo 2",
+    ]);
+    // já fez a primeira tarefa na mesma resposta, enxergando os colegas do time fixo
+    const created = steps.find((s) => s.name === "team_create_agent")!.output;
+    expect(created.agent).toBe("c_treino");
+    expect(created.report).toMatch(/^Treino de hoje: 5 km leve\. Colegas: .*consult_financeiro/);
+
+    await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'e o treino de amanhã?', 'in7')", [convId]);
+    channel = new channels.PlaygroundChannel();
+    r = await mod.processConversation(convId, { trigger: "playground", channel });
+    expect(channel.sent.filter((m: any) => m.type === "text")).toEqual([{ type: "text", text: "Amanhã é descanso 😴" }]);
+    steps = await db.many("SELECT agent, type, name, output FROM execution_steps WHERE execution_id = $1 AND type = 'delegate'", [r.executionId]);
+    expect(steps.map((s) => `${s.agent}:${s.name}`)).toEqual(["cto:ask_c_treino"]);
+    expect(steps[0]!.output).toEqual({ report: "Amanhã: descanso." });
+    expect((await db.one("SELECT uses FROM client_agents")).uses).toBe(2);
+
+    // outra pessoa não herda o agente: o time é de cada um
+    const { clientAgents } = await import("../src/agent/team.js");
+    const { upsertUser } = await import("../src/ingest.js");
+    expect(await clientAgents((await upsertUser("5519911111111", "Ana")).id)).toEqual([]);
   });
 });
