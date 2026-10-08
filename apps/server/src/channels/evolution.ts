@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { checkedUrl } from "../net.js";
 import type { Channel, InboundMessage, OutboundImage } from "./types.js";
 import { parseWAMessage } from "./wa-message.js";
 
@@ -53,7 +54,8 @@ export class EvolutionChannel implements Channel {
       mediatype: image.kind ?? "image",
       mimetype: image.mimetype ?? (image.kind === "video" ? "video/mp4" : image.kind === "document" ? "application/pdf" : "image/png"),
       caption: image.caption ?? "",
-      media: image.base64 ?? image.url,
+      // a Evolution busca a URL de dentro da nossa rede: só endereço público passa
+      media: image.base64 ?? (await checkedUrl(image.url!)),
       fileName: image.fileName ?? (image.kind === "video" ? "gravacao.mp4" : image.kind === "document" ? "arquivo.pdf" : "imagem.png"),
     });
     return { id: r?.key?.id };

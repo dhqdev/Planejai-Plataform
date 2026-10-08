@@ -8,6 +8,7 @@ import { many, one, query } from "../../db/pool.js";
 import { emitEvent, internalKey } from "../../events.js";
 import { phoneVariants } from "../../ingest.js";
 import { QUEUES, getBoss } from "../../queue/boss.js";
+import { hit } from "../../ratelimit.js";
 import { inviteLink } from "../../social.js";
 import { connections } from "../../telegram.js";
 
@@ -146,9 +147,20 @@ export async function registerInternalRoutes(app: FastifyInstance) {
     }>("/api/internal/send", async (req, reply) => {
       const b = req.body ?? {};
       if (!b.text && !b.media_url && !b.media_base64) return bad(reply, "mande text e/ou media_url / media_base64");
+      if (b.media_url && !/^https?:\/\//i.test(b.media_url)) return bad(reply, "media_url precisa ser http(s)");
       const u = await findUser(b);
       if (!u && !b.phone) return bad(reply, "pessoa não encontrada (mande phone)", 404);
       if (u?.status === "blocked") return bad(reply, "pessoa bloqueada", 409);
+      // um laço errado num fluxo do n8n não pode queimar o número: teto por dia e ritmo para quem não é cliente
+      const DAY = 86_400;
+      if ((await hit("internal:send:day", DAY)) > config.INTERNAL_SEND_PER_DAY)
+        return reply.code(429).header("Retry-After", "3600").send({ error: `limite de ${config.INTERNAL_SEND_PER_DAY} envios em 24h (INTERNAL_SEND_PER_DAY)` });
+      if (!u) {
+        if (config.INTERNAL_UNKNOWN_GAP_SECONDS > 0 && (await hit("internal:send:unknown:gap", config.INTERNAL_UNKNOWN_GAP_SECONDS)) > 1)
+          return reply.code(429).header("Retry-After", String(config.INTERNAL_UNKNOWN_GAP_SECONDS)).send({ error: `espere ${config.INTERNAL_UNKNOWN_GAP_SECONDS}s entre mensagens para números que não são clientes` });
+        if ((await hit("internal:send:unknown:day", DAY)) > config.INVITES_PER_DAY)
+          return reply.code(429).header("Retry-After", "3600").send({ error: `limite de ${config.INVITES_PER_DAY} mensagens em 24h para números que não são clientes` });
+      }
       const base64 = b.media_base64?.replace(/^data:[^;]+;base64,/, "");
       const kind = b.kind ?? (b.mimetype?.startsWith("video/") ? "video" : b.mimetype && !b.mimetype.startsWith("image/") ? "document" : "image");
       const job: OutboundJob = {

@@ -1,4 +1,5 @@
 import type { WASocket } from "baileys";
+import { safeFetch } from "../net.js";
 import { isConnectionError, whatsapp, type WhatsAppSession } from "../whatsapp/session.js";
 import type { Channel, InboundMessage, OutboundImage } from "./types.js";
 
@@ -52,7 +53,8 @@ export class BaileysChannel implements Channel {
   }
 
   async sendImage(jid: string, image: OutboundImage) {
-    const content = image.base64 ? Buffer.from(image.base64, "base64") : { url: image.url! };
+    // URL de fora é baixada aqui, só da internet pública (net.ts), em vez de a biblioteca buscar sozinha
+    const content = image.base64 ? Buffer.from(image.base64, "base64") : await downloadMedia(image.url!);
     const r = await this.run((s) =>
       image.kind === "document"
         ? s.sendMessage(jid, { document: content, caption: image.caption, mimetype: image.mimetype ?? "application/pdf", fileName: image.fileName ?? "arquivo.pdf" })
@@ -85,4 +87,15 @@ export class BaileysChannel implements Channel {
   async markRead(jid: string, messageId: string) {
     await this.run((s) => s.readMessages([{ remoteJid: jid, id: messageId, fromMe: false }]), EXTRA_WAIT_MS);
   }
+}
+
+const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
+
+async function downloadMedia(url: string) {
+  const res = await safeFetch(url, { signal: AbortSignal.timeout(60_000), headers: { "User-Agent": "Mozilla/5.0 (compatible; PlanejaiBot/1.0)" } });
+  if (!res.ok) throw new Error(`Arquivo não abriu (${res.status})`);
+  if (Number(res.headers.get("content-length") ?? 0) > MAX_MEDIA_BYTES) throw new Error("Arquivo grande demais (máx. 25 MB)");
+  const data = Buffer.from(await res.arrayBuffer());
+  if (data.length > MAX_MEDIA_BYTES) throw new Error("Arquivo grande demais (máx. 25 MB)");
+  return data;
 }

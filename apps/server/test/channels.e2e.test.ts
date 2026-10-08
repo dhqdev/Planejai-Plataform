@@ -91,6 +91,17 @@ describe.skipIf(!enabled)("Telegram e API interna (e2e)", () => {
     expect(events.find((e) => e.event === "user.created")?.data.user_id).toBe(user.id);
   });
 
+  it("envio pela API interna tem ritmo para quem não é cliente e recusa URL que não é http(s)", async () => {
+    const send = (payload: any) => app.inject({ method: "POST", url: "/api/internal/send", headers: H(), payload });
+    expect((await send({ phone: "5511900001111", media_url: "file:///etc/passwd" })).statusCode).toBe(400);
+    expect((await send({ phone: "5511900001111", text: "oi" })).statusCode).toBe(200);
+    const again = await send({ phone: "5511900002222", text: "oi" });
+    expect(again.statusCode).toBe(429);
+    expect(again.headers["retry-after"]).toBe("30");
+    // cliente não espera o intervalo
+    expect((await send({ phone: "5519988887777", text: "oi" })).statusCode).toBe(200);
+  });
+
   it("lança gasto pela automação e avisa o n8n", async () => {
     const r = await app.inject({ method: "POST", url: "/api/internal/transactions", headers: H(), payload: { phone: "5519988887777", amount: "32,50", description: "uber", external_ref: "ext-1" } });
     expect(r.json()).toMatchObject({ ok: true, transaction: { category: "Transporte", source: "automacao" } });

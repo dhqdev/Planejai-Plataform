@@ -77,6 +77,9 @@ const schema = z.object({
   INVITES_PER_DAY: z.coerce.number().int().min(1).default(40),
   // Intervalo mínimo (s) entre dois convites enviados
   INVITE_GAP_SECONDS: z.coerce.number().min(0).default(45),
+  // API interna (n8n): teto de envios em 24h e intervalo mínimo (s) entre envios para número que não é cliente
+  INTERNAL_SEND_PER_DAY: z.coerce.number().int().min(1).default(300),
+  INTERNAL_UNKNOWN_GAP_SECONDS: z.coerce.number().min(0).default(30),
   // conversas processadas ao mesmo tempo por worker (como o --concurrency do n8n em modo fila)
   // (até 16: cada conversa rodando segura uma conexão do banco; o pool cresce junto, ver db/pool.ts)
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(16).default(4),
