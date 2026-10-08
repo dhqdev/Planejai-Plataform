@@ -51,6 +51,8 @@ export async function purgeOld(log?: { info: (...a: any[]) => void; error: (...a
     [config.LOG_CONTENT_HOURS],
   );
   await closeOrphanRuns();
+  const { expireErrands } = await import("./errands.js");
+  await expireErrands().catch((err) => log?.error({ err }, "falha ao vencer recados"));
   const execs = await query("DELETE FROM executions WHERE started_at < now() - make_interval(days => $1)", [config.EXECUTION_RETENTION_DAYS]);
   const files = await query("DELETE FROM media_files WHERE created_at < now() - make_interval(days => $1)", [config.EXECUTION_RETENTION_DAYS]);
   // lembrete que já passou ou foi cancelado não serve mais para nada

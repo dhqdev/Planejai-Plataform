@@ -53,6 +53,7 @@ apps/server/src/
   integrations/registry.ts INTEGRATIONS: conectores, campos (com help de onde pegar e quais escopos), test() real;
                            credenciais AES-256-GCM no banco; `oauth` marca Google/Mercado Livre (redirectUri na tela)
   integrations/mercadolivre.ts  OAuth do ML: o refresh_token GIRA a cada uso e é salvo de novo; precisa do escopo offline_access
+  errands.ts               recados: o assistente fala com um estabelecimento pela pessoa (detalhes em agentes.md)
   reminders.ts             lembretes (pg-boss + cron-parser), o CTO escreve a mensagem na hora; o único que disparou é apagado com as memórias criadas junto; reminderOccurrences() expande o cron para a Agenda
   api/server.ts            login (dono ou conta), cadastro, requireAuth/requireSuper
   api/security.ts          cabeçalhos de segurança (CSP no HTML com hash do script inline, nosniff, DENY), erro do Postgres

@@ -76,6 +76,15 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     maxTokens: 1200,
   },
   {
+    task: "agent:recados",
+    label: "Recados",
+    why: "Fala com estabelecimentos pela pessoa: mensagens curtas e decisões simples (fechar, perguntar). Barato e bom de conversa.",
+    model: "deepseek/deepseek-v4.1-flash",
+    fallbacks: ["xiaomi/mimo-v2.6-flash"],
+    temperature: 0.3,
+    maxTokens: 800,
+  },
+  {
     task: "vision",
     label: "Visão (fotos recebidas)",
     why: "Descreve fotos/prints/comprovantes antes do CTO responder.",

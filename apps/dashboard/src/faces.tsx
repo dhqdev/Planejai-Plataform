@@ -55,4 +55,5 @@ export const CORE_FACES: Record<string, { persona: string; face: Face }> = {
   financeiro: { persona: "Nico", face: { color: 7, eyes: "dot", mouth: "grin", extra: "cap" } },
   comunicacao: { persona: "Bia", face: { color: 1, eyes: "wink", mouth: "cat", extra: "headset" } },
   produtividade: { persona: "Duda", face: { color: 0, eyes: "wide", mouth: "smile", extra: "leaf" } },
+  recados: { persona: "Zeca", face: { color: 3, eyes: "dot", mouth: "open", extra: "none" } },
 };

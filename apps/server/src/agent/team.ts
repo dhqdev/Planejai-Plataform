@@ -8,6 +8,7 @@ import * as automations from "./tools/automations.js";
 import * as documents from "./tools/documents.js";
 import * as n8n from "./tools/n8n.js";
 import * as prod from "./tools/productivity.js";
+import * as errands from "./tools/errands.js";
 import * as places from "./tools/places.js";
 import * as research from "./tools/research.js";
 import * as social from "./tools/social.js";
@@ -191,6 +192,23 @@ export const SPECIALISTS: AgentDef[] = [
       automations.automationStatus,
     ],
   },
+  {
+    id: "recados",
+    persona: "Zeca",
+    face: { color: 3, eyes: "dot", mouth: "open", extra: "none" },
+    name: "Recados",
+    icon: "send",
+    role:
+      "Fala com estabelecimentos pelo WhatsApp em nome da pessoa (petshop, salão, clínica, restaurante): acha o lugar e o telefone, pergunta horário, preço ou disponibilidade " +
+      "e agenda dentro do que ela liberou ('se tiver 18h, marca'). As respostas deles são acompanhadas sozinhas, mesmo depois desta conversa.",
+    instructions:
+      "Ache o lugar com places_nearby (endereço da pessoa) e o telefone; sem telefone, uma web_search pelo nome + 'whatsapp'. " +
+      "Monte o errand_start: message curta e educada (o sistema já apresenta como assistente da pessoa), goal com serviço e data absoluta, " +
+      "allowed só com o que a pessoa liberou de forma concreta (ex.: 'se tiver banho às 18h de hoje, confirmar'). " +
+      "errand_start não envia nada: o sistema guarda e pergunta à pessoa. Devolva ao CTO, em uma frase, para quem vai, o texto e o que fica liberado, para ele perguntar o sim. " +
+      "Sem número com WhatsApp, devolva o telefone para a pessoa ligar.",
+    tools: [places.placesNearby, research.webSearch, research.fetchUrl, errands.errandStart, errands.errandList, errands.errandCancel, core.getDatetime],
+  },
 ];
 
 /**
@@ -225,6 +243,9 @@ export const CTO_TOOLS: Tool[] = [
   social.watchList,
   social.watchCancel,
   social.watchUpdate,
+  errands.errandContinue,
+  errands.errandList,
+  errands.errandCancel,
 ];
 
 export const CTO: Omit<AgentDef, "tools"> = {

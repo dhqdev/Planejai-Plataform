@@ -55,6 +55,14 @@ export async function startWorker(log: { info: (...a: any[]) => void; error: (..
     }
   });
 
+  // recados: o estabelecimento respondeu, o agente de recados decide o próximo passo
+  await boss.work<{ errandId: string }>(QUEUES.errand, { batchSize: 1, pollingIntervalSeconds: 3 }, async ([job]) => {
+    if (!job) return;
+    const { runErrandTurn } = await import("../agent/errand-agent.js");
+    const r = await runErrandTurn(job.data.errandId);
+    log.info({ errandId: job.data.errandId, outcome: r?.kind ?? "aguardando" }, "recado");
+  });
+
   await boss.work<{ conversationId: string }>(QUEUES.summarize, { batchSize: 1, pollingIntervalSeconds: 10 }, async ([job]) => {
     if (job) await summarizeConversation(job.data.conversationId);
   });

@@ -41,6 +41,9 @@ export async function upsertConversation(userId: string, channel: string, remote
 /** Guarda a mensagem recebida e agenda o processamento (com debounce, para juntar mensagens seguidas). */
 export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; reason?: string }> {
   if (!msg.phone) return { queued: false, reason: "sem telefone" };
+  // resposta de um estabelecimento com quem o assistente está falando por alguém (recado): não vira cliente
+  const { handleErrandInbound } = await import("./errands.js");
+  if (await handleErrandInbound(msg)) return { queued: false, reason: "recado" };
   const user = await upsertUser(msg.phone, msg.pushName);
   const conv = await upsertConversation(user.id, msg.channel, msg.remoteJid);
 

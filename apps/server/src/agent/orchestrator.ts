@@ -14,6 +14,7 @@ import { TEAM_TOOLS } from "./tools/team.js";
 import { finishBrowser } from "./tools/research.js";
 import { Guard, GuardTimeout, redactSecrets } from "./guard.js";
 import { autoLaunchReceipts } from "./receipts.js";
+import { errandsContext, openErrands } from "../errands.js";
 import { isOwner } from "../ingest.js";
 import { describeMessage, preprocessMedia } from "./media.js";
 import { unbackedClaim } from "./claims.js";
@@ -115,7 +116,7 @@ export async function processConversation(
 }
 
 export interface ProcessOpts {
-  trigger: "message" | "reminder" | "playground";
+  trigger: "message" | "reminder" | "playground" | "errand";
   event?: string;
   channel?: Channel;
   /** a fila ainda vai tentar de novo: erro passageiro deixa as mensagens pendentes em vez de perder */
@@ -147,6 +148,8 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
 
   const channel = opts.channel ?? getChannel(conversation.channel);
   const settings = await getSettings();
+  // lembrete e recado: a pessoa não perguntou nada agora (sem reação, sem "já vou ver")
+  const proactive = opts.trigger === "reminder" || opts.trigger === "errand";
 
   // Enxurrada: as mais antigas ficam registradas, mas só as últimas MAX_BATCH vão para o agente
   if (pending.length > MAX_BATCH) {
@@ -216,7 +219,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     if (lastInbound) channel.markRead(conversation.remote_jid, lastInbound.external_id).catch(() => {});
     // Primeira coisa que a pessoa vê: uma reação com o emoji do tema, na hora e sem IA
     let autoReaction: string | null = null;
-    if (lastInbound && opts.trigger !== "reminder") {
+    if (lastInbound && !proactive) {
       const said = pending.filter((m) => m.role === "user").map((m) => m.content ?? "").join(" ");
       autoReaction = pickReaction(said, lastInbound.meta?.kind);
       channel.react(conversation.remote_jid, lastInbound.external_id, autoReaction).catch(() => {});
@@ -227,7 +230,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     const waiting = opts.trigger === "message" ? await openPending(conversationId) : [];
     // Só um "valeu", "ok" ou emoji: a reação já respondeu, então nem chama a IA (economia de tokens)
     const userMsgs = pending.filter((m) => m.role === "user");
-    if (!waiting.length && opts.trigger !== "reminder" && userMsgs.length === pending.length && userMsgs.every((m) => !m.media && (!m.meta?.kind || m.meta.kind === "text"))) {
+    if (!waiting.length && !proactive && userMsgs.length === pending.length && userMsgs.every((m) => !m.media && (!m.meta?.kind || m.meta.kind === "text"))) {
       const last = (await recentShort(conversationId, 3))?.filter((e) => e.role === "assistant").at(-1);
       if (isAckOnly(userMsgs.map((m) => m.content ?? ""), Boolean(last && /\?\s*\S{0,3}\s*$/.test(last.text)))) {
         const step = await tracer.step({ agent: "cto", type: "info", name: "só reação, sem IA", input: { reacao: autoReaction } });
@@ -240,7 +243,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       }
     }
 
-    if (opts.trigger !== "reminder") progress.start();
+    if (!proactive) progress.start();
     await preprocessMedia(pending, channel, tracer, conversation.remote_jid);
 
     // Contexto: memória curta no Redis (já interpretada); sem Redis, as mensagens das últimas horas no Postgres
@@ -293,6 +296,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       disconnected,
       autoReaction,
       styleNotes: (user as any).style_notes ?? null,
+      errands: errandsContext(await openErrands(user.id)),
     });
 
     const ctx: ToolContext = {
@@ -311,7 +315,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       inboundFiles: pending.map((m) => m.inboundFile).filter(Boolean),
       inboundText: fresh.map((e) => `[msg_id=${e.id}] ${e.text}`).join("\n").slice(0, 6000),
       // lembrete agendado não ganha "já vou ver": a pessoa não perguntou nada agora
-      progress: opts.trigger === "reminder" ? undefined : progress,
+      progress: proactive ? undefined : progress,
     };
     const tools = [...(await availableTools(CTO_TOOLS, user)), ...TEAM_TOOLS, ...team.map(delegationTool)];
     // "sim"/"não" da pessoa para a ação guardada: o servidor executa (ou descarta) antes do CTO responder
@@ -323,7 +327,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     let result;
     try {
       // comprovante na foto vira despesa na hora, sem depender do modelo lembrar
-      const receiptNotes = opts.trigger !== "reminder" ? await autoLaunchReceipts(pending, ctx) : [];
+      const receiptNotes = !proactive ? await autoLaunchReceipts(pending, ctx) : [];
       result = await runToolLoop({ agent: "cto", task: "agent:cto", ctx, tools, messages: [{ role: "system", content: system }, ...messages, ...confirmNotes, ...receiptNotes], maxSteps: 10 });
     } finally {
       // navegador esquecido aberto: fecha e, se a pessoa pediu a gravação, manda junto

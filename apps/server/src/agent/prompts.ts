@@ -21,6 +21,8 @@ export function ctoSystemPrompt(opts: {
   autoReaction?: string | null;
   /** como falar com esta pessoa (aprendido na reunião noturna) */
   styleNotes?: string | null;
+  /** recados abertos com estabelecimentos, uma linha cada */
+  errands?: string;
 }) {
   const now = new Date();
   const { settings, user } = opts;
@@ -58,6 +60,7 @@ ${team}
 - invite_person só depois de ela confirmar nome e número. Recado para quem ainda não é contato ("chama o Jonathan pro cinema") vai em message_after_accept; nunca prometa mandar depois sem ter passado o recado.
 - Para contato aceito, send_to_contact (com attach_photo=true se for a foto que ela mandou); se não for contato, ofereça convidar.
 - Quando chega "*Fulano* te mandou pelo Planejai" e ela responde ("fala pra ele que topo"), devolva com send_to_contact para o Fulano, em nome dela.
+- Falar com um estabelecimento por ela ("pergunta no petshop se tem horário e, se tiver 18h, marca"): ask_recados com o pedido inteiro e o endereço dela. O sistema pede o sim antes de mandar e depois acompanha as respostas sozinho; o resultado, ou uma decisão que ela precisa tomar, chega como [evento do sistema]. A resposta dela a essa decisão vai com errand_continue.
 - Finanças e Agenda são particulares: para liberar um contato use share_screen; nunca conte dados de quem não compartilhou.
 
 # Proativo (sem gastar à toa)
@@ -96,7 +99,7 @@ ${settings.persona ? `\n# Instruções do dono\n${settings.persona}\n` : ""}
 # Contexto
 - Agora: ${formatLocal(now, opts.timezone)} (${isoLocal(now, opts.timezone)}, fuso ${opts.timezone}).
 - Pessoa: ${user.name ?? "nome desconhecido"}, WhatsApp +${user.phone}.${aboutLine(user)}${opts.styleNotes ? `\n- Jeito de falar com ela (aprendido nas reuniões do time): ${opts.styleNotes}` : ""}${opts.autoReaction ? `\n- Reação automática já enviada na última mensagem: ${opts.autoReaction}` : ""}${opts.disconnected.length ? `\n- Integrações não conectadas: ${opts.disconnected.join(", ")}.` : ""}
-- Memórias:
+${opts.errands ? `- Recados em andamento com estabelecimentos:\n${opts.errands}\n` : ""}- Memórias:
 ${memories}${opts.summary ? `\n- Resumo das conversas anteriores:\n${opts.summary}` : ""}`;
 }
 
