@@ -66,12 +66,10 @@ deploy/portainer-stack.yml stack compose (app, worker, db, redis, browserless)
 deploy/swarm-traefik-stack.yml  Swarm + Traefik (network_public), domínio autoplanejai.tekvosoft.com
 ```
 
-## Receitas
-
 ### Adicionar uma ferramenta
 1. Crie com `defineTool` no arquivo do domínio em `agent/tools/` (JSON Schema em `parameters`, use `obj()`).
 2. Se depende de conector, ponha `integration: "<id>"`: a tool some do agente enquanto não estiver conectada.
-3. Ação com dinheiro ou que fala com terceiros: inclua `...CONFIRM_PARAM` e chame `requireConfirmation(args, resumo)` no início.
+3. Ação com dinheiro, que fala com terceiros ou apaga: inclua `...CONFIRM_PARAM` e comece com `const c = await requireConfirmation(args, resumo, ctx); if (c) return c;`. O servidor guarda e só executa depois do "sim" da pessoa (ver `agentes.md`). Se só lê, confira se o nome cai em `NO_SIDE_EFFECT` (`orchestrator.ts`).
 4. Registre a tool no especialista certo em `agent/team.ts` (ou em `CTO_TOOLS` se for núcleo da conversa).
 5. Imagens para enviar: `ctx.outbox.addMedia(...)` e devolva o `media_id`; o CTO posiciona com `[[media:ID]]`.
 6. Se a tool chama um LLM, devolva `_usage` (o `ChatResult`) para o custo entrar no log.
@@ -87,92 +85,6 @@ deploy/swarm-traefik-stack.yml  Swarm + Traefik (network_public), domínio autop
 3. Rótulo em `AGENT_LABEL` (`apps/dashboard/src/components.tsx`).
 4. Apelido e carinha: `persona` e `face` (pessoinha a traço: fundo pastel 0-7, olhos, boca, cabelo/acessório em `extra`) no `team.ts`, e a mesma entrada em `CORE_FACES` (`apps/dashboard/src/faces.tsx`).
 O CTO ganha automaticamente `ask_<id>` e os outros especialistas ganham `consult_<id>`.
-
-### WhatsApp (Baileys)
-- A conexão vive no processo `worker` (ou `all`) e só um processo segura a sessão (`pg_try_advisory_lock`). O worker deve ter 1 réplica.
-- A API manda comandos (`connect`, `logout`, `restart`) por `pg_notify('wa_command')`; o status/QR fica em `wa_sessions`, que a tela WhatsApp lê a cada 2s.
-- Só reconecta sozinho se a sessão já foi pareada; QR novo só quando alguém pede no dashboard.
-- Áudio e foto são baixados na chegada (`downloadMediaMessage`) e o base64 sai do banco depois de transcrito/descrito.
-- Não copie código do tekvosoft (AGPL); a implementação aqui é própria, usando só a API pública do Baileys.
-
-### Painéis e permissões
-- Dono da stack = `ADMIN_EMAIL`/`ADMIN_PASSWORD` do .env, sempre super admin (id "owner", não fica na tabela). É o ÚNICO super admin: `toAccount` sempre devolve "admin" para conta do banco e as rotas de contas não aceitam `role`. Não reabra isso.
-- Entrada só por convite (`signupMode` padrão `invite`; também `approval`, `open`, `closed`). Convite (`social.ts`, fila `invite.send`) chega no WhatsApp; SIM/NÃO é tratado no ingest sem LLM e o aceite cria contatos nos dois sentidos. O link `/convite/CODIGO` abre o cadastro do painel já preenchido; convite vale como aprovação.
-- Super admin cadastra cliente completo (nome e sobrenome, e-mail, telefone) em **Clientes** (`POST /api/clients`), que devolve o link para a pessoa criar a senha.
-- Contatos: `send_to_contact` ("manda esse look pro Giovani") só envia para quem aceitou o convite.
-- Telas particulares (`sharing.ts`): Finanças, Agenda, De olho, Documentos, Memórias e o resumo do Início mostram só os dados da própria pessoa, inclusive para o dono (`selfUserId`: conta ligada ou primeiro OWNER_PHONES). Ver os de um contato só se ele liberou (tabela `shares`, escopos `finance`/`agenda`, só leitura): `personalUser(conta, ?user=, escopo)` devolve null = 403. Liberar: Minha conta > Compartilhar (`GET/PUT /api/shares`) ou no WhatsApp (`share_screen`). Só entre contatos (quem aceitou convite).
-- Rota nova: dado pessoal usa `selfUserId`/`personalUser`; dado de operação (execuções, custos, clientes) usa `scopeUserId` ou fica no bloco `requireSuper`.
-- Abas do cliente (`tabs.ts`, `GET /api/me/tabs`): todo mundo começa só com Início, Agenda, Finanças e De olho. Módulos (`OPTIONAL`: convites, memorias, meu_time) e até 3 abas sob medida (`/aba/:slug`, feitas de widgets do Painel) são liberados pela reunião noturna ou pelo super admin em Clientes. Rota de módulo no `App.tsx` só existe se `has(modulo)`.
-- Visual: neutro; o degradê da marca (`--grad`: #FF7A1A, #FF4458, #E23382, #8B2BE2) em pontos de destaque: item ativo do menu e da barra, topo do card de Finanças, barras de limite, borda do Téo, hoje na agenda, avatar, botão Convidar/Atualizar (`.btn-brand`). Ícones de indicadores e categorias usam um tom da paleta (`.tone-ico`, `--c`). Categorias usam a paleta (`CATEGORY_COLORS`, igual à dos gráficos). Não pinte o resto.
-- Fluidez: `useApi` (`hooks.ts`) guarda as respostas em memória e mostra na hora ao voltar para a tela, atualizando por trás; o `App.tsx` baixa o código das telas e esquenta as rotas mais usadas logo após o login. Puxar para atualizar (`PullToRefresh.tsx`) dispara `refreshAll()`, sem recarregar a página.
-- Versão nova: o build grava `version.json` e troca o `VERSION` do `sw.js` (`vite.config.ts`). `update.ts` confere ao abrir, ao voltar para o app e a cada 5 min e mostra a pílula "Atualizar" (celular e notebook). Não ponha cache em `/version.json`.
-- Menu (`App.tsx`): "Meu dia" (Início, Agenda, Finanças, De olho, Documentos) igual para todos; o dono tem ainda "Plataforma" (Execuções, Pessoas, Agentes, Conexões, Configurações) e "Conta". Telas irmãs ficam num item só com abas no topo (`GROUPS`: Execuções|Filas, Clientes|Convites, Agentes|Modelos, WhatsApp|Integrações, Minha conta|O que ele sabe). Página nova: entre num grupo existente antes de criar item novo no menu; rota em `App.tsx` no ramo certo e ícone de `icons.tsx` (nada de emoji). Widget novo do Painel: entrada em `WIDGETS` de `pages/Dashboard.tsx` (tamanhos s/m/l/xl; o layout de cada conta fica em `/api/me/dashboard`). O teste `features.e2e.test.ts` confere que admin leva 403 nas rotas de super admin; acrescente as novas lá.
-
-### Memória curta, retenção e mídia
-- Contexto do CTO = últimas `HISTORY_LIMIT` entradas do Redis (texto já interpretado) + resumo da conversa + memórias. Não volte a mandar mídia crua ou documento inteiro para o LLM: documento entra com prévia de 2.500 caracteres e o resto via `read_document`.
-- Conversa não é guardada no Postgres quando o Redis está no ar: a mensagem é apagada depois de processada e a resposta não é gravada (o histórico já está no WhatsApp). Sem Redis, cai no modo antigo (guarda `MESSAGE_RETENTION_HOURS` e resume).
-- Cache no Redis (`shortmem.ts`: `cacheGet`/`cacheSet`, `markSeen`, `countInWindow`): resultado de web_search/fetch_url (6h) e Mercado Livre (1h), interpretação de mídia por hash (30 dias), texto de documento (24h), dedupe de webhook e ritmo por minuto. Ferramenta nova determinística pode entrar no cache do runner (`agent/cache.ts`).
-- Gravações e prints ficam em `media_files` (servidos por `/api/media/:id`) por `EXECUTION_RETENTION_DAYS`.
-
-### Ritmo das respostas (estilo Instinct)
-- `agent/progress.ts`: mantém o "digitando..." ligado e manda avisos curtos. A frase que o CTO escreve junto de um `ask_*` sai na hora ("deixa eu ver aqui 🔎"); se ele não escrever nada, um aviso de reserva sai após 7s e outro aos 45s (máx. 3 por execução, sem LLM).
-- Resposta junto de `react_to_message`/`save_memory` é entregue sem outra rodada do modelo (pergunta simples = 1 chamada). Não quebre isso ao mexer no runner.
-- A primeira coisa de toda execução é a reação temática instantânea (`agent/reaction.ts`, regex, sem IA): cinema 🍿, gasto 💸, viagem ✈️... O CTO não reage de novo; só troca por ✅ quando conclui uma tarefa. Tema novo = linha nova em THEMES (a ordem importa).
-- "valeu", "ok", "kkk" ou só emoji (isAckOnly em `agent/reaction.ts`): a reação responde e o CTO nem é chamado. "ok"/"sim" contam como pergunta respondida se a última fala do assistente terminou com "?".
-- Todo texto que sai (balões, avisos, notifyUser) passa por `humanize()` (`agent/humanize.ts`): sem "-", "•" ou travessão, para soar como gente. Não reintroduza listas com marcador no prompt.
-- Dashboard: `/agenda` (pages/Calendar.tsx, estilo Google Agenda: painel lateral com Criar, minicalendário e agendas Lembretes/Google/Feriados no Brasil calculados no front; Dia/Semana/Mês/Lista; semana começa na segunda; no celular pílulas e botão + flutuante; antes era mês/semana/lista, arrastar lembrete único chama PATCH /api/reminders/:id, Google Agenda aparece só para o dono); Finanças (o Financeiro/Nico tem controle total: `update_transaction`, `delete_transaction` por ids ou por filtro com confirmação, `of_contact` para ler as de um contato que compartilhou) com abas Visão geral (KPIs, insight sem IA em `buildInsight`, rosca por categoria, limites e próximos lembretes) e Lançamentos; barra de baixo do celular é uma cápsula com só Início, Agenda, Finanças e Mais (`PHONE_TABS` em App.tsx); o "Mais" abre uma folha com o resto agrupado pelas seções do menu (Meu dia, Plataforma, Conta) em quadrados; no celular o Painel troca os botões de canto por uma linha Ajustes/Editar/Convidar.
-
-### Reunião noturna do time e proatividade
-- `improve.ts` (fila `improve.daily`, 19h no `DEFAULT_TIMEZONE`): a "reunião" do Téo (CTO) é UMA chamada barata em JSON por pessoa ativa. Ela devolve: `style` (vai para `users.style_notes` e entra no prompt do CTO), `agent_notes` (uma dica por especialista em `agent_notes`, entra no prompt dele via `collab.ts`), `tabs` (libera módulos e no máximo 1 aba nova por noite) e `create` (agente do cliente com `persona`; a carinha sai de `faceFor(userId:slug)`). Assuntos somam em `user_topics` e viram agente (`client_agents`, até 3, ferramentas só de `CLIENT_AGENT_TOOLS`) quando aparecem em 2 dias diferentes. Botão "Reunião agora" em Agentes.
-- **Time de cada pessoa** (`agent/tools/team.ts`): o CTO também cria agentes na conversa com `team_create_agent` (com `first_task` o agente novo já trabalha na mesma resposta), ajusta com `team_adjust_agent` (agente sob medida: instruções, foco, ferramentas, aposentar; especialista fixo: grava `agent_notes` só daquela pessoa) e lista com `team_list`. Limite `MAX_CLIENT_AGENTS` (6) por pessoa; `client_agents.origin` diz se nasceu na reunião (`melhoria`) ou a pedido (`pedido`), e a reunião noturna só aposenta os que ela criou. A `TeamRoom` de cada execução recebe o time da pessoa (fixos + sob medida), então agentes sob medida consultam e são consultados (`consult_c_<slug>`) como qualquer colega.
-- Uso por cliente (super admin, Clientes > pessoa): `GET /api/clients/:id/usage` traz execuções, custo, mensagens por dia, quem trabalhou (por agente), agentes criados, o que o time aprendeu e as abas (`PUT /api/clients/:id/tabs`).
-- `watches.ts` (fila `watch.check`, a cada 15 min): preço (Mercado Livre) e notícias (busca) são conferidos sem LLM. Duram 7 dias por padrão (1 a 30). `notify_mode` "always" (padrão) manda o resultado de cada olhada, achando ou não (texto pronto, sem IA); "changes" só fala quando algo melhora. Quando há novidade, o modelo `proactive` escreve o aviso. No fim do prazo avisa uma vez (`ended_notice`). Tela /watches cria, ajusta (PATCH), pausa, "Olhar já" (POST /api/watches/:id/check) e reativa; no WhatsApp `watch_create`/`watch_update`.
-
-### Gastos automáticos
-- Foto/documento de comprovante: a visão escreve `FINANCEIRO: tipo=...; valor_total=...; data=...; estabelecimento=...`; o CTO chama `add_transaction` direto com `message_id` (vira `external_ref`, então reprocessar não duplica).
-- Parcelado: `installments` com o valor TOTAL; `splitInstallments` distribui os centavos.
-- Respostas das tools financeiras já vêm formatadas (`brl`) para o modelo não errar conta.
-- Categoria é opcional em `add_transaction`: `autoCategory` usa o histórico da pessoa (mesmo lugar/descrição), depois `CATEGORY_RULES` (regex sem acento), depois "Outros". Regra nova = linha em `CATEGORY_RULES`.
-- Limites (`budgets`, categoria NULL = total do mês): `set_budget`/`budget_status`; `add_transaction` devolve `budget_alert` uma vez ao passar de 80% e uma vez ao estourar (por mês). No painel: Finanças > Limites do mês (`PUT /api/budgets`, valor 0 remove).
-- Gráficos (`charts.ts`, `make_chart`: categorias, meses, dias, limites): números do SQL, SVG próprio com a paleta, PNG pelo browserless da stack (ou `CHROME_PATH` em dev). Sem LLM; sai como mídia `[[media:ID]]`.
-- Imagens simples sob pedido (`images.ts`, `make_image`: mapa_mental, lista, passos, tabela, frase): a IA escreve só o conteúdo em JSON, o HTML é montado no servidor e vira PNG por `htmlToPng` (página inteira). CTO, Pesquisador e agentes de cliente têm a ferramenta; o prompt proíbe dizer que não consegue gerar imagem.
-- Layout no notebook (`FIT_QUERY` em hooks.ts = min-width 1024 e min-height 680): páginas com classe `fit` cabem na tela sem rolar (Painel, Finanças, Agenda, Agentes, Configurações); listas rolam dentro dos cartões. Abaixo disso (zoom, telas baixas, celular) volta o layout normal com rolagem. Abas/filtros ativos usam fundo `--ink`; botões com texto branco usam `--grad-strong` (mais escuro, `background-origin: border-box`). Números em `--mono` e rótulos pequenos em caixa alta, como em Finanças.
-
-### Navegador (pesquisa gravada)
-- Ferramentas do Pesquisador: `browser_open` (record/send_recording), `browser_action`, `browser_screenshot`, `browser_close`. A sessão fica em `ctx.room.browser`; o orquestrador fecha o que ficou aberto e manda a gravação se ela foi pedida.
-- Precisa de ffmpeg (já na imagem) e do browserless da stack (`TIMEOUT` 300000). Em dev: `CHROME_PATH=/caminho/do/chrome`.
-
-### Filas (como o modo fila do n8n)
-- Tudo passa pelo pg-boss (`queue/boss.ts`): mensagem vira job `conversation.process` (prioridade 10), lembretes, resumos, convites, De olho e reunião noturna têm fila própria com retry. `WORKER_CONCURRENCY` (padrão 4) = jobs em paralelo por réplica do worker; para escalar, aumente isso ou suba réplicas (a conexão do WhatsApp continua em um só processo pelo lock).
-- Tela **Filas** (super admin, `GET /api/queues`): na fila, rodando, feitos e falhas em 24h, tempo médio e de espera; falha pode ser reprocessada (`POST /api/queues/:name/:id/retry`).
-
-### Trocar modelos
-Padrões em `ROUTE_DEFAULTS` com o porquê de cada escolha e `maxTokens` por rota; em produção troque pela tela **Modelos** (grava em `model_routes`, sem redeploy). Critério: entrada barata para quem lê muito histórico (CTO, Pesquisador), saída barata para quem escreve muito, modelo omni para áudio, e sempre `fallbacks`. Confira IDs e preços no catálogo ao vivo (`GET /api/models/catalog`).
-
-### Banco
-Nova migração = novo arquivo `db/migrations/00N_descricao.sql` (nunca edite uma já aplicada). Roda sozinha no boot.
-
-## Rodar e testar
-
-```bash
-npm ci
-cp .env.example .env            # preencha SESSION_SECRET, ENCRYPTION_KEY, ADMIN_PASSWORD, OPENROUTER_API_KEY, DATABASE_URL
-docker compose up db redis -d   # ou Postgres/Redis locais
-npm run dev                     # API + worker em :3000 (migra no boot)
-npm run dev:dashboard           # dashboard em :5173 com proxy para :3000
-npm run typecheck && npm test   # e2e rodam com TEST_DATABASE_URL (banco descartável); REDIS_URL e CHROME_PATH ligam os testes de Redis e navegador
-npm run build                   # dashboard vai para apps/server/public
-```
-Sem WhatsApp, teste pelos e2e (canal playground) e veja os passos em **Execuções**.
-
-## Publicar
-- Push na `main` roda `.github/workflows/ci.yml`: o job `image` só sai depois do `test` verde e publica `ghcr.io/dhqdev/planejai-plataform` (amd64, arm64, arm/v7) com as tags `latest` e `sha-<curto>`, depois chama o webhook do Portainer (`PORTAINER_WEBHOOK_URL`). Rollback = trocar a tag na stack para um `sha-…` antigo. Não recrie um workflow de deploy separado do teste.
-- Operação (segredos, backup/restore, rollback, saúde, plano do número): `docs/operacao.md`.
-- Versões: workflow **Release** (manual: patch/minor/major/atual) sobe os `package.json`, escreve `CHANGELOG.md`, cria tag `vX.Y.Z` + release e dispara o CI na tag (imagem `X.Y.Z`, `X.Y`, `latest`). A versão vem do package.json (`src/version.ts`, `APP_VERSION`/`GIT_SHA` no build) e aparece no painel e no `/health`. Não edite a versão à mão.
-- Stacks: `redis` guarda memória curta (appendonly, noeviction) e `redis-cache` (`REDIS_CACHE_URL`, allkeys-lru) guarda cache; `backup` faz `pg_dump` diário em `planejai_backups` (14 dias, `BACKUP_REMOTE` opcional via rclone); browserless fica fixo numa versão e na rede `planejai_browser`. Imagem de terceiros sempre com versão fixa.
-- Healthcheck da imagem: `node apps/server/dist/healthcheck.js` (API olha `/health`; worker olha o arquivo de vida de `alive.ts` e, se tiver o aluguel do WhatsApp, o `heartbeat_at`).
-- Stack: `deploy/portainer-stack.yml` (compose comum) ou `deploy/swarm-traefik-stack.yml` (Swarm + Traefik em network_public, domínio autoplanejai.tekvosoft.com). Postgres e Redis são da própria stack; nunca aponte para os que já existem no servidor.
-- O Dockerfile só roda `apk add ffmpeg` na arquitetura alvo; o resto das deps é JS puro. Não adicione dependência nativa no servidor sem ajustar isso.
 
 ## Regras do projeto
 - Travas (Configurações > Travas de segurança, chaves em settings.ts/GUARD_LIMITS): ritmo por minuto no ingest, limite de
@@ -194,22 +106,16 @@ Sem WhatsApp, teste pelos e2e (canal playground) e veja os passos em **Execuçõ
 - Toda chamada de LLM e de tool passa pelo `Tracer` para aparecer em Execuções.
 - Push direto na `main` (sem PR), a pedido do dono.
 
-## Telegram e n8n
+## Onde está o resto
 
-- **Telegram** (`channels/telegram.ts`, `telegram.ts`): um bot do dono (token em Integrações > Telegram; ao salvar, `setupTelegram` pega o @ e liga o webhook `/webhooks/telegram` com segredo derivado do SESSION_SECRET e re-registrado no boot; sem https público o worker faz long polling). A pessoa liga a conta em Minha conta > Conexões (link `t.me/bot?start=CODIGO`, uso único, 15 min, tabela `link_codes`) ou mandando o próprio contato no bot (confere o número com `users`). Ligação em `channel_links`; uma conta do Telegram por pessoa. Sem ligação o bot só explica como conectar (sem IA). `conversationOf` usa a conversa mais recente, então lembretes e avisos saem no canal onde a pessoa está falando. Texto estilo WhatsApp vira HTML (`toTelegramHtml`).
-- **API interna** (`api/routes/internal.ts`, cabeçalho `X-Planejai-Key` = `INTERNAL_API_KEY`; sem ela a API responde 503): `GET/POST/PATCH /api/internal/users`, `POST /api/internal/send` (texto, imagem, vídeo, PDF; fila `outbound.send` no worker), `POST /api/internal/agent` (o assistente escreve do jeito dele), `POST /api/internal/transactions`, `GET /api/internal/finance`. A lista aparece no modal Integrações > n8n.
-- **Eventos** (`events.ts`): `emitEvent` faz POST no "Webhook de eventos" da integração n8n com `X-Planejai-Signature` (HMAC do corpo com a chave interna): user.created, user.activated, transaction.created, budget.alert, reminder.fired, telegram.linked.
-- **n8n na mesma rede**: `N8N_URL`/`N8N_API_KEY`/`N8N_EVENTS_URL` viram credenciais da integração n8n por `envFallback` (o que foi salvo na tela vence, campo a campo). Apelidos na `network_public`: `planejai-app` (app) e `n8n-interno` (stack em `deploy/n8n-stack.yml`, com `PLANEJAI_API_URL`, `PLANEJAI_API_KEY` e `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`). Fluxos do n8n chamam o Planejai com `{{ $env.PLANEJAI_API_URL }}` e o cabeçalho `X-Planejai-Key: {{ $env.PLANEJAI_API_KEY }}`; eventos levam o mesmo cabeçalho. Fluxos criados no n8n do David (pasta "Planejai (plataforma nova)"): Eventos, Criar conta, Pagamento Asaas, Enviar mensagem.
-- **Automações de clientes** (`agent/tools/automations.ts`, tabela `automations`): `automation_save` recebe nós e ligações em formato curto e `buildWorkflow` monta o JSON do n8n. Para quem não é dono: só `CLIENT_NODES`, sem `$env`/código/credenciais, HTTP/RSS só com URL pública fixa, webhook com prefixo `pj-<user>`, e `planejai.notify`/`planejai.agent` viram HTTP para a própria pessoa (user_id fixado no servidor). `ownerOnly: false` libera a ferramenta mesmo sendo da integração n8n. Limite `AUTOMATIONS_PER_USER`; apagar conta apaga os fluxos. Fluxo de cliente também é recusado se disparar mais que a cada `MIN_CLIENT_INTERVAL_MIN` (15 min; cada disparo pode custar IA) ou se tiver nó solto, sem ligação a partir do gatilho. `automation_status` devolve as últimas execuções e, na falha, o nó e o erro (sem os dados que passaram pelo fluxo), para o agente corrigir com `automation_save` e o mesmo `workflow_id`.
-- **Assinatura pelo Asaas** (`billing.ts`, tabela `subscriptions`, migração 015): desligada por padrão (`billingEnabled` em Configurações > Assinatura; chave e token do webhook em Integrações > Asaas). `billingAccess(user)` é a regra única: dono e `users.billing_exempt` sempre passam; dias grátis (`billingTrialDays`) contam da entrada da pessoa ou de `billingStartedAt` (quando a cobrança foi ligada), o que for mais recente; depois só com assinatura em dia. O orquestrador trava antes de chamar a IA (passo "trava: assinatura") e avisa uma vez por dia com o link `/assinatura`. `subscribe()` cria cliente e assinatura mensal com `billingType: UNDEFINED` (a pessoa paga na página do Asaas: Pix, cartão ou boleto; CPF/CNPJ não fica no nosso banco). O status só muda pelo webhook `POST /webhooks/asaas` (cabeçalho `asaas-access-token`), em `handleAsaasEvent`. Tela do cliente: `pages/Billing.tsx`.
-- **Regras financeiras** (migração 018): `handleAsaasEvent` ignora evento repetido (tabela `asaas_events`, pelo id do evento) e avisa a pessoa no WhatsApp pela fila `outbound.send` (texto fixo em `BILLING_TEXT`, sem IA): pagamento confirmado (só uma vez por pagamento), vencido com link, cancelado por fora. Primeiro pagamento de quem foi convidado dá `billingReferralPercent`% (padrão 10) de desconto na próxima cobrança de quem convidou (`referral_credits`, um por convidado, aplicado com POST /payments/{id} no Asaas). Fila diária `finance.daily` às 9h: `billingReminders` (vencimento `billingReminderDays` antes e no dia, só Pix/boleto; fim dos dias grátis 1 dia antes) e `remindBills`. Eventos para o n8n: payment.confirmed, payment.overdue, subscription.canceled, referral.credited. O fluxo n8n "Pagamento Asaas" só trata pagamento avulso (sem `payment.subscription`).
-- **Contas fixas** (`bills.ts`, tabela `bills`): aluguel, parcelas, salário com dia de vencimento; uma mensagem por pessoa por dia com o que vence (antes, no dia, e no dia seguinte se não pagou). Ferramentas `bill_save/list/pay/delete` (Nico; `bill_pay` também no CTO) e card "Contas fixas" em Finanças; "paguei" lança com `external_ref = bill:<id>:<mês>`.
-- **Ferramentas do assistente** (`agent/tools/n8n.ts`, com o especialista Produtividade): `n8n_workflows`, `n8n_executions`, `n8n_trigger` (pede confirmação; Basic Auth opcional dos webhooks). Só o dono (OWNER_PHONES) pode usar.
-- Fluxos prontos para importar no n8n: `/mnt/project-files/planejai-deploy/n8n/` (auxiliares convertidos da Evolution para a API interna e fluxo de eventos).
-- **Notificações** (`notifications.ts`, `api/routes/notifications.ts`, tabela `notifications`): `notify({userId|null, kind, title, body, link})`; null = para o dono. `events.ts` gera as de cliente, limite, lembrete e Telegram; automações, login novo e WhatsApp deslogado também chamam `notify`. O painel consulta `/api/notifications/unread` a cada 30 s (`dashboard/src/notify.ts`) e mostra a bolinha no menu, na barra de baixo e no sino.
-- **Documentos** (`documents.ts`, tabela `documents`, bytea): ferramentas `document_save/list/send/delete` no CTO usam `ctx.inboundFiles` (arquivo recebido na mensagem). Painel em `/documentos`; super admin vê todos.
-- **Código de login** (`logincode.ts`): navegador sem cookie `pj_dev` conhecido recebe código pela fila `outbound.send`. Testes rodam com `LOGIN_CODE=false`, exceto `test/panel.e2e.test.ts`.
-- **Agenda com Meet**: `calendar_create_event` com `meet=true` manda `conferenceDataVersion=1`; convidados recebem convite pelo Google (`sendUpdates=all`).
-- **Mapa**: `map_route` abre o Google Maps no navegador headless, devolve print + link + opções; no CTO direto.
-- **Carregando**: `BlockLoader` (16 blocos em onda, CSS puro em styles.css); `index.html` mostra o mesmo loader antes do JS.
+Leia só o arquivo do assunto que você vai mexer (ficam nesta pasta):
 
+| Arquivo | Assunto |
+| --- | --- |
+| `agentes.md` | confirmação de ação sensível, memória curta, ritmo das respostas, reunião noturna, time de cada pessoa, navegador, filas, modelos |
+| `painel.md` | permissões, telas particulares, abas, menu, visual, PWA, agenda e finanças no painel |
+| `financas.md` | gastos automáticos, limites, gráficos, imagens, assinatura do Asaas, regras financeiras, contas fixas |
+| `integracoes.md` | WhatsApp (Baileys), Telegram, API interna, eventos e n8n, automações, notificações, documentos, código de login |
+| `deploy.md` | rodar e testar local, CI, imagem, stacks, versões, migrações |
+
+Mudou um comportamento descrito aqui ou num desses arquivos? Atualize o texto no mesmo commit. Sem histórico ("antes era..."): o git guarda isso.
