@@ -1,4 +1,4 @@
-/* Planejai: tinta sobre papel. A única coisa colorida da tela é o Mochi (e as cores que informam: status, agendas, categorias). Celular, iPad e desktop. */
+/* Planejai: tinta sobre papel com o roxo do Mochi nos destaques (botão principal, item ativo, hoje, avisos). O resto é neutro, e as cores que informam (status, agendas, categorias) continuam. Celular, iPad e desktop. */
 :root {
   --bg: #f6f6f4;
   --panel: #ffffff;
@@ -34,10 +34,16 @@
   --brand-2: #ff4458;
   --brand-3: #e23382;
   --brand-4: #8b2be2;
-  /* destaque é tinta sólida (antes era um degradê laranja-roxo); o texto por cima usa --on-ink */
-  --grad: var(--ink);
-  --grad-strong: var(--ink);
-  --grad-soft: var(--panel-2);
+  /* cores do Mochi (ícone do app): roxo elétrico, magenta do anel e o fundo noite */
+  --violet: #6510e0;
+  --magenta: #c42bea;
+  --midnight: #210552;
+  --violet-soft: #f1eafe;
+  --on-brand: #ffffff;
+  /* destaque é cor sólida, sem degradê; o texto por cima usa --on-brand */
+  --grad: var(--violet);
+  --grad-strong: var(--violet);
+  --grad-soft: var(--violet-soft);
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -63,6 +69,10 @@
   --canvas-dot: #2c2c2c;
   --shadow: none;
   --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.5);
+  --violet: #8c4bff;
+  --magenta: #e05cff;
+  --violet-soft: #241838;
+  --on-brand: #ffffff;
   color-scheme: dark;
 }
 
@@ -858,7 +868,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .fin-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); }
 .fin-tabs button { display: inline-flex; align-items: center; gap: 7px; border: none; background: none; padding: 8px 14px; border-radius: 10px; font-weight: 600; color: var(--muted); cursor: pointer; }
 .fin-tabs button.active { background: var(--ink); color: var(--on-ink); }
-.fin-tabs button.active .ico { color: var(--text); }
+.fin-tabs button.active .ico { color: inherit; }
 .fin-month-label { font-size: 12px; margin-left: 4px; }
 .fin-period { display: inline-flex; align-items: center; gap: 6px; }
 .icon-btn.round { border-radius: 50%; width: 34px; height: 34px; }
@@ -1179,3 +1189,20 @@ button.chip { cursor: pointer; color: var(--text); }
 .share-row > span { flex: 1; min-width: 0; font-weight: 550; }
 .share-toggles { display: flex; gap: 6px; flex-shrink: 0; }
 .subtabs-bar:has(+ .route-fade > .page-wide) { padding-left: 28px; padding-right: 28px; }
+
+/* ---------- Cores do Mochi: só nos destaques ---------- */
+.btn-brand, .avatar, .fab.ink, .cal-fab, .cal-mini-grid button.sel, .cal-cell.today .cal-num, .cal-week-day.today strong, .cal-list-date.today strong { color: var(--on-brand); }
+.btn-brand { box-shadow: 0 1px 0 rgba(255, 255, 255, .18) inset, 0 6px 16px color-mix(in srgb, var(--violet) 26%, transparent); }
+.nav a.active { color: var(--violet); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--violet) 22%, var(--border)); }
+.nav a.active .ico { color: var(--violet); }
+.nav-dot, .tab-dot, .bell-dot { background: var(--magenta); }
+.subtabs button.active { background: var(--violet); color: var(--on-brand); }
+.update-pill::before { background: var(--magenta); }
+:focus-visible { outline-color: var(--violet); }
+::selection { background: color-mix(in srgb, var(--violet) 22%, transparent); }
+@media (max-width: 767px) {
+  .tab.active { color: var(--violet); background: var(--violet-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--violet) 18%, transparent); }
+  .tab.active .tab-ico { color: var(--violet); }
+}
+/* marca na barra lateral: o Mochi sobre o fundo noite, como no ícone do app */
+.brand > .mochi-badge { padding: 5px; margin: 0; border-radius: 14px; background: radial-gradient(circle at 50% 45%, #7a14f5 0%, var(--midnight) 78%); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--magenta) 70%, transparent); }
