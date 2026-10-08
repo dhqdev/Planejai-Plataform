@@ -1,5 +1,5 @@
 import { GH_HEADERS, getCredentials } from "../../integrations/registry.js";
-import { defineTool, obj } from "./types.js";
+import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 async function notion(path: string, body?: unknown, method = "POST") {
   const c = await getCredentials("notion");
@@ -105,14 +105,21 @@ export const githubSearchIssues = defineTool<{ query: string }>({
   },
 });
 
-export const githubCreateIssue = defineTool<{ repo?: string; title: string; body?: string }>({
+export const githubCreateIssue = defineTool<{ repo?: string; title: string; body?: string; confirmed_by_user?: boolean }>({
   name: "github_create_issue",
-  description: "Cria uma issue num repositório (repo no formato dono/nome; sem repo usa o padrão configurado).",
+  description: "Cria uma issue num repositório (repo no formato dono/nome; sem repo usa o padrão configurado). Fora do repositório padrão, só depois do \"sim\".",
   integration: "github",
-  parameters: obj({ repo: { type: "string" }, title: { type: "string" }, body: { type: "string" } }, ["title"]),
-  async run(args) {
-    const repo = args.repo ?? (await getCredentials("github"))?.default_repo;
+  parameters: obj({ repo: { type: "string" }, title: { type: "string" }, body: { type: "string" }, ...CONFIRM_PARAM }, ["title"]),
+  async run(args, ctx) {
+    const fallback = (await getCredentials("github"))?.default_repo;
+    const repo = (args.repo ?? fallback ?? "").trim();
     if (!repo) return { error: "Diga em qual repositório (dono/nome) ou configure o repositório padrão na integração do GitHub." };
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || repo.split("/").some((p) => /^\.+$/.test(p))) return { ok: false, error: `Repositório inválido: ${repo}. Use dono/nome.` };
+    // publicar em nome da pessoa num repositório que não é o dela (inclusive público de terceiros) pede o sim
+    if (repo.toLowerCase() !== String(fallback ?? "").toLowerCase()) {
+      const c = await requireConfirmation(args, `criar a issue "${args.title}" em ${repo}`, ctx);
+      if (c) return c;
+    }
     const j = await github(`/repos/${repo}/issues`, { method: "POST", body: JSON.stringify({ title: args.title, body: args.body }) });
     return { ok: true, number: j.number, url: j.html_url };
   },

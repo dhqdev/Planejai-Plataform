@@ -239,6 +239,12 @@ describe("GitHub", () => {
     expect(calls[0]!.headers.get("content-type")).toBe("application/json");
     gh(calls[0]!);
   });
+  it("repositório inválido é recusado e fora do padrão pede o sim", async () => {
+    expect(await productivity.githubCreateIssue.run({ repo: "../../user/repos", title: "T" }, ctx)).toMatchObject({ ok: false });
+    expect(await productivity.githubCreateIssue.run({ repo: "dono/..", title: "T" }, ctx)).toMatchObject({ ok: false });
+    expect(await productivity.githubCreateIssue.run({ repo: "outra-pessoa/projeto", title: "T" }, ctx)).toMatchObject({ needs_confirmation: true });
+    expect(calls).toHaveLength(0);
+  });
 });
 
 describe("Linear (GraphQL)", () => {
