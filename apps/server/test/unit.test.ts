@@ -295,5 +295,9 @@ describe("perguntas de boas-vindas do cadastro", () => {
     const a = cleanAnswers({ goal: "agenda", forget: ["meds", "x"], home: "alone", shared: "split", more: "  tenho   um gato " });
     expect(a).toEqual({ goal: ["agenda"], forget: ["meds"], home: "alone", more: "tenho um gato" });
     expect(onboardingSummary(a)).toBe("Quer ajuda com: Agenda e lembretes. Costuma esquecer: Remédios. Mora: Sozinho(a). Contou: tenho um gato");
+    const { specialistSystemPrompt } = await import("../src/agent/prompts.js");
+    const user = { id: "u", phone: "5519900000000", name: "Ana", status: "active", timezone: null, profile: { onboarding: { summary: onboardingSummary(a) } } };
+    const prompt = specialistSystemPrompt({ name: "Financeiro", role: "dinheiro", instructions: "" } as any, { timezone: "America/Sao_Paulo", user, settings: { assistantName: "Planejai" } as any });
+    expect(prompt).toContain("Contou no cadastro (use para personalizar as respostas, não pergunte de novo): Quer ajuda com: Agenda e lembretes.");
   });
 });
