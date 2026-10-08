@@ -567,8 +567,8 @@ export function CopyField({ value }: { value: string }) {
   );
 }
 
-/** Cores das categorias: tons foscos que se distinguem no claro e no escuro (a maior começa no violeta da marca), depois cinzas. */
-export const CATEGORY_COLORS = ["#6d4fd8", "#e07a2f", "#2a9d8f", "#d1537e", "#3f7fd6", "#8a9a2b", "#b0663a", "#5a67c4", "#9aa0a6", "#c2c5ca", "#7d7d78", "#b5b5af", "#5f5f5a", "#dcdcd6"];
+/** Paleta da marca para categorias (a mesma dos gráficos do WhatsApp), do laranja ao azul e depois cinzas. */
+export const CATEGORY_COLORS = ["#FF7A1A", "#FF4458", "#E23382", "#B830C8", "#8B2BE2", "#5B45E8", "#2F7BEA", "#16A3A3", "#9AA0A6", "#C9CCD1", "#7d7d78", "#b5b5af", "#5f5f5a", "#dcdcd6"];
 
 /** Rosca SVG simples (sem biblioteca) para gastos por categoria. */
 export function Donut({ items, size = 150, center }: { items: { label: string; value: number }[]; size?: number; center?: ReactNode }) {
@@ -579,12 +579,12 @@ export function Donut({ items, size = 150, center }: { items: { label: string; v
   return (
     <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: "rotate(-90deg)" }}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--panel-2)" strokeWidth={14} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--panel-2)" strokeWidth={18} />
         {total > 0 &&
           items.map((it, i) => {
             const len = (it.value / total) * c;
             const el = (
-              <circle key={it.label} cx={size / 2} cy={size / 2} r={r} fill="none" stroke={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} strokeWidth={14}
+              <circle key={it.label} cx={size / 2} cy={size / 2} r={r} fill="none" stroke={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} strokeWidth={18}
                 strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-offset}>
                 <title>{it.label}</title>
               </circle>

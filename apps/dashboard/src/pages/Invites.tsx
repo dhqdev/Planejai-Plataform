@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, ago, phoneFmt } from "../api";
+import { api, ago } from "../api";
 import { CopyField, Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
@@ -93,9 +93,9 @@ export function InvitesPage({ isSuper }: { isSuper: boolean }) {
             data.invites.map((i: any) => (
               <div className="line-item" key={i.id} style={{ padding: "10px 16px" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="ellipsis"><strong>{i.name ?? phoneFmt(i.phone)}</strong></div>
+                  <div className="ellipsis"><strong>{i.name ?? `+${i.phone}`}</strong></div>
                   <div className="muted" style={{ fontSize: 12 }}>
-                    {phoneFmt(i.phone)} · {STATUS[i.status] ?? i.status} · {ago(i.created_at)}
+                    +{i.phone} · {STATUS[i.status] ?? i.status} · {ago(i.created_at)}
                     {isSuper && ` · por ${i.inviter_name}`}
                   </div>
                 </div>
@@ -150,7 +150,7 @@ export function InvitesPage({ isSuper }: { isSuper: boolean }) {
               <div className="line-item" key={c.id} style={{ padding: "10px 16px" }}>
                 <Icon name="user" size={16} />
                 <span style={{ flex: 1 }}>{c.name}</span>
-                <span className="muted">{phoneFmt(c.phone)}</span>
+                <span className="muted">+{c.phone}</span>
               </div>
             ))}
             {contacts.data && !contacts.data.length && <Empty>Quando alguém aceitar seu convite, aparece aqui.</Empty>}

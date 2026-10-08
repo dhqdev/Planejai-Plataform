@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ago, api, brl, phoneFmt, usd } from "../api";
+import { ago, api, brl, usd } from "../api";
 import { AgentTag, CopyField, Empty, ErrorBox, Loading, Modal, PageHead, Status, confirmDialog, initial } from "../components";
 import { AgentFace } from "../faces";
 import { useApi } from "../hooks";
@@ -54,7 +54,7 @@ export function ClientsPage() {
                   <strong>{name}</strong>
                 </div>
                 <div className="muted ellipsis" style={{ fontSize: 13, maxWidth: "none" }}>
-                  {[c.phone && phoneFmt(c.phone), c.email, c.invited_by_name && `convidado por ${c.invited_by_name}`].filter(Boolean).join(" · ") || "sem contato"}
+                  {[c.phone && `+${c.phone}`, c.email, c.invited_by_name && `convidado por ${c.invited_by_name}`].filter(Boolean).join(" · ") || "sem contato"}
                 </div>
                 {/* no celular o status desce para baixo do nome: ao lado ele espremia o nome */}
                 <div className="phone-only" style={{ marginTop: 4 }}><Status status={c.status} /></div>
@@ -139,9 +139,9 @@ function ClientDetail({ client, onClose }: { client: any; onClose: () => void })
     setStatus(r.status);
   };
   return (
-    <Modal title={client.full_name || client.name || (client.phone ? phoneFmt(client.phone) : "Cliente")} icon={<Icon name="user" />} onClose={onClose} wide>
+    <Modal title={client.full_name || client.name || (client.phone ? `+${client.phone}` : "Cliente")} icon={<Icon name="user" />} onClose={onClose} wide>
       <dl className="kv">
-        <dt>WhatsApp</dt><dd>{client.phone ? phoneFmt(client.phone) : "–"}</dd>
+        <dt>WhatsApp</dt><dd>{client.phone ? `+${client.phone}` : "–"}</dd>
         <dt>E-mail</dt><dd>{client.email ?? "–"}</dd>
         <dt>Convidado por</dt><dd>{client.invited_by_name ?? "–"}</dd>
         <dt>Convites</dt><dd>{client.invites_accepted ?? 0} aceitos de {client.invites_sent ?? 0} enviados · {client.contacts ?? 0} contatos</dd>

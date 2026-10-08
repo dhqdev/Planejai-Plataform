@@ -99,8 +99,7 @@ function loadHidden(): Kind[] {
 
 export function CalendarPage({ isSuper }: { isSuper: boolean }) {
   const [phone, setPhone] = useState(isPhone());
-  // no celular a agenda abre em lista (o mês fica a um toque)
-  const [view, setView] = useState<View>(() => (isPhone() ? "list" : "month"));
+  const [view, setView] = useState<View>("month");
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
   const [selected, setSelected] = useState(() => startOfDay(new Date()));
   const [open, setOpen] = useState<Ev | null>(null);

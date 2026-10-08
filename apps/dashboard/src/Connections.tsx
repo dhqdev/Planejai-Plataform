@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, phoneFmt } from "./api";
+import { api } from "./api";
 import { useApi } from "./hooks";
 import { Icon } from "./icons";
 
@@ -56,7 +56,7 @@ export function Connections({ owner }: { owner?: boolean }) {
         <span className="conn-ico wa"><Icon name="phone" size={18} /></span>
         <div className="conn-text">
           <strong>WhatsApp</strong>
-          <small className="muted">{data.whatsapp ? phoneFmt(data.whatsapp.phone) : "Nenhum número ligado"}</small>
+          <small className="muted">{data.whatsapp ? `+${data.whatsapp.phone}` : "Nenhum número ligado"}</small>
         </div>
         {data.whatsapp && <span className="badge badge-ok"><span className="dot dot-ok" />Ligado</span>}
       </div>
