@@ -1,16 +1,16 @@
 /* Planejai: preto e branco. A paleta do Mochi aparece só em pontos escolhidos (marca, bolinhas de novidade, hoje na agenda, o CTO no mapa do time, perguntas de boas-vindas); as cores que informam (status, agendas, categorias) continuam. Celular, iPad e desktop. */
 :root {
-  --bg: #f6f6f4;
+  --bg: #fafafa;
   --panel: #ffffff;
-  --panel-2: #f2f2ef;
-  --border: #e6e6e2;
-  --border-2: #d6d6d0;
-  --text: #141414;
-  --muted: #686863;
-  --ink: #141414;
+  --panel-2: #f4f4f5;
+  --border: #e8e8e8;
+  --border-2: #d9d9d9;
+  --text: #111111;
+  --muted: #6b6b6b;
+  --ink: #111111;
   --on-ink: #ffffff;
-  --accent: #141414;
-  --accent-soft: #ececE8;
+  --accent: #111111;
+  --accent-soft: #efefef;
   --ok: #2a7047;
   --ok-soft: #e8f2ec;
   --err: #c0392b;
@@ -19,7 +19,7 @@
   --warn-soft: #f6efe1;
   --info: #3b5bb5;
   --info-soft: #e9edf7;
-  --canvas-dot: #dcdcd6;
+  --canvas-dot: #dedede;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.14);
   --radius: 16px;
@@ -1226,20 +1226,23 @@ button.chip { cursor: pointer; color: var(--text); }
 .share-toggles { display: flex; gap: 6px; flex-shrink: 0; }
 .subtabs-bar:has(+ .route-fade > .page-wide) { padding-left: 28px; padding-right: 28px; }
 
-/* ---------- Preto e branco; a paleta do Mochi só em pontos escolhidos ---------- */
-.btn-brand, .avatar, .fab.ink, .cal-fab, .cal-mini-grid button.sel { color: var(--on-ink); }
+/* ---------- Preto e branco; o roxo do Mochi só nos pontos estratégicos ----------
+   Roxo: ação principal da tela (.btn-brand e o + flutuante), item ativo do menu e da barra, hoje na agenda,
+   foco do teclado, o Téo no mapa e as bolinhas de novidade (magenta). O resto é tinta sobre branco. */
+.avatar, .cal-mini-grid button.sel { color: var(--on-ink); }
+.btn-brand, .fab.ink, .cal-fab { background: var(--violet); border-color: var(--violet); color: var(--on-brand); }
 .cal-cell.today .cal-num, .cal-week-day.today strong, .cal-list-date.today strong { background: var(--violet); color: var(--on-brand); }
-.btn-brand { box-shadow: 0 1px 0 rgba(255, 255, 255, .14) inset, 0 6px 16px rgba(0, 0, 0, .16); }
-.nav a.active { color: var(--text); box-shadow: inset 0 0 0 1px var(--border-2); }
-.nav a.active .ico { color: var(--text); }
+.btn-brand { box-shadow: 0 6px 16px color-mix(in srgb, var(--violet) 26%, transparent); }
+.nav a.active { color: var(--text); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--violet) 18%, var(--border)); }
+.nav a.active .ico { color: var(--violet); }
 .nav-dot, .tab-dot, .bell-dot { background: var(--magenta); }
 .subtabs button.active { background: var(--ink); color: var(--on-ink); }
 .update-pill::before { background: var(--magenta); }
-:focus-visible { outline-color: var(--text); }
-::selection { background: color-mix(in srgb, var(--text) 14%, transparent); }
+:focus-visible { outline-color: var(--violet); }
+::selection { background: color-mix(in srgb, var(--violet) 18%, transparent); }
 @media (max-width: 767px) {
-  .tab.active { color: var(--text); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--border-2); }
-  .tab.active .tab-ico { color: var(--text); }
+  .tab.active { color: var(--text); background: var(--violet-soft); box-shadow: none; }
+  .tab.active .tab-ico { color: var(--violet); }
 }
 /* marca na barra lateral: o Mochi sobre o fundo noite, como no ícone do app */
 .brand > .mochi-badge { padding: 5px; margin: 0; border-radius: 14px; background: radial-gradient(circle at 50% 45%, #7a14f5 0%, var(--midnight) 78%); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--magenta) 70%, transparent); }
@@ -1348,25 +1351,26 @@ button.chip { cursor: pointer; color: var(--text); }
   .docs-usage .docs-meter { max-width: none; }
 }
 
-/* ---------- Menu lateral e barra do celular em preto ----------
-   O menu é um painel flutuante preto; a aba ativa é uma "almofada" branca com o ícone em preto.
-   Mesma linguagem no celular. (Os nomes --night/--marsh ficaram da versão roxa.) */
+/* ---------- Menu lateral e barra do celular: painel branco, item ativo com o roxo do Mochi ----------
+   O menu é um painel flutuante branco com borda fina; a aba ativa é uma "almofada" lilás com o ícone roxo.
+   Mesma linguagem no celular. (Os nomes --night/--marsh ficaram da versão roxa antiga.) */
 :root {
-  --night: #111111;
-  --night-2: #1d1d1d;
-  --night-line: rgba(255, 255, 255, .1);
-  --night-text: #fafafa;
-  --night-muted: #a3a3a3;
-  --marsh: #ffffff;
-  --marsh-ink: #111111;
+  --night: #ffffff;
+  --night-2: #f4f4f5;
+  --night-line: rgba(0, 0, 0, .07);
+  --night-hover: rgba(0, 0, 0, .04);
+  --night-text: #111111;
+  --night-muted: #6b6b6b;
+  --night-shadow: rgba(0, 0, 0, .06);
+  --marsh: var(--violet-soft);
+  --marsh-ink: var(--violet);
 }
-:root[data-theme="dark"] { --night: #050505; --night-2: #161616; --night-line: rgba(255, 255, 255, .1); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --night: #050505; --night-2: #161616; } }
+:root[data-theme="dark"] { --night: #171717; --night-2: #1f1f1f; --night-line: rgba(255, 255, 255, .08); --night-hover: rgba(255, 255, 255, .05); --night-text: #f1f1ee; --night-muted: #9a9a94; --night-shadow: rgba(0, 0, 0, .4); }
 
 @media (min-width: 768px) {
   .sidebar {
     margin: 10px 0 10px 10px; border: none; border-radius: 24px; background: var(--night); color: var(--night-text);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, .06) inset, 0 18px 40px -18px rgba(0, 0, 0, .4);
+    box-shadow: inset 0 0 0 1px var(--night-line), 0 18px 40px -24px var(--night-shadow);
     padding: 18px 12px 14px;
   }
   .sidebar .brand { color: var(--night-text); padding-bottom: 18px; }
@@ -1375,7 +1379,7 @@ button.chip { cursor: pointer; color: var(--text); }
   .sidebar .nav-section { color: var(--night-muted); opacity: .8; letter-spacing: 0; font-size: 12px; padding: 18px 12px 6px; }
   .sidebar .nav a { color: var(--night-muted); border-radius: 14px; padding: 9px 12px; font-weight: 500; box-shadow: none; transition: background .18s, color .18s, transform .12s; }
   .sidebar .nav a .ico { transition: transform .25s cubic-bezier(.34, 1.56, .5, 1), color .18s; }
-  .sidebar .nav a.active { background: var(--marsh); color: var(--night); font-weight: 650; box-shadow: 0 1px 0 #fff inset, 0 6px 16px -6px rgba(0, 0, 0, .45); }
+  .sidebar .nav a.active { background: var(--marsh); color: var(--night-text); font-weight: 650; box-shadow: none; }
   .sidebar .nav a.active .ico { color: var(--marsh-ink); transform: scale(1.06); }
   .sidebar .nav a.active::before { display: none; }
   .sidebar .nav .count { background: var(--magenta); color: #fff; }
@@ -1388,9 +1392,9 @@ button.chip { cursor: pointer; color: var(--text); }
   .sidebar::-webkit-scrollbar { display: none; }
 }
 @media (min-width: 768px) and (hover: hover) and (pointer: fine) {
-  .sidebar .nav a:not(.active):hover { background: rgba(255, 255, 255, .07); color: var(--night-text); }
+  .sidebar .nav a:not(.active):hover { background: var(--night-hover); color: var(--night-text); }
   .sidebar .nav a:not(.active):hover .ico { transform: translateX(1px) scale(1.06); }
-  .sidebar-foot .btn:hover { background: rgba(255, 255, 255, .07); color: var(--night-text); }
+  .sidebar-foot .btn:hover { background: var(--night-hover); color: var(--night-text); }
 }
 @media (max-width: 1180px) and (min-width: 768px) {
   .sidebar .nav a { width: 50px; height: 46px; padding: 0; }
@@ -1402,12 +1406,12 @@ button.chip { cursor: pointer; color: var(--text); }
   .tabbar-pill {
     padding: 7px; border-radius: 30px; border: none; background: var(--night);
     -webkit-backdrop-filter: none; backdrop-filter: none;
-    box-shadow: 0 1px 0 rgba(255, 255, 255, .08) inset, 0 16px 34px -10px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .2);
+    box-shadow: inset 0 0 0 1px var(--night-line), 0 16px 34px -14px var(--night-shadow), 0 2px 6px var(--night-shadow);
   }
   .tabbar-scroll .tab, .tab-more { height: 58px; border-radius: 23px; }
   .tab-glider {
     top: 7px; bottom: 7px; left: 7px; width: calc((100% - 14px) / 4); border-radius: 23px;
-    background: var(--marsh); box-shadow: 0 1px 0 #fff inset, 0 8px 18px -8px rgba(0, 0, 0, .55);
+    background: var(--marsh); box-shadow: none;
   }
   .tabbar .tab .tab-ico { color: var(--night-muted); }
   .tabbar .tab .tab-ico svg { width: 27px; height: 27px; stroke-width: 1.9; }
