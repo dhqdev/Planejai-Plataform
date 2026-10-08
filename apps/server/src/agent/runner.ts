@@ -93,6 +93,7 @@ export async function runToolLoop(opts: {
       parentId: ctx.parentStepId,
       input: { messages: messages.slice(-6), tools: specs.map((s) => s.function.name) },
     });
+    compactOldToolResults(messages);
     let res;
     try {
       res = await chatCompletion(choice, { messages, tools: last ? undefined : specs, signal: guard?.signal });
@@ -192,4 +193,23 @@ export async function runToolLoop(opts: {
     }
   }
   return { text: "", steps: maxSteps, messages };
+}
+
+/** Resultado de ferramenta que o modelo já leu numa rodada anterior volta encurtado. */
+const OLD_TOOL_CHARS = 3000;
+
+/**
+ * Cada passo do loop reenvia a conversa inteira; páginas e buscas lidas antes (até 12 mil caracteres cada)
+ * eram pagas de novo a cada passo. Só o lote mais recente de resultados vai inteiro; os anteriores, que o
+ * modelo já leu, seguem com o começo (onde ficam resposta, títulos e preços) até OLD_TOOL_CHARS.
+ */
+export function compactOldToolResults(messages: ChatMessage[]) {
+  let i = messages.length - 1;
+  while (i >= 0 && messages[i]!.role === "tool") i--; // lote atual fica inteiro
+  for (; i >= 0; i--) {
+    const m = messages[i]!;
+    if (m.role === "tool" && typeof m.content === "string" && m.content.length > OLD_TOOL_CHARS + 40) {
+      messages[i] = { ...m, content: `${m.content.slice(0, OLD_TOOL_CHARS)}… [encurtado: já lido antes]` };
+    }
+  }
 }

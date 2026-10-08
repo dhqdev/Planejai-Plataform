@@ -49,7 +49,7 @@ export const webSearch = defineTool<{ query: string; max_results?: number }>({
     ["query"],
   ),
   async run(args) {
-    const max = Math.min(args.max_results ?? 6, 10);
+    const max = Math.min(args.max_results ?? 5, 8);
     const tavily = await getCredentials("tavily");
     if (tavily) {
       const res = await fetch("https://api.tavily.com/search", {
@@ -84,7 +84,8 @@ export const webSearch = defineTool<{ query: string; max_results?: number }>({
         { role: "system", content: "Pesquise e responda com fatos atuais e as URLs das fontes. Seja objetivo." },
         { role: "user", content: args.query },
       ],
-      plugins: [{ id: "web", max_results: max }],
+      // o plugin cobra por resultado (US$ 4 a cada mil): 3 fontes bastam para quase tudo
+      plugins: [{ id: "web", max_results: Math.min(args.max_results ?? 3, 5) }],
     });
     return { provider: "openrouter-web", model: r.model, answer: r.message.content, _usage: r };
   },
@@ -95,7 +96,7 @@ export const fetchUrl = defineTool<{ url: string; max_chars?: number }>({
   description: "Abre uma página e retorna o texto dela (com links). Usa navegador headless quando disponível, para sites com JavaScript.",
   parameters: obj({ url: { type: "string" }, max_chars: { type: "number" } }, ["url"]),
   async run(args) {
-    const max = Math.min(args.max_chars ?? 12_000, 40_000);
+    const max = Math.min(args.max_chars ?? 8_000, 30_000);
     const url = await checkedUrl(args.url);
     let html: string | null = null;
     try {

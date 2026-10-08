@@ -227,3 +227,21 @@ describe("imagens simples (make_image)", () => {
     expect(buildImageHtml({ kind: "passos", title: "P", sections: [{ title: "um" }] }).html).toContain('class="n">1<');
   });
 });
+
+describe("compactOldToolResults", () => {
+  it("encurta resultados já lidos e mantém o lote atual inteiro", async () => {
+    const { compactOldToolResults } = await import("../src/agent/runner.js");
+    const big = "x".repeat(9000);
+    const msgs: any[] = [
+      { role: "system", content: "s" },
+      { role: "assistant", content: null, tool_calls: [] },
+      { role: "tool", tool_call_id: "1", content: big },
+      { role: "assistant", content: null, tool_calls: [] },
+      { role: "tool", tool_call_id: "2", content: big },
+    ];
+    compactOldToolResults(msgs);
+    expect(msgs[2].content.length).toBeLessThan(3100);
+    expect(msgs[2].content).toContain("encurtado");
+    expect(msgs[4].content).toBe(big);
+  });
+});
