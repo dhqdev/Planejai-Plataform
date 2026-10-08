@@ -67,6 +67,17 @@ describe("lembrete recorrente com limite", () => {
   });
 });
 
+describe("e-mail pelo Gmail", () => {
+  it("recusa quebra de linha no cabeçalho e mostra o começo do texto no pedido de sim", async () => {
+    const { gmailSend } = await import("../src/agent/tools/communication.js");
+    expect(await gmailSend.run({ to: "ana@x.com\r\nBcc: espiao@y.com", subject: "Oi", body: "Tudo bem?" }, {} as any)).toMatchObject({ ok: false });
+    expect(await gmailSend.run({ to: "não é email", subject: "Oi", body: "Tudo bem?" }, {} as any)).toMatchObject({ ok: false });
+    const ask: any = await gmailSend.run({ to: "ana@x.com", subject: "Reunião", body: "Oi Ana, podemos mudar a reunião para sexta às 10h?" }, {} as any);
+    expect(ask.needs_confirmation).toBe(true);
+    expect(ask.message).toContain("Oi Ana, podemos mudar a reunião");
+  });
+});
+
 describe("webhooks", () => {
   it("lê mensagem da Evolution, inclusive conta com LID", () => {
     const [m] = new EvolutionChannel().parseWebhook({

@@ -1,5 +1,6 @@
 import { googleApi } from "../../integrations/google.js";
 import { getCredentials } from "../../integrations/registry.js";
+import { EMAIL } from "./agenda.js";
 import { htmlToText } from "./research.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
@@ -51,10 +52,16 @@ export const gmailSend = defineTool<{ to: string; subject: string; body: string;
   integration: "google",
   parameters: obj({ to: { type: "string" }, subject: { type: "string" }, body: { type: "string" }, ...CONFIRM_PARAM }, ["to", "subject", "body"]),
   async run(args, ctx) {
-    const c = await requireConfirmation(args, `enviar e-mail para ${args.to} com assunto "${args.subject}"`, ctx);
+    // quebra de linha no cabeçalho vira cópia oculta (\r\nBcc:): recusa antes de qualquer coisa
+    if (/[\r\n]/.test(args.to) || /[\r\n]/.test(args.subject)) return { ok: false, error: "Destinatário e assunto não podem ter quebra de linha" };
+    const to = args.to.split(",").map((e) => e.trim()).filter(Boolean);
+    if (!to.length || to.some((e) => !EMAIL.test(e))) return { ok: false, error: `E-mail inválido: ${args.to}` };
+    const body = args.body.trim();
+    const preview = body.length > 200 ? `${body.slice(0, 199)}…` : body;
+    const c = await requireConfirmation(args, `enviar e-mail para ${to.join(", ")} com assunto "${args.subject}": "${preview}"`, ctx);
     if (c) return c;
     const subject = `=?UTF-8?B?${Buffer.from(args.subject).toString("base64")}?=`;
-    const raw = [`To: ${args.to}`, `Subject: ${subject}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "", args.body].join("\r\n");
+    const raw = [`To: ${to.join(", ")}`, `Subject: ${subject}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "", args.body].join("\r\n");
     const r = await googleApi(`${GMAIL}/messages/send`, { method: "POST", body: JSON.stringify({ raw: Buffer.from(raw).toString("base64url") }) });
     return { ok: true, id: r.id };
   },

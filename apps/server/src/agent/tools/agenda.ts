@@ -104,7 +104,7 @@ export const calendarListEvents = defineTool<{ from: string; to: string; query?:
   },
 });
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
+export const EMAIL = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
 
 export const calendarCreateEvent = defineTool<{
   title: string;
