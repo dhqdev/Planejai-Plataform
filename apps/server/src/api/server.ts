@@ -264,10 +264,10 @@ export async function buildServer() {
       root: publicDir,
       wildcard: false,
       cacheControl: false,
-      setHeaders(res, path) {
+      setHeaders(reply, path) {
         // arquivos com hash nunca mudam; o resto (index, sw.js, manifest) sempre revalida para o PWA atualizar
-        res.setHeader("Cache-Control", path.includes("/assets/") ? "public, max-age=31536000, immutable" : "no-cache");
-        if (path.endsWith("sw.js")) res.setHeader("Service-Worker-Allowed", "/");
+        reply.header("Cache-Control", path.includes("/assets/") ? "public, max-age=31536000, immutable" : "no-cache");
+        if (path.endsWith("sw.js")) reply.header("Service-Worker-Allowed", "/");
       },
     });
     app.setNotFoundHandler((req, reply) => {
