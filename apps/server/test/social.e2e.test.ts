@@ -338,6 +338,23 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     expect(defs.map((d) => [d.id, d.task, d.tools.map((t) => t.name)])).toEqual([["c_cinema", "agent:cliente", ["web_search", "fetch_url"]]]);
   });
 
+  it("reunião noturna não apaga o que a pessoa pediu", async () => {
+    const { teamAdjustAgent } = await import("../src/agent/tools/team.js");
+    const ctx: any = { user: david, room: { team: [] } };
+    expect(await teamAdjustAgent.run({ agent: "pesquisador", note: "Prefere sites em português" }, ctx)).toMatchObject({ ok: true });
+    // o agente de cinema passa a ser dela, com as instruções que ela pediu
+    await db.query("UPDATE client_agents SET origin = 'pedido', instructions = 'Do jeito dela' WHERE user_id = $1 AND slug = 'cinema'", [david.id]);
+    const { improveUser } = await import("../src/improve.js");
+    await improveUser(david.id);
+    expect(await db.one("SELECT note, user_note FROM agent_notes WHERE user_id = $1 AND agent = 'pesquisador'", [david.id])).toEqual({
+      note: "Mora em Campinas, prefere o Iguatemi.",
+      user_note: "Prefere sites em português",
+    });
+    expect(await db.one("SELECT instructions FROM client_agents WHERE user_id = $1 AND slug = 'cinema'", [david.id])).toEqual({ instructions: "Do jeito dela" });
+    const { noteText } = await import("../src/agent/collab.js");
+    expect(noteText({ note: "Mora em Campinas.", user_note: "Prefere sites em português" })).toBe("Pedido dela: Prefere sites em português. Aprendido nas reuniões: Mora em Campinas.");
+  });
+
   it("cache de ferramentas reaproveita a mesma busca, com argumentos em qualquer ordem", async () => {
     const { toolCacheKey } = await import("../src/agent/cache.js");
     expect(toolCacheKey("web_search", { query: "Cinema", max_results: 3 })?.key).toBe(toolCacheKey("web_search", { max_results: 3, query: "cinema" })?.key);

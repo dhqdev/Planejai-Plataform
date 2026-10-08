@@ -135,7 +135,7 @@ export function clientRoutes(api: FastifyInstance) {
     );
     const topics = await many("SELECT topic, round(score::numeric, 1)::float AS score, days FROM user_topics WHERE user_id = $1 ORDER BY score DESC LIMIT 10", [id]);
     const person = await one("SELECT style_notes FROM users WHERE id = $1", [id]);
-    const notes = await many("SELECT agent, note, updated_at FROM agent_notes WHERE user_id = $1 ORDER BY agent", [id]);
+    const notes = await many("SELECT agent, note, user_note, updated_at FROM agent_notes WHERE user_id = $1 ORDER BY agent", [id]);
     const money = await one(
       `SELECT COUNT(*)::int AS transactions, (SELECT COUNT(*)::int FROM budgets WHERE user_id = $1) AS budgets,
               (SELECT COUNT(*)::int FROM reminders WHERE user_id = $1 AND status = 'scheduled') AS reminders,

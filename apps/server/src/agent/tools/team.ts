@@ -1,6 +1,6 @@
 import { many, one, query } from "../../db/pool.js";
 import { notify } from "../../notifications.js";
-import { delegationTool } from "../collab.js";
+import { delegationTool, noteText } from "../collab.js";
 import { availableTools } from "../runner.js";
 import { CLIENT_AGENT_TOOLS, clientAgentDef, faceFor, MAX_CLIENT_AGENTS, slugify, SPECIALISTS } from "../team.js";
 import { defineTool, obj, type Tool } from "./types.js";
@@ -114,7 +114,8 @@ export const teamAdjustAgent = defineTool<{ agent: string; instructions?: string
       const note = String(args.note ?? args.instructions ?? "").trim();
       if (!note) return { ok: false, error: "Para um especialista fixo, passe note" };
       await query(
-        "INSERT INTO agent_notes (user_id, agent, note) VALUES ($1, $2, $3) ON CONFLICT (user_id, agent) DO UPDATE SET note = $3, updated_at = now()",
+        // pedido da pessoa fica em user_note: a reunião noturna só reescreve note
+        "INSERT INTO agent_notes (user_id, agent, user_note) VALUES ($1, $2, $3) ON CONFLICT (user_id, agent) DO UPDATE SET user_note = $3, updated_at = now()",
         [ctx.user.id, id, note.slice(0, 400)],
       );
       return { ok: true, agent: id, note: note.slice(0, 400) };
@@ -146,10 +147,10 @@ export const teamList = defineTool<Record<string, never>>({
   description: "Lista o time desta pessoa: especialistas fixos (com o que cada um já aprendeu sobre ela) e os agentes sob medida dela (ativos e aposentados).",
   parameters: obj({}),
   async run(_a, ctx) {
-    const notes = await many("SELECT agent, note FROM agent_notes WHERE user_id = $1", [ctx.user.id]);
+    const notes = await many("SELECT agent, note, user_note FROM agent_notes WHERE user_id = $1", [ctx.user.id]);
     const own = await many("SELECT slug, name, persona, focus, tools, uses, active, origin FROM client_agents WHERE user_id = $1 ORDER BY active DESC, created_at", [ctx.user.id]);
     return {
-      fixed: SPECIALISTS.map((s) => ({ agent: s.id, name: s.name, persona: s.persona, note: notes.find((n) => n.agent === s.id)?.note ?? null })),
+      fixed: SPECIALISTS.map((s) => ({ agent: s.id, name: s.name, persona: s.persona, note: noteText(notes.find((n) => n.agent === s.id)) })),
       own: own.map((a) => ({ agent: `c_${a.slug}`, name: a.name, persona: a.persona, focus: a.focus, tools: a.tools, uses: a.uses, active: a.active, origin: a.origin })),
       limit: MAX_CLIENT_AGENTS,
     };

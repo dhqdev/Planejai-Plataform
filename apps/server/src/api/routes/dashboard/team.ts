@@ -16,7 +16,7 @@ export function teamRoutes(base: FastifyInstance) {
     const mine = (await many("SELECT id, slug, name, persona, face, focus, uses, created_at FROM client_agents WHERE user_id = $1 AND active ORDER BY created_at", [uid])).map((a) =>
       withLook(a, uid),
     );
-    const notes = await many("SELECT agent, note FROM agent_notes WHERE user_id = $1", [uid]);
+    const notes = await many("SELECT agent, note, user_note FROM agent_notes WHERE user_id = $1", [uid]);
     return { core, mine, notes };
   });
 

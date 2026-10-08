@@ -95,6 +95,13 @@ async function toolsFor(def: AgentDef, chain: string[], ctx: ToolContext) {
   return { own, all: [...own, ...peers, shareTool()] };
 }
 
+/** "Pedido dela: ... Aprendido nas reuniões: ..." (o que existir), para prompt e listas. */
+export function noteText(n?: { note?: string | null; user_note?: string | null } | null) {
+  if (!n) return null;
+  const parts = [n.user_note ? `Pedido dela: ${n.user_note}` : "", n.note ? `Aprendido nas reuniões: ${n.note}` : ""].filter(Boolean);
+  return parts.length ? parts.join(". ") : null;
+}
+
 async function systemFor(def: AgentDef, ctx: ToolContext, own: Tool[]) {
   const settings = await getSettings();
   const owner = isOwner(ctx.user.phone);
@@ -104,7 +111,7 @@ async function systemFor(def: AgentDef, ctx: ToolContext, own: Tool[]) {
       timezone: ctx.timezone,
       user: ctx.user,
       settings,
-      note: (await one("SELECT note FROM agent_notes WHERE user_id = $1 AND agent = $2", [ctx.user.id, def.id]).catch(() => null))?.note,
+      note: noteText(await one("SELECT note, user_note FROM agent_notes WHERE user_id = $1 AND agent = $2", [ctx.user.id, def.id]).catch(() => null)),
     }) +
     (missing.length ? `\n\n(Integrações não conectadas para você: ${missing.join(", ")})` : "")
   );

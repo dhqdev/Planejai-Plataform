@@ -320,7 +320,7 @@ function ClientUsage({ id }: { id: string }) {
           <h3 style={{ marginTop: 16 }}>O que o time aprendeu</h3>
           {data.styleNotes && <div className="line-item" style={{ alignItems: "flex-start" }}><span className="persona">Téo</span><span className="grow">{data.styleNotes}</span></div>}
           {(data.notes ?? []).map((n: any) => (
-            <div key={n.agent} className="line-item row-wrap" style={{ alignItems: "flex-start" }}><span style={{ width: 150, flexShrink: 0 }}><AgentTag id={n.agent} /></span><span className="grow" style={{ flexBasis: 180 }}>{n.note}</span></div>
+            <div key={n.agent} className="line-item row-wrap" style={{ alignItems: "flex-start" }}><span style={{ width: 150, flexShrink: 0 }}><AgentTag id={n.agent} /></span><span className="grow" style={{ flexBasis: 180 }}>{n.user_note && <>Pedido dela: {n.user_note}{n.note ? ". " : ""}</>}{n.note && <>Aprendido nas reuniões: {n.note}</>}</span></div>
           ))}
         </>
       )}

@@ -18,11 +18,11 @@ interface Member {
 
 /** Meu time: o Téo (CTO), os especialistas e os agentes criados só para esta pessoa, cada um com nome e carinha. */
 export function TeamPage() {
-  const { data, error } = useApi<{ core: Member[]; mine: Member[]; notes?: { agent: string; note: string }[] }>("/api/me/team");
+  const { data, error } = useApi<{ core: Member[]; mine: Member[]; notes?: { agent: string; note: string | null; user_note?: string | null }[] }>("/api/me/team");
   const [sel, setSel] = useState<Member | null>(null);
   if (error) return <div className="page"><ErrorBox error={error} /></div>;
   if (!data) return <Loading />;
-  const note = (id: string) => data.notes?.find((n) => n.agent === id)?.note;
+  const noteOf = (id: string) => data.notes?.find((n) => n.agent === id);
 
   const Card = ({ m, lead }: { m: Member; lead?: boolean }) => (
     <button className={`team-card ${lead ? "lead" : ""}`} onClick={() => setSel(m)}>
@@ -52,7 +52,8 @@ export function TeamPage() {
             <dd>{sel.name}</dd>
             {sel.uses != null && (<><dt>Usado</dt><dd>{sel.uses} vezes</dd></>)}
             {sel.created_at && (<><dt>Criado</dt><dd>{ago(sel.created_at)}</dd></>)}
-            {note(sel.id) && (<><dt>Aprendeu</dt><dd>{note(sel.id)}</dd></>)}
+            {noteOf(sel.id)?.user_note && (<><dt>Você pediu</dt><dd>{noteOf(sel.id)!.user_note}</dd></>)}
+            {noteOf(sel.id)?.note && (<><dt>Aprendeu</dt><dd>{noteOf(sel.id)!.note}</dd></>)}
           </dl>
         </Modal>
       )}

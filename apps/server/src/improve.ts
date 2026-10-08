@@ -49,7 +49,7 @@ export async function improveUser(userId: string) {
   const agents = await many("SELECT slug, name, persona, focus, uses, created_at FROM client_agents WHERE user_id = $1 AND active", [userId]);
   const tools = Object.keys(CLIENT_AGENT_TOOLS).join(", ");
   const person = await one("SELECT style_notes FROM users WHERE id = $1", [userId]);
-  const notes = await many("SELECT agent, note FROM agent_notes WHERE user_id = $1", [userId]);
+  const notes = await many("SELECT agent, note FROM agent_notes WHERE user_id = $1 AND note IS NOT NULL", [userId]);
   const usedAgents = await many(
     `SELECT s.agent, COUNT(*)::int AS n FROM execution_steps s JOIN executions e ON e.id = s.execution_id
       WHERE e.user_id = $1 AND s.type = 'llm' AND s.started_at > now() - interval '24 hours' GROUP BY 1`,
@@ -82,7 +82,7 @@ export async function improveUser(userId: string) {
           '"update":[{"slug":"...","instructions":"..."}],"retire":["slug"]}\n' +
           "Regras: topics = assuntos concretos do dia (1 a 3 palavras, minúsculas), no máximo 6. " +
           "style = como falar com ele (tamanho das respostas, emojis, formalidade, apelidos), até 250 caracteres; repita o atual se nada mudou. " +
-          `agent_notes = só para agentes que trabalharam hoje (ids: ${SPECIALISTS.map((s) => s.id).join(", ")}), o que ele aprendeu sobre o cliente (preferências, cidade, marcas, onde buscar), até 300 caracteres; a nota substitui a atual, então mantenha o que já estava nela e ainda vale (pode ter sido pedido pelo próprio cliente); lista vazia se nada novo. ` +
+          `agent_notes = só para agentes que trabalharam hoje (ids: ${SPECIALISTS.map((s) => s.id).join(", ")}), o que ele aprendeu sobre o cliente (preferências, cidade, marcas, onde buscar), até 300 caracteres; a nota substitui a atual, então mantenha o que já estava nela e ainda vale; lista vazia se nada novo. ` +
           `tabs.enable só se o uso pede (${Object.entries(OPTIONAL).map(([k, v]) => `${k}: ${v.desc}`).join("; ")}). ` +
           `tabs.custom só para um assunto que se repete muito e merece uma tela (máximo 1 por noite e 3 no total): ícone em ${TAB_ICONS.join(", ")}; widgets em ${TAB_WIDGETS.join(", ")}. ` +
           `create só para assunto que já aparece em ${MIN_DAYS}+ dias nos acumulados e é recorrente hoje, que um especialista atenderia melhor que o time geral e que nenhum agente sob medida dele já cobre; ` +
@@ -130,7 +130,8 @@ export async function improveUser(userId: string) {
     if (!slug || !toolNames.length || !c.instructions) continue;
     await query(
       `INSERT INTO client_agents (user_id, slug, name, focus, instructions, tools, persona, face) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT (user_id, slug) DO UPDATE SET active = true, focus = $4, instructions = $5, tools = $6, persona = COALESCE(client_agents.persona, $7), updated_at = now()`,
+       ON CONFLICT (user_id, slug) DO UPDATE SET active = true, focus = $4, instructions = $5, tools = $6, persona = COALESCE(client_agents.persona, $7), updated_at = now()
+       WHERE client_agents.origin = 'melhoria'`,
       [
         userId,
         slug,
@@ -146,7 +147,7 @@ export async function improveUser(userId: string) {
   }
   for (const u of (plan.update ?? []).slice(0, 3)) {
     if (!u.instructions) continue;
-    const res = await query("UPDATE client_agents SET instructions = $3, updated_at = now() WHERE user_id = $1 AND slug = $2 AND active", [
+    const res = await query("UPDATE client_agents SET instructions = $3, updated_at = now() WHERE user_id = $1 AND slug = $2 AND active AND origin = 'melhoria'", [
       userId,
       String(u.slug),
       String(u.instructions).slice(0, 1500),
