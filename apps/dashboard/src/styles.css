@@ -1471,8 +1471,13 @@ button.chip { cursor: pointer; color: var(--text); }
     background: color-mix(in srgb, var(--text) 6%, transparent); border-color: transparent;
   }
   .more-sheet .more-tile svg.ico { width: 20px; height: 20px; }
-  .more-sheet .more-tile.active { background: var(--night); color: var(--marsh); }
-  .more-sheet .more-tile.active svg.ico { color: var(--marsh); }
+  /* ativo = a mesma almofada lilás do menu lateral (texto escuro no claro, claro no escuro) */
+  .more-sheet .more-tile.active { background: var(--marsh); color: var(--night-text); }
+  .more-sheet .more-tile.active svg.ico { color: var(--marsh-ink); }
+  /* no escuro o vidro sobre o fundo escurecido virava preto: painel um tom acima, borda e blocos visíveis */
+  :root[data-theme="dark"] .modal.more-sheet { background: color-mix(in srgb, #242424 94%, transparent); border-color: rgba(255, 255, 255, .12); box-shadow: 0 24px 60px -20px rgba(0, 0, 0, .7); }
+  :root[data-theme="dark"] .more-sheet .more-section .more-tile { background: rgba(255, 255, 255, .07); }
+  :root[data-theme="dark"] .more-sheet .more-section .more-tile.active { background: var(--marsh); }
 }
 @media (max-width: 767px) { .modal-bg:has(.more-sheet) .modal-scrim { background: rgba(10, 4, 24, .42); } }
 
