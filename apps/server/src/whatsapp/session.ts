@@ -1,97 +1,24 @@
-import makeWASocket, {
-  Browsers,
-  DisconnectReason,
-  downloadMediaMessage,
-  fetchLatestBaileysVersion,
-  makeCacheableSignalKeyStore,
-  type AuthenticationCreds,
-  type WAMessage,
-  type WASocket,
-} from "baileys";
+import makeWASocket, { Browsers, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, type WASocket } from "baileys";
 import { randomBytes } from "node:crypto";
 import { hostname } from "node:os";
-import type pg from "pg";
 import pino from "pino";
-import QRCode from "qrcode";
-import { parseWAMessage } from "../channels/wa-message.js";
-import { pool, query } from "../db/pool.js";
-import { ingest } from "../ingest.js";
 import { notify } from "../notifications.js";
 import { clearAuthState, usePgAuthState } from "./auth-state.js";
+import { CommandListener } from "./commands.js";
+import { reasonName, statusCodeOf } from "./disconnect.js";
+import { handleIncoming } from "./inbound.js";
+import { SessionLease } from "./lease.js";
+import { pingSocket, Waiters } from "./outbound.js";
+import { isPaired, Pairing } from "./pairing.js";
+import { SessionStatus } from "./status.js";
+import { DEFAULT_TIMINGS, SESSION_ID, type Log, type Status, type WaCommand, type WaTimings } from "./types.js";
 
-export const SESSION_ID = "default";
-const MEDIA_MAX_BYTES = 20 * 1024 * 1024;
+export { sendWaCommand } from "./commands.js";
+export { isConnectionError } from "./disconnect.js";
+export { isPaired } from "./pairing.js";
+export { SESSION_ID, type WaCommand, type WaTimings } from "./types.js";
 
-type Status = "disconnected" | "connecting" | "reconnecting" | "qr" | "pairing" | "connected";
-type Log = { info: (...a: any[]) => void; warn: (...a: any[]) => void; error: (...a: any[]) => void };
 type SocketConfig = Parameters<typeof makeWASocket>[0];
-
-export interface WaCommand {
-  action: "connect" | "logout" | "restart";
-  /** quando informado, conecta por código de pareamento em vez de QR */
-  phone?: string;
-}
-
-/** Tempos da conexão. Os padrões valem para produção; os testes encurtam. */
-export interface WaTimings {
-  /** renova o aluguel e confere a saúde do socket */
-  heartbeatMs: number;
-  /** validade do aluguel: se o processo morrer sem avisar, outro assume depois disso */
-  leaseSeconds: number;
-  /** ping do próprio Baileys; sem resposta em keepAlive+5s ele fecha com connectionLost */
-  keepAliveMs: number;
-  /** conexão aberta sem receber NADA do servidor por esse tempo = socket meio-aberto: derruba e religa */
-  staleMs: number;
-  /** sem QR nem conexão aberta nesse tempo = servidor não respondeu: tenta de novo */
-  openTimeoutMs: number;
-  /** espera entre tentativas: base * 2^tentativa, até o máximo (nunca desiste) */
-  backoffBaseMs: number;
-  backoffMaxMs: number;
-}
-
-const DEFAULT_TIMINGS: WaTimings = {
-  heartbeatMs: 15_000,
-  leaseSeconds: 45,
-  keepAliveMs: 20_000,
-  staleMs: 90_000,
-  openTimeoutMs: 45_000,
-  backoffBaseMs: 2_000,
-  backoffMaxMs: 60_000,
-};
-
-/** Nome legível de cada DisconnectReason do Baileys, para o log dizer por que caiu. */
-const REASON_NAMES: Record<number, string> = {
-  [DisconnectReason.connectionClosed]: "connectionClosed",
-  [DisconnectReason.connectionLost]: "connectionLost/timedOut",
-  [DisconnectReason.connectionReplaced]: "connectionReplaced",
-  [DisconnectReason.loggedOut]: "loggedOut",
-  [DisconnectReason.forbidden]: "forbidden",
-  [DisconnectReason.badSession]: "badSession",
-  [DisconnectReason.restartRequired]: "restartRequired",
-  [DisconnectReason.multideviceMismatch]: "multideviceMismatch",
-  [DisconnectReason.unavailableService]: "unavailableService",
-};
-
-/**
- * Já foi pareado? `creds.registered` NÃO serve: o Baileys só marca registered no pareamento por código;
- * quem conectou pelo QR fica com registered=false para sempre. O que prova o pareamento é a conta
- * assinada (account) que o WhatsApp devolve no pair-success, junto do me.id.
- */
-export function isPaired(creds: Partial<AuthenticationCreds> | null | undefined) {
-  return Boolean(creds?.account && creds?.me?.id);
-}
-
-function statusCodeOf(err: unknown): number | undefined {
-  return (err as any)?.output?.statusCode;
-}
-
-/** Erro de envio que significa "o socket morreu por baixo" (vale derrubar, religar e tentar de novo). */
-export function isConnectionError(err: unknown) {
-  const code = statusCodeOf(err);
-  if (code !== undefined && [428, 408, 440, 503].includes(code)) return true;
-  // só erros do próprio socket do Baileys: falha ao baixar a mídia de uma URL não derruba a conexão
-  return /^connection (closed|terminated|was lost|failure)/i.test((err as Error)?.message ?? "");
-}
 
 /**
  * Conexão própria com o WhatsApp via Baileys (WhatsApp Web multi-device), no estilo do tekvosoft:
@@ -104,6 +31,10 @@ export function isConnectionError(err: unknown) {
  * espera crescente (2s, 4s, 8s... até 60s) que nunca desiste. Só loggedOut/forbidden (o celular removeu o
  * aparelho) limpa as credenciais e pede QR novo. A cada batida (15s) um vigia confere se o socket ainda
  * recebe tráfego; conexão meio-aberta (sem close nem resposta) é derrubada e religada.
+ *
+ * Aqui fica só o ciclo de vida da conexão (socket, quedas, religação com espera crescente, vigia). O resto
+ * mora ao lado: aluguel (lease), status do painel (status), comandos do painel (commands), QR/código
+ * (pairing), mensagens que chegam (inbound) e espera/ping dos envios (outbound).
  */
 export class WhatsAppSession {
   sock: WASocket | null = null;
@@ -117,7 +48,6 @@ export class WhatsAppSession {
   private beating = false;
   /** conexões em montagem (entre o connect() começar e o socket existir) */
   private connecting = 0;
-  private listenClient: pg.PoolClient | null = null;
   private retries = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private openTimer: NodeJS.Timeout | null = null;
@@ -125,17 +55,21 @@ export class WhatsAppSession {
   private epoch = 0;
   private lastRecvAt = 0;
   private lastLeaseOkAt = 0;
-  private pairPhone: string | null = null;
   private stopping = false;
-  private waiters = new Set<() => void>();
-  /** gravações de status/credenciais em fila, na ordem em que aconteceram */
-  private statusChain: Promise<unknown> = Promise.resolve();
+  /** gravações de credenciais em fila, na ordem em que aconteceram */
   private saving: Promise<unknown> = Promise.resolve();
   private version: [number, number, number] | undefined;
   private waitingLogged = false;
 
-  private readonly holder: string;
   private readonly t: WaTimings;
+  private readonly lease: SessionLease;
+  private readonly status = new SessionStatus();
+  private readonly pairing = new Pairing(this.status);
+  private readonly waiters = new Waiters();
+  private readonly commands = new CommandListener(
+    () => this.log,
+    (cmd) => void this.handleCommand(cmd).catch((err) => this.log.error({ err }, "falha no comando do WhatsApp")),
+  );
   private readonly makeSocket: (cfg: SocketConfig) => WASocket;
   private readonly fetchVersion: () => Promise<[number, number, number] | undefined>;
 
@@ -147,8 +81,8 @@ export class WhatsAppSession {
       fetchVersion?: () => Promise<[number, number, number] | undefined>;
     } = {},
   ) {
-    this.holder = opts.holder ?? `${hostname()}:${process.pid}:${randomBytes(3).toString("hex")}`;
     this.t = { ...DEFAULT_TIMINGS, ...opts.timings };
+    this.lease = new SessionLease(opts.holder ?? `${hostname()}:${process.pid}:${randomBytes(3).toString("hex")}`, this.t.leaseSeconds);
     this.makeSocket = opts.makeSocket ?? ((cfg) => makeWASocket(cfg));
     this.fetchVersion = opts.fetchVersion ?? (async () => (await fetchLatestBaileysVersion()).version);
   }
@@ -173,16 +107,6 @@ export class WhatsAppSession {
     log.info("gerenciador do WhatsApp (Baileys) iniciado");
   }
 
-  /** Assume a conexão se ninguém estiver com ela ou se o aluguel do outro processo venceu. */
-  private async acquireLease() {
-    const r = await query(
-      `UPDATE wa_sessions SET holder = $2, lease_until = now() + make_interval(secs => $3), heartbeat_at = now()
-        WHERE id = $1 AND (holder IS NULL OR holder = $2 OR lease_until IS NULL OR lease_until < now()) RETURNING id`,
-      [SESSION_ID, this.holder, this.t.leaseSeconds],
-    );
-    return (r.rowCount ?? 0) > 0;
-  }
-
   /**
    * A cada 15s: renova o aluguel (mostra no painel que está escutando), assume a conexão se ela ficou livre,
    * solta se outro processo assumiu e confere se o socket ainda está vivo.
@@ -193,7 +117,7 @@ export class WhatsAppSession {
     try {
       let got: boolean;
       try {
-        got = await this.acquireLease();
+        got = await this.lease.acquire();
         this.lastLeaseOkAt = Date.now();
       } catch (err) {
         // Banco fora: mantém a conexão enquanto o aluguel ainda vale; depois dele outro processo pode assumir
@@ -215,7 +139,7 @@ export class WhatsAppSession {
       }
       this.waitingLogged = false;
       // Sem LISTEN os comandos do painel não chegam, mas a conexão não pode esperar por isso
-      await this.ensureListening().catch((err) => this.log.warn({ err }, "não consegui escutar os comandos do painel (wa_command); tento de novo na próxima batida"));
+      await this.commands.ensure().catch((err) => this.log.warn({ err }, "não consegui escutar os comandos do painel (wa_command); tento de novo na próxima batida"));
       if (!this.holding) {
         this.holding = true;
         this.retries = 0;
@@ -227,7 +151,7 @@ export class WhatsAppSession {
           this.log.info("aluguel do WhatsApp assumido; conectando com a sessão salva");
           await this.connect("connecting");
         } else {
-          await this.setStatus("disconnected", {}, "clear");
+          await this.status.set("disconnected", {}, "clear");
         }
         return;
       }
@@ -259,42 +183,14 @@ export class WhatsAppSession {
       return;
     }
     // Conectado: mantém o painel certo (ex.: alguém gravou 'connecting' pela API e o comando não mudou nada)
-    await this.queueStatus(() =>
-      query(
-        `UPDATE wa_sessions SET status = 'connected', qr = NULL, pairing_code = NULL, last_error = NULL, down_since = NULL, updated_at = now()
-          WHERE id = $1 AND status <> 'connected'`,
-        [SESSION_ID],
-      ),
-    );
+    await this.status.confirmConnected();
   }
 
   /** Perdeu o aluguel: larga o socket (o outro processo cuida do status) e segue tentando reassumir. */
   private suspend() {
     this.holding = false;
     this.dropSocket();
-    this.wakeWaiters();
-  }
-
-  /** LISTEN wa_command: comandos do dashboard (API). Se a conexão do LISTEN cair, a próxima batida refaz. */
-  private async ensureListening() {
-    if (this.listenClient) return;
-    const client = await pool.connect();
-    client.on("error", (err) => {
-      this.log.warn({ err }, "conexão do LISTEN wa_command caiu; refaço na próxima batida");
-      if (this.listenClient === client) this.listenClient = null;
-      client.release(err);
-    });
-    client.on("notification", (msg) => {
-      if (msg.channel !== "wa_command" || !msg.payload) return;
-      void this.handleCommand(JSON.parse(msg.payload) as WaCommand).catch((err) => this.log.error({ err }, "falha no comando do WhatsApp"));
-    });
-    try {
-      await client.query("LISTEN wa_command");
-    } catch (err) {
-      client.release(err as Error);
-      throw err;
-    }
-    this.listenClient = client;
+    this.waiters.wake();
   }
 
   async handleCommand(cmd: WaCommand) {
@@ -310,12 +206,12 @@ export class WhatsAppSession {
       await clearAuthState(SESSION_ID);
       this.paired = false;
       this.retries = 0;
-      this.wakeWaiters();
-      await this.setStatus("disconnected", {}, "clear");
-      await query("UPDATE wa_sessions SET phone = NULL, name = NULL WHERE id = $1", [SESSION_ID]);
+      this.waiters.wake();
+      await this.status.set("disconnected", {}, "clear");
+      await this.status.forgetIdentity();
       return;
     }
-    if (cmd.action === "connect" && cmd.phone) this.pairPhone = cmd.phone.replace(/\D/g, "");
+    if (cmd.action === "connect" && cmd.phone) this.pairing.usePhone(cmd.phone);
     this.retries = 0;
     await this.connect("connecting");
   }
@@ -360,7 +256,7 @@ export class WhatsAppSession {
     const status: Status = this.paired ? "reconnecting" : "connecting";
     const lastError = opts.lastError ?? `${reason}. Reconectando sozinho (tentativa ${attempt}).`;
     this.log.warn({ reason, code: opts.code, attempt, delayMs: delay }, `WhatsApp caiu (${reason}); reconectando em ${Math.round(delay / 1000)}s`);
-    void this.setStatus(status, { last_error: lastError }, this.paired ? "set" : "keep").catch((err) => this.log.warn({ err }, "não gravei o status do WhatsApp"));
+    void this.status.set(status, { last_error: lastError }, this.paired ? "set" : "keep").catch((err) => this.log.warn({ err }, "não gravei o status do WhatsApp"));
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       void this.connect(status, lastError).catch((err) => {
@@ -391,7 +287,7 @@ export class WhatsAppSession {
     this.connecting++;
     try {
       // "reconectando" mantém desde quando caiu; conexão nova (início, comando do painel) zera o relógio
-      await this.setStatus(status, { last_error: lastError ?? null }, status === "reconnecting" ? "set" : "clear");
+      await this.status.set(status, { last_error: lastError ?? null }, status === "reconnecting" ? "set" : "clear");
       await this.saving; // credenciais do socket anterior (ex.: logo depois de ler o QR) já no banco
       ({ state, saveCreds } = await usePgAuthState(SESSION_ID));
       version = await this.latestVersion();
@@ -422,7 +318,7 @@ export class WhatsAppSession {
     sock.ws?.on?.("message", () => {
       if (this.sock === sock) this.lastRecvAt = Date.now();
     });
-    let pairingRequested = false;
+    const onQr = this.pairing.forSocket(sock);
 
     // Se o servidor do WhatsApp não responder (rede bloqueada, DNS), não fica preso em "conectando"
     this.openTimer = setTimeout(() => {
@@ -445,16 +341,7 @@ export class WhatsAppSession {
         this.openTimer = null;
       }
       try {
-        if (qr) {
-          if (this.pairPhone && !pairingRequested) {
-            pairingRequested = true;
-            const code = await sock.requestPairingCode(this.pairPhone);
-            this.pairPhone = null;
-            await this.setStatus("pairing", { pairing_code: code });
-          } else if (!pairingRequested) {
-            await this.setStatus("qr", { qr: await QRCode.toDataURL(qr, { margin: 1, width: 320 }) });
-          }
-        }
+        if (qr) await onQr(qr);
         if (connection === "open") {
           const wasDown = this.retries;
           this.open = true;
@@ -462,9 +349,9 @@ export class WhatsAppSession {
           this.retries = 0;
           this.lastRecvAt = Date.now();
           const phone = sock.user?.id?.split(":")[0]?.split("@")[0] ?? null;
-          await this.setStatus("connected", { phone, name: sock.user?.name ?? null }, "clear");
+          await this.status.set("connected", { phone, name: sock.user?.name ?? null }, "clear");
           this.log.info({ phone, afterAttempts: wasDown }, "WhatsApp conectado");
-          this.wakeWaiters();
+          this.waiters.wake();
         }
         if (connection === "close") this.onClose(sock, lastDisconnect?.error);
       } catch (err) {
@@ -475,7 +362,7 @@ export class WhatsAppSession {
         else if (this.sock === sock && qr && !this.paired) {
           // falhou gerar o QR/código de pareamento: mostra o erro e deixa gerar de novo
           this.dropSocket();
-          await this.setStatus("disconnected", { last_error: (err as Error).message }, "clear").catch(() => {});
+          await this.status.set("disconnected", { last_error: (err as Error).message }, "clear").catch(() => {});
         }
       }
     });
@@ -485,7 +372,7 @@ export class WhatsAppSession {
       if (type !== "notify") return;
       for (const raw of messages) {
         try {
-          await this.handleIncoming(sock, raw);
+          await handleIncoming(sock, raw, this.log);
         } catch (err) {
           this.log.error({ err }, "falha ao processar mensagem recebida");
         }
@@ -497,7 +384,7 @@ export class WhatsAppSession {
   private onClose(sock: WASocket, error: Error | undefined) {
     const code = statusCodeOf(error);
     const message = error?.message ?? "conexão fechada";
-    const name = code !== undefined ? REASON_NAMES[code] ?? `código ${code}` : "sem código";
+    const name = reasonName(code);
     this.dropSocket({ end: false }); // o Baileys já fechou este
     if (this.stopping || !this.holding) return;
     const pairedNow = this.paired || isPaired(sock.authState?.creds);
@@ -507,11 +394,11 @@ export class WhatsAppSession {
       this.log.warn({ code, reason: name, message }, "WhatsApp desconectado pelo celular; limpando a sessão (precisa de QR novo)");
       this.paired = false;
       this.retries = 0;
-      this.wakeWaiters();
+      this.waiters.wake();
       void (async () => {
         await this.saving;
         await clearAuthState(SESSION_ID);
-        await this.setStatus("disconnected", { last_error: "Sessão encerrada no celular. Conecte de novo." }, "clear");
+        await this.status.set("disconnected", { last_error: "Sessão encerrada no celular. Conecte de novo." }, "clear");
         await notify({ userId: null, kind: "whatsapp", title: "WhatsApp desconectado", body: "A sessão foi encerrada no celular. Gere um QR code novo para religar.", link: "/whatsapp" });
       })().catch((err) => this.log.error({ err }, "falha ao limpar a sessão do WhatsApp"));
       return;
@@ -524,10 +411,10 @@ export class WhatsAppSession {
         return;
       }
       this.log.warn({ code, reason: name, message }, "conexão caiu antes de concluir o pareamento");
-      this.wakeWaiters();
+      this.waiters.wake();
       const lastError =
         code === DisconnectReason.timedOut ? "O QR code expirou. Gere outro para conectar." : `A conexão caiu antes de concluir o pareamento (${name}). Gere outro QR code.`;
-      void this.setStatus("disconnected", { last_error: lastError }, "clear").catch((err) => this.log.warn({ err }, "não gravei o status do WhatsApp"));
+      void this.status.set("disconnected", { last_error: lastError }, "clear").catch((err) => this.log.warn({ err }, "não gravei o status do WhatsApp"));
       return;
     }
 
@@ -551,7 +438,10 @@ export class WhatsAppSession {
       if (this.connected && this.sock) {
         const sock = this.sock;
         if (probes > 0 || Date.now() - this.lastRecvAt < this.t.keepAliveMs * 1.5) return sock;
-        if (await this.ping(sock, Math.min(8000, Math.max(1000, deadline - Date.now())))) return sock;
+        if (await pingSocket(sock, Math.min(8000, Math.max(1000, deadline - Date.now())))) {
+          if (this.sock === sock) this.lastRecvAt = Date.now();
+          return sock;
+        }
         this.reportBroken(sock, new Error("sem resposta ao ping antes do envio"));
       }
       if (this.stopping) throw new Error("WhatsApp encerrando");
@@ -560,25 +450,7 @@ export class WhatsAppSession {
       if (!this.sock && !this.reconnectTimer) this.scheduleReconnect("envio pedido com a conexão caída", { immediate: true });
       const left = deadline - Date.now();
       if (left <= 0) throw new Error(`WhatsApp reconectando; não consegui enviar em ${Math.round(timeoutMs / 1000)}s. Tente de novo em instantes.`);
-      await new Promise<void>((resolve) => {
-        const done = () => {
-          clearTimeout(timer);
-          this.waiters.delete(done);
-          resolve();
-        };
-        const timer = setTimeout(done, left);
-        this.waiters.add(done);
-      });
-    }
-  }
-
-  private async ping(sock: WASocket, timeoutMs: number) {
-    try {
-      await sock.query({ tag: "iq", attrs: { id: sock.generateMessageTag(), to: "s.whatsapp.net", type: "get", xmlns: "w:p" }, content: [{ tag: "ping", attrs: {} }] }, timeoutMs);
-      if (this.sock === sock) this.lastRecvAt = Date.now();
-      return true;
-    } catch {
-      return false;
+      await this.waiters.wait(left);
     }
   }
 
@@ -589,71 +461,19 @@ export class WhatsAppSession {
     this.scheduleReconnect(`envio falhou com a conexão quebrada (${(err as Error)?.message ?? err})`, { immediate: true });
   }
 
-  private wakeWaiters() {
-    for (const w of [...this.waiters]) w();
-  }
-
-  private queueStatus<T>(fn: () => Promise<T>): Promise<T> {
-    const p = this.statusChain.then(fn, fn);
-    this.statusChain = p.catch(() => {});
-    return p;
-  }
-
-  /** Grava o status do painel em ordem. down: "set" marca o início da queda, "clear" zera, "keep" mantém. */
-  private setStatus(
-    status: Status,
-    patch: { qr?: string | null; pairing_code?: string | null; phone?: string | null; name?: string | null; last_error?: string | null } = {},
-    down: "set" | "clear" | "keep" = "keep",
-  ) {
-    return this.queueStatus(() =>
-      query(
-        `UPDATE wa_sessions SET status = $2, qr = $3, pairing_code = $4,
-           phone = COALESCE($5, phone), name = COALESCE($6, name), last_error = $7,
-           down_since = CASE WHEN $8 = 'clear' THEN NULL WHEN $8 = 'set' THEN COALESCE(down_since, now()) ELSE down_since END,
-           updated_at = now() WHERE id = $1`,
-        [SESSION_ID, status, patch.qr ?? null, patch.pairing_code ?? null, patch.phone ?? null, patch.name ?? null, patch.last_error ?? null, down],
-      ),
-    );
-  }
-
-  private async handleIncoming(sock: WASocket, raw: WAMessage) {
-    const msg = parseWAMessage(raw, "baileys");
-    if (!msg) return;
-    void query("UPDATE wa_sessions SET last_message_at = now() WHERE id = $1", [SESSION_ID]).catch(() => {});
-    // Baixa a mídia já na chegada (a mídia do WhatsApp expira e o socket só existe aqui)
-    if (msg.media && ["audio", "image", "document", "video"].includes(msg.kind)) {
-      try {
-        const buf = await downloadMediaMessage(raw, "buffer", {}, { logger: pino({ level: "silent" }), reuploadRequest: sock.updateMediaMessage });
-        if (buf.length <= MEDIA_MAX_BYTES) msg.media.base64 = buf.toString("base64");
-      } catch (err) {
-        this.log.warn({ err }, "não consegui baixar a mídia");
-      }
-    }
-    await ingest(msg);
-  }
-
   async stop() {
     this.stopping = true;
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.heartbeat = null;
     this.dropSocket();
-    this.wakeWaiters();
-    if (this.listenClient) {
-      await this.listenClient.query("UNLISTEN wa_command").catch(() => {});
-      this.listenClient.release();
-      this.listenClient = null;
-    }
-    await this.statusChain;
+    this.waiters.wake();
+    await this.commands.stop();
+    await this.status.settled();
     if (this.holding) {
       this.holding = false;
-      await query("UPDATE wa_sessions SET holder = NULL, lease_until = NULL WHERE id = $1 AND holder = $2", [SESSION_ID, this.holder]).catch(() => {});
+      await this.lease.release().catch(() => {});
     }
   }
 }
 
 export const whatsapp = new WhatsAppSession();
-
-/** Usado pela API: manda um comando para o processo que segura a conexão. */
-export async function sendWaCommand(cmd: WaCommand) {
-  await query("SELECT pg_notify('wa_command', $1)", [JSON.stringify(cmd)]);
-}
