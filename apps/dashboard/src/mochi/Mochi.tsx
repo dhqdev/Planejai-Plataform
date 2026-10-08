@@ -50,21 +50,39 @@ export const MOODS: { id: Mood; label: string }[] = [
 export type Slot = "head" | "eyes" | "neck" | "costume";
 export type Outfit = Partial<Record<Slot, string>>;
 
-export const ITEMS: { id: string; slot: Slot; label: string }[] = [
-  { id: "beanie", slot: "head", label: "Gorro" },
-  { id: "santa", slot: "head", label: "Papai Noel" },
-  { id: "party", slot: "head", label: "Festa" },
-  { id: "crown", slot: "head", label: "Coroa" },
-  { id: "witch", slot: "head", label: "Bruxa" },
-  { id: "cap", slot: "head", label: "Boné" },
-  { id: "headphones", slot: "head", label: "Fone" },
-  { id: "bow", slot: "head", label: "Laço" },
-  { id: "flower", slot: "head", label: "Flor" },
+/** top = ponto mais alto do item (no viewBox 0..120), para o ícone recortado não cortar o chapéu */
+export const ITEMS: { id: string; slot: Slot; label: string; top?: number }[] = [
+  { id: "beanie", slot: "head", label: "Gorro", top: 12 },
+  { id: "santa", slot: "head", label: "Papai Noel", top: 18 },
+  { id: "party", slot: "head", label: "Festa", top: 5 },
+  { id: "crown", slot: "head", label: "Coroa", top: 18 },
+  { id: "witch", slot: "head", label: "Bruxa", top: 2 },
+  { id: "cap", slot: "head", label: "Boné", top: 23 },
+  { id: "headphones", slot: "head", label: "Fone", top: 27 },
+  { id: "bow", slot: "head", label: "Laço", top: 34 },
+  { id: "flower", slot: "head", label: "Flor", top: 30 },
+  { id: "beret", slot: "head", label: "Boina", top: 28 },
+  { id: "chef", slot: "head", label: "Chef", top: 8 },
+  { id: "grad", slot: "head", label: "Formatura", top: 22 },
+  { id: "cowboy", slot: "head", label: "Caubói", top: 25 },
+  { id: "catears", slot: "head", label: "Gatinho", top: 22 },
+  { id: "halo", slot: "head", label: "Auréola", top: 16 },
+  { id: "sprout", slot: "head", label: "Brotinho", top: 20 },
   { id: "sunglasses", slot: "eyes", label: "Óculos escuros" },
   { id: "glasses", slot: "eyes", label: "Óculos" },
+  { id: "hearts", slot: "eyes", label: "Coração" },
+  { id: "mask", slot: "eyes", label: "Máscara" },
+  { id: "monocle", slot: "eyes", label: "Monóculo" },
   { id: "scarf", slot: "neck", label: "Cachecol" },
   { id: "bowtie", slot: "neck", label: "Gravatinha" },
-  { id: "pumpkin", slot: "costume", label: "Abóbora" },
+  { id: "tie", slot: "neck", label: "Gravata" },
+  { id: "pearls", slot: "neck", label: "Colar" },
+  { id: "medal", slot: "neck", label: "Medalha" },
+  { id: "bandana", slot: "neck", label: "Bandana" },
+  { id: "pumpkin", slot: "costume", label: "Abóbora", top: 30 },
+  { id: "bear", slot: "costume", label: "Ursinho", top: 26 },
+  { id: "dino", slot: "costume", label: "Dino", top: 24 },
+  { id: "astronaut", slot: "costume", label: "Astronauta", top: 24 },
 ];
 
 export const SLOTS: { id: Slot; label: string }[] = [
@@ -285,12 +303,12 @@ function Hat({ id, u }: { id: string; u: string }) {
     case "headphones":
       return (
         <g>
-          <path d="M22 76 C20 44 38 33 60 33 C82 33 100 44 98 76" stroke={`url(#${u}-dark)`} strokeWidth={6} fill="none" strokeLinecap="round" />
+          <path d="M20 74 C18 44 38 34 60 34 C82 34 102 44 100 74" stroke={`url(#${u}-dark)`} strokeWidth={5.5} fill="none" strokeLinecap="round" />
           <path d="M28 58 C34 42 46 38 60 38" stroke="rgba(255,255,255,.25)" strokeWidth={1.6} fill="none" strokeLinecap="round" />
-          {[16, 104].map((x) => (
+          {[19, 101].map((x) => (
             <g key={x}>
-              <rect x={x - 7} y={66} width={14} height={22} rx={7} fill={`url(#${u}-dark)`} />
-              <rect x={x - 4} y={70} width={8} height={14} rx={4} fill="#8b5cf0" />
+              <rect x={x - 6.5} y={70} width={13} height={22} rx={6.5} fill={`url(#${u}-dark)`} />
+              <rect x={x - 3.8} y={74} width={7.6} height={14} rx={3.8} fill="#8b5cf0" />
             </g>
           ))}
         </g>
@@ -319,6 +337,79 @@ function Hat({ id, u }: { id: string; u: string }) {
          </g>
         </g>
       );
+    case "beret":
+      return (
+        <g transform="rotate(-8 58 52)">
+          <path d="M56 37 l1.5 -5.5" stroke="#3a1730" strokeWidth={2.6} strokeLinecap="round" />
+          <ellipse cx={58} cy={49} rx={36} ry={12.5} fill={`url(#${u}-wine)`} />
+          <ellipse cx={58} cy={56.5} rx={30} ry={4.4} fill="#5e1a3c" />
+          <path d="M34 44 C42 39 54 37.5 64 38" stroke="rgba(255,255,255,.3)" strokeWidth={2.4} fill="none" strokeLinecap="round" />
+        </g>
+      );
+    case "chef":
+      return (
+        <g>
+          <rect x={39} y={30} width={42} height={28} rx={4} fill={`url(#${u}-white)`} />
+          {[
+            [45, 28, 11],
+            [60, 22, 13],
+            [75, 28, 11],
+            [52, 32, 9],
+            [68, 32, 9],
+          ].map(([x, y, r]) => (
+            <circle key={`${x}-${y}`} cx={x} cy={y} r={r} fill={`url(#${u}-white)`} />
+          ))}
+          <path d="M48 36 L49 52 M60 34 L60 52 M72 36 L71 52" stroke="rgba(0,0,0,.07)" strokeWidth={1.6} strokeLinecap="round" />
+          <rect x={36} y={51} width={48} height={11} rx={4} fill={`url(#${u}-white)`} stroke="rgba(0,0,0,.08)" strokeWidth={0.8} />
+        </g>
+      );
+    case "grad":
+      return (
+        <g>
+          <path d="M40 48 Q60 43 80 48 L80 60 Q60 55 40 60 Z" fill={`url(#${u}-dark)`} />
+          <path d="M60 28 L100 38.5 L60 49 L20 38.5 Z" fill={`url(#${u}-dark)`} />
+          <path d="M60 30 L94 38.5" stroke="rgba(255,255,255,.22)" strokeWidth={1.4} strokeLinecap="round" />
+          <circle cx={60} cy={38.5} r={2.2} fill="#ffc83d" />
+          <path d="M60 38.5 Q80 40 90 42 L91 56" stroke="#ffc83d" strokeWidth={1.6} fill="none" strokeLinecap="round" />
+          <path d="M88.5 55 L93.5 55 L94.5 63 L87.5 63 Z" fill="#ffc83d" />
+        </g>
+      );
+    case "cowboy":
+      return (
+        <g transform="translate(0 5)">
+          <path d="M36 56 C34 41 38 30 46 29.5 C52 29 56 33 60 33 C64 33 68 29 74 29.5 C82 30 86 41 84 56 Z" fill={`url(#${u}-leather)`} />
+          <path d="M60 33.5 L60 45" stroke="rgba(0,0,0,.18)" strokeWidth={1.6} strokeLinecap="round" />
+          <rect x={36} y={48} width={48} height={7} rx={2} fill="#5a3416" />
+          <path d="M10 53 C16 47 24 51 30 55 C46 61 74 61 90 55 C96 51 104 47 110 53 C106 63 86 66 60 66 C34 66 14 63 10 53 Z" fill={`url(#${u}-leather)`} />
+          <path d="M42 34 C46 31 50 31 53 32" stroke="rgba(255,255,255,.3)" strokeWidth={2} fill="none" strokeLinecap="round" />
+        </g>
+      );
+    case "catears":
+      return (
+        <g stroke="#2a2a33" strokeWidth={3} strokeLinejoin="round" strokeLinecap="round">
+          <path d="M24 60 C30 52 44 47 60 47 C76 47 90 52 96 60" fill="none" />
+          <path d="M27 55 L32 29 L50 49 Z" fill="#2a2a33" />
+          <path d="M93 55 L88 29 L70 49 Z" fill="#2a2a33" />
+          <path d="M32.5 49 L34.5 37 L43 47 Z M87.5 49 L85.5 37 L77 47 Z" fill="#ff9ec9" stroke="#ff9ec9" strokeWidth={1.4} />
+        </g>
+      );
+    case "halo":
+      return (
+        <g>
+          <ellipse cx={60} cy={30} rx={24} ry={7} fill="none" stroke="#ffe27a" strokeWidth={7} opacity={0.35} filter={`url(#${u}-soft)`} />
+          <ellipse cx={60} cy={30} rx={22} ry={6} fill="none" stroke={`url(#${u}-gold)`} strokeWidth={3.6} />
+          <path d="M44 27 Q52 24.5 60 24.5" stroke="#fff8d6" strokeWidth={1.3} fill="none" strokeLinecap="round" />
+        </g>
+      );
+    case "sprout":
+      return (
+        <g>
+          <path d="M60 52 C60 46 59 40 61 34" stroke="#4c9a3a" strokeWidth={2.4} fill="none" strokeLinecap="round" />
+          <path d="M61 35 C54 26 44 28 41 33 C48 38 56 38 61 35 Z" fill="#6cc04a" />
+          <path d="M61 35 C66 24 78 24 81 29 C75 35 67 37 61 35 Z" fill="#82d35a" />
+          <path d="M45 32.5 C50 32 56 33.5 60 35 M64 33.5 C69 30 74 28.5 78 29" stroke="rgba(0,0,0,.12)" strokeWidth={0.9} fill="none" strokeLinecap="round" />
+        </g>
+      );
   }
   return null;
 }
@@ -334,6 +425,37 @@ function EyeWear({ id, u }: { id: string; u: string }) {
         <circle cx={RX} cy={EY} r={8.8} fill="rgba(255,255,255,.16)" />
         <path d={`M${LX - 5} ${EY - 4} Q${LX - 3} ${EY - 6} ${LX} ${EY - 6.4}`} stroke="rgba(255,255,255,.8)" strokeWidth={1.2} strokeLinecap="round" />
         <path d={`M${RX - 5} ${EY - 4} Q${RX - 3} ${EY - 6} ${RX} ${EY - 6.4}`} stroke="rgba(255,255,255,.8)" strokeWidth={1.2} strokeLinecap="round" />
+      </g>
+    );
+  if (id === "hearts")
+    return (
+      <g>
+        <path d="M18.5 75 L33.5 77 M86.5 77 L101.5 75" stroke="#e0306f" strokeWidth={2} strokeLinecap="round" />
+        <path d="M54.5 77 Q60 74 65.5 77" stroke="#e0306f" strokeWidth={2} fill="none" strokeLinecap="round" />
+        {[LX, RX].map((x) => (
+          <path key={x} transform={`translate(${x} ${EY + 1.5}) scale(1.05)`} d="M0 9.5 C-14 1 -12 -10 -5 -10 C-2 -10 0 -8 0 -6 C0 -8 2 -10 5 -10 C12 -10 14 1 0 9.5 Z" fill="#ff5c93" fillOpacity={0.45} stroke="#e0306f" strokeWidth={1.9} strokeLinejoin="round" />
+        ))}
+        <path d={`M${LX - 8} ${EY - 4} Q${LX - 7} ${EY - 7.5} ${LX - 3.5} ${EY - 8}`} stroke="rgba(255,255,255,.85)" strokeWidth={1.3} fill="none" strokeLinecap="round" />
+      </g>
+    );
+  if (id === "mask")
+    return (
+      <g>
+        <path d="M100 74 C106 76 110 82 108 90 M100 76 C104 82 104 88 100 94" stroke="#1b1b22" strokeWidth={2.6} fill="none" strokeLinecap="round" />
+        <path
+          fillRule="evenodd"
+          fill={`url(#${u}-dark)`}
+          d={`M18 71 C34 66 48 69 60 72 C72 69 86 66 102 71 L101 84 C88 90 72 88 60 85 C48 88 32 90 19 84 Z M${LX} ${EY - 7} a9.5 7.5 0 1 0 0.01 0 Z M${RX} ${EY - 7} a9.5 7.5 0 1 0 0.01 0 Z`}
+        />
+        <path d="M24 71.5 C34 68.5 44 69 52 70.5" stroke="rgba(255,255,255,.25)" strokeWidth={1.4} fill="none" strokeLinecap="round" />
+      </g>
+    );
+  if (id === "monocle")
+    return (
+      <g>
+        <path d={`M${RX + 6.5} ${EY + 6.5} C${RX + 10} ${EY + 16} ${RX + 18} ${EY + 18} ${RX + 22} ${EY + 24}`} stroke="#c99a2e" strokeWidth={1.2} fill="none" strokeDasharray="1.6 1.4" strokeLinecap="round" />
+        <circle cx={RX} cy={EY} r={9.2} fill="rgba(255,255,255,.18)" stroke={`url(#${u}-gold)`} strokeWidth={2.4} />
+        <path d={`M${RX - 5} ${EY - 4.5} Q${RX - 3} ${EY - 6.6} ${RX} ${EY - 6.8}`} stroke="rgba(255,255,255,.85)" strokeWidth={1.2} fill="none" strokeLinecap="round" />
       </g>
     );
   return null;
@@ -366,14 +488,116 @@ function Neck({ id, u }: { id: string; u: string }) {
     );
   if (id === "bowtie")
     return (
-      <g transform="translate(60 103)">
+      <g transform="translate(60 98.5)">
         <path d="M0 0 L-11 -6 Q-13 0 -11 6 Z" fill={`url(#${u}-redtie)`} />
         <path d="M0 0 L11 -6 Q13 0 11 6 Z" fill={`url(#${u}-redtie)`} />
         <rect x={-3} y={-3.4} width={6} height={6.8} rx={2} fill="#b8172a" />
         <path d="M-9 -3 L-4 -1 M9 -3 L4 -1" stroke="rgba(255,255,255,.35)" strokeWidth={1} strokeLinecap="round" />
       </g>
     );
+  if (id === "tie")
+    return (
+      <g>
+        <path d="M51.5 87 L68.5 87 L65 94.5 L55 94.5 Z" fill="#1f3f8f" />
+        <path d="M55 94.5 L65 94.5 L70.5 107 L60 113 L49.5 107 Z" fill={`url(#${u}-navy)`} />
+        <path d="M53 100 L67 97 M51.5 105.5 L69 102" stroke="rgba(255,255,255,.28)" strokeWidth={1.6} strokeLinecap="round" />
+      </g>
+    );
+  if (id === "pearls")
+    return (
+      <g>
+        {Array.from({ length: 13 }, (_, i) => {
+          const t = i / 12;
+          const x = 26 + t * 68;
+          const y = 88 + Math.sin(t * Math.PI) * 10;
+          return (
+            <g key={i}>
+              <circle cx={x} cy={y} r={i === 6 ? 3.6 : 2.7} fill={`url(#${u}-white)`} stroke="rgba(0,0,0,.12)" strokeWidth={0.5} />
+              <circle cx={x - 0.8} cy={y - 0.9} r={0.8} fill="#fff" />
+            </g>
+          );
+        })}
+      </g>
+    );
+  if (id === "medal")
+    return (
+      <g>
+        <path d="M44 86 L55 99 L60 95 L51 84 Z" fill="#3f6fdc" />
+        <path d="M76 86 L65 99 L60 95 L69 84 Z" fill="#e23a48" />
+        <circle cx={60} cy={100} r={6.6} fill={`url(#${u}-gold)`} stroke="#c98a12" strokeWidth={0.8} />
+        <path d="M60 96.6 l1 2.2 2.4 0.3 -1.8 1.6 0.5 2.4 -2.1 -1.2 -2.1 1.2 0.5 -2.4 -1.8 -1.6 2.4 -0.3 Z" fill="#fff4c4" />
+      </g>
+    );
+  if (id === "bandana")
+    return (
+      <g>
+        <path d="M20 86 C34 94 86 94 100 86 L98 93 C88 98 74 100 68 101 L60 110 L52 101 C46 100 32 98 22 93 Z" fill={`url(#${u}-red)`} />
+        {[
+          [34, 93],
+          [48, 96.5],
+          [72, 96.5],
+          [86, 93],
+          [60, 102],
+        ].map(([x, y]) => (
+          <circle key={x} cx={x} cy={y} r={1.3} fill="#fff" opacity={0.9} />
+        ))}
+        <path d="M26 89 C40 95 80 95 94 89" stroke="rgba(255,255,255,.35)" strokeWidth={1} fill="none" />
+      </g>
+    );
   return null;
+}
+
+/** capuz de bichinho por cima do corpo, com o rosto aparecendo */
+const HOOD = "M60 36 C92 36 107 41 107 62 L107 92 C107 101 100 106 90 106 L30 106 C20 106 13 101 13 92 L13 62 C13 41 28 36 60 36 Z";
+const FACE_HOLE = "M60 63 C80 63 92 68 92 80 C92 93 80 98 60 98 C40 98 28 93 28 80 C28 68 40 63 60 63 Z";
+
+function Hood({ id, u }: { id: string; u: string }) {
+  const fill = id === "bear" ? `url(#${u}-fur)` : `url(#${u}-dino)`;
+  return (
+    <g>
+      {id === "bear" &&
+        [26, 94].map((x) => (
+          <g key={x}>
+            <circle cx={x} cy={40} r={12} fill={`url(#${u}-fur)`} />
+            <circle cx={x} cy={40.5} r={6.5} fill="#e7b98c" />
+          </g>
+        ))}
+      {id === "dino" &&
+        [
+          [43, 39, 9],
+          [60, 37, 13],
+          [77, 39, 9],
+        ].map(([x, y, h]) => (
+          <path key={x} d={`M${x - 7} ${y + 3} Q${x} ${y - h * 2} ${x + 7} ${y + 3} Z`} fill="#ffb84d" stroke="#e8902a" strokeWidth={0.8} />
+        ))}
+      <path fillRule="evenodd" d={`${HOOD} ${FACE_HOLE}`} fill={fill} />
+      <path fillRule="evenodd" d={`${HOOD} ${FACE_HOLE}`} fill={`url(#${u}-shade)`} />
+      <path d={FACE_HOLE} fill="none" stroke="rgba(0,0,0,.18)" strokeWidth={1.6} />
+      <path d="M34 44 C44 39.5 54 38.5 64 39" stroke="rgba(255,255,255,.28)" strokeWidth={2.6} fill="none" strokeLinecap="round" />
+      {id === "dino" &&
+        [
+          [22, 70],
+          [98, 72],
+          [26, 94],
+          [95, 95],
+        ].map(([x, y]) => <circle key={x} cx={x} cy={y} r={3} fill="#3e9a4f" opacity={0.7} />)}
+    </g>
+  );
+}
+
+/** capacete de astronauta: vidro por cima e gola embaixo */
+function Helmet({ u }: { u: string }) {
+  return (
+    <g>
+      <path d="M60 24 C92 24 112 44 112 70 C112 84 108 92 104 96 L16 96 C12 92 8 84 8 70 C8 44 28 24 60 24 Z" fill={`url(#${u}-glass)`} stroke="rgba(160,190,230,.9)" strokeWidth={1.6} />
+      <path d="M30 40 C38 32 50 29 60 29" stroke="#fff" strokeOpacity={0.85} strokeWidth={3} fill="none" strokeLinecap="round" />
+      <path d="M100 52 C104 58 106 64 106 70" stroke="#fff" strokeOpacity={0.55} strokeWidth={2} fill="none" strokeLinecap="round" />
+      <rect x={12} y={94} width={96} height={14} rx={7} fill={`url(#${u}-white)`} stroke="rgba(0,0,0,.12)" strokeWidth={0.8} />
+      <rect x={28} y={98} width={10} height={6} rx={2} fill="#ef4b5f" />
+      <rect x={42} y={98} width={6} height={6} rx={2} fill="#4f8cf0" />
+      <circle cx={88} cy={101} r={3} fill="#2fbf7f" />
+    </g>
+  );
 }
 
 function Pumpkin({ u }: { u: string }) {
@@ -436,6 +660,15 @@ function Defs({ u }: { u: string }) {
       {lin("brim", "#6a39bd", "#3c1a7c", "0")}
       {lin("brand", "#ff8a2a", "#e23382", "0.8")}
       {lin("dark", "#3a3a44", "#121216", "0")}
+      {lin("wine", "#c2457a", "#6e1e48", "0.4")}
+      {lin("leather", "#c98a4b", "#7a4a1e", "0.4")}
+      {lin("navy", "#3a63c9", "#1a3480", "0")}
+      {lin("fur", "#b98353", "#7c4f2c", "0.4")}
+      {lin("dino", "#7fd36b", "#3f9a4c", "0.4")}
+      <linearGradient id={`${u}-glass`} x1="0" y1="0" x2="0.4" y2="1">
+        <stop offset="0" stopColor="#dbeaff" stopOpacity="0.45" />
+        <stop offset="1" stopColor="#a9c8f0" stopOpacity="0.12" />
+      </linearGradient>
       <linearGradient id={`${u}-lens`} x1="0" y1="0" x2="0.3" y2="1">
         <stop offset="0" stopColor="#3b3b44" />
         <stop offset="0.5" stopColor="#111114" />
@@ -606,6 +839,13 @@ export function Mochi({
   };
 
   const pumpkin = outfit.costume === "pumpkin";
+  const hood = outfit.costume === "bear" || outfit.costume === "dino";
+  const astronaut = outfit.costume === "astronaut";
+  // recorte justo no corpo; se tem chapéu, a caixa cresce para cima (mesma proporção) e nada fica cortado
+  const top = Math.min(34, ...ITEMS.filter((i) => i.top !== undefined && outfit[i.slot] === i.id && !(astronaut && i.slot === "head")).map((i) => (i.top as number) - 2));
+  const ch = 114 - top;
+  const cw = (ch * 104) / 80;
+  const cropBox = `${(60 - cw / 2).toFixed(1)} ${top} ${cw.toFixed(1)} ${ch}`;
   const shadesUp = outfit.eyes === "sunglasses" && !(face.l.k === "dot" && face.r.k === "dot" && !face.l.lid && !face.l.s);
 
   return (
@@ -614,7 +854,7 @@ export function Mochi({
       className={`mochi ${still ? "m-still" : ""} ${face.scan ? `m-scan-${face.scan}` : ""} ${className ?? ""}`}
       width={size}
       height={crop ? Math.round((size * 80) / 104) : size}
-      viewBox={crop ? "8 34 104 80" : "0 0 120 120"}
+      viewBox={crop ? cropBox : "0 0 120 120"}
       role="img"
       aria-label={title ?? "Mochi"}
       style={style}
@@ -641,7 +881,8 @@ export function Mochi({
           </>
         )}
 
-        {outfit.neck && !pumpkin && <Neck id={outfit.neck} u={u} />}
+        {hood && <Hood id={outfit.costume as string} u={u} />}
+        {outfit.neck && !pumpkin && !astronaut && <Neck id={outfit.neck} u={u} />}
 
         <g className="m-look" ref={look}>
           <g className={`m-eyes ${face.scan ? "m-scanning" : ""}`}>
@@ -658,11 +899,12 @@ export function Mochi({
           </g>
         )}
 
-        {outfit.head && (
-          <g transform="translate(0 -6.5)">
+        {outfit.head && !astronaut && (
+          <g transform={hood ? "translate(0 -9)" : "translate(0 -6.5)"}>
             <Hat id={outfit.head} u={u} />
           </g>
         )}
+        {astronaut && <Helmet u={u} />}
       </g>
     </svg>
   );

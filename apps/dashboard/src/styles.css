@@ -1244,8 +1244,8 @@ button.chip { cursor: pointer; color: var(--text); }
   .tab.active { color: var(--text); background: var(--violet-soft); box-shadow: none; }
   .tab.active .tab-ico { color: var(--violet); }
 }
-/* marca na barra lateral: o Mochi sobre o fundo noite, como no ícone do app */
-.brand > .mochi-badge { padding: 5px; margin: 0; border-radius: 14px; background: radial-gradient(circle at 50% 45%, #7a14f5 0%, var(--midnight) 78%); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--magenta) 70%, transparent); }
+/* marca na barra lateral e no topo do celular: o Mochi num quadrinho branco (nunca sobre cor) */
+.brand > .mochi-badge { padding: 5px; margin: 0; border-radius: 14px; background: #fff; box-shadow: 0 0 0 1px rgba(20, 10, 40, .08), 0 2px 8px rgba(20, 10, 40, .12); }
 
 /* ---------- Celular: barra de baixo com 4 botões e o "Mais" organizado por seção ---------- */
 @media (max-width: 767px) {
