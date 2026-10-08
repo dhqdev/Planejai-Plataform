@@ -217,7 +217,12 @@ export async function buildServer() {
     return { ok: true, pending: true, message: "Cadastro recebido! Assim que o administrador aprovar você já pode entrar." };
   });
 
-  app.get("/api/auth/config", async () => ({ signupMode: (await getSettings()).signupMode, version: VERSION }));
+  // público (tela de entrar e landing): modo de cadastro e, com cobrança ligada, o plano para a seção de preço
+  app.get("/api/auth/config", async () => {
+    const s = await getSettings();
+    const plan = s.billingEnabled ? { name: s.billingPlanName, price: Number(s.billingPrice), trialDays: Number(s.billingTrialDays) } : null;
+    return { signupMode: s.signupMode, version: VERSION, plan };
+  });
 
   app.post("/api/auth/logout", async (_req, reply) => {
     reply.clearCookie(COOKIE, { path: "/" });

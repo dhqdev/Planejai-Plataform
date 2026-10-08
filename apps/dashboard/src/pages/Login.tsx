@@ -18,7 +18,7 @@ const inviteCode = () => /^\/convite\/([A-Za-z0-9]+)/.exec(location.pathname)?.[
 
 export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
   const code = inviteCode();
-  const [mode, setMode] = useState<"login" | "register">(code ? "register" : "login");
+  const [mode, setMode] = useState<"login" | "register">(code || new URLSearchParams(location.search).has("cadastro") ? "register" : "login");
   const [signup, setSignup] = useState<string>("invite");
   const [invite, setInvite] = useState<Invite | null>(null);
   const [form, setForm] = useState({ name: "", email: "", password: "", phone: "" });

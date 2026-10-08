@@ -42,6 +42,9 @@ const load = {
 function page<P>(pick: () => Promise<ComponentType<P>>) {
   return lazy(() => pick().then((c) => ({ default: c }), () => ({ default: PageUnavailable as ComponentType<P> })));
 }
+/** Landing pública: só baixa para quem abre "/" sem estar logado. */
+const Landing = page(() => import("./pages/Landing").then((m) => m.LandingPage));
+
 function PageUnavailable() {
   return (
     <div className="page">
@@ -284,6 +287,7 @@ export function App() {
   // termos e privacidade abrem sem login (link do cadastro e do convite no WhatsApp)
   if (loc.pathname === "/privacidade") return <PrivacyPage />;
   if (me === undefined) return <BlockLoader />;
+  if (!me && loc.pathname === "/") return <Suspense fallback={<BlockLoader />}><Landing /></Suspense>;
   if (!me) return <AuthPage onLogin={setMe} />;
 
   const has = (m: string) => isSuper || (tabs.data?.modules ?? []).includes(m);
