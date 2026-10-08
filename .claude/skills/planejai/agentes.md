@@ -37,7 +37,7 @@ Cada item tem teste; rode `npm test` depois de mexer em `orchestrator.ts`, `runn
 - O worker processa com `wait: false`: conversa ocupada volta para a fila em 5 s em vez de prender uma vaga.
 
 ## Memória curta, retenção e mídia
-- Contexto do CTO = últimas `HISTORY_LIMIT` entradas do Redis (texto já interpretado) + resumo da conversa + memórias. Não volte a mandar mídia crua ou documento inteiro para o LLM: documento entra com prévia de 2.500 caracteres e o resto via `read_document`.
+- Contexto do CTO = últimas `HISTORY_LIMIT` entradas do Redis (texto já interpretado) + resumo da conversa + memórias. Memórias no prompt (`loadMemories`): até 6 com a tag `perfil` (cidade, família, trabalho) sempre, mais 5 parecidas com a mensagem e as 8 mais recentes. `save_memory` não duplica: fato já sabido só junta tags, fato que detalha um antigo o substitui, e `replaces_id` troca um fato que mudou. Não volte a mandar mídia crua ou documento inteiro para o LLM: documento entra com prévia de 2.500 caracteres e o resto via `read_document`.
 - Conversa não é guardada no Postgres quando o Redis está no ar: a mensagem é apagada depois de processada e a resposta não é gravada (o histórico já está no WhatsApp). Sem Redis, cai no modo antigo (guarda `MESSAGE_RETENTION_HOURS` e resume).
 - Cache no Redis (`shortmem.ts`: `cacheGet`/`cacheSet`, `markSeen`, `countInWindow`): resultado de web_search/fetch_url (6h) e Mercado Livre (1h), interpretação de mídia por hash (30 dias), texto de documento (24h), dedupe de webhook e ritmo por minuto. Ferramenta nova determinística pode entrar no cache do runner (`agent/cache.ts`).
 - Gravações e prints ficam em `media_files` (servidos por `/api/media/:id`) por `EXECUTION_RETENTION_DAYS`.

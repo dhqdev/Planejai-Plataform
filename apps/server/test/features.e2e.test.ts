@@ -197,6 +197,23 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(tx.n).toBe(1);
   });
 
+  it("memória: o mesmo fato não duplica e o perfil sempre entra no contexto", async () => {
+    const core = await import("../src/agent/tools/core.js");
+    const { loadMemories } = await import("../src/agent/orchestrator.js");
+    const rui = await db.one("INSERT INTO users (phone, name, status) VALUES ('5519988880000', 'Rui', 'active') RETURNING *");
+    const ctx: any = { user: rui };
+    await core.saveMemory.run({ content: "Mora em Campinas", tags: ["perfil"] }, ctx);
+    await core.saveMemory.run({ content: "mora em Campinas" }, ctx);
+    expect((await db.many("SELECT content, tags FROM memories WHERE user_id = $1", [rui.id]))).toEqual([{ content: "Mora em Campinas", tags: ["perfil"] }]);
+    // mudou de cidade: troca o fato antigo
+    const old = await db.one("SELECT id FROM memories WHERE user_id = $1", [rui.id]);
+    expect(await core.saveMemory.run({ content: "Mora em Sorocaba", tags: ["perfil"], replaces_id: old.id }, ctx)).toEqual({ ok: true, updated: old.id });
+    for (let i = 0; i < 10; i++) await core.saveMemory.run({ content: `Gosta do restaurante número ${i} ${"abcdefghij"[i]}x` }, ctx);
+    await db.query("UPDATE memories SET created_at = now() - interval '30 days' WHERE id = $1", [old.id]);
+    const mem = await loadMemories(rui.id, "qual filme ver hoje");
+    expect(mem.some((m: any) => m.content === "Mora em Sorocaba")).toBe(true);
+  });
+
   it("lembretes: no máximo 30 ativos por pessoa e nada mais frequente que 15 min", async () => {
     const { createReminder } = await import("../src/reminders.js");
     const ana = await db.one("INSERT INTO users (phone, name, status) VALUES ('5519977770000', 'Ana', 'active') RETURNING *");

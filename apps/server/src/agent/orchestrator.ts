@@ -66,7 +66,9 @@ export function splitBubbles(text: string): Bubble[] {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function loadMemories(userId: string, text: string) {
+export async function loadMemories(userId: string, text: string) {
+  // o básico (cidade, família, trabalho) sempre entra, mesmo depois de muitas memórias novas
+  const profile = await many("SELECT id, content FROM memories WHERE user_id = $1 AND 'perfil' = ANY(tags) ORDER BY created_at DESC LIMIT 6", [userId]);
   const recent = await many("SELECT id, content FROM memories WHERE user_id = $1 ORDER BY created_at DESC LIMIT 8", [userId]);
   const related = text
     ? await many(
@@ -76,7 +78,7 @@ async function loadMemories(userId: string, text: string) {
       )
     : [];
   const seen = new Set<string>();
-  return [...related, ...recent].filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)));
+  return [...profile, ...related, ...recent].filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)));
 }
 
 export interface ProcessResult {
