@@ -318,17 +318,18 @@ function useCurtain() {
       if (keep) {
         document.body.appendChild(keep);
         keep.classList.add("out");
-        setTimeout(() => keep.remove(), 700);
+        setTimeout(() => keep.remove(), 800);
       }
       nav(href);
-    }, 620);
+    }, 700);
   };
   const curtain = veil
     ? createPortal(
         <div ref={node} className="lp-veil" style={{ ["--x" as string]: `${veil.x}px`, ["--y" as string]: `${veil.y}px` }} aria-hidden="true">
-          <span className="lp-veil-mochi">
-            <Mochi size={96} still mood="happy" />
-          </span>
+          <span className="lp-veil-wave a" />
+          <span className="lp-veil-wave b" />
+          <span className="lp-veil-wave c" />
+          <span className="lp-veil-glow" />
         </div>,
         document.body,
       )
@@ -368,7 +369,7 @@ export function LandingPage() {
     [
       "Como eu começo?",
       invite
-        ? "Hoje o Planejai é só por convite: alguém que já usa te convida pelo WhatsApp, você responde SIM e cria a conta pelo link que chega."
+        ? "O Planejai é só por convite. Quem já usa gera um código para você, que vale por 24 horas. É só tocar em Tenho um convite, digitar o código e criar sua conta."
         : closed
           ? "Os cadastros estão fechados no momento. Se você já tem conta, é só entrar."
           : "Crie a conta com seu nome, e-mail e WhatsApp. Logo depois ele faz umas perguntas rápidas para já começar te conhecendo.",

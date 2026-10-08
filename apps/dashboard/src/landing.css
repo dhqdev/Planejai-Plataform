@@ -337,7 +337,7 @@
 }
 @keyframes lp-say { 0% { opacity: 0; transform: translateY(8px) scale(.85); } 10%, 82% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-4px); } }
 
-/* clique em Entrar e Criar conta: onda saindo do dedo e cortina roxa com o Mochi */
+/* clique em Entrar e Tenho um convite: onda saindo do dedo e banho roxo cobrindo a tela */
 .lp-btn { position: relative; overflow: hidden; isolation: isolate; }
 .lp-btn::after {
   content: ""; position: absolute; z-index: -1; left: var(--rx, 50%); top: var(--ry, 50%); width: 12px; height: 12px; margin: -6px 0 0 -6px;
@@ -346,17 +346,24 @@
 .lp-btn.ghost::after { background: color-mix(in srgb, var(--lp-violet) 22%, transparent); }
 .lp-btn.lp-ripple::after { animation: lp-ripple .6s var(--lp-ease); }
 @keyframes lp-ripple { from { opacity: 1; transform: scale(0); } to { opacity: 0; transform: scale(36); } }
-.lp-veil {
-  position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: var(--lp-violet, #6510e0); pointer-events: none;
-  clip-path: circle(0 at var(--x) var(--y)); animation: lp-veil-in .6s cubic-bezier(.65, 0, .35, 1) .08s forwards;
-}
+/* o banho roxo: três ondas saindo do ponto do clique (lilás, violeta, noite) e um brilho que respira no meio */
+.lp-veil { position: fixed; inset: 0; z-index: 1000; pointer-events: none; }
+.lp-veil-wave { position: absolute; inset: 0; clip-path: circle(0 at var(--x) var(--y)); animation: lp-veil-in .62s cubic-bezier(.7, 0, .25, 1) forwards; }
+.lp-veil-wave.a { background: #c9a8ff; animation-duration: .5s; }
+.lp-veil-wave.b { background: var(--lp-violet, #6510e0); animation-delay: .07s; }
+.lp-veil-wave.c { background: radial-gradient(circle at var(--x) var(--y), #7a2cff 0, #5a10d0 32%, #2b0a6b 78%, #1d0b42 100%); animation-delay: .14s; animation-duration: .58s; }
 @keyframes lp-veil-in { to { clip-path: circle(150vmax at var(--x) var(--y)); } }
-.lp-veil-mochi { animation: lp-veil-hop .7s cubic-bezier(.34, 1.56, .64, 1) .22s both; filter: drop-shadow(0 18px 22px rgba(0, 0, 0, .25)); }
-@keyframes lp-veil-hop { from { opacity: 0; transform: translateY(40px) scale(.4); } }
-.lp-veil.out { clip-path: circle(150vmax at var(--x) var(--y)); animation: lp-veil-out .55s var(--lp-ease, ease) forwards; }
-.lp-veil.out .lp-veil-mochi { animation: lp-veil-up .5s var(--lp-ease, ease) forwards; }
-@keyframes lp-veil-out { to { opacity: 0; } }
-@keyframes lp-veil-up { to { opacity: 0; transform: translateY(-30px) scale(.8); } }
+.lp-veil-glow {
+  position: absolute; left: var(--x); top: var(--y); width: 70vmax; height: 70vmax; margin: -35vmax 0 0 -35vmax; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(214, 190, 255, .55), rgba(140, 75, 255, .18) 45%, transparent 70%);
+  opacity: 0; animation: lp-veil-glow .9s ease-out .3s forwards;
+}
+@keyframes lp-veil-glow { from { opacity: 0; transform: scale(.4); } 60% { opacity: 1; } to { opacity: .8; transform: scale(1); } }
+.lp-veil.out .lp-veil-wave { clip-path: circle(150vmax at var(--x) var(--y)); animation: none; }
+.lp-veil.out { animation: lp-veil-out .6s cubic-bezier(.4, 0, .2, 1) forwards; }
+.lp-veil.out .lp-veil-glow { opacity: .8; animation: lp-veil-glow-out .6s ease-in forwards; }
+@keyframes lp-veil-out { 0% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes lp-veil-glow-out { from { opacity: .8; transform: scale(1); } to { opacity: 0; transform: scale(1.6); } }
 
 @media (prefers-reduced-motion: reduce) {
   .lp { scroll-behavior: auto; }
