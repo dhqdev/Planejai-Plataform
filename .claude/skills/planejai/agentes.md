@@ -34,6 +34,7 @@ Cada item tem teste; rode `npm test` depois de mexer em `orchestrator.ts`, `runn
 - Trava de honestidade (`agent/claims.ts`, `CLAIMS`): resposta que diz anotei, apaguei, agendei, salvei, mandei, convidei ou gerei o link sem a ferramenta certa ter rodado ganha uma rodada para fazer, senão vira "nada foi feito". Pendência esperando o sim não conta como feita (`runner.ts` ignora `needs_confirmation`).
 - Teste chamando a ferramenta direto: passe `{ ...ctx, approvedAction: true }`.
 - Nova tentativa da fila (erro passageiro do LLM) só refaz a rodada se nenhuma ferramenta com efeito rodou (`sideEffectsDone` em `orchestrator.ts`). Ferramenta nova só de leitura: confira se o nome cai em `NO_SIDE_EFFECT`.
+- Lembrete, recado e automação (trigger proativo) processam só as linhas `role = 'event'`; mensagem da pessoa que chegou junto fica para o job `conversation.process` dela, com reação, limites e o "sim".
 - O worker processa com `wait: false`: conversa ocupada volta para a fila em 5 s em vez de prender uma vaga.
 
 ## Memória curta, retenção e mídia

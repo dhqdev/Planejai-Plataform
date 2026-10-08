@@ -222,6 +222,20 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     expect(ex.status).toBe("partial");
   });
 
+  it("lembrete que dispara junto do 'sim' da pessoa não engole a mensagem dela", async () => {
+    await db.query(
+      "INSERT INTO pending_actions (conversation_id, user_id, tool, agent, args, summary) VALUES ($1, $2, 'send_to_contact', 'cto', $3, 'Mandar para Giovani Silva: \"Sim junto do lembrete\"')",
+      [davidConv, david.id, JSON.stringify({ contact: "giovani", message: "Sim junto do lembrete" })],
+    );
+    const sim = await db.one("INSERT INTO messages (conversation_id, role, content, external_id, meta) VALUES ($1, 'user', 'sim', $2, $3) RETURNING id", [davidConv, `d${++seq}`, { kind: "text" }]);
+    await mod.processConversation(davidConv, { trigger: "reminder", event: "Lembrete agendado disparou agora. O que lembrar: beber água", channel: new channels.PlaygroundChannel() });
+    expect(await db.one("SELECT processed FROM messages WHERE id = $1", [sim.id])).toEqual({ processed: false });
+    expect(lastTexts(3).some((t) => t.includes("Sim junto do lembrete"))).toBe(false);
+    // o job da própria pessoa: o "sim" executa a pendência
+    await mod.processConversation(davidConv, { trigger: "message", channel: new channels.PlaygroundChannel() });
+    expect(lastTexts(3).some((t) => t.includes("Sim junto do lembrete"))).toBe(true);
+  });
+
   it("cadastro no painel só com convite, e o convite conta para quem convidou", async () => {
     const { buildServer } = await import("../src/api/server.js");
     const app = await buildServer();

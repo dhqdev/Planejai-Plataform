@@ -148,13 +148,17 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
   if (opts.event) {
     await query("INSERT INTO messages (conversation_id, role, content, processed) VALUES ($1, 'event', $2, false)", [conversationId, opts.event]);
   }
-  let pending = await many("SELECT * FROM messages WHERE conversation_id = $1 AND processed = false ORDER BY id", [conversationId]);
+  // lembrete e recado: a pessoa não perguntou nada agora (sem reação, sem "já vou ver")
+  const proactive = opts.trigger === "reminder" || opts.trigger === "errand";
+  // proativo só pega os eventos: mensagem da pessoa que chegou junto fica para o job dela (reação, limites e o "sim")
+  let pending = await many(
+    `SELECT * FROM messages WHERE conversation_id = $1 AND processed = false ${proactive ? "AND role = 'event'" : ""} ORDER BY id`,
+    [conversationId],
+  );
   if (!pending.length) return { executionId: null, bubbles: [], outbox: new Outbox() };
 
   const channel = opts.channel ?? getChannel(conversation.channel);
   const settings = await getSettings();
-  // lembrete e recado: a pessoa não perguntou nada agora (sem reação, sem "já vou ver")
-  const proactive = opts.trigger === "reminder" || opts.trigger === "errand";
 
   // Enxurrada: as mais antigas ficam registradas, mas só as últimas MAX_BATCH vão para o agente
   if (pending.length > MAX_BATCH) {
