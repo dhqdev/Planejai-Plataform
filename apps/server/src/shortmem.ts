@@ -128,16 +128,19 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
   }
 }
 
-export async function cacheSet(key: string, value: unknown, ttlSeconds: number) {
+/** Guarda no cache; devolve false quando não deu (sem Redis, grande demais ou erro). */
+export async function cacheSet(key: string, value: unknown, ttlSeconds: number, maxBytes = 512_000): Promise<boolean> {
   const r = cacheRedis();
-  if (!r) return;
+  if (!r) return false;
   try {
     const raw = JSON.stringify(value);
-    if (raw.length > 512_000) return; // nada gigante no Redis
+    if (raw.length > maxBytes) return false; // nada gigante no Redis
     await r.set(CACHE_PREFIX + key, raw, "EX", Math.max(1, Math.round(ttlSeconds)));
     void r.incr("pj:stats:cache_writes").catch(() => {});
+    return true;
   } catch {
     /* sem cache, segue */
+    return false;
   }
 }
 

@@ -39,6 +39,9 @@ function fakeOpenRouter(body: any) {
     const userText = String(body.messages.findLast((m: any) => m.role === "user")?.content ?? "");
     if (last.role === "tool") return completion("Feito!");
     if (userText.includes("convida o Giovani")) return completion(null, [call("invite_person", { name: "Giovani Silva", phone: "(19) 92222-3333", confirmed_by_user: true })]);
+    if (userText.includes("libera minhas finanças")) return completion(null, [call("share_screen", { contact: "giovani", screen: "finance", allow: true })]);
+    if (userText.includes("tira o Giovani")) return completion(null, [call("share_screen", { contact: "giovani", screen: "finance", allow: false })]);
+    if (userText.includes("Lembrete: mandar pro Giovani")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "Bom dia!" })]);
     if (userText.includes("manda esse look")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "Olha esse look, o que acha?", attach_photo: true })]);
     return completion("ok");
   }
@@ -134,20 +137,50 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     expect(await social.inviteStats(david.id)).toEqual({ total: 1, accepted: 1, pending: 0, declined: 0 });
   });
 
-  it("'manda esse look pro Giovani' encaminha a foto com a mensagem", async () => {
+  it("'manda esse look pro Giovani' pergunta antes e, no sim, encaminha a foto com a mensagem", async () => {
     const look = { base64: Buffer.from("foto-do-look").toString("base64"), mimetype: "image/jpeg" };
+    const before = channels.playground.sent.length;
     await say("manda esse look pro Giovani", look);
-    const sent = channels.playground.sent.slice(-2);
+    // nada sai antes do "sim": a pendência guarda a chave da foto (a foto em si fica no Redis)
+    expect(channels.playground.sent.slice(before).some((s) => s.type === "image")).toBe(false);
+    const p = await db.one("SELECT args, summary FROM pending_actions WHERE conversation_id = $1 AND tool = 'send_to_contact' AND status = 'pending'", [davidConv]);
+    expect(p.summary).toBe('Mandar para Giovani Silva: "Olha esse look, o que acha?" com a foto');
+    expect(p.args.photo_key).toMatch(new RegExp(`^pending-photo:${davidConv}:`));
+    await say("sim");
+    const sent = channels.playground.sent.slice(-3);
     // o recado chega com a dica de como responder: a conversa é de ida e volta
-    expect(sent[0]).toMatchObject({
+    expect(sent).toContainEqual({
       type: "text",
       text: "*David Queiroz* te mandou pelo Planejai:\n\nOlha esse look, o que acha?\n\n_Para responder, é só me dizer o que falar pro David._",
     });
-    expect(sent[1]).toMatchObject({ type: "image", image: { base64: look.base64, mimetype: "image/jpeg" } });
+    expect(sent.find((s) => s.type === "image")).toMatchObject({ type: "image", image: { base64: look.base64, mimetype: "image/jpeg" } });
     // o assistente do Giovani fica sabendo, se ele perguntar depois
     const gioConv = await db.one("SELECT c.id FROM conversations c JOIN users u ON u.id = c.user_id WHERE u.phone = '5519922223333'");
     const { recentShort } = await import("../src/shortmem.js");
     expect((await recentShort(gioConv.id, 5))?.some((e) => e.text.includes("Olha esse look"))).toBe(true);
+  });
+
+  it("lembrete que pede para mandar algo a um contato só cria a pendência", async () => {
+    const before = channels.playground.sent.length;
+    await mod.processConversation(davidConv, { trigger: "reminder", event: "Lembrete: mandar pro Giovani um bom dia", channel: new channels.PlaygroundChannel() });
+    expect(channels.playground.sent.slice(before).some((s) => s.text?.includes("Bom dia!"))).toBe(false);
+    expect(await db.one("SELECT status FROM pending_actions WHERE conversation_id = $1 AND tool = 'send_to_contact' ORDER BY id DESC LIMIT 1", [davidConv])).toEqual({ status: "pending" });
+    await say("depois vejo isso"); // não é sim nem não: a pendência cai
+  });
+
+  it("liberar as finanças a um contato pede o sim; tirar o acesso segue direto", async () => {
+    const gio = await db.one("SELECT id FROM users WHERE phone = '5519922223333'");
+    const shared = () => db.one("SELECT 1 AS ok FROM shares WHERE owner_id = $1 AND viewer_id = $2 AND scope = 'finance'", [david.id, gio.id]);
+    await say("libera minhas finanças pro Giovani");
+    expect(await shared()).toBeUndefined();
+    expect(await db.one("SELECT summary FROM pending_actions WHERE conversation_id = $1 AND tool = 'share_screen' AND status = 'pending'", [davidConv])).toEqual({
+      summary: "Liberar as finanças para Giovani Silva ver no painel",
+    });
+    await say("sim");
+    expect(await shared()).toEqual({ ok: 1 });
+    expect(lastTexts(3).some((t) => t.includes("liberou as finanças pra você"))).toBe(true);
+    await say("tira o Giovani das finanças");
+    expect(await shared()).toBeUndefined();
   });
 
   it("cadastro no painel só com convite, e o convite conta para quem convidou", async () => {
