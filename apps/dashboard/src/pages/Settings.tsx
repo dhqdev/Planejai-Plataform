@@ -150,7 +150,7 @@ export function SettingsPage() {
           {num("maxExecutionMinutes", "Tempo máximo por resposta (minutos)", "Perto do fim o time é avisado para responder com o que tem; no limite, tudo é cancelado e a pessoa recebe um aviso. Entre 0,5 e 30.", 0.5)}
           {num("maxToolCalls", "Ações por resposta", "Ferramentas e consultas somando o time todo. Evita loop de pesquisa. Entre 5 e 200.")}
           {num("rateLimitPerMinute", "Mensagens por minuto", "Acima disso o agente junta tudo e responde no máximo uma vez por minuto. Nada se perde.")}
-          {num("dailyMessageLimit", "Mensagens por pessoa em 24h", "Ao passar, avisa uma vez e para de responder até liberar. 0 = sem limite.")}
+          {num("dailyMessageLimit", "Mensagens por pessoa por dia", "Ao passar, avisa uma vez e para de responder até liberar. 0 = sem limite.")}
           {num("dailyCostLimitUsd", "Gasto de IA por pessoa em 24h (US$)", "Soma o custo real do OpenRouter das respostas daquela pessoa. 0 = sem limite.", 0.05)}
           {num("maxMessageChars", "Tamanho máximo de mensagem (caracteres)", "Texto maior é cortado antes de ir para a IA. Documentos têm limite próprio.", 100)}
           <p className="muted" style={{ fontSize: 12 }}>Sempre ligadas: o agente ignora ordens escritas dentro de documentos, páginas e e-mails, não revela instruções nem chaves, pede "sim" antes de pagar ou enviar algo, e nenhuma chave de API sai numa mensagem.</p>

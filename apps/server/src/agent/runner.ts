@@ -188,12 +188,22 @@ export async function runToolLoop(opts: {
     );
     for (const r of results) messages.push({ role: "tool", tool_call_id: r.id, content: r.content.slice(0, 12_000) });
     if (guard?.expired) return { text: "", steps: step, messages, timedOut: true };
-    if (quickOnly && results.every((r) => !r.content.includes('"error"'))) {
+    if (quickOnly && results.every((r) => !failedResult(r.content))) {
       messages.push({ role: "assistant", content: said });
       return { text: said, steps: step, messages };
     }
   }
   return { text: "", steps: maxSteps, messages };
+}
+
+/** Resultado que não deu certo (erro, ok:false, pediu confirmação): pelo campo, não por "error" aparecer no texto. */
+export function failedResult(content: string) {
+  try {
+    const v = JSON.parse(content);
+    return Boolean(v && typeof v === "object" && ("error" in v || v.ok === false || v.needs_confirmation));
+  } catch {
+    return false;
+  }
 }
 
 /** Resultado de ferramenta que o modelo já leu numa rodada anterior volta encurtado. */

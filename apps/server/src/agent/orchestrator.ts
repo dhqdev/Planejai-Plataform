@@ -415,8 +415,9 @@ function limitText(text: string, m: { meta?: any }, max: number) {
 /** Algum limite de 24h da pessoa estourou? Devolve qual, para o log. */
 async function usageLimitHit(userId: string, s: { dailyMessageLimit: number; dailyCostLimitUsd: number }) {
   if (s.dailyMessageLimit > 0) {
-    const r = await one("SELECT COALESCE(SUM(messages), 0)::int AS n FROM usage_daily WHERE user_id = $1 AND day >= current_date - 1", [userId]);
-    if (r.n > s.dailyMessageLimit) return { limite: "mensagens em 24h", usado: r.n, maximo: s.dailyMessageLimit };
+    // usage_daily conta por dia (o ingest soma em current_date); antes somava ontem + hoje e travava antes da hora
+    const r = await one("SELECT COALESCE(SUM(messages), 0)::int AS n FROM usage_daily WHERE user_id = $1 AND day = current_date", [userId]);
+    if (r.n > s.dailyMessageLimit) return { limite: "mensagens hoje", usado: r.n, maximo: s.dailyMessageLimit };
   }
   if (s.dailyCostLimitUsd > 0) {
     const r = await one("SELECT COALESCE(SUM(cost_usd), 0)::float AS c FROM executions WHERE user_id = $1 AND started_at > now() - interval '24 hours'", [userId]);

@@ -275,3 +275,14 @@ describe("nova tentativa da fila", () => {
     expect(sideEffectsDone(new Set(["web_search", "schedule_reminder", "send_to_contact"]))).toEqual(["schedule_reminder", "send_to_contact"]);
   });
 });
+
+describe("humanize", () => {
+  it("faixa vira 'a', conta continua conta, travessão vira vírgula", async () => {
+    const { humanize } = await import("../src/agent/humanize.js");
+    expect(humanize("das 10 - 12h")).toBe("das 10 a 12h");
+    expect(humanize("entrega em 5 - 10 dias")).toBe("entrega em 5 a 10 dias");
+    expect(humanize("100 - 30 = 70")).toBe("100 - 30 = 70");
+    expect(humanize("Ficou ótimo — vou mandar")).toBe("Ficou ótimo, vou mandar");
+    expect(humanize("- pão\n- leite")).toBe("pão\nleite");
+  });
+});
