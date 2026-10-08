@@ -372,12 +372,14 @@ export const addTransaction = defineTool<{
   installments?: number;
   source?: string;
   message_id?: string;
+  item?: number;
 }>({
   name: "add_transaction",
   description:
     "Registra um gasto ou receita da pessoa (ex.: 'gastei 8,20 na padaria', foto de comprovante/nota, Pix, documento de fatura). " +
     "Não precisa pedir confirmação. Para compra parcelada informe o valor TOTAL e installments (cria uma parcela por mês). " +
-    "Passe message_id da mensagem de origem (evita lançar o mesmo comprovante duas vezes).",
+    "Passe message_id da mensagem de origem (evita lançar o mesmo comprovante duas vezes). " +
+    "Foto, print ou lista com vários gastos: uma chamada por item, todas com o mesmo message_id e item=1, 2, 3…",
   parameters: obj(
     {
       kind: { type: "string", enum: ["expense", "income"] },
@@ -389,6 +391,7 @@ export const addTransaction = defineTool<{
       installments: { type: "number", description: "Número de parcelas (padrão 1)" },
       source: { type: "string", enum: ["conversa", "audio", "comprovante", "documento"] },
       message_id: { type: "string" },
+      item: { type: "number", description: "Número do item quando a mesma mensagem traz vários gastos (1, 2, 3…)" },
     },
     ["kind", "amount"],
   ),
@@ -403,14 +406,20 @@ export const addTransaction = defineTool<{
     for (const [i, amount] of parts.entries()) {
       const when = new Date(first);
       when.setMonth(when.getMonth() + i);
-      const ref = args.message_id ? `${args.message_id}:${i}` : null;
+      // vários itens da mesma foto/lista não podem cair na mesma referência (o 2º virava "duplicado")
+      const ref = args.message_id ? `${args.message_id}${args.item ? `#${Math.floor(args.item)}` : ""}:${i}` : null;
       const desc = n > 1 ? `${args.description ?? args.merchant ?? category} (${i + 1}/${n})` : (args.description ?? null);
       const row = await one(
         `INSERT INTO transactions (user_id, kind, amount, category, description, merchant, occurred_at, source, external_ref)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (user_id, external_ref) WHERE external_ref IS NOT NULL DO NOTHING RETURNING id`,
         [ctx.user.id, args.kind, amount, category, desc, args.merchant ?? null, when, args.source ?? "conversa", ref],
       );
-      if (!row) return { ok: true, duplicate: true, note: "Esse comprovante/mensagem já tinha sido lançado; nada foi duplicado." };
+      if (!row)
+        return {
+          ok: true,
+          duplicate: true,
+          note: "Esse comprovante/mensagem já tinha sido lançado; nada foi duplicado. Se for outro item da mesma mensagem, chame de novo com item diferente.",
+        };
       ids.push(row.id);
     }
     const alerts = args.kind !== "expense" ? [] : await budgetAlerts(ctx.user.id, ctx.timezone, category, first);

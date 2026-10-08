@@ -119,7 +119,10 @@ export const SPECIALISTS: AgentDef[] = [
       "Ao anotar, devolva o valor, a categoria e o total do mês na categoria. Você cuida de tudo nas finanças da pessoa: anotar, corrigir (update_transaction), " +
       "apagar (delete_transaction), recategorizar, limites, gráficos e conversar sobre os gastos. Para corrigir ou apagar, ache os ids com list_transactions. " +
       "Apagar vários por filtro só com confirmed_by_user=true. Finanças de um contato só com of_contact e só para ler (se ele compartilhou). " +
-      "Links de pagamento só com confirmed_by_user=true quando o CTO informar que a pessoa confirmou.",
+      "Links de pagamento só com confirmed_by_user=true quando o CTO informar que a pessoa confirmou. " +
+      "Foto ou lista com vários gastos (linhas ITEM:): lance todos, um add_transaction por item com o mesmo message_id e item=1, 2, 3…, e devolva quantos lançou e o total. " +
+      "Pedido com mais de uma parte (ex.: apagar os antigos e lançar os da foto): faça todas; não ter nada para apagar não encerra a tarefa. " +
+      "Seu relatório começa direto pelo resultado, sem prefixo [CTO].",
     tools: [
       finance.addTransaction,
       finance.listTransactions,

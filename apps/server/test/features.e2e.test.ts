@@ -102,6 +102,16 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     const ctx: any = { user, timezone: "America/Sao_Paulo" };
     const again: any = await addTransaction.run({ kind: "expense", amount: 45.9, category: "Alimentação", message_id: String(m.id) }, ctx);
     expect(again.duplicate).toBe(true);
+
+    // vários gastos da mesma foto: cada item entra, e repetir um item não duplica
+    const listMsg = `${m.id}-lista`;
+    const i1: any = await addTransaction.run({ kind: "expense", amount: 12, description: "café", message_id: listMsg, item: 1 }, ctx);
+    const i2: any = await addTransaction.run({ kind: "expense", amount: 30, description: "uber", message_id: listMsg, item: 2 }, ctx);
+    const i2b: any = await addTransaction.run({ kind: "expense", amount: 30, description: "uber", message_id: listMsg, item: 2 }, ctx);
+    expect(i1.duplicate).toBeUndefined();
+    expect(i2.duplicate).toBeUndefined();
+    expect(i2b.duplicate).toBe(true);
+    await db.query("DELETE FROM transactions WHERE id = ANY($1)", [[...i1.ids, ...i2.ids]]);
   });
 
   it("documento é lido localmente e entra resumido no contexto", async () => {

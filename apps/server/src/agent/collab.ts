@@ -97,8 +97,12 @@ export function delegationTool(def: AgentDef): Tool<{ message: string }> {
       return ctx.room.withLock(def.id, async () => {
         const chain = [...ctx.callChain, def.id];
         const { own, all } = await toolsFor(def, chain, ctx);
-        const thread = ctx.room.threads.get(def.id) ?? [{ role: "system", content: await systemFor(def, ctx, own) } as ChatMessage];
-        thread.push({ role: "user", content: `[CTO] ${args.message}${ctx.room.boardText()}` });
+        const known = ctx.room.threads.get(def.id);
+        const thread = known ?? [{ role: "system", content: await systemFor(def, ctx, own) } as ChatMessage];
+        // chegou foto/documento nesta rodada: o especialista vê a mensagem já interpretada, não só o resumo do CTO
+        const withMedia = Boolean(ctx.inboundImages?.length || ctx.inboundFiles?.length);
+        const original = !known && withMedia && ctx.inboundText ? `\n\n[Mensagem da pessoa, com a mídia já descrita]\n${ctx.inboundText}` : "";
+        thread.push({ role: "user", content: `[CTO] ${args.message}${original}${ctx.room.boardText()}` });
         ctx.room.edges.push({ from: ctx.agent, to: def.id });
         if (def.clientAgentId) void query("UPDATE client_agents SET uses = uses + 1 WHERE id = $1", [def.clientAgentId]).catch(() => {});
         const r = await runToolLoop({ agent: def.id, task: def.task ?? `agent:${def.id}`, ctx: { ...ctx, agent: def.id, callChain: chain }, tools: all, maxSteps: 7, messages: thread });

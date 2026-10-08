@@ -288,6 +288,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       guard,
       inboundImages: pending.map((m) => m.inboundImage).filter(Boolean),
       inboundFiles: pending.map((m) => m.inboundFile).filter(Boolean),
+      inboundText: fresh.map((e) => `[msg_id=${e.id}] ${e.text}`).join("\n").slice(0, 6000),
       // lembrete agendado não ganha "já vou ver": a pessoa não perguntou nada agora
       progress: opts.trigger === "reminder" ? undefined : progress,
     };
