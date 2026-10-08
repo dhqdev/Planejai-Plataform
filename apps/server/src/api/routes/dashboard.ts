@@ -10,6 +10,7 @@ import { integrationCallbackRoutes, integrationRoutes } from "./dashboard/integr
 import { inviteRoutes } from "./dashboard/invites.js";
 import { meRoutes } from "./dashboard/me.js";
 import { memoryRoutes } from "./dashboard/memories.js";
+import { resourceRoutes } from "./dashboard/resources.js";
 import { settingsRoutes } from "./dashboard/settings.js";
 import { teamAdminRoutes, teamRoutes } from "./dashboard/team.js";
 import { whatsappRoutes } from "./dashboard/whatsapp.js";
@@ -46,6 +47,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       settingsRoutes(api);
       whatsappRoutes(api);
       billingAdminRoutes(api);
+      resourceRoutes(api);
     });
   });
 }

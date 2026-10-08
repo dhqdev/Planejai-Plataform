@@ -4,6 +4,7 @@ import { migrate } from "./db/migrate.js";
 import { pool } from "./db/pool.js";
 import { startAliveBeat } from "./alive.js";
 import { reencryptStale } from "./integrations/registry.js";
+import { startProcessBeat } from "./resources.js";
 import { stopBoss } from "./queue/boss.js";
 import { startWorker } from "./queue/worker.js";
 import { whatsapp } from "./whatsapp/session.js";
@@ -21,6 +22,8 @@ async function main() {
   if (config.WHATSAPP_PROVIDER === "evolution" && !config.WEBHOOK_SECRET) log.warn("WEBHOOK_SECRET vazio: o webhook da Evolution vai recusar tudo até você configurar");
   if (config.WHATSAPP_PROVIDER === "cloud" && !config.WHATSAPP_CLOUD_APP_SECRET) log.warn("WHATSAPP_CLOUD_APP_SECRET vazio: o webhook da Meta vai recusar tudo até você configurar");
 
+  // foto de memória e CPU deste processo para a tela Servidor (API e worker)
+  startProcessBeat();
   if (config.ROLE === "all" || config.ROLE === "worker") {
     await startWorker(log, config.WORKER_CONCURRENCY);
     startAliveBeat();

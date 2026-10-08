@@ -212,6 +212,11 @@ export async function redisInfo(): Promise<{ enabled: boolean; ok: boolean; keys
   }
 }
 
+/** Clientes do Redis principal e do cache (o mesmo quando não há REDIS_CACHE_URL), para a tela Servidor. */
+export function redisHandles(): { main: Redis | null; cache: Redis | null; separateCache: boolean } {
+  return { main: redis(), cache: config.REDIS_CACHE_URL ? cacheRedis() : null, separateCache: Boolean(config.REDIS_CACHE_URL) };
+}
+
 export async function closeShort() {
   await client?.quit().catch(() => {});
   await cacheClient?.quit().catch(() => {});

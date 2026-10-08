@@ -4,6 +4,7 @@ import { startTelegramPolling } from "../telegram.js";
 import { processConversation, summarizeConversation } from "../agent/orchestrator.js";
 import { one } from "../db/pool.js";
 import { purgeOld } from "../maintenance.js";
+import { snapshotStorage } from "../resources.js";
 import { dailyImprovement } from "../improve.js";
 import { sendInvite } from "../social.js";
 import { checkDueWatches } from "../watches.js";
@@ -60,6 +61,7 @@ export async function startWorker(log: { info: (...a: any[]) => void; error: (..
 
   await boss.work(QUEUES.purge, { batchSize: 1, pollingIntervalSeconds: 30 }, async () => {
     await purgeOld(log);
+    await snapshotStorage().catch((err) => log.error({ err }, "falha na foto diária de armazenamento"));
   });
   // de hora em hora: resume e apaga mensagens com mais de 24h, logs e gravações antigas
   await boss.schedule(QUEUES.purge, "17 * * * *");

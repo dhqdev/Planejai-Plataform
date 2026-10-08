@@ -32,6 +32,7 @@ const load = {
   notifications: () => import("./pages/Notifications"),
   profile: () => import("./pages/Profile"),
   queues: () => import("./pages/Queues"),
+  resources: () => import("./pages/Resources"),
   settings: () => import("./pages/Settings"),
   team: () => import("./pages/Team"),
   watches: () => import("./pages/Watches"),
@@ -72,6 +73,8 @@ const CalendarPage = page(() => load.calendar().then((m) => m.CalendarPage));
 const SettingsPage = page(() => load.settings().then((m) => m.SettingsPage));
 const WatchesPage = page(() => load.watches().then((m) => m.WatchesPage));
 const QueuesPage = page(() => load.queues().then((m) => m.QueuesPage));
+const ServerPage = page(() => load.resources().then((m) => m.ServerPage));
+const StoragePage = page(() => load.resources().then((m) => m.StoragePage));
 const TeamPage = page(() => load.team().then((m) => m.TeamPage));
 const CustomTabPage = page(() => load.dashboard().then((m) => m.CustomTabPage));
 const NotificationsPage = page(() => load.notifications().then((m) => m.NotificationsPage));
@@ -84,6 +87,8 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/notificacoes": load.notifications,
   "/executions": load.executions,
   "/queues": load.queues,
+  "/servidor": load.resources,
+  "/armazenamento": load.resources,
   "/clients": load.clients,
   "/invites": load.invites,
   "/agents": load.agents,
@@ -129,6 +134,7 @@ const GROUPS: { to: string; label: string }[][] = [
   [{ to: "/clients", label: "Clientes" }, { to: "/invites", label: "Convites" }],
   [{ to: "/agents", label: "Agentes" }, { to: "/models", label: "Modelos" }],
   [{ to: "/whatsapp", label: "WhatsApp" }, { to: "/integrations", label: "Integrações" }],
+  [{ to: "/servidor", label: "Servidor" }, { to: "/armazenamento", label: "Armazenamento" }],
   [{ to: "/profile", label: "Minha conta" }, { to: "/memories", label: "O que ele sabe" }],
 ];
 const groupOf = (path: string) => GROUPS.find((g) => g.some((t) => t.to === "/" + (path.split("/")[1] ?? "")));
@@ -154,6 +160,7 @@ const SUPER_NAV: NavItem[] = [
   { to: "/clients", label: "Pessoas", icon: "users", badge: "clients" },
   { to: "/agents", label: "Agentes", icon: "brain" },
   { to: "/whatsapp", label: "Conexões", icon: "plug" },
+  { to: "/servidor", label: "Servidor", icon: "cpu" },
   { to: "/settings", label: "Configurações", icon: "settings", short: "Ajustes" },
   { section: "Conta" },
   { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
@@ -350,6 +357,8 @@ export function App() {
               <Route path="/executions" element={<ExecutionsPage />} />
               <Route path="/executions/:id" element={<ExecutionDetailPage />} />
               <Route path="/queues" element={<QueuesPage />} />
+              <Route path="/servidor" element={<ServerPage />} />
+              <Route path="/armazenamento" element={<StoragePage />} />
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/whatsapp" element={<WhatsAppPage />} />
               <Route path="/agents" element={<AgentsPage />} />
