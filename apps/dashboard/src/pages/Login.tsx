@@ -100,7 +100,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
       </section>
       <section className="auth-form">
         <form className="card" onSubmit={submit}>
-          <div className="auth-logo"><Mochi size={96} crop mood={error ? "error" : busy ? "working" : done ? "finished" : "greeting"} follow /></div>
+          <div className="auth-logo"><Mochi size={64} crop mood={error ? "error" : busy ? "working" : done ? "finished" : "greeting"} follow /></div>
           {challenge ? (
             <>
               <h1>Confirme que é você</h1>

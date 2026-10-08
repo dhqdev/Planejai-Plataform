@@ -1027,7 +1027,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
   .sidebar { padding: 14px 8px; align-items: center; }
   .brand { padding: 4px 0 14px; justify-content: center; }
   .brand > div:not(.brand-logo):not(.mochi-badge), .nav-section, .nav a .label, .nav .count, .sidebar-foot .me > div:not(.avatar):not(.me-actions) { display: none; }
-  .nav-section { display: block; height: 10px; padding: 0; }
+  .nav-section { display: block; height: 1px; margin: 8px 10px; padding: 0; font-size: 0; background: var(--border); }
   .nav a { justify-content: center; width: 44px; height: 40px; padding: 0; }
   .nav a.active::before { left: -8px; }
   .nav a[data-count]::after { content: attr(data-count); position: absolute; top: 3px; right: 3px; min-width: 15px; height: 15px; border-radius: 99px; background: var(--violet); color: var(--on-brand); font-size: 10px; display: grid; place-items: center; padding: 0 4px; }
