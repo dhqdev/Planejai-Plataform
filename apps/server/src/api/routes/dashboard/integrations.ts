@@ -3,7 +3,7 @@ import { config } from "../../../config.js";
 import { internalKey } from "../../../events.js";
 import { googleAuthUrl, googleExchangeCode, googleRedirectUri } from "../../../integrations/google.js";
 import { mercadolivreAuthUrl, mercadolivreExchangeCode } from "../../../integrations/mercadolivre.js";
-import { disconnect, getDef, isConnected, listIntegrations, rawCredentials, saveCredentials, setEnabled } from "../../../integrations/registry.js";
+import { disconnect, getCredentials, getDef, isConnected, listIntegrations, rawCredentials, saveCredentials, setEnabled } from "../../../integrations/registry.js";
 import { setupTelegram } from "../../../telegram.js";
 import { isOauthState, newOauthState } from "./shared.js";
 
@@ -45,7 +45,8 @@ export function integrationRoutes(api: FastifyInstance) {
     const def = getDef(req.params.id);
     if (!def) return reply.code(404).send({ error: "integração desconhecida" });
     const creds: Record<string, string> = {};
-    const current = await rawCredentials(def.id);
+    // o que veio da stack conta como já preenchido (ex.: N8N_URL): basta colar a chave que falta
+    const current = { ...(def.envFallback?.() ?? {}), ...(await rawCredentials(def.id)) };
     for (const f of def.fields) {
       const v = req.body?.[f.key];
       // campo de senha vazio no formulário = manter o valor salvo
@@ -91,7 +92,8 @@ export function integrationRoutes(api: FastifyInstance) {
     if (!(await isConnected(def.id))) return reply.code(400).send({ error: "Não conectada" });
     if (!def.test) return { ok: true, message: "Conectada (sem teste automático)" };
     try {
-      return { ok: true, message: await def.test(await rawCredentials(def.id)) };
+      // mesmas credenciais que as ferramentas usam (stack + tela)
+      return { ok: true, message: await def.test((await getCredentials(def.id))!) };
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }

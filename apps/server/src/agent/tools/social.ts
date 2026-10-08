@@ -1,4 +1,5 @@
 import { createInvite, displayName, findContact, inviteStats, listContacts, notifyUser, relayText } from "../../social.js";
+import { SCOPE_LABEL, SHARE_SCOPES, setShare, type ShareScope } from "../../sharing.js";
 import { cancelWatch, createWatch, listWatches } from "../../watches.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
@@ -127,5 +128,34 @@ export const watchCancel = defineTool<{ id: string }>({
   parameters: obj({ id: { type: "string" } }, ["id"]),
   async run(args, ctx) {
     return { ok: await cancelWatch(args.id, ctx.user.id) };
+  },
+});
+
+export const shareScreen = defineTool<{ contact: string; screen: ShareScope; allow: boolean }>({
+  name: "share_screen",
+  description:
+    "Finanças e Agenda de cada pessoa são particulares. Use quando ela pedir para deixar um contato ver (ou parar de ver) uma delas " +
+    "(ex.: 'deixa a Ana ver minhas finanças'). Só vale para contatos (quem aceitou convite). Ver é só leitura; o contato é avisado.",
+  parameters: obj(
+    {
+      contact: { type: "string", description: "Nome do contato" },
+      screen: { type: "string", enum: SHARE_SCOPES },
+      allow: { type: "boolean", description: "true = liberar, false = tirar o acesso" },
+    },
+    ["contact", "screen", "allow"],
+  ),
+  async run(args, ctx) {
+    const found = await findContact(ctx.user.id, args.contact);
+    if (found.length !== 1) {
+      return found.length
+        ? { error: "Mais de um contato com esse nome; pergunte qual.", options: found.map((c) => c.name) }
+        : { error: `${args.contact} não é contato no Planejai. Só dá para compartilhar com quem aceitou um convite.`, contacts: (await listContacts(ctx.user.id)).map((c) => c.name) };
+    }
+    const c = found[0]!;
+    await setShare(ctx.user.id, c.id, args.screen, args.allow);
+    const what = args.screen === "finance" ? "as finanças" : "a agenda";
+    const who = displayName(ctx.user as any).split(" ")[0];
+    await notifyUser(c.id, args.allow ? `${who} liberou ${what} pra você ver no painel do Planejai.` : `${who} parou de compartilhar ${what} com você.`);
+    return { ok: true, contact: c.name, screen: SCOPE_LABEL[args.screen], allowed: args.allow };
   },
 });

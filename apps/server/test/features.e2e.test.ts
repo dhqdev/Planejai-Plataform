@@ -178,6 +178,36 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(tx.n).toBe(1);
   });
 
+  it("o Financeiro tem controle total: lista com filtro, corrige, recategoriza e apaga (em lote só com confirmação)", async () => {
+    const fin = await import("../src/agent/tools/finance.js");
+    const leo = await db.one("INSERT INTO users (phone, name, status) VALUES ('5519955556666', 'Leo', 'active') RETURNING *");
+    const ctx: any = { user: leo, timezone: "America/Sao_Paulo" };
+    for (const [amount, description] of [[81, "padaria"], [30, "uber casa"], [25, "uber trabalho"]] as const) await fin.addTransaction.run({ kind: "expense", amount, description }, ctx);
+    const ubers: any = await fin.listTransactions.run({ search: "uber" }, ctx);
+    expect(ubers.count).toBe(2);
+    const bread: any = await fin.listTransactions.run({ search: "padaria" }, ctx);
+    // "era 18 e não 81"
+    const fixed: any = await fin.updateTransaction.run({ ids: [bread.items[0].id], amount: 18 }, ctx);
+    expect(fixed).toMatchObject({ ok: true, updated: 1 });
+    expect(fixed.items[0].amount).toBe("R$ 18,00");
+    // recategoriza os dois de uma vez
+    const moved: any = await fin.updateTransaction.run({ ids: ubers.items.map((i: any) => i.id), category: "Lazer" }, ctx);
+    expect(moved.updated).toBe(2);
+    // outra pessoa não mexe nos lançamentos do Leo
+    const other: any = { user: { id: (await db.one("SELECT id FROM users WHERE name = 'Bia'")).id }, timezone: "America/Sao_Paulo" };
+    expect(await fin.updateTransaction.run({ ids: [bread.items[0].id], amount: 1 }, other)).toMatchObject({ ok: false });
+    expect(await fin.deleteTransaction.run({ ids: [bread.items[0].id] }, other)).toMatchObject({ ok: false, deleted: 0 });
+    // apagar por filtro pede confirmação e mostra quantos/total
+    const ask: any = await fin.deleteTransaction.run({ search: "uber" }, ctx);
+    expect(ask).toMatchObject({ needs_confirmation: true, count: 2, total: "R$ 55,00" });
+    expect((await fin.listTransactions.run({}, ctx) as any).count).toBe(3);
+    expect(await fin.deleteTransaction.run({ search: "uber", confirmed_by_user: true }, ctx)).toMatchObject({ ok: true, deleted: 2 });
+    // um item apontado sai sem confirmação
+    expect(await fin.deleteTransaction.run({ id: bread.items[0].id }, ctx)).toMatchObject({ ok: true, deleted: 1 });
+    // finanças de um contato só se ele compartilhou
+    expect(await fin.financeSummary.run({ of_contact: "Bia" }, ctx)).toMatchObject({ error: expect.stringContaining("não é contato") });
+  });
+
   it("categoriza sozinho, avisa limite de gastos e desenha gráfico sem IA", async () => {
     const fin = await import("../src/agent/tools/finance.js");
     const { Outbox } = await import("../src/agent/tools/types.js");
@@ -221,7 +251,7 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(mems.map((m: any) => m.content)).not.toContain("Precisa ligar para o dentista hoje");
   });
 
-  it("painéis: cadastro vira admin com acesso só aos próprios dados; super admin vê tudo", async () => {
+  it("painéis: cadastro vira admin com acesso só aos próprios dados; finanças e agenda são particulares até a pessoa compartilhar", async () => {
     const { buildServer } = await import("../src/api/server.js");
     const app = await buildServer();
     const cookieOf = (res: any) => String(res.headers["set-cookie"]).split(";")[0]!;
@@ -258,11 +288,34 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     await app.inject({ method: "PATCH", url: `/api/accounts/${ana.id}`, headers: { cookie: sup }, payload: { role: "superadmin" } });
     expect((await app.inject({ method: "GET", url: "/api/auth/me", headers: { cookie: adm } })).json()).toMatchObject({ role: "admin" });
     expect((await app.inject({ method: "GET", url: "/api/me/tabs", headers: { cookie: adm } })).json()).toMatchObject({ all: false, modules: [] });
-    for (const url of ["/api/integrations", "/api/settings", "/api/executions", "/api/executions/summary", "/api/people", "/api/accounts", "/api/overview", "/api/queues", "/api/costs", `/api/clients/${ana.user_id ?? ana.id}/usage`]) {
+    for (const url of ["/api/integrations", "/api/settings", "/api/executions", "/api/executions/summary", "/api/accounts", "/api/overview", "/api/queues", "/api/costs", `/api/clients/${ana.user_id ?? ana.id}/usage`]) {
       expect((await app.inject({ method: "GET", url, headers: { cookie: adm } })).statusCode).toBe(403);
     }
+    // particular: nem o dono vê as finanças da Bia, nem pedindo por ?user=
+    const bia = await db.one("SELECT id FROM users WHERE name = 'Bia'");
     const supFin = (await app.inject({ method: "GET", url: "/api/finance?month=2026-03", headers: { cookie: sup } })).json();
-    expect(supFin.transactions.length).toBe(4);
+    expect(supFin.transactions).toEqual([]);
+    expect((await app.inject({ method: "GET", url: `/api/finance?month=2026-03&user=${bia.id}`, headers: { cookie: adm } })).statusCode).toBe(403);
+    // compartilhar só com contato; depois disso a Ana vê as finanças da Bia (só leitura), mas não a agenda
+    const { setShare } = await import("../src/sharing.js");
+    await expect(setShare(bia.id, user.id, "finance", true)).rejects.toThrow(/contato/);
+    await db.query("INSERT INTO contacts (user_id, contact_id) VALUES ($1, $2), ($2, $1)", [bia.id, user.id]);
+    await setShare(bia.id, user.id, "finance", true);
+    const shares = (await app.inject({ method: "GET", url: "/api/shares", headers: { cookie: adm } })).json();
+    expect(shares.withMe).toMatchObject([{ id: bia.id, scopes: ["finance"] }]);
+    expect(shares.mine).toMatchObject([{ id: bia.id, scopes: [] }]);
+    const seen = (await app.inject({ method: "GET", url: `/api/finance?month=2026-03&user=${bia.id}`, headers: { cookie: adm } })).json();
+    expect(seen).toMatchObject({ readonly: true });
+    expect(seen.transactions.length).toBe(4);
+    const range0 = `from=${new Date().toISOString()}&to=${new Date(Date.now() + 7 * 86400_000).toISOString()}`;
+    expect((await app.inject({ method: "GET", url: `/api/calendar?${range0}&user=${bia.id}`, headers: { cookie: adm } })).statusCode).toBe(403);
+    // só leitura: apagar um lançamento da Bia não funciona
+    const del = await app.inject({ method: "DELETE", url: `/api/finance/${seen.transactions[0].id}`, headers: { cookie: adm } });
+    expect(del.json()).toEqual({ ok: false });
+    // a Ana libera a agenda dela para a Bia pelo painel
+    const put = await app.inject({ method: "PUT", url: "/api/shares", headers: { cookie: adm }, payload: { contact: bia.id, scope: "agenda", on: true } });
+    expect(put.json()).toEqual({ ok: true });
+    expect(await db.one("SELECT count(*)::int AS n FROM shares WHERE owner_id = $1 AND viewer_id = $2 AND scope = 'agenda'", [user.id, bia.id])).toEqual({ n: 1 });
     // agenda: a admin cria um lembrete pelo painel, arrasta para outro horário e vê no calendário
     const at = new Date(Date.now() + 2 * 86400_000);
     const local = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" }).format(at).replace(" ", "T");

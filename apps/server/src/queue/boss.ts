@@ -45,6 +45,7 @@ export const QUEUE_LABELS: Record<string, string> = {
   [QUEUES.invite]: "Convites",
   [QUEUES.watch]: "De olho",
   [QUEUES.improve]: "Reunião noturna",
+  [QUEUES.outbound]: "Envios",
 };
 
 /**

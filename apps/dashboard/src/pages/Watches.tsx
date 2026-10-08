@@ -4,7 +4,7 @@ import { useApi } from "../hooks";
 import { Icon } from "../icons";
 
 /** O que o agente está vigiando sozinho (preço e notícias) e avisa no WhatsApp quando muda. */
-export function WatchesPage({ isSuper }: { isSuper: boolean }) {
+export function WatchesPage() {
   const { data, error, reload } = useApi<any[]>("/api/watches", { poll: 60000 });
   if (!data) return error ? <div className="page"><ErrorBox error={error} /></div> : <Loading />;
   const active = data.filter((w) => w.active);
@@ -21,7 +21,6 @@ export function WatchesPage({ isSuper }: { isSuper: boolean }) {
           {w.best?.price ? ` · melhor até agora ${brl(w.best.price)}` : ""}
           {` · a cada ${w.every_hours}h`}
           {w.notified ? ` · ${w.notified} aviso(s)` : ""}
-          {isSuper && w.user_name ? ` · ${w.user_name}` : ""}
         </div>
       </div>
       <span className="muted hide-phone" style={{ fontSize: 12 }}>{w.active ? `próxima ${when(w.next_check_at)}` : `criado ${ago(w.created_at)}`}</span>

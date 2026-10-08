@@ -24,6 +24,8 @@ export interface IntegrationDef {
   /** credenciais que podem vir do .env quando não configuradas no dashboard */
   envFallback?: () => Record<string, string> | null;
   test?: (creds: Record<string, string>) => Promise<string>;
+  /** conferência rápida para a lista (sem custo): o serviço responde? falta algo? */
+  health?: (creds: Record<string, string>) => Promise<{ ok: boolean; text: string }>;
 }
 
 async function okJson(res: Response, label: string) {
@@ -390,8 +392,24 @@ export const INTEGRATIONS: IntegrationDef[] = [
             events_url: config.N8N_EVENTS_URL || `${config.N8N_URL.replace(/\/$/, "")}/webhook/planejai-eventos`,
           }
         : null,
+    health: async (c) => {
+      const base = c.base_url.replace(/\/$/, "");
+      try {
+        const res = await fetch(`${base}/healthz`, { signal: timed(4000) });
+        if (!res.ok) return { ok: false, text: `O n8n em ${base} respondeu ${res.status}` };
+      } catch {
+        return { ok: false, text: `O n8n em ${base} não responde. Confira se a stack do n8n está na mesma rede (apelido n8n-interno).` };
+      }
+      return c.api_key
+        ? { ok: true, text: "Eventos, disparos e criação de fluxos ligados." }
+        : { ok: true, text: "Eventos e disparos ligados. Falta a chave da API (N8N_API_KEY) para o assistente listar e criar fluxos." };
+    },
     test: async (c) => {
-      if (!c.api_key) return "Ligado pela stack (eventos e disparos). Para listar e criar fluxos, ponha N8N_API_KEY.";
+      if (!c.api_key) {
+        const h = await getDef("n8n")!.health!(c);
+        if (!h.ok) throw new Error(h.text);
+        return `n8n respondeu. ${h.text}`;
+      }
       const res = await fetch(`${c.base_url.replace(/\/$/, "")}/api/v1/workflows?limit=250`, { headers: { "X-N8N-API-KEY": c.api_key, accept: "application/json" }, signal: timed() });
       const json = await okJson(res, "n8n");
       const list = json.data ?? [];
@@ -437,6 +455,7 @@ export async function saveCredentials(id: string, creds: Record<string, string>,
     [id, encryptJson(next)],
   );
   cache.delete(id);
+  healthCache.delete(id);
 }
 
 export async function rawCredentials(id: string): Promise<Record<string, string>> {
@@ -452,6 +471,20 @@ export async function disconnect(id: string) {
 export async function setEnabled(id: string, enabled: boolean) {
   await query("UPDATE integrations SET enabled = $2, updated_at = now() WHERE id = $1", [id, enabled]);
   cache.delete(id);
+}
+
+const healthCache = new Map<string, { at: number; value: { ok: boolean; text: string } }>();
+
+/** Estado real de uma integração conectada (guardado 60s para a tela não martelar o serviço). */
+async function healthOf(def: IntegrationDef) {
+  if (!def.health) return null;
+  const hit = healthCache.get(def.id);
+  if (hit && Date.now() - hit.at < 60_000) return hit.value;
+  const creds = await getCredentials(def.id);
+  if (!creds) return null;
+  const value = await def.health(creds).catch((err) => ({ ok: false, text: (err as Error).message }));
+  healthCache.set(def.id, { at: Date.now(), value });
+  return value;
 }
 
 export async function listIntegrations() {
@@ -474,6 +507,7 @@ export async function listIntegrations() {
         connected,
         enabled: r?.enabled ?? true,
         source: r?.has_creds ? "dashboard" : connected ? "env" : null,
+        health: connected ? await healthOf(d) : null,
         connectedAt: r?.connected_at ?? null,
         // OAuth com client configurado mas ainda sem autorização
         pendingOAuth: Boolean(d.oauth && r?.has_creds && !connected),

@@ -109,7 +109,9 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
   const [hidden, setHidden] = useState<Kind[]>(loadHidden);
   const [search, setSearch] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
-  const people = useApi<any[]>(isSuper ? "/api/people" : null);
+  // particular: a agenda de um contato só aparece se ele compartilhou (e só para ver)
+  const shared = useApi<{ withMe: { id: string; name: string; scopes: string[] }[] }>("/api/shares");
+  const owners = (shared.data?.withMe ?? []).filter((p) => p.scopes.includes("agenda"));
 
   useEffect(() => {
     const mq = matchMedia("(max-width: 767px)");
@@ -143,7 +145,9 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
   }, [view, cursor]);
 
   const path = `/api/calendar?from=${range.from.toISOString()}&to=${range.to.toISOString()}${person ? `&user=${person}` : ""}`;
-  const { data, error, reload } = useApi<{ events: Ev[] }>(path, { poll: 30000 });
+  const { data, error, reload } = useApi<{ events: Ev[]; readonly?: boolean }>(path, { poll: 30000 });
+  const readonly = Boolean(data?.readonly);
+  const create = (d: Date) => { if (!readonly) setCreating(d); };
   const events = useMemo(() => {
     const years = new Set([range.from.getFullYear(), addDays(range.to, -1).getFullYear()]);
     const hol = [...years].flatMap(holidays).filter((h) => {
@@ -196,7 +200,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
 
   // arrastar um lembrete para outro dia/horário
   const move = async (ev: Ev, to: Date) => {
-    if (ev.kind !== "reminder" || ev.recurring || !ev.reminderId) return;
+    if (readonly || ev.kind !== "reminder" || ev.recurring || !ev.reminderId) return;
     try {
       await api(`/api/reminders/${ev.reminderId}`, { method: "PATCH", json: { at: to.toISOString() } });
       haptic(12);
@@ -233,18 +237,18 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
     <div className={`page cal-page fit ${side && !phone ? "with-side" : ""}`}>
       {!phone && side && (
         <aside className="cal-side">
-          <button className="cal-create" onClick={() => setCreating(withTime(selected))}>
+          <button className="cal-create" onClick={() => create(withTime(selected))}>
             <Icon name="plus" size={20} /> Criar
           </button>
           <MiniMonth selected={selected} onPick={pick} />
           <CalendarList title="Minhas agendas" items={calendars.filter((c) => c.group === "mine")} hidden={hidden} onToggle={toggleCal} />
           <CalendarList title="Outras agendas" items={calendars.filter((c) => c.group === "other")} hidden={hidden} onToggle={toggleCal} />
-          {isSuper && (
+          {owners.length > 0 && (
             <div className="cal-side-block">
-              <h4>Pessoa</h4>
-              <select className="select" aria-label="Pessoa" value={person} onChange={(e) => setPerson(e.target.value)}>
-                <option value="">Todas as pessoas</option>
-                {(people.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name ?? `+${p.phone}`}</option>)}
+              <h4>De quem</h4>
+              <select className="select" aria-label="De quem" value={person} onChange={(e) => setPerson(e.target.value)}>
+                <option value="">Minha agenda</option>
+                {owners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
           )}
@@ -279,7 +283,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
               {VIEWS.slice().reverse().map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
             {!side && (
-              <button className="btn btn-brand" onClick={() => setCreating(withTime(selected))}><Icon name="plus" size={16} /> Criar</button>
+              <button className="btn btn-brand" onClick={() => create(withTime(selected))}><Icon name="plus" size={16} /> Criar</button>
             )}
           </div>
         )}
@@ -291,10 +295,10 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
               <div className="card cal-picker">
                 <MiniMonth selected={selected} onPick={pick} />
                 <CalendarList title="Agendas" items={calendars} hidden={hidden} onToggle={toggleCal} />
-                {isSuper && (
-                  <select className="select" aria-label="Pessoa" style={{ marginTop: 10 }} value={person} onChange={(e) => setPerson(e.target.value)}>
-                    <option value="">Todas as pessoas</option>
-                    {(people.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name ?? `+${p.phone}`}</option>)}
+                {owners.length > 0 && (
+                  <select className="select" aria-label="De quem" style={{ marginTop: 10 }} value={person} onChange={(e) => setPerson(e.target.value)}>
+                    <option value="">Minha agenda</option>
+                    {owners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 )}
               </div>
@@ -327,20 +331,20 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
                   setView("day");
                 }
               }}
-              onCreate={(d) => setCreating(withTime(d))}
+              onCreate={(d) => create(withTime(d))}
               onOpen={setOpen}
               onMove={(ev, d) => { const s = new Date(ev.start); d.setHours(s.getHours(), s.getMinutes()); void move(ev, d); }}
             />
           )}
           {(view === "week" || view === "day") && (
-            <WeekView from={range.from} days={view === "day" ? 1 : 7} byDay={byDay} onOpen={setOpen} onCreate={(d) => setCreating(d)} onMove={move} />
+            <WeekView from={range.from} days={view === "day" ? 1 : 7} byDay={byDay} onOpen={setOpen} onCreate={(d) => create(d)} onMove={move} />
           )}
           {view === "list" && <ListView from={range.from} byDay={byDay} onOpen={setOpen} />}
         </div>
       </div>
 
       {phone && createPortal(
-        <button className="cal-fab" aria-label="Novo lembrete" onClick={() => { haptic(10); setCreating(withTime(selected)); }}>
+        <button className="cal-fab" aria-label="Novo lembrete" onClick={() => { haptic(10); create(withTime(selected)); }}>
           <Icon name="plus" size={24} />
         </button>,
         document.body,
@@ -350,9 +354,6 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
       {creating && (
         <NewReminder
           at={creating}
-          isSuper={isSuper}
-          people={people.data ?? []}
-          defaultPerson={person}
           onClose={(saved) => { setCreating(null); if (saved) void reload(); }}
         />
       )}
@@ -734,15 +735,15 @@ function EventDetail({ ev, onClose, onChanged }: { ev: Ev; onClose: () => void; 
   );
 }
 
-function NewReminder({ at, isSuper, people, defaultPerson, onClose }: { at: Date; isSuper: boolean; people: any[]; defaultPerson: string; onClose: (saved: boolean) => void }) {
-  const [f, setF] = useState({ intent: "", date: key(at), time: hhmm(at), user: defaultPerson });
+function NewReminder({ at, onClose }: { at: Date; onClose: (saved: boolean) => void }) {
+  const [f, setF] = useState({ intent: "", date: key(at), time: hhmm(at) });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true);
     setError(null);
     try {
-      await api("/api/reminders", { method: "POST", json: { intent: f.intent, at: `${f.date}T${f.time}`, user: f.user || undefined } });
+      await api("/api/reminders", { method: "POST", json: { intent: f.intent, at: `${f.date}T${f.time}` } });
       haptic(12);
       onClose(true);
     } catch (e) {
@@ -755,7 +756,7 @@ function NewReminder({ at, isSuper, people, defaultPerson, onClose }: { at: Date
       title="Novo lembrete"
       icon={<Icon name="bell" />}
       onClose={() => onClose(false)}
-      footer={<button className="btn btn-primary" disabled={busy || !f.intent.trim() || (isSuper && !f.user)} onClick={save}>{busy ? "Salvando…" : "Salvar"}</button>}
+      footer={<button className="btn btn-primary" disabled={busy || !f.intent.trim()} onClick={save}>{busy ? "Salvando…" : "Salvar"}</button>}
     >
       <ErrorBox error={error} />
       <div className="field">
@@ -766,15 +767,6 @@ function NewReminder({ at, isSuper, people, defaultPerson, onClose }: { at: Date
         <div className="field"><label htmlFor="rm-date">Dia</label><input id="rm-date" name="date" className="input" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></div>
         <div className="field"><label htmlFor="rm-time">Hora</label><input id="rm-time" name="time" className="input" type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} /></div>
       </div>
-      {isSuper && (
-        <div className="field">
-          <label htmlFor="rm-user">Para quem</label>
-          <select id="rm-user" className="select" value={f.user} onChange={(e) => setF({ ...f, user: e.target.value })}>
-            <option value="">Escolha a pessoa</option>
-            {people.map((p) => <option key={p.id} value={p.id}>{p.name ?? `+${p.phone}`}</option>)}
-          </select>
-        </div>
-      )}
       <p className="muted" style={{ fontSize: 13, margin: 0 }}>Na hora, o assistente manda a mensagem no WhatsApp do jeito dele, com o contexto.</p>
     </Modal>
   );

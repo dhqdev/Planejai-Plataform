@@ -4,7 +4,6 @@ import { api } from "../api";
 import { CopyField, ErrorBox, IntegrationIcon, Loading, Modal, PageHead } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
-import { Connections } from "../Connections";
 
 export function IntegrationsPage() {
   const { data, error, reload } = useApi<any>("/api/integrations");
@@ -27,10 +26,9 @@ export function IntegrationsPage() {
     <div className="page">
       <PageHead title="Integrações" subtitle="Ferramentas que o seu agente pode usar. Credenciais ficam criptografadas no seu banco." />
       {notice && <div className={notice.ok ? "ok-box" : "error-box"} style={{ marginBottom: 14 }}>{notice.text}</div>}
-      <div style={{ marginBottom: 20 }}><Connections owner /></div>
       {categories.map((cat) => (
         <div key={cat} style={{ marginBottom: 20 }}>
-          <h3 className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".06em" }}>{cat}</h3>
+          <h3 className="muted" style={{ fontSize: 13, fontWeight: 600 }}>{cat}</h3>
           <div className="card">
             {data.integrations
               .filter((i: any) => i.category === cat)
@@ -40,11 +38,13 @@ export function IntegrationsPage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="row">
                       <span className="name">{i.name}</span>
-                      {i.connected && <span className="badge badge-ok"><span className="dot dot-ok" />Conectado{i.source === "env" ? " (via .env)" : ""}</span>}
+                      {i.connected && (i.health?.ok === false
+                        ? <span className="badge badge-warn">Sem resposta</span>
+                        : <span className="badge badge-ok"><span className="dot dot-ok" />Conectado{i.source === "env" ? " pela stack" : ""}</span>)}
                       {i.pendingOAuth && <span className="badge badge-warn">Falta autorizar</span>}
                       {!i.enabled && <span className="badge">Desativado</span>}
                     </div>
-                    <div className="desc">{i.description}</div>
+                    <div className="desc">{i.health?.text ?? i.description}</div>
                   </div>
                   <button className={`btn ${i.connected ? "" : "btn-primary"}`} onClick={() => setOpen(i)}>
                     {i.connected ? "Gerenciar" : "Conectar"}
@@ -110,6 +110,8 @@ function ConnectModal({ integration: i, onClose }: { integration: any; onClose: 
       }
     >
       <p className="muted" style={{ marginTop: 0 }}>{i.description}</p>
+      {i.health && <div className={i.health.ok ? "ok-box" : "error-box"} style={{ marginBottom: 12 }}>{i.health.text}</div>}
+      {i.source === "env" && <p className="help">Ligado pelas variáveis da stack. O que você salvar aqui completa ou substitui o que veio de lá.</p>}
       {i.oauth && (
         <div className="field">
           <div className="help">

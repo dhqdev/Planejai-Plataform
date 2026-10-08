@@ -116,29 +116,41 @@ type NavLinkItem = { to: string; label: string; icon: string; badge?: string; sh
 type NavItem = { section: string } | NavLinkItem;
 const NO_NAV: NavItem[] = [];
 
-/** Super admin (dono da stack): tudo. Admin (cliente com acesso ao painel): só os próprios dados. */
-const SUPER_NAV: NavItem[] = [
-  { section: "Visão geral" },
-  { to: "/", label: "Painel", icon: "home" },
-  { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
-  { to: "/executions", label: "Execuções", icon: "activity" },
-  { to: "/queues", label: "Filas", icon: "list" },
-  { section: "Pessoas" },
-  { to: "/clients", label: "Clientes", icon: "users", badge: "clients" },
-  { to: "/invites", label: "Convites", icon: "user-plus" },
-  { section: "Agente" },
-  { to: "/agents", label: "Agentes", icon: "brain" },
-  { to: "/whatsapp", label: "WhatsApp", icon: "phone" },
-  { to: "/integrations", label: "Integrações", icon: "plug" },
-  { to: "/models", label: "Modelos", icon: "cpu" },
-  { section: "Dados" },
-  { to: "/finance", label: "Finanças", icon: "wallet" },
+/**
+ * Telas irmãs ficam juntas: um item no menu e abas no topo da tela (ex.: Execuções e Filas).
+ * Assim o menu fica curto e cada grupo responde a uma pergunta só ("o que rodou?", "quem usa?").
+ */
+const GROUPS: { to: string; label: string }[][] = [
+  [{ to: "/executions", label: "Execuções" }, { to: "/queues", label: "Filas" }],
+  [{ to: "/clients", label: "Clientes" }, { to: "/invites", label: "Convites" }],
+  [{ to: "/agents", label: "Agentes" }, { to: "/models", label: "Modelos" }],
+  [{ to: "/whatsapp", label: "WhatsApp" }, { to: "/integrations", label: "Integrações" }],
+  [{ to: "/profile", label: "Minha conta" }, { to: "/memories", label: "O que ele sabe" }],
+];
+const groupOf = (path: string) => GROUPS.find((g) => g.some((t) => t.to === "/" + (path.split("/")[1] ?? "")));
+
+/** Itens de dia a dia: iguais para o dono e para os clientes (cada um vê só os próprios dados). */
+const MY_DAY: NavItem[] = [
+  { to: "/", label: "Início", icon: "home" },
   { to: "/agenda", label: "Agenda", icon: "calendar" },
+  { to: "/finance", label: "Finanças", icon: "wallet" },
   { to: "/watches", label: "Acompanhamentos", icon: "eye", short: "De olho" },
   { to: "/documentos", label: "Documentos", icon: "file" },
-  { to: "/memories", label: "Memórias", icon: "bookmark" },
-  { section: "Sistema" },
-  { to: "/settings", label: "Configurações", icon: "settings" },
+];
+
+/** Super admin (dono da stack): o dia a dia dele e, abaixo, a operação da plataforma. */
+const SUPER_NAV: NavItem[] = [
+  { section: "Meu dia" },
+  ...MY_DAY,
+  { section: "Plataforma" },
+  { to: "/executions", label: "Execuções", icon: "activity" },
+  { to: "/clients", label: "Pessoas", icon: "users", badge: "clients" },
+  { to: "/agents", label: "Agentes", icon: "brain" },
+  { to: "/whatsapp", label: "Conexões", icon: "plug" },
+  { to: "/settings", label: "Configurações", icon: "settings", short: "Ajustes" },
+  { section: "Conta" },
+  { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
+  { to: "/profile", label: "Minha conta", icon: "user" },
 ];
 
 interface AppTabs {
@@ -158,12 +170,8 @@ function adminNav(tabs: AppTabs | null, billing = false): NavItem[] {
     ...(tabs?.custom ?? []).map((t) => ({ to: `/aba/${t.slug}`, label: t.title, icon: t.icon })),
   ];
   return [
-    { section: "Meu Planejai" },
-    { to: "/", label: "Início", icon: "home" },
-    { to: "/agenda", label: "Agenda", icon: "calendar" },
-    { to: "/finance", label: "Finanças", icon: "wallet" },
-    { to: "/watches", label: "Acompanhamentos", icon: "eye", short: "De olho" },
-    { to: "/documentos", label: "Documentos", icon: "file" },
+    { section: "Meu dia" },
+    ...MY_DAY,
     ...(extra.length ? [{ section: "Feito para você" }, ...extra] : []),
     { section: "Conta" },
     { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
@@ -312,6 +320,7 @@ export function App() {
       <main className="main" ref={mainRef}>
         <PullToRefresh target={mainRef} />
         <Suspense fallback={<Loading />}>
+        {isSuper && <SubTabs path={loc.pathname} />}
         <div className="route-fade" key={loc.pathname}>
         <Routes>
           {isSuper ? (
@@ -327,24 +336,22 @@ export function App() {
               <Route path="/settings" element={<SettingsPage />} />
             </>
           ) : (
-            <>
-              <Route path="/profile" element={<ProfilePage me={me} />} />
-              <Route path="/assinatura" element={<BillingPage />} />
-            </>
+            <Route path="/assinatura" element={<BillingPage />} />
           )}
+          <Route path="/profile" element={<ProfilePage me={me} />} />
           <Route path="/notificacoes" element={<NotificationsPage />} />
-          <Route path="/documentos" element={<DocumentsPage isSuper={isSuper} />} />
+          <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/" element={<DashboardPage me={me} theme={theme} onTheme={toggleTheme} />} />
           {has("convites") && <Route path="/invites" element={<InvitesPage isSuper={isSuper} />} />}
           {has("meu_time") && <Route path="/time" element={<TeamPage />} />}
           {(tabs.data?.custom ?? []).map((t) => (
             <Route key={t.slug} path={`/aba/${t.slug}`} element={<CustomTabPage me={me} tab={t} />} />
           ))}
-          <Route path="/watches" element={<WatchesPage isSuper={isSuper} />} />
-          <Route path="/finance" element={<FinancePage isSuper={isSuper} />} />
+          <Route path="/watches" element={<WatchesPage />} />
+          <Route path="/finance" element={<FinancePage />} />
           <Route path="/agenda" element={<CalendarPage isSuper={isSuper} />} />
           <Route path="/reminders" element={<Navigate to="/agenda" replace />} />
-          {has("memorias") && <Route path="/memories" element={<MemoriesPage isSuper={isSuper} />} />}
+          {has("memorias") && <Route path="/memories" element={<MemoriesPage />} />}
           <Route path="*" element={tabs.loading && !isSuper ? <Loading /> : <Navigate to="/" />} />
         </Routes>
         </div>
@@ -364,7 +371,7 @@ export function App() {
         <div className="tabbar-pill">
           <div className="tabbar-scroll" ref={tabsRef}>
             {links.map((t) => (
-              <NavLink key={t.to} to={t.to} end={t.to === "/"} className="tab" onPointerEnter={() => preload(t.to)}>
+              <NavLink key={t.to} to={t.to} end={t.to === "/"} className={({ isActive }) => `tab${isActive || groupOf(loc.pathname)?.[0]?.to === t.to ? " active" : ""}`} onPointerEnter={() => preload(t.to)}>
                 <span className="tab-ico"><Icon name={t.icon} size={21} />{t.badge === "notif" && <UnreadDot className="tab-dot" />}</span>
                 <span className="tab-label">{t.short ?? t.label}</span>
               </NavLink>
@@ -428,10 +435,13 @@ export function App() {
 function titleFor(path: string, items: NavItem[]) {
   const base = "/" + (path.split("/")[1] ?? "");
   const hit = (items.find((i) => "to" in i && i.to === path) ?? items.find((i) => "to" in i && i.to === base)) as { label: string } | undefined;
-  return hit?.label ?? "Planejai";
+  return hit?.label ?? groupOf(path)?.find((t) => t.to === base)?.label ?? "Planejai";
 }
 
 function Nav({ items, isSuper }: { items: NavItem[]; isSuper: boolean }) {
+  const loc = useLocation();
+  // item do grupo fica marcado também nas telas irmãs (Filas acende Execuções)
+  const inGroup = (to: string) => Boolean(groupOf(loc.pathname)?.[0]?.to === to);
   const clients = useApi<any[]>(isSuper ? "/api/clients" : null, { poll: 60000 });
   const pending = (clients.data ?? []).filter((c) => c.status === "pending" || c.account_status === "pending").length;
   return (
@@ -442,7 +452,7 @@ function Nav({ items, isSuper }: { items: NavItem[]; isSuper: boolean }) {
             {item.section}
           </div>
         ) : (
-          <NavLink key={item.to} to={item.to} end={item.to === "/"} title={item.label} onPointerEnter={() => preload(item.to)} data-count={item.badge === "clients" && pending > 0 ? pending : undefined}>
+          <NavLink key={item.to} to={item.to} end={item.to === "/"} className={({ isActive }) => (isActive || inGroup(item.to) ? "active" : "")} title={item.label} onPointerEnter={() => preload(item.to)} data-count={item.badge === "clients" && pending > 0 ? pending : undefined}>
             <Icon name={item.icon} />
             <span className="label">{item.label}</span>
             {item.badge === "clients" && pending > 0 && <span className="count">{pending}</span>}
@@ -451,5 +461,24 @@ function Nav({ items, isSuper }: { items: NavItem[]; isSuper: boolean }) {
         ),
       )}
     </nav>
+  );
+}
+
+/** Abas das telas irmãs (ex.: Execuções | Filas), no topo da tela do grupo. */
+function SubTabs({ path }: { path: string }) {
+  const group = groupOf(path);
+  const nav = useNavigate();
+  if (!group) return null;
+  const base = "/" + (path.split("/")[1] ?? "");
+  return (
+    <div className="subtabs-bar">
+      <div className="subtabs" role="tablist">
+        {group.map((t) => (
+          <button key={t.to} role="tab" aria-selected={t.to === base} className={t.to === base ? "active" : ""} onPointerEnter={() => preload(t.to)} onClick={() => { haptic(5); nav(t.to); }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

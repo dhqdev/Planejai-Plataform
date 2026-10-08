@@ -79,18 +79,3 @@ export function Icon({ name, size = 18, style, className }: { name: string; size
     </svg>
   );
 }
-
-/** Logo do Planejai (robô minimalista). */
-export function Logo({ size = 28 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 512 512" fill="none" aria-label="Planejai" role="img">
-      <line x1="256" y1="86" x2="256" y2="132" stroke="currentColor" strokeWidth="28" strokeLinecap="round" />
-      <circle cx="256" cy="74" r="26" fill="currentColor" />
-      <rect x="104" y="136" width="304" height="230" rx="90" stroke="currentColor" strokeWidth="30" />
-      <circle cx="200" cy="244" r="24" fill="currentColor" />
-      <circle cx="312" cy="244" r="24" fill="currentColor" />
-      <path d="M220 302 Q256 326 292 302" stroke="currentColor" strokeWidth="22" strokeLinecap="round" />
-      <path d="M176 450 v-4 a24 24 0 0 1 24 -24 h112 a24 24 0 0 1 24 24 v4" stroke="currentColor" strokeWidth="28" strokeLinecap="round" />
-    </svg>
-  );
-}

@@ -1,5 +1,5 @@
 import { googleApi } from "../../integrations/google.js";
-import { cancelReminder, createReminder, listReminders } from "../../reminders.js";
+import { cancelReminder, createReminder, listReminders, rescheduleReminder } from "../../reminders.js";
 import { formatLocal, parseLocalDateTime } from "../../time.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
@@ -38,10 +38,11 @@ export const scheduleReminder = defineTool<{ intent: string; in_minutes?: number
 
 export const listRemindersTool = defineTool<Record<string, never>>({
   name: "list_reminders",
-  description: "Lista os lembretes da pessoa.",
+  description: "Lista os lembretes agendados da pessoa (com id, para mudar o horário ou cancelar).",
   parameters: obj({}),
   async run(_a, ctx) {
-    const rows = await listReminders(ctx.user.id);
+    const rows = (await listReminders(ctx.user.id)).filter((r) => r.status === "scheduled");
+    if (!rows.length) return { reminders: [], note: "Nenhum lembrete agendado." };
     return rows.map((r) => ({
       id: r.id,
       intent: r.intent,
@@ -58,6 +59,17 @@ export const cancelReminderTool = defineTool<{ id: string }>({
   parameters: obj({ id: { type: "string" } }, ["id"]),
   async run(args, ctx) {
     return { ok: await cancelReminder(args.id, ctx.user.id) };
+  },
+});
+
+export const rescheduleReminderTool = defineTool<{ id: string; at: string }>({
+  name: "reschedule_reminder",
+  description: "Muda o horário de um lembrete único (id de list_reminders). Recorrente: cancele e crie de novo com o cron novo.",
+  parameters: obj({ id: { type: "string" }, at: { type: "string", description: "Nova data/hora local AAAA-MM-DDTHH:MM" } }, ["id", "at"]),
+  async run(args, ctx) {
+    const at = parseLocalDateTime(args.at, ctx.timezone);
+    const ok = await rescheduleReminder(args.id, at, ctx.user.id);
+    return ok ? { ok, next_local: formatLocal(at, ctx.timezone) } : { ok, error: "Lembrete não encontrado ou já disparado" };
   },
 });
 

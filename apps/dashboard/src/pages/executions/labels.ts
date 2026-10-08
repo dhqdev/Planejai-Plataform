@@ -13,7 +13,8 @@ const CHANNEL_LABEL: Record<string, string> = { baileys: "WhatsApp", evolution: 
 /** Ferramentas em português, como a pessoa entenderia o que o time fez. */
 const TOOL_LABEL: Record<string, string> = {
   add_transaction: "Registrou um lançamento",
-  delete_transaction: "Apagou um lançamento",
+  delete_transaction: "Apagou lançamentos",
+  update_transaction: "Corrigiu lançamentos",
   list_transactions: "Consultou lançamentos",
   finance_summary: "Montou o resumo financeiro",
   budget_status: "Conferiu os limites do mês",
@@ -23,6 +24,7 @@ const TOOL_LABEL: Record<string, string> = {
   schedule_reminder: "Agendou um lembrete",
   list_reminders: "Consultou lembretes",
   cancel_reminder: "Cancelou um lembrete",
+  reschedule_reminder: "Mudou o horário de um lembrete",
   calendar_create_event: "Criou evento na agenda",
   calendar_list_events: "Consultou a agenda",
   save_memory: "Guardou na memória",
@@ -48,6 +50,7 @@ const TOOL_LABEL: Record<string, string> = {
   send_to_contact: "Enviou para um contato",
   list_contacts: "Consultou contatos",
   invite_person: "Convidou uma pessoa",
+  share_screen: "Mudou o que um contato pode ver",
   gmail_search: "Buscou no Gmail",
   gmail_read: "Leu um e-mail",
   gmail_send: "Enviou um e-mail",

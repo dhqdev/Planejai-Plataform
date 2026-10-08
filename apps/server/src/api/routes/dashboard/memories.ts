@@ -1,20 +1,21 @@
 import type { FastifyInstance } from "fastify";
 import { scopeUserId } from "../../../accounts.js";
 import { many, one, query } from "../../../db/pool.js";
+import { NOBODY, selfUserId } from "../../../sharing.js";
 import { isUuid } from "./shared.js";
 
 /** Memórias e arquivos gerados (gravações do navegador, prints). */
 export function memoryRoutes(base: FastifyInstance) {
   // ---------- Memórias ----------
-  base.get<{ Querystring: { user?: string } }>("/api/memories", async (req) =>
+  // particulares: cada um vê o que o assistente sabe dele (o dono também só as dele)
+  base.get("/api/memories", async (req) =>
     many(
-      `SELECT m.id, m.content, m.tags, m.created_at, u.name AS user_name FROM memories m JOIN users u ON u.id = m.user_id
-        WHERE ($1::uuid IS NULL OR m.user_id = $1) ORDER BY m.created_at DESC LIMIT 300`,
-      [scopeUserId(req.account) ?? (req.query.user || null)],
+      `SELECT m.id, m.content, m.tags, m.created_at FROM memories m WHERE m.user_id = $1 ORDER BY m.created_at DESC LIMIT 300`,
+      [(await selfUserId(req.account)) ?? NOBODY],
     ),
   );
   base.delete<{ Params: { id: string } }>("/api/memories/:id", async (req) => {
-    await query("DELETE FROM memories WHERE id = $1 AND ($2::uuid IS NULL OR user_id = $2)", [req.params.id, scopeUserId(req.account)]);
+    await query("DELETE FROM memories WHERE id = $1 AND user_id = $2", [req.params.id, (await selfUserId(req.account)) ?? NOBODY]);
     return { ok: true };
   });
 

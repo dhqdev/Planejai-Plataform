@@ -18,7 +18,7 @@ const readB64 = (f: File) =>
     r.readAsDataURL(f);
   });
 
-export function DocumentsPage({ isSuper }: { isSuper: boolean }) {
+export function DocumentsPage() {
   const { data, error, reload } = useApi<Resp>("/api/documents", { poll: 60000 });
   const [q, setQ] = useState("");
   const [folder, setFolder] = useState<string | null>(null);
@@ -89,7 +89,7 @@ export function DocumentsPage({ isSuper }: { isSuper: boolean }) {
       <div className="card docs-list scroll-y">
         <table className="table">
           <thead>
-            <tr><th>Nome</th><th className="hide-phone">Tipo</th><th className="hide-phone">Pasta</th>{isSuper && <th className="hide-phone">Pessoa</th>}<th className="hide-phone">Tamanho</th><th>Quando</th><th /></tr>
+            <tr><th>Nome</th><th className="hide-phone">Tipo</th><th className="hide-phone">Pasta</th><th className="hide-phone">Tamanho</th><th>Quando</th><th /></tr>
           </thead>
           <tbody>
             {items.map((d) => (
@@ -103,7 +103,6 @@ export function DocumentsPage({ isSuper }: { isSuper: boolean }) {
                 </td>
                 <td className="hide-phone muted">{kind(d.mimetype)}</td>
                 <td className="hide-phone muted">{d.folder ?? "–"}</td>
-                {isSuper && <td className="hide-phone">{d.owner_name ?? "–"}</td>}
                 <td className="hide-phone mono muted">{bytes(d.size)}</td>
                 <td className="muted mono" style={{ whiteSpace: "nowrap" }}>{day(d.created_at)}</td>
                 <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>

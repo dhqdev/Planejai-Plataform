@@ -1,44 +1,44 @@
 import type { FastifyInstance } from "fastify";
-import { hashPassword, loadAccount, scopeUserId, verifyPassword } from "../../../accounts.js";
+import { hashPassword, loadAccount, verifyPassword } from "../../../accounts.js";
 import { config } from "../../../config.js";
 import { many, one, query } from "../../../db/pool.js";
-import { phoneVariants } from "../../../ingest.js";
 import { eraseUserData } from "../../../privacy.js";
+import { NOBODY, selfUserId } from "../../../sharing.js";
 import { ESSENTIAL, getTabs, OPTIONAL } from "../../../tabs.js";
 import { botUsername, connections, telegramLink, unlink } from "../../../telegram.js";
 import { setSession } from "../../server.js";
 
 /** A própria conta: resumo, perfil, senha, exclusão (LGPD), layout do painel, mascote, conexões e abas. */
 export function meRoutes(base: FastifyInstance) {
-  // ================= Rotas com escopo: super admin vê tudo, admin só os próprios dados =================
+  // ================= Dados da própria pessoa (particulares: o dono também vê só os dele) =================
   base.get("/api/me/overview", async (req) => {
-    const uid = scopeUserId(req.account);
+    const uid = (await selfUserId(req.account)) ?? NOBODY;
     const tz = config.DEFAULT_TIMEZONE;
     const money = await one(
       `SELECT COALESCE(SUM(amount) FILTER (WHERE kind='expense' AND date_trunc('month', occurred_at AT TIME ZONE $2) = date_trunc('month', now() AT TIME ZONE $2)),0) AS expenses_month,
               COALESCE(SUM(amount) FILTER (WHERE kind='income' AND date_trunc('month', occurred_at AT TIME ZONE $2) = date_trunc('month', now() AT TIME ZONE $2)),0) AS income_month,
               COALESCE(SUM(amount) FILTER (WHERE kind='expense' AND date_trunc('month', occurred_at AT TIME ZONE $2) = date_trunc('month', (now() - interval '1 month') AT TIME ZONE $2)),0) AS expenses_prev
-         FROM transactions WHERE ($1::uuid IS NULL OR user_id = $1)`,
+         FROM transactions WHERE user_id = $1`,
       [uid, tz],
     );
     const counts = await one(
-      `SELECT (SELECT COUNT(*) FROM reminders WHERE status = 'scheduled' AND ($1::uuid IS NULL OR user_id = $1)) AS reminders,
-              (SELECT COUNT(*) FROM memories WHERE ($1::uuid IS NULL OR user_id = $1)) AS memories,
-              (SELECT COALESCE(SUM(messages), 0) FROM usage_daily WHERE day = current_date AND ($1::uuid IS NULL OR user_id = $1)) AS messages_24h,
-              (SELECT COUNT(*) FROM watches WHERE active AND ($1::uuid IS NULL OR user_id = $1)) AS watches`,
+      `SELECT (SELECT COUNT(*) FROM reminders WHERE status = 'scheduled' AND user_id = $1) AS reminders,
+              (SELECT COUNT(*) FROM memories WHERE user_id = $1) AS memories,
+              (SELECT COALESCE(SUM(messages), 0) FROM usage_daily WHERE day = current_date AND user_id = $1) AS messages_24h,
+              (SELECT COUNT(*) FROM watches WHERE active AND user_id = $1) AS watches`,
       [uid],
     );
     const byCategory = await many(
-      `SELECT category, SUM(amount) AS total FROM transactions WHERE ($1::uuid IS NULL OR user_id = $1) AND kind = 'expense'
+      `SELECT category, SUM(amount) AS total FROM transactions WHERE user_id = $1 AND kind = 'expense'
           AND date_trunc('month', occurred_at AT TIME ZONE $2) = date_trunc('month', now() AT TIME ZONE $2) GROUP BY category ORDER BY total DESC`,
       [uid, tz],
     );
     const nextReminders = await many(
-      `SELECT id, intent, due_at, cron FROM reminders WHERE status = 'scheduled' AND ($1::uuid IS NULL OR user_id = $1) ORDER BY due_at ASC NULLS LAST LIMIT 5`,
+      `SELECT id, intent, due_at, cron FROM reminders WHERE status = 'scheduled' AND user_id = $1 ORDER BY due_at ASC NULLS LAST LIMIT 5`,
       [uid],
     );
     const recent = await many(
-      `SELECT id, kind, amount, category, description, merchant, occurred_at FROM transactions WHERE ($1::uuid IS NULL OR user_id = $1) ORDER BY occurred_at DESC LIMIT 6`,
+      `SELECT id, kind, amount, category, description, merchant, occurred_at FROM transactions WHERE user_id = $1 ORDER BY occurred_at DESC LIMIT 6`,
       [uid],
     );
     return { money, counts, byCategory, nextReminders, recent, account: { name: req.account.name, role: req.account.role, linked: Boolean(req.account.userId) } };
@@ -117,14 +117,8 @@ export function meRoutes(base: FastifyInstance) {
   });
 
   // ---------- Conexões (WhatsApp, Telegram) da própria pessoa ----------
-  const myUserId = async (a: { userId: string | null; owner: boolean }) => {
-    if (a.userId) return a.userId;
-    if (!a.owner || !config.OWNER_PHONES.length) return null;
-    const u = await one("SELECT id FROM users WHERE phone = ANY($1) ORDER BY last_seen_at DESC NULLS LAST LIMIT 1", [config.OWNER_PHONES.flatMap((p) => phoneVariants(p))]);
-    return u?.id ?? null;
-  };
   base.get("/api/me/connections", async (req) => {
-    const uid = await myUserId(req.account);
+    const uid = await selfUserId(req.account);
     const user = uid ? await one("SELECT phone FROM users WHERE id = $1", [uid]) : null;
     const links = uid ? await connections(uid) : [];
     const tg = links.find((l: any) => l.channel === "telegram");
@@ -136,7 +130,7 @@ export function meRoutes(base: FastifyInstance) {
     };
   });
   base.post("/api/me/connections/telegram", async (req, reply) => {
-    const uid = await myUserId(req.account);
+    const uid = await selfUserId(req.account);
     if (!uid) return reply.code(400).send({ error: "Sua conta ainda não está ligada a um número de WhatsApp" });
     try {
       return await telegramLink(uid);
@@ -145,7 +139,7 @@ export function meRoutes(base: FastifyInstance) {
     }
   });
   base.delete("/api/me/connections/telegram", async (req) => {
-    const uid = await myUserId(req.account);
+    const uid = await selfUserId(req.account);
     if (uid) await unlink(uid, "telegram");
     return { ok: true };
   });

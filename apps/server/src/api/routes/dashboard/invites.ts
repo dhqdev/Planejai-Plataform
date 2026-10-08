@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { scopeUserId } from "../../../accounts.js";
 import { many, query } from "../../../db/pool.js";
-import { createInvite, inviteLink, inviteStats, listContacts, ownerUserId } from "../../../social.js";
+import { myShares, selfUserId, setShare, sharedWithMe, type ShareScope } from "../../../sharing.js";
+import { createInvite, inviteLink, inviteStats, listContacts } from "../../../social.js";
 
 /** Convites e contatos. */
 export function inviteRoutes(base: FastifyInstance) {
@@ -30,7 +31,7 @@ export function inviteRoutes(base: FastifyInstance) {
     try {
       const r = await createInvite({
         // convite do dono pelo painel também liga os dois como contatos (o WhatsApp dele vem de OWNER_PHONES)
-        inviterUserId: a.userId ?? (a.owner ? await ownerUserId() : null),
+        inviterUserId: await selfUserId(a),
         inviterAccountId: a.owner ? null : a.id,
         name: req.body.name,
         phone: String(req.body.phone ?? ""),
@@ -50,7 +51,24 @@ export function inviteRoutes(base: FastifyInstance) {
     return { ok: (r.rowCount ?? 0) > 0 };
   });
   base.get("/api/contacts", async (req) => {
-    const uid = req.account.userId;
+    const uid = await selfUserId(req.account);
     return uid ? listContacts(uid) : [];
+  });
+
+  // ---------- Compartilhar Finanças/Agenda com um contato (cada tela é particular até a pessoa liberar) ----------
+  base.get("/api/shares", async (req) => {
+    const uid = await selfUserId(req.account);
+    if (!uid) return { mine: [], withMe: [] };
+    return { mine: await myShares(uid), withMe: await sharedWithMe(uid) };
+  });
+  base.put<{ Body: { contact?: string; scope?: ShareScope; on?: boolean } }>("/api/shares", async (req, reply) => {
+    const uid = await selfUserId(req.account);
+    if (!uid) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil antes de compartilhar." });
+    try {
+      await setShare(uid, String(req.body?.contact ?? ""), req.body?.scope as ShareScope, Boolean(req.body?.on));
+      return { ok: true };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
   });
 }

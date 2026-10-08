@@ -1155,3 +1155,27 @@ button.chip { cursor: pointer; color: var(--text); }
 .bill-people li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
 .bill-people li > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bill-people small { color: var(--muted); white-space: nowrap; }
+
+/* ---------- Telas irmãs em abas (Execuções | Filas, Clientes | Convites...) ---------- */
+.subtabs-bar { max-width: 1320px; margin: 0 auto; padding: 24px 36px 0; }
+.subtabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--panel-2); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.subtabs button { border: none; background: none; color: var(--muted); font: inherit; font-weight: 600; font-size: 13.5px; padding: 7px 16px; border-radius: 9px; cursor: pointer; white-space: nowrap; transition: background-color .15s, color .15s; }
+.subtabs button.active { background: var(--ink); color: var(--on-ink); }
+@media (hover: hover) and (pointer: fine) { .subtabs button:not(.active):hover { color: var(--text); } }
+.subtabs button:active { transform: scale(0.97); }
+.subtabs-bar + .route-fade > .page, .subtabs-bar + .route-fade > .page-wide { padding-top: 18px; }
+@media (max-width: 1180px) and (min-width: 768px) { .subtabs-bar { padding: 20px 26px 0; } }
+@media (max-width: 767px) {
+  .subtabs-bar { padding: 12px 16px 0; }
+  .subtabs { display: flex; }
+  .subtabs button { flex: 1; min-height: 40px; }
+  .subtabs-bar + .route-fade > .page, .subtabs-bar + .route-fade > .page-wide { padding-top: 12px; }
+}
+
+/* ---------- Compartilhar (Minha conta) ---------- */
+.share-list { display: flex; flex-direction: column; margin: 4px 0 8px; }
+.share-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.share-row:first-child { border-top: none; }
+.share-row > span { flex: 1; min-width: 0; font-weight: 550; }
+.share-toggles { display: flex; gap: 6px; flex-shrink: 0; }
+.subtabs-bar:has(+ .route-fade > .page-wide) { padding-left: 28px; padding-right: 28px; }

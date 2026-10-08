@@ -133,7 +133,7 @@ describe.skipIf(!enabled)("painel: notificações, documentos e login (e2e)", ()
     expect((await app.inject({ method: "GET", url: "/api/notifications/unread" })).statusCode).toBe(401);
   });
 
-  it("documentos: envia, baixa, a outra pessoa não vê, o dono vê com o nome, apagar some", async () => {
+  it("documentos: envia, baixa, ninguém mais vê (nem o dono da plataforma), apagar some", async () => {
     await db.query("UPDATE wa_sessions SET status = 'disconnected'");
     const login = async (email: string) => cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email, password: "senha-forte-1" } }));
     const a = await login("ana@x.com");
@@ -156,8 +156,8 @@ describe.skipIf(!enabled)("painel: notificações, documentos e login (e2e)", ()
     expect((await app.inject({ method: "DELETE", url: `/api/documents/${doc.id}`, headers: { cookie: b } })).statusCode).toBe(404);
 
     const owner = cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } }));
-    const all = (await app.inject({ method: "GET", url: "/api/documents", headers: { cookie: owner } })).json().items;
-    expect(all[0]).toMatchObject({ id: doc.id, owner_name: "Ana" });
+    expect((await app.inject({ method: "GET", url: "/api/documents", headers: { cookie: owner } })).json().items).toHaveLength(0);
+    expect((await app.inject({ method: "GET", url: `/api/documents/${doc.id}/file`, headers: { cookie: owner } })).statusCode).toBe(404);
 
     const mine = (await app.inject({ method: "GET", url: "/api/documents?q=aluguel", headers: { cookie: a } })).json();
     expect(mine.items).toHaveLength(1);

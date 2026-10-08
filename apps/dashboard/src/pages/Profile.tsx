@@ -4,6 +4,7 @@ import type { Me } from "../App";
 import { ErrorBox, PageHead, alertDialog, confirmDialog } from "../components";
 import { Connections } from "../Connections";
 import { useApi } from "../hooks";
+import { haptic } from "../touch";
 
 export function ProfilePage({ me }: { me: Me }) {
   const { data } = useApi<any>("/api/me/profile");
@@ -24,10 +25,12 @@ export function ProfilePage({ me }: { me: Me }) {
   };
   return (
     <div className="page" style={{ maxWidth: 1080 }}>
-      <PageHead title="Minha conta" subtitle={me.email} />
+      <PageHead title="Minha conta" subtitle={me.owner ? "Dono da plataforma. Nome e senha vêm da stack." : me.email} />
       {msg && <div className="ok-box" role="status" style={{ marginBottom: 12 }}>{msg}</div>}
       <ErrorBox error={error} />
       <div className="grid grid-2" style={{ alignItems: "start" }}>
+      {!me.owner && (
+      <>
       <div className="card card-pad">
         <h3>Perfil</h3>
         <div className="field"><label htmlFor="pf-name">Nome</label><input id="pf-name" name="name" autoComplete="name" className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
@@ -48,7 +51,10 @@ export function ProfilePage({ me }: { me: Me }) {
         <div className="field"><label htmlFor="pf-newpw">Nova senha</label><input id="pf-newpw" name="new-password" autoComplete="new-password" className="input" type="password" value={pw.password} onChange={(e) => setPw({ ...pw, password: e.target.value })} /></div>
         <button className="btn" onClick={() => save(pw)}>Trocar senha</button>
       </div>
-      <Connections />
+      </>
+      )}
+      <Sharing />
+      <Connections owner={me.owner} />
       <Security me={me} />
       </div>
     </div>
@@ -110,6 +116,66 @@ function Security({ me }: { me: Me }) {
             </>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+const SCREENS = [
+  { id: "finance", label: "Finanças" },
+  { id: "agenda", label: "Agenda" },
+] as const;
+
+/**
+ * Finanças e Agenda são particulares. Aqui a pessoa escolhe, por contato (quem aceitou um convite),
+ * o que ele pode ver. Também dá para pedir no WhatsApp: "deixa a Ana ver minhas finanças".
+ */
+function Sharing() {
+  const { data, reload } = useApi<{ mine: { id: string; name: string; scopes: string[] }[]; withMe: { id: string; name: string; scopes: string[] }[] }>("/api/shares");
+  const [error, setError] = useState<string | null>(null);
+  const toggle = async (contact: string, scope: string, on: boolean) => {
+    setError(null);
+    haptic(5);
+    try {
+      await api("/api/shares", { method: "PUT", json: { contact, scope, on } });
+      await reload();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  if (!data) return null;
+  return (
+    <div className="card card-pad">
+      <h3>Compartilhar</h3>
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+        Suas finanças e sua agenda são só suas. Escolha o que cada contato pode ver (só leitura). Contatos são quem aceitou um convite.
+      </p>
+      <ErrorBox error={error} />
+      {data.mine.length === 0 ? (
+        <p className="muted" style={{ fontSize: 13 }}>Você ainda não tem contatos. Convide alguém pelo WhatsApp e ele aparece aqui.</p>
+      ) : (
+        <div className="share-list">
+          {data.mine.map((c) => (
+            <div key={c.id} className="share-row">
+              <span className="ellipsis">{c.name}</span>
+              <div className="share-toggles">
+                {SCREENS.map((s) => {
+                  const on = c.scopes.includes(s.id);
+                  return (
+                    <button key={s.id} className={`chip ${on ? "active" : ""}`} aria-pressed={on} onClick={() => toggle(c.id, s.id, !on)}>
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {data.withMe.length > 0 && (
+        <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
+          Compartilharam com você: {data.withMe.map((p) => `${p.name} (${p.scopes.map((x) => SCREENS.find((s) => s.id === x)?.label ?? x).join(" e ")})`).join(", ")}. Abra em Finanças ou Agenda.
+        </p>
       )}
     </div>
   );

@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
 import { safeEqual, signSession, verifySession } from "../crypto.js";
-import { bumpSession, hashPassword, loadAccount, normalizePhone, OWNER_ID, ownerAccount, toAccount, verifyPassword, type Account } from "../accounts.js";
+import { bumpSession, hashPassword, loadAccount, normalizePhone, ownerAccount, toAccount, verifyPassword, type Account } from "../accounts.js";
 import { hit, peek } from "../ratelimit.js";
 import { one, pool, query } from "../db/pool.js";
 import { phoneVariants } from "../ingest.js";

@@ -141,15 +141,6 @@ export async function cacheSet(key: string, value: unknown, ttlSeconds: number) 
   }
 }
 
-/** Busca no cache ou calcula e guarda. */
-export async function cached<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T> {
-  const hit = await cacheGet<T>(key);
-  if (hit != null) return hit;
-  const value = await fn();
-  if (value != null) await cacheSet(key, value, ttlSeconds);
-  return value;
-}
-
 /** Marca algo como visto; devolve false se já tinha sido visto dentro da validade (dedupe barato). */
 export async function markSeen(key: string, ttlSeconds: number): Promise<boolean | null> {
   const r = redis();

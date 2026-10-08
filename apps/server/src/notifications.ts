@@ -1,6 +1,5 @@
-import { config } from "./config.js";
 import { many, one, query } from "./db/pool.js";
-import { phoneVariants } from "./ingest.js";
+import { NOBODY, ownerUserId } from "./sharing.js";
 
 /**
  * Notificações do painel (sino com bolinha no menu). userId null = para o dono da stack.
@@ -20,18 +19,10 @@ export async function notify(n: { userId: string | null; kind: string; title: st
   }
 }
 
-/** Pessoa do WhatsApp do dono (para ele também ver as notificações pessoais dele). */
-export async function ownerUserId(): Promise<string | null> {
-  const phone = config.OWNER_PHONES[0];
-  if (!phone) return null;
-  const u = await one<{ id: string }>("SELECT id FROM users WHERE phone = ANY($1) LIMIT 1", [phoneVariants(phone)]);
-  return u?.id ?? null;
-}
-
 /** Filtro de quem vê o quê: o dono vê as do sistema (user_id NULL) e as dele; cada cliente só as dele. */
 async function audience(account: { owner: boolean; userId: string | null }) {
-  if (account.owner) return { sql: "(user_id IS NULL OR user_id = $1)", arg: (await ownerUserId()) ?? "00000000-0000-0000-0000-000000000000" };
-  return { sql: "user_id = $1", arg: account.userId ?? "00000000-0000-0000-0000-000000000000" };
+  if (account.owner) return { sql: "(user_id IS NULL OR user_id = $1)", arg: (await ownerUserId()) ?? NOBODY };
+  return { sql: "user_id = $1", arg: account.userId ?? NOBODY };
 }
 
 export async function listNotifications(account: { owner: boolean; userId: string | null }, limit = 50) {

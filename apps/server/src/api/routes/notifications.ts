@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { type Account, scopeUserId } from "../../accounts.js";
 import { deleteDocument, DOC_MAX_BYTES, documentUsage, getDocument, listDocuments, saveDocument } from "../../documents.js";
-import { listNotifications, markRead, ownerUserId, unreadCount } from "../../notifications.js";
+import { listNotifications, markRead, unreadCount } from "../../notifications.js";
+import { NOBODY, selfUserId } from "../../sharing.js";
 import { requireAuth } from "../server.js";
 
 /** Notificações (sino com bolinha) e documentos guardados. Sempre no escopo de quem está logado. */
@@ -17,17 +17,16 @@ export async function registerNotificationRoutes(app: FastifyInstance) {
       return { ok: true };
     });
 
-    // Documentos: o super admin vê de todos (com o nome de quem é); cada admin só os dele
-    const myUserId = async (a: Account) => (a.owner ? (a.userId ?? (await ownerUserId())) : a.userId) as string | null;
+    // Documentos: particulares, cada um vê só os dele (o dono também)
 
     base.get<{ Querystring: { q?: string; folder?: string } }>("/api/documents", async (req) => {
-      const items = await listDocuments(scopeUserId(req.account), { q: req.query.q, folder: req.query.folder });
-      const me = await myUserId(req.account);
+      const items = await listDocuments((await selfUserId(req.account)) ?? NOBODY, { q: req.query.q, folder: req.query.folder });
+      const me = await selfUserId(req.account);
       return { items, usage: me ? await documentUsage(me) : null, max_bytes: DOC_MAX_BYTES };
     });
 
     base.post<{ Body: { name?: string; mimetype?: string; base64?: string; folder?: string; notes?: string } }>("/api/documents", async (req, reply) => {
-      const me = await myUserId(req.account);
+      const me = await selfUserId(req.account);
       if (!me) return reply.code(400).send({ error: "Ligue seu WhatsApp à conta para guardar documentos." });
       const b64 = String(req.body?.base64 ?? "").replace(/^data:[^,]*,/, "");
       if (!b64) return reply.code(400).send({ error: "Arquivo vazio" });
@@ -48,7 +47,7 @@ export async function registerNotificationRoutes(app: FastifyInstance) {
     });
 
     base.get<{ Params: { id: string }; Querystring: { inline?: string } }>("/api/documents/:id/file", async (req, reply) => {
-      const doc = await getDocument(req.params.id, scopeUserId(req.account));
+      const doc = await getDocument(req.params.id, (await selfUserId(req.account)) ?? NOBODY);
       if (!doc) return reply.code(404).send({ error: "Documento não encontrado" });
       const disposition = req.query.inline === "1" ? "inline" : "attachment";
       return reply
@@ -61,7 +60,7 @@ export async function registerNotificationRoutes(app: FastifyInstance) {
     });
 
     base.delete<{ Params: { id: string } }>("/api/documents/:id", async (req, reply) => {
-      if (!(await deleteDocument(req.params.id, scopeUserId(req.account)))) return reply.code(404).send({ error: "Documento não encontrado" });
+      if (!(await deleteDocument(req.params.id, (await selfUserId(req.account)) ?? NOBODY))) return reply.code(404).send({ error: "Documento não encontrado" });
       return { ok: true };
     });
   });

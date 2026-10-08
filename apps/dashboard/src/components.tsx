@@ -516,21 +516,6 @@ export function CopyField({ value }: { value: string }) {
   );
 }
 
-export function Stat({ label, value, sub, icon, tone }: { label: string; value: ReactNode; sub?: ReactNode; icon?: string; tone?: "ok" | "info" | "warn" }) {
-  return (
-    <div className={`card card-pad stat ${tone ?? ""}`}>
-      {icon && (
-        <div className="stat-ico">
-          <Icon name={icon} size={16} />
-        </div>
-      )}
-      <div className="label">{label}</div>
-      <div className="value">{value}</div>
-      {sub && <div className="sub">{sub}</div>}
-    </div>
-  );
-}
-
 /** Paleta da marca para categorias (a mesma dos gráficos do WhatsApp), do laranja ao azul e depois cinzas. */
 export const CATEGORY_COLORS = ["#FF7A1A", "#FF4458", "#E23382", "#B830C8", "#8B2BE2", "#5B45E8", "#2F7BEA", "#16A3A3", "#9AA0A6", "#C9CCD1", "#7d7d78", "#b5b5af", "#5f5f5a", "#dcdcd6"];
 

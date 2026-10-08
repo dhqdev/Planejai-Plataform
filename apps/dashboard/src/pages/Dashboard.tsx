@@ -608,11 +608,10 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
           <div className="more-grid" style={{ marginTop: 14 }}>
           {(isSuper
             ? [
-                ["/whatsapp", "phone", "WhatsApp", sys.data?.channel?.configured ? "conectado" : "desconectado"],
-                ["/integrations", "plug", "Integrações", ""],
-                ["/models", "cpu", "Modelos", ""],
+                ["/whatsapp", "plug", "Conexões", sys.data?.channel?.configured ? "WhatsApp conectado" : "WhatsApp desconectado"],
                 ["/agents", "brain", "Agentes", ""],
                 ["/settings", "settings", "Configurações", ""],
+                ["/profile", "user", "Minha conta", ""],
               ]
             : [
                 ["/profile", "user", "Minha conta", ""],

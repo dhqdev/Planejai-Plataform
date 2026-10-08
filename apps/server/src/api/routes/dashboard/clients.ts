@@ -9,8 +9,6 @@ import { inviteLink } from "../../../social.js";
 import { getTabs, saveTabs } from "../../../tabs.js";
 import { isUuid, withLook } from "./shared.js";
 
-const PLAYGROUND_PHONE = "playground";
-
 /** Clientes e pessoas (só super admin): cadastro, exclusão (LGPD), custo de IA e uso de cada um. */
 export function clientRoutes(api: FastifyInstance) {
   // ---------- Clientes ----------
@@ -72,26 +70,6 @@ export function clientRoutes(api: FastifyInstance) {
     if (!r.ok) return reply.code(404).send({ error: "não encontrado" });
     return { ok: true };
   });
-
-  // ---------- Pessoas ----------
-  api.get("/api/people", async () =>
-    many(`SELECT u.*, (SELECT COUNT(*) FROM memories m WHERE m.user_id = u.id) AS memories FROM users u WHERE u.phone <> $1 ORDER BY u.status = 'pending' DESC, u.last_seen_at DESC NULLS LAST`, [PLAYGROUND_PHONE]),
-  );
-
-  api.post<{ Body: { phone: string; name?: string } }>("/api/people", async (req) => {
-    const phone = String(req.body.phone ?? "").replace(/\D/g, "");
-    return one(
-      `INSERT INTO users (phone, name, status) VALUES ($1, $2, 'active') ON CONFLICT (phone) DO UPDATE SET status = 'active', name = COALESCE(EXCLUDED.name, users.name) RETURNING *`,
-      [phone, req.body.name ?? null],
-    );
-  });
-
-  api.patch<{ Params: { id: string }; Body: { status?: string; name?: string; timezone?: string } }>("/api/people/:id", async (req) =>
-    one(
-      `UPDATE users SET status = COALESCE($2, status), name = COALESCE($3, name), timezone = COALESCE($4, timezone) WHERE id = $1 RETURNING *`,
-      [req.params.id, req.body.status ?? null, req.body.name ?? null, req.body.timezone ?? null],
-    ),
-  );
 
   // ---------- Custo de IA por cliente (usage_daily: fica mesmo depois que os logs somem) ----------
   api.get<{ Querystring: { days?: string } }>("/api/costs", async (req) => {

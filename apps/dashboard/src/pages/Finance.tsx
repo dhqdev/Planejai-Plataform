@@ -46,14 +46,17 @@ function dayLabel(iso: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function FinancePage({ isSuper }: { isSuper: boolean }) {
+export function FinancePage() {
   const [month, setMonth] = useState(thisMonth());
   const [user, setUser] = useState("");
   const [adding, setAdding] = useState(false);
   const [cat, setCat] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
-  const [budget, setBudget] = useState<{ category: string | null; amount?: number; user?: string } | null>(null);
-  const people = useApi<any[]>(isSuper ? "/api/people" : null);
+  const [editing, setEditing] = useState<any | null>(null);
+  const [budget, setBudget] = useState<{ category: string | null; amount?: number } | null>(null);
+  // particular: cada um vê as suas; as de um contato só se ele compartilhou (só leitura)
+  const shared = useApi<{ withMe: { id: string; name: string; scopes: string[] }[] }>("/api/shares");
+  const owners = (shared.data?.withMe ?? []).filter((p) => p.scopes.includes("finance"));
   const { data, error, reload } = useApi<any>(`/api/finance?month=${month}${user ? `&user=${user}` : ""}`, { poll: 20000 });
 
   const months = data?.months ?? [];
@@ -77,17 +80,20 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
     else groups.push([k, [t]]);
   }
   const isCurrent = month === thisMonth();
-  const budgets: { id: string; user_id?: string; user_name?: string; category: string | null; limit: number; spent: number }[] = data?.budgets ?? [];
-  const everyone = isSuper && !user;
-  const budgetOf = new Map(everyone ? [] : budgets.filter((b) => b.category).map((b) => [b.category!, b]));
+  const budgets: { id: string; category: string | null; limit: number; spent: number }[] = data?.budgets ?? [];
+  const readonly = Boolean(data?.readonly);
+  // finanças de um contato: só para ver
+  const openBudget = (b: { category: string | null; amount?: number }) => { if (!readonly) setBudget(b); };
+  const budgetOf = new Map(budgets.filter((b) => b.category).map((b) => [b.category!, b]));
   const go = (n: number) => { haptic(6); setCat(null); setMonth(shift(month, n)); };
 
   const [tab, setTab] = useState<"overview" | "list">("overview");
-  const totalBudget = everyone ? undefined : budgets.find((b) => !b.category);
+  const totalBudget = budgets.find((b) => !b.category);
   const today = new Date();
   const elapsed = isCurrent ? today.getDate() : daysIn;
+  // próximos lembretes só nas próprias finanças (a agenda de um contato tem permissão separada)
   const reminders = useApi<{ events: any[] }>(
-    `/api/calendar?from=${new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()}&to=${new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14).toISOString()}${user ? `&user=${user}` : ""}`,
+    user ? null : `/api/calendar?from=${new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()}&to=${new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14).toISOString()}`,
   );
   const upcoming = (reminders.data?.events ?? []).filter((e) => e.kind === "reminder").slice(0, 4);
   const periodLabel = `1 - ${daysIn} de ${monthName(month).slice(0, 3)}, ${month.slice(0, 4)}`;
@@ -98,8 +104,8 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
       <div className="hide-phone">
         <PageHead
           title="Finanças"
-          subtitle={`${cap(monthName(month))} de ${month.slice(0, 4)}${isSuper ? ` · ${user ? (people.data ?? []).find((p) => p.id === user)?.name ?? "" : "todas as pessoas"}` : ""}`}
-          actions={<button className="btn btn-brand" onClick={() => setAdding(true)}><Icon name="plus" size={16} /> Lançamento</button>}
+          subtitle={`${cap(monthName(month))} de ${month.slice(0, 4)}${user ? `, de ${owners.find((p) => p.id === user)?.name ?? ""} (só para ver)` : ""}`}
+          actions={!readonly && <button className="btn btn-brand" onClick={() => setAdding(true)}><Icon name="plus" size={16} /> Lançamento</button>}
         />
       </div>
       <div className="fin-top">
@@ -113,17 +119,19 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
           <span className="fin-range"><Icon name="calendar" size={15} /> {periodLabel}</span>
           <button className="icon-btn round" aria-label="Próximo mês" disabled={isCurrent} onClick={() => go(1)}><Icon name="chevron-right" size={16} /></button>
         </div>
-        {isSuper && (
+        {owners.length > 0 && (
           <div className="fin-people">
-            <button className={!user ? "active" : ""} onClick={() => setUser("")}>Todos</button>
-            {(people.data ?? []).map((p) => (
-              <button key={p.id} className={user === p.id ? "active" : ""} title={p.name ?? undefined} onClick={() => { haptic(5); setUser(p.id); }}>{(p.name || `+${p.phone}`).trim().split(" ")[0]}</button>
+            <button className={!user ? "active" : ""} onClick={() => { haptic(5); setUser(""); }}>Minhas</button>
+            {owners.map((p) => (
+              <button key={p.id} className={user === p.id ? "active" : ""} title={p.name} onClick={() => { haptic(5); setUser(p.id); }}>{p.name.trim().split(" ")[0]}</button>
             ))}
           </div>
         )}
-        <button className="btn btn-brand fin-add phone-only" aria-label="Novo lançamento" onClick={() => setAdding(true)}>
-          <Icon name="plus" size={18} />
-        </button>
+        {!readonly && (
+          <button className="btn btn-brand fin-add phone-only" aria-label="Novo lançamento" onClick={() => setAdding(true)}>
+            <Icon name="plus" size={18} />
+          </button>
+        )}
       </div>
       <ErrorBox error={error} />
       {!data ? <Loading /> : tab === "overview" ? (
@@ -220,7 +228,7 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                   <span className="tone-ico" style={{ ["--c" as any]: "var(--brand-2)" }}><Icon name="target" size={15} /></span>
                   <h3>Limites do mês</h3>
                   <span className="spacer" />
-                  <button className="link-btn" onClick={() => setBudget({ category: !everyone && budgets.some((b) => !b.category) ? (cats[0]?.label ?? "Alimentação") : null, user: user || undefined })}>Novo limite <Icon name="chevron-right" size={13} /></button>
+                  {!readonly && <button className="link-btn" onClick={() => openBudget({ category: budgets.some((b) => !b.category) ? (cats[0]?.label ?? "Alimentação") : null })}>Novo limite <Icon name="chevron-right" size={13} /></button>}
                 </div>
                 {budgets.map((b) => {
                   const pct = b.limit ? b.spent / b.limit : 0;
@@ -230,24 +238,24 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                       className="budget-row"
                       role="button"
                       tabIndex={0}
-                      onClick={() => setBudget({ category: b.category, amount: b.limit, user: b.user_id ?? (user || undefined) })}
+                      onClick={() => openBudget({ category: b.category, amount: b.limit })}
                       onKeyDown={(e) => {
                         if (e.key !== "Enter" && e.key !== " ") return;
                         e.preventDefault();
-                        setBudget({ category: b.category, amount: b.limit, user: b.user_id ?? (user || undefined) });
+                        openBudget({ category: b.category, amount: b.limit });
                       }}
                     >
                       <span className="budget-name" title={b.category ?? undefined}>{b.category ?? "Total do mês"}</span>
                       <strong className={pct >= 1 ? "over" : ""}>{Math.round(pct * 100)}%</strong>
                       <span className={`budget-bar ${pct >= 1 ? "over" : pct >= 0.8 ? "warn" : ""}`}><i style={{ width: `${Math.min(100, pct * 100)}%` }} /></span>
-                      <small className="budget-meta">{brl(b.spent)} de {brl(b.limit)}{everyone && b.user_name ? ` · ${b.user_name.split(" ")[0]}` : ""}</small>
+                      <small className="budget-meta">{brl(b.spent)} de {brl(b.limit)}</small>
                     </div>
                   );
                 })}
                 {!budgets.length && (
                   <div className="fin-empty-side">
                     <p className="muted">Nenhum limite ainda. Ele avisa no WhatsApp ao chegar em 80% e quando estourar.</p>
-                    <button className="btn btn-brand btn-sm" onClick={() => setBudget({ category: null, user: user || undefined })}><Icon name="plus" size={14} /> Criar limite</button>
+                    {!readonly && <button className="btn btn-brand btn-sm" onClick={() => openBudget({ category: null })}><Icon name="plus" size={14} /> Criar limite</button>}
                   </div>
                 )}
               </div>
@@ -310,7 +318,7 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                       <span className="fin-tx-ico" style={{ ["--c" as any]: CATEGORY_COLORS[Math.max(0, cats.findIndex((c: any) => c.label === t.category)) % CATEGORY_COLORS.length] }}><Icon name={t.kind === "income" ? "arrow-down" : CAT_ICON[t.category] ?? "hash"} size={16} /></span>
                       <span className="fin-tx-text">
                         <span className="ellipsis">{t.description ?? t.merchant ?? t.category}</span>
-                        <small className="muted ellipsis">{t.category}{t.merchant && t.description ? ` · ${t.merchant}` : ""}{isSuper ? ` · ${t.user_name ?? `+${t.phone}`}` : ""}</small>
+                        <small className="muted ellipsis">{t.category}{t.merchant && t.description ? ` · ${t.merchant}` : ""}</small>
                       </span>
                       <strong className={t.kind === "income" ? "amount-in" : ""}>{t.kind === "income" ? "+" : "−"}{brl(t.amount)}</strong>
                     </button>
@@ -323,14 +331,18 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
           </div>
         </>
       )}
-      {budget && <BudgetModal user={budget.user ?? user} people={isSuper ? people.data ?? [] : null} initial={budget} onClose={() => { setBudget(null); void reload(); }} />}
-      {adding && <AddTransaction user={user} people={isSuper ? people.data ?? [] : null} onClose={() => { setAdding(false); void reload(); }} />}
+      {budget && <BudgetModal initial={budget} onClose={() => { setBudget(null); void reload(); }} />}
+      {adding && <TransactionForm onClose={() => { setAdding(false); void reload(); }} />}
+      {editing && <TransactionForm initial={editing} onClose={() => { setEditing(null); setDetail(null); void reload(); }} />}
       {detail && (
         <Modal
           title={detail.kind === "income" ? "Receita" : "Gasto"}
           icon={<Icon name={CAT_ICON[detail.category] ?? "wallet"} />}
           onClose={() => setDetail(null)}
-          footer={
+          footer={readonly ? undefined : (
+            <>
+            <button className="btn" onClick={() => setEditing(detail)}><Icon name="edit" size={16} /> Editar</button>
+            <span className="spacer" />
             <button
               className="btn btn-danger"
               onClick={async () => {
@@ -347,7 +359,8 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
             >
               <Icon name="trash" size={16} /> Apagar
             </button>
-          }
+            </>
+          )}
         >
           <div className="fin-total" style={{ marginBottom: 12 }}>{detail.kind === "income" ? "+" : "−"}{brl(detail.amount)}</div>
           <dl className="kv">
@@ -356,7 +369,6 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
             <dt>Categoria</dt><dd>{detail.category}</dd>
             <dt>Quando</dt><dd>{day(detail.occurred_at)}</dd>
             <dt>Origem</dt><dd>{SOURCE[detail.source] ?? detail.source}</dd>
-            {isSuper && (<><dt>Pessoa</dt><dd>{detail.user_name ?? `+${detail.phone}`}</dd></>)}
           </dl>
         </Modal>
       )}
@@ -367,7 +379,7 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Insight sem IA (não gasta token): maior categoria, comparação com o mês anterior e limites perto do fim. */
-function buildInsight(cats: { label: string; value: number }[], total: number, prev: Map<string, number>, budgets: { category: string | null; limit: number; spent: number; user_name?: string }[], month: string) {
+function buildInsight(cats: { label: string; value: number }[], total: number, prev: Map<string, number>, budgets: { category: string | null; limit: number; spent: number }[], month: string) {
   if (!cats.length) return `Nenhum gasto em ${month} ainda. Mande no WhatsApp o que gastou e eu organizo por categoria.`;
   const top = cats[0]!;
   const pct = Math.round((top.value / Math.max(total, 1)) * 100);
@@ -376,7 +388,7 @@ function buildInsight(cats: { label: string; value: number }[], total: number, p
   if (before != null && Math.abs(top.value - before) >= 1)
     parts.push(top.value > before ? `São ${brl(top.value - before)} a mais que no mês passado.` : `São ${brl(before - top.value)} a menos que no mês passado.`);
   const hot = budgets.filter((b) => b.limit && b.spent / b.limit >= 0.8).sort((a, b) => b.spent / b.limit - a.spent / a.limit)[0];
-  if (hot) parts.push(`${hot.category ?? "O total do mês"} já está em ${Math.round((hot.spent / hot.limit) * 100)}% do limite${hot.user_name ? ` (${hot.user_name})` : ""}.`);
+  if (hot) parts.push(`${hot.category ?? "O total do mês"} já está em ${Math.round((hot.spent / hot.limit) * 100)}% do limite.`);
   else if (cats.length > 1) parts.push(`Depois vem ${cats[1]!.label}, com ${brl(cats[1]!.value)}.`);
   return parts.join(" ");
 }
@@ -387,19 +399,26 @@ function shift(month: string, delta: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function AddTransaction({ user: preset, people, onClose }: { user: string; people: any[] | null; onClose: () => void }) {
-  const [user, setUser] = useState(preset);
+/** Novo lançamento ou edição de um existente (valor, tipo, categoria, descrição e data). */
+function TransactionForm({ initial, onClose }: { initial?: any; onClose: () => void }) {
   const cats = useApi<string[]>("/api/finance/categories");
-  const [f, setF] = useState({ kind: "expense", amount: "", category: "", description: "", date: new Date().toISOString().slice(0, 10) });
+  const [f, setF] = useState({
+    kind: initial?.kind ?? "expense",
+    amount: initial ? String(initial.amount).replace(".", ",") : "",
+    category: initial?.category ?? "",
+    description: initial?.description ?? "",
+    date: (initial ? new Date(initial.occurred_at) : new Date()).toISOString().slice(0, 10),
+  });
   const [error, setError] = useState<string | null>(null);
   return (
     <Modal
-      title="Novo lançamento"
+      title={initial ? "Editar lançamento" : "Novo lançamento"}
       onClose={onClose}
       footer={
         <button className="btn btn-primary" onClick={async () => {
           try {
-            await api("/api/finance", { method: "POST", json: { ...f, user: user || undefined } });
+            await api(initial ? `/api/finance/${initial.id}` : "/api/finance", { method: initial ? "PATCH" : "POST", json: f });
+            haptic(8);
             onClose();
           } catch (e) {
             setError((e as Error).message);
@@ -407,14 +426,6 @@ function AddTransaction({ user: preset, people, onClose }: { user: string; peopl
         }}>Salvar</button>
       }
     >
-      {people && !preset && (
-        <div className="field"><label htmlFor="tx-user">Pessoa</label>
-          <select id="tx-user" className="select" value={user} onChange={(e) => setUser(e.target.value)}>
-            <option value="">Escolha</option>
-            {people.map((p) => <option key={p.id} value={p.id}>{p.full_name || p.name || `+${p.phone}`}</option>)}
-          </select>
-        </div>
-      )}
       <div className="tabs">
         <button className={f.kind === "expense" ? "active" : ""} aria-pressed={f.kind === "expense"} onClick={() => setF({ ...f, kind: "expense" })}>Gasto</button>
         <button className={f.kind === "income" ? "active" : ""} aria-pressed={f.kind === "income"} onClick={() => setF({ ...f, kind: "income" })}>Receita</button>
@@ -422,7 +433,7 @@ function AddTransaction({ user: preset, people, onClose }: { user: string; peopl
       <div className="field"><label htmlFor="tx-amount">Valor (R$)</label><input id="tx-amount" name="amount" className="input" inputMode="decimal" autoComplete="off" placeholder="89,90" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} autoFocus /></div>
       <div className="field"><label htmlFor="tx-cat">Categoria</label>
         <select id="tx-cat" className="select" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>
-          <option value="">Automática (pela descrição)</option>
+          {!initial && <option value="">Automática (pela descrição)</option>}
           {(cats.data ?? []).map((c) => <option key={c}>{c}</option>)}
         </select>
       </div>
@@ -433,15 +444,14 @@ function AddTransaction({ user: preset, people, onClose }: { user: string; peopl
   );
 }
 
-function BudgetModal({ user: preset, people, initial, onClose }: { user: string; people: any[] | null; initial: { category: string | null; amount?: number }; onClose: () => void }) {
+function BudgetModal({ initial, onClose }: { initial: { category: string | null; amount?: number }; onClose: () => void }) {
   const cats = useApi<string[]>("/api/finance/categories");
-  const [user, setUser] = useState(preset);
   const [category, setCategory] = useState(initial.category ?? "");
   const [amount, setAmount] = useState(initial.amount ? String(initial.amount).replace(".", ",") : "");
   const [error, setError] = useState<string | null>(null);
   const save = async (value: string) => {
     try {
-      await api("/api/budgets", { method: "PUT", json: { category: category || null, amount: value, user: user || undefined } });
+      await api("/api/budgets", { method: "PUT", json: { category: category || null, amount: value } });
       haptic(8);
       onClose();
     } catch (e) {
@@ -456,18 +466,10 @@ function BudgetModal({ user: preset, people, initial, onClose }: { user: string;
       footer={
         <>
           {initial.amount != null && <button className="btn btn-danger" onClick={() => save("0")}><Icon name="trash" size={16} /> Remover</button>}
-          <button className="btn btn-primary" disabled={!!people && !user} onClick={() => save(amount)}>Salvar</button>
+          <button className="btn btn-primary" onClick={() => save(amount)}>Salvar</button>
         </>
       }
     >
-      {people && !preset && (
-        <div className="field"><label htmlFor="bd-user">Pessoa</label>
-          <select id="bd-user" className="select" value={user} onChange={(e) => setUser(e.target.value)}>
-            <option value="">Escolha</option>
-            {people.map((p) => <option key={p.id} value={p.id}>{p.full_name || p.name || `+${p.phone}`}</option>)}
-          </select>
-        </div>
-      )}
       <div className="field"><label htmlFor="bd-cat">Para</label>
         <select id="bd-cat" className="select" value={category} disabled={initial.amount != null} onChange={(e) => setCategory(e.target.value)}>
           <option value="">Total do mês</option>

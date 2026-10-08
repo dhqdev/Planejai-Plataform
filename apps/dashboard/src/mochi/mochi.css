@@ -38,7 +38,6 @@
 /* ---------- onde ele aparece ---------- */
 .mochi-badge { appearance: none; border: 0; background: none; padding: 0; margin: -4px 0; cursor: pointer; display: grid; place-items: center; color: var(--muted); -webkit-tap-highlight-color: transparent; transition: transform 0.15s; }
 .mochi-badge:active { transform: scale(0.92); }
-.mochi-loading { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 36px 16px; color: var(--muted); font-size: 13px; }
 
 /* ---------- guarda-roupa ---------- */
 .mochi-stage {

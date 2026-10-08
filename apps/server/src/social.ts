@@ -75,13 +75,6 @@ export interface InviteInput {
   afterAccept?: string | null;
 }
 
-/** Usuário de WhatsApp do dono da stack (a conta de dono do painel não tem um ligado). */
-export async function ownerUserId(): Promise<string | null> {
-  const phones = config.OWNER_PHONES.flatMap(phoneVariants);
-  if (!phones.length) return null;
-  return (await one("SELECT id FROM users WHERE phone = ANY($1) ORDER BY created_at LIMIT 1", [phones]))?.id ?? null;
-}
-
 async function link(a: string, b: string) {
   await query("INSERT INTO contacts (user_id, contact_id) VALUES ($1, $2), ($2, $1) ON CONFLICT DO NOTHING", [a, b]);
 }

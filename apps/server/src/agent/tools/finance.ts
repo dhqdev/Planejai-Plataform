@@ -3,6 +3,8 @@ import { emitEvent } from "../../events.js";
 import { randomUUID } from "node:crypto";
 import { many, one, query } from "../../db/pool.js";
 import { getCredentials } from "../../integrations/registry.js";
+import { canView } from "../../sharing.js";
+import { findContact } from "../../social.js";
 import { parseLocalDateTime } from "../../time.js";
 import { barChart, budgetChart, donutChart, svgToPng } from "../../charts.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
@@ -344,6 +346,22 @@ export const makeChart = defineTool<{ kind: "categorias" | "meses" | "dias" | "l
   },
 });
 
+
+/**
+ * De quem são as finanças consultadas: da própria pessoa ou de um contato que compartilhou com ela (só leitura).
+ * Devolve o id ou um erro pronto para o modelo.
+ */
+async function financeOwner(ctx: { user: { id: string } }, ofContact?: string): Promise<{ id: string; name?: string } | { error: string }> {
+  if (!ofContact?.trim()) return { id: ctx.user.id };
+  const found = await findContact(ctx.user.id, ofContact);
+  if (found.length !== 1) return { error: found.length ? `Mais de um contato chamado ${ofContact}; pergunte qual.` : `${ofContact} não é contato no Planejai.` };
+  const c = found[0]!;
+  if (!(await canView(c.id, ctx.user.id, "finance"))) return { error: `${c.name} não compartilhou as finanças. Só ela pode liberar (pedindo pro assistente dela).` };
+  return { id: c.id, name: c.name };
+}
+
+const OF_CONTACT = { of_contact: { type: "string", description: "Nome de um contato que compartilhou as finanças (só leitura). Vazio = da própria pessoa." } };
+
 export const addTransaction = defineTool<{
   kind: "expense" | "income";
   amount: number | string;
@@ -410,53 +428,67 @@ export const addTransaction = defineTool<{
   },
 });
 
-export const listTransactions = defineTool<{ from?: string; to?: string; category?: string; limit?: number }>({
+export const listTransactions = defineTool<{ from?: string; to?: string; category?: string; kind?: "expense" | "income"; search?: string; limit?: number; of_contact?: string }>({
   name: "list_transactions",
-  description: "Lista lançamentos financeiros, com filtros.",
+  description: "Lista lançamentos (com id, para editar ou apagar). Filtros por período, categoria, tipo e texto (descrição ou estabelecimento).",
   parameters: obj({
-    from: { type: "string", description: "AAAA-MM-DD" },
+    from: { type: "string", description: "AAAA-MM-DD; padrão 30 dias atrás" },
     to: { type: "string", description: "AAAA-MM-DD (inclusivo)" },
     category: { type: "string" },
+    kind: { type: "string", enum: ["expense", "income"] },
+    search: { type: "string", description: "Parte da descrição ou do estabelecimento (ex.: 'uber')" },
     limit: { type: "number" },
+    ...OF_CONTACT,
   }),
   async run(args, ctx) {
+    const who = await financeOwner(ctx, args.of_contact);
+    if ("error" in who) return who;
     const from = args.from ? parseLocalDateTime(args.from, ctx.timezone) : new Date(Date.now() - 30 * 86_400_000);
     const to = args.to ? new Date(parseLocalDateTime(args.to, ctx.timezone).getTime() + 86_400_000) : new Date(Date.now() + 86_400_000);
-    return many(
+    const rows = await many(
       `SELECT id, kind, amount, category, description, merchant, to_char(occurred_at AT TIME ZONE $6, 'DD/MM/YYYY HH24:MI') AS quando FROM transactions
         WHERE user_id = $1 AND occurred_at >= $2 AND occurred_at < $3 AND ($4::text IS NULL OR category = $4)
+          AND ($7::text IS NULL OR kind = $7) AND ($8::text IS NULL OR description ILIKE $8 OR merchant ILIKE $8)
         ORDER BY occurred_at DESC LIMIT $5`,
-      [ctx.user.id, from, to, args.category ?? null, Math.min(args.limit ?? 50, 200), ctx.timezone],
-    ).then((rows) => {
-      const total = rows.reduce((acc, r) => acc + Math.round(Number(r.amount) * 100) * (r.kind === "expense" ? 1 : 0), 0) / 100;
-      return { count: rows.length, total_expenses_listed: brl(total), items: rows };
-    });
+      [who.id, from, to, args.category ?? null, Math.min(args.limit ?? 50, 200), ctx.timezone, args.kind ?? null, args.search?.trim() ? `%${args.search.trim()}%` : null],
+    );
+    const sum = (k: string) => rows.reduce((acc, r) => acc + (r.kind === k ? Math.round(Number(r.amount) * 100) : 0), 0) / 100;
+    return {
+      ...(who.name ? { of: who.name, read_only: true } : {}),
+      count: rows.length,
+      total_expenses_listed: brl(sum("expense")),
+      total_income_listed: brl(sum("income")),
+      items: rows.map((r) => ({ ...r, amount: brl(cents(r.amount)) })),
+    };
   },
 });
 
-export const financeSummary = defineTool<{ month?: string }>({
+export const financeSummary = defineTool<{ month?: string; of_contact?: string }>({
   name: "finance_summary",
   description: "Resumo do mês: total de gastos, receitas, saldo e gastos por categoria.",
-  parameters: obj({ month: { type: "string", description: "AAAA-MM; padrão mês atual" } }),
+  parameters: obj({ month: { type: "string", description: "AAAA-MM; padrão mês atual" }, ...OF_CONTACT }),
   async run(args, ctx) {
+    const who = await financeOwner(ctx, args.of_contact);
+    if ("error" in who) return who;
     const month = args.month ?? new Intl.DateTimeFormat("en-CA", { timeZone: ctx.timezone, year: "numeric", month: "2-digit" }).format(new Date());
     const where = `user_id = $1 AND to_char(occurred_at AT TIME ZONE $2, 'YYYY-MM') = $3`;
     const totals = await one(
       `SELECT COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses, COALESCE(SUM(amount) FILTER (WHERE kind='income'),0) AS income, COUNT(*) AS count FROM transactions WHERE ${where}`,
-      [ctx.user.id, ctx.timezone, month],
+      [who.id, ctx.timezone, month],
     );
     const byCategory = await many(
       `SELECT category, SUM(amount) AS total, COUNT(*) AS count FROM transactions WHERE ${where} AND kind='expense' GROUP BY category ORDER BY total DESC`,
-      [ctx.user.id, ctx.timezone, month],
+      [who.id, ctx.timezone, month],
     );
     const prev = await one(
       `SELECT COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses FROM transactions
         WHERE user_id = $1 AND to_char(occurred_at AT TIME ZONE $2, 'YYYY-MM') = to_char(to_date($3, 'YYYY-MM') - interval '1 month', 'YYYY-MM')`,
-      [ctx.user.id, ctx.timezone, month],
+      [who.id, ctx.timezone, month],
     );
     const expenses = cents(totals?.expenses);
     const income = cents(totals?.income);
     return {
+      ...(who.name ? { of: who.name, read_only: true } : {}),
       month,
       expenses: brl(expenses),
       income: brl(income),
@@ -473,13 +505,79 @@ export const financeSummary = defineTool<{ month?: string }>({
   },
 });
 
-export const deleteTransaction = defineTool<{ id: string }>({
-  name: "delete_transaction",
-  description: "Apaga um lançamento (ex.: quando a pessoa diz que anotou errado).",
-  parameters: obj({ id: { type: "string" } }, ["id"]),
+export const updateTransaction = defineTool<{
+  ids: string[];
+  amount?: number | string;
+  category?: string;
+  description?: string;
+  merchant?: string;
+  date?: string;
+  kind?: "expense" | "income";
+}>({
+  name: "update_transaction",
+  description:
+    "Corrige lançamentos da pessoa: valor, categoria, descrição, estabelecimento, data ou tipo (ex.: 'era 18 e não 81', 'muda o uber de ontem pra Trabalho'). " +
+    "Pegue os ids com list_transactions. Vários ids = mesma mudança em todos (ex.: recategorizar). Não precisa de confirmação.",
+  parameters: obj(
+    {
+      ids: { type: "array", items: { type: "string" }, description: "Ids dos lançamentos" },
+      amount: { type: "number", description: "Novo valor em reais" },
+      category: { type: "string", enum: CATEGORIES },
+      description: { type: "string" },
+      merchant: { type: "string" },
+      date: { type: "string", description: "AAAA-MM-DD ou AAAA-MM-DDTHH:MM local" },
+      kind: { type: "string", enum: ["expense", "income"] },
+    },
+    ["ids"],
+  ),
   async run(args, ctx) {
-    const r = await query("DELETE FROM transactions WHERE id = $1 AND user_id = $2", [args.id, ctx.user.id]);
-    return { ok: (r.rowCount ?? 0) > 0 };
+    const ids = (args.ids ?? []).filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 200);
+    if (!ids.length) return { ok: false, error: "Passe os ids (use list_transactions)" };
+    const amount = args.amount != null && args.amount !== "" ? parseAmount(args.amount) : null;
+    if (amount !== null && amount <= 0) return { ok: false, error: "Valor precisa ser maior que zero" };
+    const when = args.date ? parseLocalDateTime(args.date, ctx.timezone) : null;
+    const rows = await many(
+      `UPDATE transactions SET amount = COALESCE($3, amount), category = COALESCE($4, category), description = COALESCE($5, description),
+              merchant = COALESCE($6, merchant), occurred_at = COALESCE($7, occurred_at), kind = COALESCE($8, kind)
+        WHERE user_id = $1 AND id = ANY($2::uuid[])
+        RETURNING id, kind, amount, category, description, merchant, to_char(occurred_at AT TIME ZONE $9, 'DD/MM/YYYY HH24:MI') AS quando`,
+      [ctx.user.id, ids, amount, args.category && CATEGORIES.includes(args.category) ? args.category : null, args.description ?? null, args.merchant ?? null, when, args.kind ?? null, ctx.timezone],
+    );
+    if (!rows.length) return { ok: false, error: "Nenhum lançamento seu com esses ids" };
+    return { ok: true, updated: rows.length, items: rows.map((r) => ({ ...r, amount: brl(cents(r.amount)) })) };
+  },
+});
+
+export const deleteTransaction = defineTool<{ ids?: string[]; id?: string; from?: string; to?: string; category?: string; search?: string; confirmed_by_user?: boolean }>({
+  name: "delete_transaction",
+  description:
+    "Apaga lançamentos da pessoa. Por ids (de list_transactions; 1 ou poucos itens que ela apontou, sem confirmação) " +
+    "ou por filtro (período, categoria, texto) para apagar vários de uma vez: com filtro, mostre quantos e o total e só apague com confirmed_by_user=true.",
+  parameters: obj({
+    ids: { type: "array", items: { type: "string" } },
+    from: { type: "string", description: "AAAA-MM-DD" },
+    to: { type: "string", description: "AAAA-MM-DD (inclusivo)" },
+    category: { type: "string" },
+    search: { type: "string", description: "Parte da descrição ou do estabelecimento" },
+    ...CONFIRM_PARAM,
+  }),
+  async run(args, ctx) {
+    const ids = [...(args.ids ?? []), ...(args.id ? [args.id] : [])].filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 200);
+    if (ids.length) {
+      const rows = await many("DELETE FROM transactions WHERE user_id = $1 AND id = ANY($2::uuid[]) RETURNING amount", [ctx.user.id, ids]);
+      return { ok: rows.length > 0, deleted: rows.length, total: brl(cents(rows.reduce((a, r) => a + Number(r.amount), 0))) };
+    }
+    if (!args.from && !args.to && !args.category && !args.search?.trim()) return { ok: false, error: "Diga o que apagar: ids ou um filtro (período, categoria, texto)" };
+    const from = args.from ? parseLocalDateTime(args.from, ctx.timezone) : new Date(0);
+    const to = args.to ? new Date(parseLocalDateTime(args.to, ctx.timezone).getTime() + 86_400_000) : new Date(Date.now() + 366 * 86_400_000);
+    const where = `user_id = $1 AND occurred_at >= $2 AND occurred_at < $3 AND ($4::text IS NULL OR category = $4) AND ($5::text IS NULL OR description ILIKE $5 OR merchant ILIKE $5)`;
+    const params = [ctx.user.id, from, to, args.category ?? null, args.search?.trim() ? `%${args.search.trim()}%` : null];
+    const preview = await one(`SELECT COUNT(*)::int AS n, COALESCE(SUM(amount), 0) AS total FROM transactions WHERE ${where}`, params);
+    if (!preview?.n) return { ok: false, error: "Nenhum lançamento com esse filtro" };
+    const gate = requireConfirmation(args, `apagar ${preview.n} lançamento(s) somando ${brl(cents(preview.total))}`);
+    if (gate) return { ...gate, count: preview.n, total: brl(cents(preview.total)) };
+    const r = await query(`DELETE FROM transactions WHERE ${where}`, params);
+    return { ok: true, deleted: r.rowCount ?? 0, total: brl(cents(preview.total)) };
   },
 });
 
