@@ -172,8 +172,8 @@ export function FinancePage() {
 
               <div className="card card-pad fin-trend">
                 <div className="fin-card-head"><h3>Últimos meses</h3></div>
-                {!months.length && <p className="muted" style={{ fontSize: 13, margin: "4px 0 0" }}>O histórico aparece aqui depois do primeiro mês com gastos.</p>}
-                <div className="fin-months" style={months.length ? undefined : { display: "none" }}>
+                {months.length < 2 && <p className="muted" style={{ fontSize: 13, margin: "4px 0 0" }}>{months.length ? "Quando tiver gastos em mais de um mês, a comparação aparece aqui." : "O histórico aparece aqui depois do primeiro mês com gastos."}</p>}
+                <div className="fin-months" style={months.length >= 2 ? undefined : { display: "none" }}>
                   {months.map((m: any) => (
                     <button key={m.month} className={m.month === month ? "active" : ""} onClick={() => { haptic(5); setCat(null); setMonth(m.month); }} title={`${m.month}: ${brl(m.expenses)}`}>
                       <span className="fin-month-bar"><i style={{ height: `${(Number(m.expenses) / maxMonth) * 100}%` }} /></span>
@@ -199,7 +199,7 @@ export function FinancePage() {
                 </div>
                 {cats.length ? (
                   <div className="fin-donut">
-                    <Donut items={cats} size={150} center={<div><small className="muted">Total</small><div style={{ fontWeight: 700, fontSize: 13 }} title={brl(expenses)}>{brlShort(expenses)}</div></div>} />
+                    <Donut items={cats} size={150} center={<div><small className="muted">Total</small><div style={{ fontWeight: 600, fontSize: 13 }} title={brl(expenses)}>{brlShort(expenses)}</div></div>} />
                     <div className="fin-legend">
                       {cats.map((c: any, i: number) => {
                         const b = budgetOf.get(c.label);

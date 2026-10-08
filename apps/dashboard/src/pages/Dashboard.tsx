@@ -155,7 +155,7 @@ const WIDGETS: Record<string, WidgetDef> = {
     icon: "send",
     sizes: ["s", "m"],
     render: ({ sys, mine }) => (
-      <Num icon="send" label="Mensagens hoje" value={sys?.counts.messages_24h ?? mine?.counts.messages_24h ?? 0} sub={sys ? `${sys.counts.people} pessoas ativas` : undefined} />
+      <Num icon="send" label="Mensagens hoje" value={sys?.counts.messages_24h ?? mine?.counts.messages_24h ?? 0} sub={sys ? `${sys.counts.people} ${Number(sys.counts.people) === 1 ? "pessoa ativa" : "pessoas ativas"}` : undefined} />
     ),
   },
   people: {
@@ -520,11 +520,11 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
             </>
           ) : (
             <div className="dash-actions">
-              <button className={`btn ${fit ? "" : "phone-only"}`} onClick={() => setModal("quick")}>
-                <Icon name="settings" size={16} /> Ajustes
+              <button className={`icon-btn ${fit ? "" : "phone-only"}`} onClick={() => setModal("quick")} aria-label="Ajustes rápidos" title="Ajustes rápidos">
+                <Icon name="settings" size={17} />
               </button>
-              <button className="btn" onClick={() => setEditing(true)}>
-                <Icon name="layout" size={16} /> Editar<span className="hide-phone"> painel</span>
+              <button className="icon-btn" onClick={() => setEditing(true)} aria-label="Editar painel" title="Editar painel">
+                <Icon name="layout" size={17} />
               </button>
               <button className={`btn btn-brand ${fit ? "" : "phone-only"}`} onClick={() => setModal("invite")}>
                 <Icon name="user-plus" size={16} /> Convidar

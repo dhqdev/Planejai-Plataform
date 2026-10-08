@@ -35,7 +35,16 @@ export async function api<T = any>(path: string, init: RequestInit & { json?: un
 /** Custo em dólar, igual ao OpenRouter (o valor já é o custo real que ele devolve em usage.cost). */
 export const usd = (v: number | string | null | undefined) => {
   const n = Number(v ?? 0);
-  return n < 0.01 && n > 0 ? `US$ ${n.toFixed(5)}` : `US$ ${n.toFixed(2)}`;
+  const digits = n < 0.01 && n > 0 ? 5 : 2;
+  return `US$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+};
+
+/** Telefone com DDI para mostrar: 5519999999999 → +55 (19) 99999-9999. Fora do Brasil fica +número. */
+export const phoneFmt = (v: string | null | undefined) => {
+  const d = String(v ?? "").replace(/\D/g, "");
+  if (!d) return "";
+  const m = d.match(/^55(\d{2})(\d{4,5})(\d{4})$/);
+  return m ? `+55 (${m[1]}) ${m[2]}-${m[3]}` : `+${d}`;
 };
 
 export const ms = (v: number | null | undefined) => {
