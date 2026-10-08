@@ -1,5 +1,6 @@
 import type { ChatMessage } from "../llm/types.js";
-import { isoLocal } from "../time.js";
+import { one } from "../db/pool.js";
+import { formatLocal, isoLocal } from "../time.js";
 import { addTransaction } from "./tools/finance.js";
 import type { ToolContext } from "./tools/types.js";
 
@@ -61,6 +62,21 @@ export async function autoLaunchReceipts(pending: any[], ctx: ToolContext): Prom
     const desc = kind === "image" ? m.meta?.image_description : kind === "document" ? String(m.meta?.doc_text ?? "").slice(0, 3000) : null;
     const r = parseReceipt(desc);
     if (!r || SKIP.test(m.content ?? "")) continue;
+    // o mesmo Pix mandado de novo (ou como foto e depois PDF): mesmo valor e estabelecimento nos últimos 3 dias
+    const twin = r.estabelecimento
+      ? await one(
+          `SELECT occurred_at FROM transactions WHERE user_id = $1 AND amount = $2 AND created_at > now() - interval '3 days'
+             AND (merchant ILIKE $3 OR description ILIKE $3) AND (external_ref IS NULL OR external_ref NOT LIKE $4) LIMIT 1`,
+          [ctx.user.id, r.valor, r.estabelecimento, `${m.id}:%`],
+        )
+      : null;
+    if (twin) {
+      const when = formatLocal(new Date(twin.occurred_at), ctx.timezone);
+      const step = await ctx.tracer.step({ agent: "cto", type: "info", name: "comprovante repetido", input: { message_id: String(m.id), ...r } });
+      await step.ok({ lancado: false, parecido_com: when });
+      notes.push({ role: "system", content: `O comprovante da msg_id=${m.id} parece o mesmo comprovante de ${when} e não foi lançado; pergunte se é outro.` });
+      continue;
+    }
     const step = await ctx.tracer.step({ agent: "cto", type: "tool", name: "add_transaction", input: { automatico: "comprovante na foto", message_id: String(m.id), ...r } });
     try {
       const out: any = await addTransaction.run(

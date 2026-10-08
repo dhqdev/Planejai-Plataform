@@ -33,6 +33,7 @@ function fakeOpenRouter(body: any) {
     if (body.messages.some((m: any) => m.role === "system" && String(m.content).includes("JÁ lançou"))) {
       return completion("Anotado ✅", [call("react_to_message", { emoji: "✅" })]);
     }
+    if (body.messages.some((m: any) => m.role === "system" && String(m.content).includes("parece o mesmo comprovante"))) return completion("Esse parece o mesmo de antes. É outro?");
     if (userText.includes("FINANCEIRO:")) {
       return completion(null, [
         call("react_to_message", { emoji: "✅" }),
@@ -123,6 +124,16 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(old2020.error).toContain("ano");
   });
 
+
+  it("o mesmo comprovante mandado de novo (outra foto) não vira dois gastos", async () => {
+    const img = { base64: Buffer.from("outra-foto-do-mesmo-pix").toString("base64"), mimetype: "image/jpeg" };
+    await db.query("INSERT INTO messages (conversation_id, role, content, external_id, media, meta) VALUES ($1, 'user', '', 'img2', $2, $3)", [convId, img, { kind: "image" }]);
+    const channel = new channels.PlaygroundChannel();
+    await mod.processConversation(convId, { trigger: "playground", channel });
+    const n = await db.one("SELECT COUNT(*)::int AS n FROM transactions WHERE user_id = $1 AND merchant = 'Pizzaria Bella'", [user.id]);
+    expect(n.n).toBe(1);
+    expect(channel.sent.some((s: any) => s.text?.includes("É outro?"))).toBe(true);
+  });
   it("documento é lido localmente e entra resumido no contexto", async () => {
     const csv = "data,descricao,valor\n2026-10-01,Mercado,250.40\n2026-10-02,Uber,32.10\n";
     await db.query("INSERT INTO messages (conversation_id, role, content, external_id, media, meta) VALUES ($1, 'user', 'meu extrato', 'doc1', $2, $3)", [
