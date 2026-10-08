@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ago, api } from "../api";
+import { ago, api, phoneFmt } from "../api";
 import { ErrorBox, Loading, PageHead, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 
@@ -95,7 +95,7 @@ export function WhatsAppPage() {
           {s.status === "connected" && (
             <div>
               <div style={{ fontSize: 20, fontWeight: 700, overflowWrap: "anywhere" }}>{s.name || "WhatsApp"}</div>
-              <div className="mono">{s.phone ? `+${s.phone}` : ""}</div>
+              <div className="mono">{s.phone ? phoneFmt(s.phone) : ""}</div>
               <p className="muted">Mensagens que chegarem neste número vão para o time de agentes. Pessoas novas aparecem em <Link to="/people" style={{ color: "var(--accent)" }}>Pessoas</Link> para você aprovar.</p>
             </div>
           )}

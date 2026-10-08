@@ -155,7 +155,7 @@ const WIDGETS: Record<string, WidgetDef> = {
     icon: "send",
     sizes: ["s", "m"],
     render: ({ sys, mine }) => (
-      <Num icon="send" label="Mensagens hoje" value={sys?.counts.messages_24h ?? mine?.counts.messages_24h ?? 0} sub={sys ? `${sys.counts.people} pessoas ativas` : undefined} />
+      <Num icon="send" label="Mensagens hoje" value={sys?.counts.messages_24h ?? mine?.counts.messages_24h ?? 0} sub={sys ? `${sys.counts.people} ${Number(sys.counts.people) === 1 ? "pessoa ativa" : "pessoas ativas"}` : undefined} />
     ),
   },
   people: {

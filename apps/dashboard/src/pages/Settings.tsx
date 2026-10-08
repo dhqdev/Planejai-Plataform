@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, brl } from "../api";
+import { api, brl, phoneFmt } from "../api";
 import { CopyField, ErrorBox, Loading, PageHead } from "../components";
 import { useApi } from "../hooks";
 
@@ -184,7 +184,7 @@ export function SettingsPage() {
           )}
           <h3 style={{ marginTop: 18 }}>Acesso</h3>
           <p className="muted">
-            Donos (sempre liberados): {data.ownerPhones.length ? data.ownerPhones.map((p: string) => `+${p}`).join(", ") : "nenhum (defina OWNER_PHONES)"}
+            Donos (sempre liberados): {data.ownerPhones.length ? data.ownerPhones.map((p: string) => phoneFmt(p)).join(", ") : "nenhum (defina OWNER_PHONES)"}
             <br />
             Contatos desconhecidos: {data.allowUnknown ? "liberados automaticamente" : "ficam aguardando aprovação em Pessoas"}
           </p>

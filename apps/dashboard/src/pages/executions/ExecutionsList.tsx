@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../../api";
+import { api, phoneFmt } from "../../api";
 import { ErrorBox, Modal, PageHead } from "../../components";
 import { useApi } from "../../hooks";
 import { Icon } from "../../icons";
@@ -90,7 +90,7 @@ export function ExecutionsPage() {
         </div>
         <select className="select ex-select" value={user} onChange={(e) => set("user", e.target.value)} aria-label="Pessoa">
           <option value="">Pessoas</option>
-          {(s?.people ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name ?? `+${p.phone}`}</option>)}
+          {(s?.people ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name ?? phoneFmt(p.phone)}</option>)}
         </select>
         <select className="select ex-select" value={agent} onChange={(e) => set("agent", e.target.value)} aria-label="Agente">
           <option value="">Agentes</option>

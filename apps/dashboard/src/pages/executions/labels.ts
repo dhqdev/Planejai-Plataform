@@ -1,3 +1,4 @@
+import { phoneFmt } from "../../api";
 import { AGENT_ICON, AGENT_LABEL } from "../../components";
 import { CORE_FACES, type Face } from "../../faces";
 import { firstWords } from "./format";
@@ -156,4 +157,4 @@ export function executionTitle(e: any, words: number) {
 }
 export const channelOf = (e: any): string | null => (e.channel ? CHANNEL_LABEL[e.channel] ?? e.channel : null);
 /** Quem mandou: nome ou telefone; null quando foi o próprio sistema. */
-export const personOf = (e: any): string | null => e.user_name ?? (e.phone ? `+${e.phone}` : null);
+export const personOf = (e: any): string | null => e.user_name ?? (e.phone ? phoneFmt(e.phone) : null);

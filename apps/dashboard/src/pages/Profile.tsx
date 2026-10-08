@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, phoneFmt } from "../api";
 import type { Me } from "../App";
 import { ErrorBox, PageHead, alertDialog, confirmDialog } from "../components";
 import { Connections } from "../Connections";
@@ -36,7 +36,7 @@ export function ProfilePage({ me }: { me: Me }) {
         <div className="field"><label htmlFor="pf-name">Nome</label><input id="pf-name" name="name" autoComplete="name" className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
         <div className="field">
           <label htmlFor="pf-phone">WhatsApp ligado</label>
-          <input id="pf-phone" className="input" aria-describedby="pf-phone-help" value={data?.user ? `+${data.user.phone}` : "nenhum"} disabled />
+          <input id="pf-phone" className="input" aria-describedby="pf-phone-help" value={data?.user ? phoneFmt(data.user.phone) : "nenhum"} disabled />
           <span className="help" id="pf-phone-help">É por esse número que o assistente sabe que é você.</span>
         </div>
         <div className="field">

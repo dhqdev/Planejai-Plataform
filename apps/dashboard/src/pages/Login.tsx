@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, phoneFmt } from "../api";
 import type { Me } from "../App";
 import { ErrorBox } from "../components";
 import { haptic } from "../touch";
@@ -148,7 +148,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
                   <div className="field"><label>Nome completo</label><input className="input" value={form.name} onChange={set("name")} autoComplete="name" autoFocus required /></div>
                   <div className="field">
                     <label>WhatsApp</label>
-                    <input className="input" placeholder="(19) 99999-9999" value={invite ? `+${invite.phone}` : form.phone} onChange={set("phone")} disabled={Boolean(invite)} inputMode="tel" required />
+                    <input className="input" placeholder="(19) 99999-9999" value={invite ? phoneFmt(invite.phone) : form.phone} onChange={set("phone")} disabled={Boolean(invite)} inputMode="tel" required />
                   </div>
                 </>
               )}
