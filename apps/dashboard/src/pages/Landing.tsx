@@ -2,9 +2,9 @@ import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode,
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
-import { AgentFace, CORE_FACES } from "../faces";
 import { Mochi, type Mood } from "../mochi/Mochi";
 import "../landing.css";
+import { TeamStage, type StageAgent } from "./TeamStage";
 
 /**
  * Landing pública (quem abre "/" sem estar logado). Estilo Toki/Pierre: muito respiro, tipografia grande,
@@ -338,7 +338,7 @@ function useCurtain() {
 }
 
 /** Os especialistas que já vêm prontos, com o que cada um faz e como pedir. */
-const TEAM: { id: keyof typeof CORE_FACES; role: string; text: string; asks: string[] }[] = [
+const TEAM: StageAgent[] = [
   {
     id: "cto",
     role: "Conversa com você",
@@ -631,20 +631,8 @@ export function LandingPage() {
           <div className="lp-wrap">
             <h2 className="lp-h2" data-reveal>Por trás de cada resposta, um time inteiro.</h2>
             <p className="lp-sub" data-reveal>Cada especialista é um Mochi com uma função. Você não precisa escolher com quem falar: o Maestro chama quem precisa, eles conversam entre si e você recebe uma resposta só.</p>
-            <div className="lp-team-grid">
-              {TEAM.map((m, i) => (
-                <article key={m.id} className={`lp-agent ${m.id === "cto" ? "lead" : ""}`} data-reveal style={{ ["--d" as string]: i }}>
-                  <AgentFace face={CORE_FACES[m.id].face} size={m.id === "cto" ? 92 : 72} title={CORE_FACES[m.id].persona} />
-                  <h3>
-                    {CORE_FACES[m.id].persona}
-                    <small>{m.role}</small>
-                  </h3>
-                  <p>{m.text}</p>
-                  <ul className="lp-agent-asks" aria-label={`Exemplos de pedidos para ${CORE_FACES[m.id].persona}`}>
-                    {m.asks.map((a) => <li key={a}>{a}</li>)}
-                  </ul>
-                </article>
-              ))}
+            <div data-reveal>
+              <TeamStage team={TEAM} />
             </div>
           </div>
         </section>
