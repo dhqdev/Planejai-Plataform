@@ -66,6 +66,9 @@ Cada item tem teste; rode `npm test` depois de mexer em `orchestrator.ts`, `runn
 - Ferramentas do Pesquisador: `browser_open` (record/send_recording), `browser_action`, `browser_screenshot`, `browser_close`. A sessão fica em `ctx.room.browser`; o orquestrador fecha o que ficou aberto e manda a gravação se ela foi pedida.
 - Precisa de ffmpeg (já na imagem) e do browserless da stack (`TIMEOUT` 300000). Em dev: `CHROME_PATH=/caminho/do/chrome`.
 
+## Resposta vazia
+- No trigger `message`, texto vazio do CTO (que não seja `[[silencio]]` explícito) ganha uma rodada extra sem ferramentas; se ainda vier vazio, a pessoa recebe "Me perdi aqui no meio..." e a execução fica Parcial (`orchestrator.ts`, "trava: resposta vazia").
+
 ## Lembretes com teto
 - `createReminder` (`reminders.ts`) recusa cron mais frequente que `MIN_REMINDER_INTERVAL_MIN` (15) e mais de `MAX_ACTIVE_REMINDERS` (30) ativos por pessoa; a regra do cron mora em `cron-limits.ts` (a mesma das automações de cliente). Lembrete de quem passou do `dailyCostLimitUsd` sai como texto pronto (`plainText`), sem IA.
 

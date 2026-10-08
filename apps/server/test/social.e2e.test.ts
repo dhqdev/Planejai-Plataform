@@ -37,6 +37,8 @@ function fakeOpenRouter(body: any) {
   if (system.includes("avisando a pessoa")) return completion("Saiu a data do show do Coldplay em SP: 12/03. https://ex.com/coldplay");
   if (system.includes("CTO de um time")) {
     const userText = String(body.messages.findLast((m: any) => m.role === "user")?.content ?? "");
+    if (last.role === "system" && String(last.content).includes("Responda à pessoa agora")) return completion(userText.includes("sempre vazio") ? "" : "Aqui está o que achei!");
+    if (userText.includes("resposta vazia") || userText.includes("sempre vazio")) return completion("");
     if (last.role === "tool") return completion("Feito!");
     if (userText.includes("convida o Giovani")) return completion(null, [call("invite_person", { name: "Giovani Silva", phone: "(19) 92222-3333", confirmed_by_user: true })]);
     if (userText.includes("libera minhas finanças")) return completion(null, [call("share_screen", { contact: "giovani", screen: "finance", allow: true })]);
@@ -206,6 +208,15 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     expect(await db.one("SELECT status FROM pending_actions WHERE id = $1", [newer.id])).toEqual({ status: "approved" });
     expect(lastTexts(3).some((t) => t.includes("Teste do sim único"))).toBe(true);
     expect(await db.one("SELECT 1 AS ok FROM shares WHERE owner_id = $1 AND scope = 'agenda'", [david.id])).toBeUndefined();
+  });
+
+  it("resposta vazia do modelo não vira silêncio", async () => {
+    const ch = await say("teste de resposta vazia");
+    expect(ch.sent.filter((s) => s.type === "text").at(-1)?.text).toBe("Aqui está o que achei!");
+    const ch2 = await say("sempre vazio");
+    expect(ch2.sent.filter((s) => s.type === "text").at(-1)?.text).toContain("Me perdi aqui no meio");
+    const ex = await db.one("SELECT status FROM executions WHERE conversation_id = $1 ORDER BY started_at DESC LIMIT 1", [davidConv]);
+    expect(ex.status).toBe("partial");
   });
 
   it("cadastro no painel só com convite, e o convite conta para quem convidou", async () => {

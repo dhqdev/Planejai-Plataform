@@ -381,6 +381,25 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       await step.ok({ refeito: Boolean(retry?.text) && !still });
       result.text = retry?.text && !still ? retry.text : `Não consegui concluir isso agora (${claim}), então nada foi feito. Pode me pedir de novo?`;
     }
+    // resposta vazia (passos só com ferramentas, ou o modelo devolveu nada) não pode virar silêncio: mais uma rodada, sem ferramentas
+    if (opts.trigger === "message" && !result.timedOut && !guard.expired && !result.text.trim()) {
+      const step = await tracer.step({ agent: "cto", type: "info", name: "trava: resposta vazia", input: { passos: result.steps } });
+      const again = await runToolLoop({
+        agent: "cto",
+        task: "agent:cto",
+        ctx,
+        tools: [],
+        maxSteps: 1,
+        messages: [...result.messages, { role: "system", content: "Responda à pessoa agora, em texto, com o que você já tem." }],
+      }).catch(() => null);
+      const text = again?.text?.trim() ?? "";
+      await step.ok({ respondeu: Boolean(text) });
+      if (text) result.text = text;
+      else {
+        result.text = "Me perdi aqui no meio. Pode me falar de novo o que você precisa?";
+        ctx.room.partial = "O modelo não escreveu resposta";
+      }
+    }
     if (result.timedOut || (guard.expired && !result.text)) {
       const step = await tracer.step({ agent: "cto", type: "info", name: "trava: tempo máximo", input: { minutos: guard.minutes, acoes: guard.toolCalls } });
       await step.ok({ stopped: true });
