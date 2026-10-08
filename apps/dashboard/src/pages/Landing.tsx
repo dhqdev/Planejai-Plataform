@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { AgentFace, CORE_FACES } from "../faces";
 import { Mochi, type Mood } from "../mochi/Mochi";
@@ -149,10 +151,189 @@ function Bubble({ m }: { m: Msg }) {
 function Clip({ children, label }: { children: ReactNode; label: string }) {
   const [ref, inView] = useInView<HTMLDivElement>("-10% 0px");
   return (
-    <div ref={ref} className={`lp-clip ${inView ? "play" : ""}`} role="img" aria-label={label}>
+    <div ref={ref} className={`lp-clip ${inView ? "play" : ""}`} role="img" aria-label={label} data-reveal style={{ ["--d" as string]: 1 }}>
       {children}
     </div>
   );
+}
+
+/**
+ * Rolagem: grava no .lp a posição (--sp, 0 a 1), quanto do topo já saiu (--hero) e a inclinação pela
+ * velocidade (--lean). O CSS usa isso para o parallax do topo, a barra de progresso e o Mochi que acompanha.
+ * Sem estado do React: nada renderiza de novo enquanto rola.
+ */
+function useScrollVars(root: RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const el = root.current;
+    if (!el || reduced()) return;
+    let raf = 0;
+    let last = el.scrollTop;
+    let lastT = performance.now();
+    let calm: ReturnType<typeof setTimeout>;
+    const update = () => {
+      raf = 0;
+      const y = el.scrollTop;
+      const now = performance.now();
+      const v = (y - last) / Math.max(16, now - lastT);
+      last = y;
+      lastT = now;
+      el.style.setProperty("--sp", (y / Math.max(1, el.scrollHeight - el.clientHeight)).toFixed(4));
+      el.style.setProperty("--hero", Math.min(1, y / (el.clientHeight * 0.8)).toFixed(4));
+      el.style.setProperty("--lean", `${Math.max(-16, Math.min(16, v * 7)).toFixed(1)}deg`);
+      clearTimeout(calm);
+      calm = setTimeout(() => el.style.setProperty("--lean", "0deg"), 140);
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(raf);
+      clearTimeout(calm);
+    };
+  }, [root]);
+}
+
+/** Blocos com data-reveal sobem e aparecem quando entram na tela, uma vez só. */
+function useReveal(root: RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const el = root.current;
+    if (!el || reduced() || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          // atributo, não classe: o React reescreve className quando o bloco muda de estado
+          (e.target as HTMLElement).dataset.in = "";
+          io.unobserve(e.target);
+        }
+      },
+      { root: el, rootMargin: "0px 0px -12% 0px" },
+    );
+    for (const n of el.querySelectorAll("[data-reveal]")) io.observe(n);
+    el.classList.add("reveal-on");
+    return () => io.disconnect();
+  }, [root]);
+}
+
+/** O que o Mochi que acompanha a rolagem diz e sente em cada parte da página. */
+const BUDDY: Record<string, { mood: Mood; say: string }> = {
+  "como-funciona": { mood: "curious", say: "Olha como é fácil." },
+  time: { mood: "happy", say: "Esse é o meu time!" },
+  seguranca: { mood: "wink", say: "Sem o seu sim, nada sai." },
+  preco: { mood: "finished", say: "Cabe no bolso." },
+  perguntas: { mood: "thinking", say: "Ficou alguma dúvida?" },
+};
+
+/**
+ * Mochi que acompanha a rolagem: assume quando o do topo sai da tela, inclina com a velocidade,
+ * pula e muda de cara a cada seção e sai de cena quando chega o Mochi grande do final.
+ */
+function Buddy({ root }: { root: RefObject<HTMLDivElement | null> }) {
+  const box = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  const [part, setPart] = useState<string | null>(null);
+
+  useEffect(() => {
+    const el = root.current;
+    const b = box.current;
+    if (!el || !b) return;
+    const end = el.querySelector(".lp-final");
+    const check = () => {
+      const past = el.scrollTop > el.clientHeight * 0.7;
+      const ending = end ? end.getBoundingClientRect().top < el.clientHeight * 0.75 : false;
+      b.dataset.show = past && !ending ? "1" : "0";
+    };
+    check();
+    el.addEventListener("scroll", check, { passive: true });
+    let io: IntersectionObserver | undefined;
+    if (typeof IntersectionObserver !== "undefined") {
+      io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) if (e.isIntersecting) setPart(e.target.id);
+        },
+        { root: el, rootMargin: "-45% 0px -45% 0px" },
+      );
+      for (const id of Object.keys(BUDDY)) {
+        const s = el.querySelector(`#${id}`);
+        if (s) io.observe(s);
+      }
+    }
+    return () => {
+      el.removeEventListener("scroll", check);
+      io?.disconnect();
+    };
+  }, [root]);
+
+  useEffect(() => {
+    if (!part || reduced()) return;
+    body.current?.animate(
+      [{ transform: "none" }, { transform: "translateY(-14px) scale(1.06, .94)" }, { transform: "translateY(2px) scale(.96, 1.04)" }, { transform: "none" }],
+      { duration: 520, easing: "cubic-bezier(.34, 1.56, .64, 1)" },
+    );
+  }, [part]);
+
+  const now = part ? BUDDY[part] : null;
+  return (
+    <div className="lp-buddy" ref={box} data-show="0" aria-hidden="true">
+      {now && (
+        <span className="lp-buddy-say" key={part}>
+          {now.say}
+        </span>
+      )}
+      <div className="lp-buddy-body" ref={body}>
+        <Mochi size={80} mood={now?.mood ?? "happy"} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Clique em Entrar/Criar conta: onda no botão, a tela se cobre de roxo a partir do dedo com o Mochi
+ * pulando no meio, troca para o login e o roxo se desfaz por cima dele.
+ */
+function useCurtain() {
+  const nav = useNavigate();
+  const [veil, setVeil] = useState<{ x: number; y: number } | null>(null);
+  const node = useRef<HTMLDivElement>(null);
+  const go = (e: MouseEvent<HTMLAnchorElement>) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    const a = e.currentTarget;
+    const href = a.getAttribute("href") ?? "/login";
+    if (reduced()) return nav(href);
+    const r = a.getBoundingClientRect();
+    const x = e.clientX || r.left + r.width / 2;
+    const y = e.clientY || r.top + r.height / 2;
+    a.style.setProperty("--rx", `${x - r.left}px`);
+    a.style.setProperty("--ry", `${y - r.top}px`);
+    a.classList.remove("lp-ripple");
+    void a.offsetWidth;
+    a.classList.add("lp-ripple");
+    setVeil({ x, y });
+    setTimeout(() => {
+      // a cortina vive fora da landing para continuar na tela depois da troca de rota
+      const keep = node.current?.cloneNode(true) as HTMLElement | undefined;
+      if (keep) {
+        document.body.appendChild(keep);
+        keep.classList.add("out");
+        setTimeout(() => keep.remove(), 700);
+      }
+      nav(href);
+    }, 620);
+  };
+  const curtain = veil
+    ? createPortal(
+        <div ref={node} className="lp-veil" style={{ ["--x" as string]: `${veil.x}px`, ["--y" as string]: `${veil.y}px` }} aria-hidden="true">
+          <span className="lp-veil-mochi">
+            <Mochi size={96} still mood="happy" />
+          </span>
+        </div>,
+        document.body,
+      )
+    : null;
+  return { go, curtain };
 }
 
 const TEAM: { id: keyof typeof CORE_FACES; role: string; text: string }[] = [
@@ -167,6 +348,10 @@ export function LandingPage() {
   const [cfg, setCfg] = useState<Config | null>(null);
   const [mood, setMood] = useState<Mood>("greeting");
   const [open, setOpen] = useState<number | null>(0);
+  const root = useRef<HTMLDivElement>(null);
+  const { go, curtain } = useCurtain();
+  useScrollVars(root);
+  useReveal(root);
 
   useEffect(() => {
     api<Config>("/api/auth/config").then(setCfg, () => {});
@@ -194,8 +379,11 @@ export function LandingPage() {
   ];
 
   return (
-    <div className="lp">
+    <div className="lp" ref={root}>
+      {curtain}
+      <Buddy root={root} />
       <header className="lp-nav">
+        <span className="lp-progress" aria-hidden="true" />
         <div className="lp-wrap lp-nav-row">
           <a href="/" className="lp-logo" aria-label="Planejai, início">
             <Mochi size={34} mood="happy" still />
@@ -209,11 +397,11 @@ export function LandingPage() {
             <a href="#perguntas">Perguntas</a>
           </nav>
           <div className="lp-nav-cta">
-            <a className="lp-btn ghost" href="/login">
+            <a className="lp-btn ghost" href="/login" onClick={go}>
               Entrar
             </a>
             {!closed && (
-              <a className="lp-btn" href="/login?cadastro=1">
+              <a className="lp-btn" href="/login?cadastro=1" onClick={go}>
                 {cta}
               </a>
             )}
@@ -225,18 +413,26 @@ export function LandingPage() {
         <section className="lp-hero">
           <div className="lp-wrap lp-hero-grid">
             <div className="lp-hero-copy">
-              <h1>Sua vida organizada numa conversa de WhatsApp.</h1>
+              <h1 aria-label="Sua vida organizada numa conversa de WhatsApp.">
+                {"Sua vida organizada numa conversa de WhatsApp.".split(" ").map((w, i) => (
+                  <Fragment key={w}>
+                    <span className="lp-w" aria-hidden="true" style={{ ["--i" as string]: i }}>
+                      {w}
+                    </span>{" "}
+                  </Fragment>
+                ))}
+              </h1>
               <p className="lp-lead">
                 Mande um texto, um áudio ou a foto do comprovante. O Planejai anota seus gastos, marca seus compromissos e te lembra do que importa, com um time de
                 especialistas trabalhando por trás.
               </p>
               <div className="lp-hero-cta">
                 {!closed && (
-                  <a className="lp-btn big" href="/login?cadastro=1">
+                  <a className="lp-btn big" href="/login?cadastro=1" onClick={go}>
                     {cta}
                   </a>
                 )}
-                <a className="lp-btn big ghost" href="/login">
+                <a className="lp-btn big ghost" href="/login" onClick={go}>
                   Já tenho conta
                 </a>
               </div>
@@ -244,9 +440,13 @@ export function LandingPage() {
             </div>
             <div className="lp-hero-stage">
               <div className="lp-mochi-peek" aria-hidden="true">
-                <Mochi size={132} mood={mood} />
+                <div className="lp-peek-in">
+                  <Mochi size={132} mood={mood} />
+                </div>
               </div>
-              <Phone onMood={setMood} />
+              <div className="lp-phone-par">
+                <Phone onMood={setMood} />
+              </div>
             </div>
           </div>
         </section>
@@ -254,7 +454,7 @@ export function LandingPage() {
         <section className="lp-strip" aria-label="O que ele entende">
           <div className="lp-wrap lp-strip-row">
             <span>Ele entende</span>
-            <ul>
+            <ul data-reveal>
               <li>texto</li>
               <li>áudio</li>
               <li>foto de comprovante</li>
@@ -266,10 +466,10 @@ export function LandingPage() {
 
         <section id="como-funciona" className="lp-section">
           <div className="lp-wrap">
-            <h2 className="lp-h2">Você fala do seu jeito. Ele organiza do jeito certo.</h2>
+            <h2 className="lp-h2" data-reveal>Você fala do seu jeito. Ele organiza do jeito certo.</h2>
 
             <div className="lp-row">
-              <div className="lp-row-copy">
+              <div className="lp-row-copy" data-reveal>
                 <h3>Seus gastos se anotam sozinhos</h3>
                 <p>
                   "Gastei 30 no Uber" já vira lançamento na categoria certa. Foto de comprovante e parcelas também. No fim do mês você vê para onde foi cada real, com limites
@@ -306,7 +506,7 @@ export function LandingPage() {
             </div>
 
             <div className="lp-row flip">
-              <div className="lp-row-copy">
+              <div className="lp-row-copy" data-reveal>
                 <h3>Lembretes que chegam como um amigo</h3>
                 <p>
                   Nada de "Lembrete: tarefa 1". Ele te chama pelo nome, no horário certo, e entende "toda segunda", "daqui 15 minutos" ou "dia 10 às 9h". A agenda inteira
@@ -341,7 +541,7 @@ export function LandingPage() {
             </div>
 
             <div className="lp-row">
-              <div className="lp-row-copy">
+              <div className="lp-row-copy" data-reveal>
                 <h3>Ele te conhece desde o primeiro oi</h3>
                 <p>
                   No cadastro ele faz umas perguntas rápidas. Depois vai guardando o que você conta, como a cidade, quem mora com você e o dia que o salário cai, e
@@ -363,7 +563,7 @@ export function LandingPage() {
             </div>
 
             <div className="lp-row flip">
-              <div className="lp-row-copy">
+              <div className="lp-row-copy" data-reveal>
                 <h3>Fica de olho por você</h3>
                 <p>Peça para acompanhar o preço de um produto no Mercado Livre ou as notícias de um assunto. Ele confere várias vezes ao dia e te avisa no WhatsApp.</p>
               </div>
@@ -390,11 +590,11 @@ export function LandingPage() {
 
         <section id="time" className="lp-section lp-team">
           <div className="lp-wrap">
-            <h2 className="lp-h2">Por trás de cada resposta, um time inteiro.</h2>
-            <p className="lp-sub">Cada especialista é um Mochi. Eles conversam entre si, e o Téo junta tudo numa resposta só para você.</p>
+            <h2 className="lp-h2" data-reveal>Por trás de cada resposta, um time inteiro.</h2>
+            <p className="lp-sub" data-reveal>Cada especialista é um Mochi. Eles conversam entre si, e o Téo junta tudo numa resposta só para você.</p>
             <div className="lp-team-grid">
-              {TEAM.map((m) => (
-                <article key={m.id} className={`lp-agent ${m.id === "cto" ? "lead" : ""}`}>
+              {TEAM.map((m, i) => (
+                <article key={m.id} className={`lp-agent ${m.id === "cto" ? "lead" : ""}`} data-reveal style={{ ["--d" as string]: i }}>
                   <AgentFace face={CORE_FACES[m.id].face} size={m.id === "cto" ? 92 : 72} title={CORE_FACES[m.id].persona} />
                   <h3>
                     {CORE_FACES[m.id].persona}
@@ -409,21 +609,21 @@ export function LandingPage() {
 
         <section id="seguranca" className="lp-section">
           <div className="lp-wrap">
-            <h2 className="lp-h2">Nada sai sem o seu sim.</h2>
+            <h2 className="lp-h2" data-reveal>Nada sai sem o seu sim.</h2>
             <div className="lp-safe">
-              <div>
+              <div data-reveal style={{ ["--d" as string]: 0 }}>
                 <h3>Você confirma o que importa</h3>
                 <p>Mensagem para outra pessoa, pagamento ou apagar algo só acontece depois do seu sim, conferido pelo sistema.</p>
               </div>
-              <div>
+              <div data-reveal style={{ ["--d" as string]: 1 }}>
                 <h3>Seus dados são só seus</h3>
                 <p>Ninguém além de você vê suas finanças e sua agenda, a não ser que você compartilhe com um contato.</p>
               </div>
-              <div>
+              <div data-reveal style={{ ["--d" as string]: 2 }}>
                 <h3>Apague quando quiser</h3>
                 <p>Um pedido no WhatsApp ou um clique no painel apaga tudo de vez, como manda a LGPD.</p>
               </div>
-              <div>
+              <div data-reveal style={{ ["--d" as string]: 3 }}>
                 <h3>Chaves guardadas com criptografia</h3>
                 <p>As conexões ficam criptografadas, e dados sensíveis como CPF e cartão são escondidos nos registros.</p>
               </div>
@@ -434,8 +634,8 @@ export function LandingPage() {
         {cfg?.plan && (
           <section id="preco" className="lp-section">
             <div className="lp-wrap">
-              <h2 className="lp-h2">Um plano, tudo incluído.</h2>
-              <div className="lp-plan">
+              <h2 className="lp-h2" data-reveal>Um plano, tudo incluído.</h2>
+              <div className="lp-plan" data-reveal>
                 <div>
                   <h3>{cfg.plan.name}</h3>
                   <p className="lp-plan-price">
@@ -452,7 +652,7 @@ export function LandingPage() {
                   <li>Painel no celular e no computador</li>
                 </ul>
                 {!closed && (
-                  <a className="lp-btn big" href="/login?cadastro=1">
+                  <a className="lp-btn big" href="/login?cadastro=1" onClick={go}>
                     {cta}
                   </a>
                 )}
@@ -463,8 +663,8 @@ export function LandingPage() {
 
         <section id="perguntas" className="lp-section">
           <div className="lp-wrap lp-faq-wrap">
-            <h2 className="lp-h2">Perguntas que todo mundo faz</h2>
-            <div className="lp-faq">
+            <h2 className="lp-h2" data-reveal>Perguntas que todo mundo faz</h2>
+            <div className="lp-faq" data-reveal style={{ ["--d" as string]: 1 }}>
               {faq.map(([q, a], i) => (
                 <div key={q} className={`lp-q ${open === i ? "open" : ""}`}>
                   <button aria-expanded={open === i} onClick={() => setOpen(open === i ? null : i)}>
@@ -481,16 +681,18 @@ export function LandingPage() {
         </section>
 
         <section className="lp-final">
-          <div className="lp-wrap lp-final-grid">
+          <div className="lp-wrap lp-final-grid" data-reveal>
             <div>
               <h2>Manda um oi. O resto ele organiza.</h2>
               {!closed && (
-                <a className="lp-btn big light" href="/login?cadastro=1">
+                <a className="lp-btn big light" href="/login?cadastro=1" onClick={go}>
                   {cta}
                 </a>
               )}
             </div>
-            <Mochi size={180} mood="greeting" />
+            <div className="lp-final-mochi">
+              <Mochi size={180} mood="greeting" />
+            </div>
           </div>
         </section>
       </main>
@@ -502,7 +704,7 @@ export function LandingPage() {
             <span>Planejai</span>
           </span>
           <span className="lp-foot-links">
-            <a href="/login">Entrar</a>
+            <a href="/login" onClick={go}>Entrar</a>
             <a href="/privacidade">Termos e privacidade</a>
           </span>
           <small>Seu assistente pessoal no WhatsApp.</small>

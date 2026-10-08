@@ -179,3 +179,12 @@ input[type="checkbox"]:not([switch]):active, input[type="radio"]:active { transf
   .ptr.busy svg, .pj-updating-dot, .ex-spin { animation-duration: 1.4s !important; animation-iteration-count: infinite !important; }
 }
 @keyframes pj-blink { 50% { opacity: .25; } }
+
+/* Login e cadastro entram em cascata (chega aqui também pela cortina roxa da landing). */
+@media (prefers-reduced-motion: no-preference) {
+  .auth-hero > *, .auth-form .card { animation: auth-in .7s cubic-bezier(.2, .9, .25, 1) both; }
+  .auth-hero > :nth-child(2) { animation-delay: .08s; }
+  .auth-hero > :nth-child(3) { animation-delay: .16s; }
+  .auth-form .card { animation-delay: .12s; }
+  @keyframes auth-in { from { opacity: 0; transform: translateY(18px); } }
+}
