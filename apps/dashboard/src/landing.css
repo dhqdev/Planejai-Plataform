@@ -177,12 +177,16 @@
 
 /* ---------- time ---------- */
 .lp-team { margin-top: 128px; padding: 112px 0; background: var(--lp-sand); }
-.lp-team-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 40px 28px; margin-top: 64px; align-items: start; }
+.lp-team-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 48px 40px; margin-top: 64px; align-items: start; }
 .lp-agent .agent-face { display: grid; place-items: center; border-radius: 50%; overflow: hidden; transition: transform .3s cubic-bezier(.34, 1.56, .64, 1); }
 .lp-agent.lead .agent-face { box-shadow: 0 0 0 3px var(--lp-sand), 0 0 0 5px var(--lp-violet); }
 .lp-agent h3 { margin-top: 20px; font-size: 20px; letter-spacing: -0.02em; font-weight: 600; }
 .lp-agent h3 small { display: block; margin-top: 2px; font-size: 14px; font-weight: 500; color: var(--lp-muted); letter-spacing: 0; }
 .lp-agent p { margin-top: 10px; font-size: 15px; color: var(--lp-muted); line-height: 1.5; }
+.lp-agent-asks { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.lp-agent-asks li { max-width: 100%; padding: 7px 12px; border-radius: 14px 14px 14px 4px; background: #fff; border: 1px solid var(--lp-line); font-size: 14px; line-height: 1.35; }
+.lp-agent-asks li::before { content: "“"; }
+.lp-agent-asks li::after { content: "”"; }
 @media (hover: hover) and (pointer: fine) { .lp-agent:hover .agent-face { transform: translateY(-4px) rotate(-3deg); } }
 
 /* ---------- segurança ---------- */
@@ -240,7 +244,7 @@
 /* ---------- telas menores ---------- */
 @media (max-width: 1020px) {
   .lp-links { display: none; }
-  .lp-team-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lp-team-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lp-plan { grid-template-columns: 1fr 1fr; }
   .lp-plan .lp-btn { grid-column: 1 / -1; justify-self: start; }
 }
@@ -264,8 +268,7 @@
   .lp-row.flip .lp-row-copy { order: 0; }
   .lp-clip { min-height: 0; padding: 28px 18px; border-radius: 24px; }
   .lp-team { margin-top: 88px; padding: 80px 0; }
-  .lp-team-grid { grid-template-columns: 1fr 1fr; gap: 36px 20px; margin-top: 44px; }
-  .lp-agent.lead { grid-column: 1 / -1; }
+  .lp-team-grid { grid-template-columns: 1fr; gap: 40px; margin-top: 44px; }
   .lp-safe { grid-template-columns: 1fr; margin-top: 32px; }
   .lp-plan { grid-template-columns: 1fr; padding: 28px; gap: 28px; }
   .lp-plan .lp-btn { width: 100%; }

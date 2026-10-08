@@ -337,12 +337,44 @@ function useCurtain() {
   return { go, curtain };
 }
 
-const TEAM: { id: keyof typeof CORE_FACES; role: string; text: string }[] = [
-  { id: "cto", role: "Conversa com você", text: "Entende o que você pediu e chama quem do time precisa. É ele que te responde." },
-  { id: "financeiro", role: "Cuida do dinheiro", text: "Anota gastos, lê comprovantes, separa por categoria e avisa quando passa do limite." },
-  { id: "agenda", role: "Cuida da agenda", text: "Lembretes de uma vez ou de toda semana, compromissos e o que tem no seu dia." },
-  { id: "pesquisador", role: "Procura por você", text: "Pesquisa preços, horários e notícias, e fica de olho quando algo baixa de preço." },
-  { id: "produtividade", role: "Automatiza o resto", text: "Cria avisos que se repetem e acompanha sites e notícias para você não precisar lembrar." },
+/** Os especialistas que já vêm prontos, com o que cada um faz e como pedir. Bia (e-mail e Slack) fica de fora: é só da conta do dono. */
+const TEAM: { id: keyof typeof CORE_FACES; role: string; text: string; asks: string[] }[] = [
+  {
+    id: "cto",
+    role: "Conversa com você",
+    text: "É com ele que você fala. Entende o pedido, resolve sozinho o que é rápido (anotar um gasto, criar um lembrete, achar o lugar mais perto) e chama o especialista certo quando precisa. Antes de responder, confere o que o time trouxe.",
+    asks: ["qual a farmácia mais perto?", "me lembra de ligar pra minha mãe às 19h"],
+  },
+  {
+    id: "financeiro",
+    role: "Cuida do dinheiro",
+    text: "Lança gastos e receitas, inclusive pela foto do comprovante, que já entra com a categoria certa. Corrige, divide parcelas, controla contas fixas, avisa quando você passa do limite e faz gráfico do mês.",
+    asks: ["gastei 42 no almoço", "quanto gastei com mercado esse mês?"],
+  },
+  {
+    id: "agenda",
+    role: "Cuida do seu tempo",
+    text: "Lembretes de uma vez ou que se repetem, compromissos com hora marcada e o resumo do que tem no seu dia. Com o Google Agenda conectado, marca reunião com link do Meet.",
+    asks: ["toda segunda às 7h me lembra da academia", "o que eu tenho amanhã?"],
+  },
+  {
+    id: "pesquisador",
+    role: "Procura por você",
+    text: "Pesquisa preço, sessão de cinema, horário, notícia e endereço, compara produtos e fica de olho quando algo baixa de preço. Abre sites só quando a busca não basta.",
+    asks: ["sessões de Duna hoje no Iguatemi", "avisa se o iPhone 16 baixar de 4 mil"],
+  },
+  {
+    id: "recados",
+    role: "Fala com quem você precisa",
+    text: "Manda mensagem para um estabelecimento por você, se apresentando como seu assistente: pergunta horário, preço ou disponibilidade e marca dentro do que você liberou. Nada sai sem o seu sim.",
+    asks: ["pergunta no petshop se tem banho às 18h e, se tiver, marca", "vê se o salão tem horário sábado de manhã"],
+  },
+  {
+    id: "produtividade",
+    role: "Automatiza o resto",
+    text: "Cria rotinas que rodam sozinhas: um aviso que se repete, acompanhar um site ou uma notícia, juntar informações todo dia de manhã.",
+    asks: ["todo dia às 8h me manda a previsão do tempo", "me avisa quando sair notícia do concurso"],
+  },
 ];
 
 export function LandingPage() {
@@ -592,7 +624,7 @@ export function LandingPage() {
         <section id="time" className="lp-section lp-team">
           <div className="lp-wrap">
             <h2 className="lp-h2" data-reveal>Por trás de cada resposta, um time inteiro.</h2>
-            <p className="lp-sub" data-reveal>Cada especialista é um Mochi. Eles conversam entre si, e o Téo junta tudo numa resposta só para você.</p>
+            <p className="lp-sub" data-reveal>Cada especialista é um Mochi com uma função. Você não precisa escolher com quem falar: o Téo chama quem precisa, eles conversam entre si e você recebe uma resposta só.</p>
             <div className="lp-team-grid">
               {TEAM.map((m, i) => (
                 <article key={m.id} className={`lp-agent ${m.id === "cto" ? "lead" : ""}`} data-reveal style={{ ["--d" as string]: i }}>
@@ -602,6 +634,9 @@ export function LandingPage() {
                     <small>{m.role}</small>
                   </h3>
                   <p>{m.text}</p>
+                  <ul className="lp-agent-asks" aria-label={`Exemplos de pedidos para ${CORE_FACES[m.id].persona}`}>
+                    {m.asks.map((a) => <li key={a}>{a}</li>)}
+                  </ul>
                 </article>
               ))}
             </div>
