@@ -197,6 +197,18 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(tx.n).toBe(1);
   });
 
+  it("lembretes: no máximo 30 ativos por pessoa e nada mais frequente que 15 min", async () => {
+    const { createReminder } = await import("../src/reminders.js");
+    const ana = await db.one("INSERT INTO users (phone, name, status) VALUES ('5519977770000', 'Ana', 'active') RETURNING *");
+    const conv = await db.one("INSERT INTO conversations (user_id, channel, remote_jid) VALUES ($1, 'playground', 'jid-ana') RETURNING id", [ana.id]);
+    const base = { userId: ana.id, conversationId: conv.id, intent: "beber água", timezone: "America/Sao_Paulo" };
+    await expect(createReminder({ ...base, cron: "* * * * *" })).rejects.toThrow(/15 minutos/);
+    await expect(createReminder({ ...base, dueAt: new Date(Date.now() - 3_600_000) })).rejects.toThrow(/já passou/);
+    for (let i = 0; i < 30; i++)
+      await db.query("INSERT INTO reminders (user_id, conversation_id, intent, due_at, timezone) VALUES ($1, $2, 'x', now() + interval '1 day', 'America/Sao_Paulo')", [ana.id, conv.id]);
+    await expect(createReminder({ ...base, dueAt: new Date(Date.now() + 3_600_000) })).rejects.toThrow(/30 lembretes/);
+  });
+
   it("o Financeiro tem controle total: lista com filtro, corrige, recategoriza e apaga (em lote só com confirmação)", async () => {
     const fin = await import("../src/agent/tools/finance.js");
     const leo = await db.one("INSERT INTO users (phone, name, status) VALUES ('5519955556666', 'Leo', 'active') RETURNING *");

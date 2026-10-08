@@ -57,6 +57,16 @@ describe("datas no fuso da pessoa", () => {
   });
 });
 
+describe("lembrete recorrente com limite", () => {
+  it("recusa cron a cada minuto ou a cada 5 min e aceita uma vez por dia", async () => {
+    const { cronTooFrequent } = await import("../src/cron-limits.js");
+    expect(cronTooFrequent("* * * * *", 15)).not.toBeNull();
+    expect(cronTooFrequent("*/5 * * * *", 15)).not.toBeNull();
+    expect(cronTooFrequent("0 8 * * *", 15)).toBeNull();
+    expect(cronTooFrequent("0,30 9 * * 1-5", 15)).toBeNull();
+  });
+});
+
 describe("webhooks", () => {
   it("lê mensagem da Evolution, inclusive conta com LID", () => {
     const [m] = new EvolutionChannel().parseWebhook({

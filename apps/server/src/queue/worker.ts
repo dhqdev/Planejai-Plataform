@@ -47,6 +47,7 @@ export async function startWorker(log: { info: (...a: any[]) => void; error: (..
           `Lembrete agendado disparou agora. O que lembrar: ${reminder.intent}` +
           (reminder.cron ? ` (lembrete recorrente: ${reminder.cron})` : "") +
           ". Escreva a mensagem para a pessoa.",
+        plainText: `Lembrete: ${reminder.intent}`,
       });
       ok = true;
       void emitEvent("reminder.fired", { user_id: reminder.user_id, reminder_id: reminder.id, intent: reminder.intent });

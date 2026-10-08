@@ -1,4 +1,5 @@
 import { config } from "../../config.js";
+import { cronTooFrequent } from "../../cron-limits.js";
 import { many, one, query } from "../../db/pool.js";
 import { isOwner } from "../../ingest.js";
 import { getCredentials } from "../../integrations/registry.js";
@@ -71,15 +72,6 @@ const FORBIDDEN = /\$env|\$vars|\$secrets|process\.|require\s*\(|constructor|__p
 /** Fluxo de cliente não dispara mais vezes que isso: cada disparo pode custar uma chamada de IA e uma mensagem. */
 export const MIN_CLIENT_INTERVAL_MIN = 15;
 
-/** Campo de minutos de um cron: aceita minuto fixo, lista espaçada ou "a cada N" com N grande o bastante. */
-function minuteFieldOk(f: string) {
-  const step = /^\*\/(\d+)$/.exec(f);
-  if (step) return Number(step[1]) >= MIN_CLIENT_INTERVAL_MIN;
-  if (!/^\d+(,\d+)*$/.test(f)) return false;
-  const m = f.split(",").map(Number).sort((a, b) => a - b);
-  return m.every((v, i) => (i === 0 ? v + 60 - m.at(-1)! : v - m[i - 1]!) >= MIN_CLIENT_INTERVAL_MIN || m.length === 1);
-}
-
 /** Motivo pelo qual o agendamento é frequente demais para um cliente, ou null se está bom. */
 export function scheduleTooFrequent(params: Record<string, unknown>): string | null {
   const rules = (params.rule as any)?.interval;
@@ -88,11 +80,8 @@ export function scheduleTooFrequent(params: Record<string, unknown>): string | n
     if (field === "seconds") return "intervalo em segundos";
     if (field === "minutes" && Number(r.minutesInterval ?? 5) < MIN_CLIENT_INTERVAL_MIN) return `a cada ${r.minutesInterval ?? 5} min`;
     if (field === "cronExpression") {
-      const parts = String(r.expression ?? "").trim().split(/\s+/);
-      if (parts.length < 5 || parts.length > 6) return "expressão cron inválida";
-      // com 6 campos o primeiro é o segundo, que tem de ser fixo
-      if (parts.length === 6 && !/^\d+$/.test(parts[0]!)) return "cron com segundos variáveis";
-      if (!minuteFieldOk(parts[parts.length - 5]!)) return `cron "${r.expression}"`;
+      const why = cronTooFrequent(String(r.expression ?? ""), MIN_CLIENT_INTERVAL_MIN);
+      if (why) return why;
     }
   }
   return null;

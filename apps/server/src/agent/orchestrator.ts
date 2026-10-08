@@ -124,6 +124,8 @@ export interface ProcessOpts {
   retryable?: boolean;
   /** false = se a conversa já está sendo processada, devolve busy na hora em vez de esperar a trava */
   wait?: boolean;
+  /** texto pronto para mandar sem IA quando a pessoa passou do limite de custo (lembrete) */
+  plainText?: string;
 }
 
 /** OpenRouter fora do ar, limite de taxa, rede caída ou tempo de rede esgotado: vale tentar de novo. */
@@ -180,6 +182,21 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       }
       await tracer.finish(notified ? "[limite diário: avisado]" : "[limite diário: silêncio]");
       return { executionId: tracer.executionId, bubbles: [], outbox: new Outbox() };
+    }
+  }
+  // Lembrete de quem passou do limite de custo: sai o texto pronto, sem IA (um cron mal pedido não vira custo sem teto)
+  if (opts.trigger === "reminder" && opts.plainText && !isOwner(user.phone)) {
+    const hit = await costLimitHit(user.id, settings.dailyCostLimitUsd);
+    if (hit) {
+      const events = pending.filter((m) => m.role === "event");
+      await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [events.map((m) => m.id)]);
+      const tracer = await Tracer.start({ trigger: opts.trigger, userId: user.id, conversationId, input: opts.plainText });
+      const step = await tracer.step({ agent: "cto", type: "info", name: "trava: limite diário (lembrete sem IA)", input: hit });
+      await step.ok({ texto_pronto: true });
+      await channel.sendText(conversation.remote_jid, opts.plainText).catch(() => {});
+      await pushShort(conversationId, [{ id: Date.now(), role: "assistant", text: opts.plainText, ts: Date.now() }]).catch(() => {});
+      await tracer.finish(opts.plainText);
+      return { executionId: tracer.executionId, bubbles: [{ type: "text", text: opts.plainText }], outbox: new Outbox() };
     }
   }
   // Assinatura: acabaram os dias grátis ou o pagamento está pendente. Avisa uma vez por dia com o link e não chama a IA.
@@ -445,10 +462,13 @@ async function usageLimitHit(userId: string, s: { dailyMessageLimit: number; dai
     const r = await one("SELECT COALESCE(SUM(messages), 0)::int AS n FROM usage_daily WHERE user_id = $1 AND day = current_date", [userId]);
     if (r.n > s.dailyMessageLimit) return { limite: "mensagens hoje", usado: r.n, maximo: s.dailyMessageLimit };
   }
-  if (s.dailyCostLimitUsd > 0) {
-    const r = await one("SELECT COALESCE(SUM(cost_usd), 0)::float AS c FROM executions WHERE user_id = $1 AND started_at > now() - interval '24 hours'", [userId]);
-    if (r.c >= s.dailyCostLimitUsd) return { limite: "custo de IA em 24h (US$)", usado: Number(r.c.toFixed(4)), maximo: s.dailyCostLimitUsd };
-  }
+  return costLimitHit(userId, s.dailyCostLimitUsd);
+}
+
+async function costLimitHit(userId: string, limitUsd: number) {
+  if (limitUsd <= 0) return null;
+  const r = await one("SELECT COALESCE(SUM(cost_usd), 0)::float AS c FROM executions WHERE user_id = $1 AND started_at > now() - interval '24 hours'", [userId]);
+  if (r.c >= limitUsd) return { limite: "custo de IA em 24h (US$)", usado: Number(r.c.toFixed(4)), maximo: limitUsd };
   return null;
 }
 

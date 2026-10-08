@@ -1,6 +1,13 @@
 import cronParser from "cron-parser";
 import { many, one, query } from "./db/pool.js";
 import { QUEUES, getBoss } from "./queue/boss.js";
+import { cronTooFrequent } from "./cron-limits.js";
+import { formatLocal } from "./time.js";
+
+/** Lembrete recorrente dispara no máximo a cada 15 min: cada disparo roda o CTO inteiro. */
+export const MIN_REMINDER_INTERVAL_MIN = 15;
+/** Lembretes ativos por pessoa */
+export const MAX_ACTIVE_REMINDERS = 30;
 
 export function nextCronDate(cron: string, timezone: string, after = new Date()): Date {
   return cronParser.parseExpression(cron, { tz: timezone, currentDate: after }).next().toDate();
@@ -21,9 +28,15 @@ export async function createReminder(opts: {
   timezone: string;
 }) {
   if (!opts.dueAt && !opts.cron) throw new Error("Informe due_at ou cron");
-  if (opts.cron) nextCronDate(opts.cron, opts.timezone); // valida a expressão
+  if (opts.cron) {
+    nextCronDate(opts.cron, opts.timezone); // valida a expressão
+    if (cronTooFrequent(opts.cron, MIN_REMINDER_INTERVAL_MIN))
+      throw new Error(`Lembrete recorrente pode repetir no máximo a cada ${MIN_REMINDER_INTERVAL_MIN} minutos`);
+  }
   const first = opts.dueAt ?? nextCronDate(opts.cron!, opts.timezone);
-  if (first.getTime() < Date.now() - 60_000) throw new Error(`O horário ${first.toISOString()} já passou`);
+  if (first.getTime() < Date.now() - 60_000) throw new Error(`O horário ${formatLocal(first, opts.timezone)} já passou`);
+  const active = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM reminders WHERE user_id = $1 AND status = 'scheduled'", [opts.userId]);
+  if ((active?.n ?? 0) >= MAX_ACTIVE_REMINDERS) throw new Error(`Já são ${MAX_ACTIVE_REMINDERS} lembretes ativos. Peça para cancelar algum antes de criar outro.`);
   const row = await one<{ id: string }>(
     `INSERT INTO reminders (user_id, conversation_id, intent, due_at, cron, timezone) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
     [opts.userId, opts.conversationId, opts.intent, first, opts.cron ?? null, opts.timezone],

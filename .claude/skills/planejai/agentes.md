@@ -66,6 +66,9 @@ Cada item tem teste; rode `npm test` depois de mexer em `orchestrator.ts`, `runn
 - Ferramentas do Pesquisador: `browser_open` (record/send_recording), `browser_action`, `browser_screenshot`, `browser_close`. A sessão fica em `ctx.room.browser`; o orquestrador fecha o que ficou aberto e manda a gravação se ela foi pedida.
 - Precisa de ffmpeg (já na imagem) e do browserless da stack (`TIMEOUT` 300000). Em dev: `CHROME_PATH=/caminho/do/chrome`.
 
+## Lembretes com teto
+- `createReminder` (`reminders.ts`) recusa cron mais frequente que `MIN_REMINDER_INTERVAL_MIN` (15) e mais de `MAX_ACTIVE_REMINDERS` (30) ativos por pessoa; a regra do cron mora em `cron-limits.ts` (a mesma das automações de cliente). Lembrete de quem passou do `dailyCostLimitUsd` sai como texto pronto (`plainText`), sem IA.
+
 ## Filas (como o modo fila do n8n)
 - Tudo passa pelo pg-boss (`queue/boss.ts`): mensagem vira job `conversation.process` (prioridade 10), lembretes, resumos, convites, De olho e reunião noturna têm fila própria com retry. `WORKER_CONCURRENCY` (padrão 4) = jobs em paralelo por réplica do worker; para escalar, aumente isso ou suba réplicas (a conexão do WhatsApp continua em um só processo pelo lock).
 - Tela **Filas** (super admin, `GET /api/queues`): na fila, rodando, feitos e falhas em 24h, tempo médio e de espera; falha pode ser reprocessada (`POST /api/queues/:name/:id/retry`).
