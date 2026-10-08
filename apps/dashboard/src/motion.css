@@ -2,7 +2,7 @@
    - botões: afundam ao apertar e soltam com mola; onda a partir do dedo (motion.ts)
    - botão da marca: o degradê corre ao passar o mouse
    - cards clicáveis: sobem um pouco; cards da página entram em cascata
-   - abas: o traço nasce do centro
+   - abas: o traço nasce do centro; links, menu e pílulas seguem a skiper40 (bloco "links e abas")
    - menu lateral: ícone dá um passinho; item ativo ganha a barrinha crescendo
    - campos: o anel de foco abre em vez de aparecer
    Regras: só transform e opacity se movem; nada de interface passa de 300 ms; efeito de hover só com mouse
@@ -90,6 +90,38 @@ input[type="checkbox"]:not([switch]):active, input[type="radio"]:active { transf
 .update-pill::before { animation: pj-breathe 1.8s ease-in-out infinite; }
 @keyframes pj-breathe { 50% { transform: scale(1.35); opacity: .7; } }
 
+/* ---------- links e abas: efeitos da skiper40 (Skiper UI) refeitos em CSS, sem Tailwind ----------
+   - links de texto (.link, .link-btn): o sublinhado entra da esquerda para a direita (Link001);
+     o .link mantém um traço fraco parado para continuar parecendo link
+   - abas sublinhadas (.tabs): o traço nasce do centro (Link003, bloco "abas e segmentos" acima)
+   - menu lateral: o fundo sobe de baixo para cima (Link004)
+   - abas em pílula (.subtabs, .fin-tabs): o fundo cresce do centro para os lados (Link005)
+   - seta "abrir" dos cartões do Painel e dos links: anda um passinho para a direita */
+:is(a, button).link, .link-btn {
+  text-decoration: none; background-repeat: no-repeat; background-origin: content-box;
+  background-image: linear-gradient(currentColor, currentColor); background-position: 0 100%; background-size: 0 1px;
+  transition: background-size .28s var(--soft), color .15s;
+}
+:is(a, button).link {
+  background-image: linear-gradient(currentColor, currentColor), linear-gradient(color-mix(in srgb, currentColor 28%, transparent), color-mix(in srgb, currentColor 28%, transparent));
+  background-position: 0 100%, 0 100%; background-size: 0 1.5px, 100% 1px;
+}
+.link-btn .ico, .widget-head .icon-btn .ico { transition: transform .22s var(--soft); }
+.nav a:not(.active) {
+  background-image: linear-gradient(var(--nav-hover, var(--panel-2)), var(--nav-hover, var(--panel-2))); background-repeat: no-repeat; background-position: 50% 100%; background-size: 100% 0;
+  transition: background-size .22s var(--soft), color .15s, transform .12s;
+}
+/* menu escuro do notebook: o fundo que sobe é o mesmo lilás translúcido do hover dele */
+@media (min-width: 768px) { .sidebar .nav { --nav-hover: rgba(244, 239, 255, .07); } }
+/* a pílula de fundo é um ::before com o mesmo arredondado do botão (um degradê sairia com canto reto no meio do caminho) */
+.subtabs button, .fin-tabs button { position: relative; isolation: isolate; }
+.subtabs button::before, .fin-tabs button::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--panel-2);
+  opacity: 0; transform: scaleX(.35); transition: transform .26s var(--soft), opacity .18s;
+}
+.subtabs button::before { background: var(--panel); }
+.subtabs button.active::before, .fin-tabs button.active::before { display: none; }
+
 /* ---------- hover: só onde existe mouse ---------- */
 @media (hover: hover) and (pointer: fine) {
   .btn:hover:not(:disabled) { transform: translateY(-1px); }
@@ -105,6 +137,12 @@ input[type="checkbox"]:not([switch]):active, input[type="radio"]:active { transf
   .list-item:hover { box-shadow: inset 2px 0 0 var(--text); }
   .more-tile:hover { transform: translateY(-2px); border-color: var(--border-2); }
   .more-tile:hover > :first-child { transform: scale(1.06); }
+  :is(a, button).link:hover { background-size: 100% 1.5px, 100% 1px; }
+  .link-btn:hover { background-size: 100% 1px; }
+  .link-btn:hover .ico, .card:hover .widget-head .icon-btn .ico { transform: translateX(2px); }
+  .nav a:not(.active):hover, .sidebar .nav a:not(.active):hover { background-color: transparent; background-image: linear-gradient(var(--nav-hover, var(--panel-2)), var(--nav-hover, var(--panel-2))); background-size: 100% 100%; }
+  .subtabs button:not(.active):hover, .fin-tabs button:not(.active):hover { color: var(--text); }
+  .subtabs button:not(.active):hover::before, .fin-tabs button:not(.active):hover::before { opacity: 1; transform: none; }
   /* apertar ganha do hover */
   .btn:active:not(:disabled) { transform: scale(.97); }
   .card.clickable:active { transform: scale(.98); }
