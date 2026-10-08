@@ -10,6 +10,7 @@ export const QUEUES = {
   watch: "watch.check",
   improve: "improve.daily",
   outbound: "outbound.send",
+  financeDaily: "finance.daily",
 } as const;
 
 let boss: PgBoss | null = null;
@@ -27,6 +28,7 @@ export async function getBoss(): Promise<PgBoss> {
   await b.createQueue(QUEUES.watch, { name: QUEUES.watch, policy: "singleton" });
   await b.createQueue(QUEUES.improve, { name: QUEUES.improve, policy: "singleton" });
   await b.createQueue(QUEUES.outbound, { name: QUEUES.outbound, policy: "standard" });
+  await b.createQueue(QUEUES.financeDaily, { name: QUEUES.financeDaily, policy: "singleton" });
   boss = b;
   return b;
 }
@@ -46,6 +48,7 @@ export const QUEUE_LABELS: Record<string, string> = {
   [QUEUES.watch]: "De olho",
   [QUEUES.improve]: "Reunião noturna",
   [QUEUES.outbound]: "Envios",
+  [QUEUES.financeDaily]: "Contas e mensalidades",
 };
 
 /**

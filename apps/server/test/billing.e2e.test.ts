@@ -48,6 +48,8 @@ describe.skipIf(!enabled)("assinatura pelo Asaas (e2e)", () => {
       if (path === "/customers") return json({ id: "cus_1" });
       if (path === "/subscriptions") return json({ id: "sub_1" });
       if (path === "/subscriptions/sub_1/payments") return json({ data: [{ id: "pay_1", invoiceUrl: "https://sandbox.asaas.com/i/pay_1" }] });
+      if (path.startsWith("/payments?subscription=sub_ana")) return json({ data: [{ id: "pay_ana_2", value: 19.9, dueDate: "2026-12-01", billingType: "UNDEFINED" }] });
+      if (path.startsWith("/payments/")) return json({ id: path.split("/")[2] });
       return json({ deleted: true });
     }) as typeof fetch;
     db = await import("../src/db/pool.js");
@@ -165,5 +167,47 @@ describe.skipIf(!enabled)("assinatura pelo Asaas (e2e)", () => {
     expect(asaasCalls.at(-1)).toMatchObject({ method: "DELETE", path: "/subscriptions/sub_1" });
     expect((await status()).status).toBe("canceled");
     await app.close();
+  });
+
+  it("regras financeiras: avisa no WhatsApp, ignora evento repetido, dá desconto a quem indicou e lembra o vencimento", async () => {
+    const outbox = async () => (await db.many("SELECT data FROM pgboss.job WHERE name = 'outbound.send' ORDER BY created_on")).map((r) => r.data);
+    await db.query("DELETE FROM pgboss.job WHERE name = 'outbound.send'");
+    // Ana já assina (cartão) e convidou o Beto, que paga a primeira mensalidade
+    const { upsertUser } = await import("../src/ingest.js");
+    const ana = await upsertUser("5519955550000", "Ana");
+    const beto = await upsertUser("5519966660000", "Beto");
+    await db.query("UPDATE users SET status = 'active', full_name = name WHERE id = ANY($1)", [[ana.id, beto.id]]);
+    await db.query("UPDATE users SET invited_by = $1 WHERE id = $2", [ana.id, beto.id]);
+    await db.query("INSERT INTO subscriptions (user_id, asaas_customer_id, asaas_subscription_id, status, value, next_due_date, last_payment_at) VALUES ($1, 'cus_a', 'sub_ana', 'active', 19.9, '2026-12-01', now()), ($2, 'cus_b', 'sub_beto', 'trial', 19.9, CURRENT_DATE, NULL)", [ana.id, beto.id]);
+    const today = new Date().toISOString().slice(0, 10);
+
+    const evt = { id: "evt_1", event: "PAYMENT_CONFIRMED", payment: { id: "pay_b1", subscription: "sub_beto", value: 19.9, dueDate: today, billingType: "PIX", status: "CONFIRMED" } };
+    expect(await billing.handleAsaasEvent(evt)).toMatchObject({ handled: true, status: "active" });
+    // o Asaas reenviou o mesmo evento: nada muda e ninguém recebe duas vezes
+    expect(await billing.handleAsaasEvent(evt)).toMatchObject({ duplicate: true });
+    // cartão/Pix manda RECEIVED do mesmo pagamento depois: não repete a mensagem
+    await billing.handleAsaasEvent({ id: "evt_2", event: "PAYMENT_RECEIVED", payment: { ...evt.payment, status: "RECEIVED" } });
+    const sent = await outbox();
+    expect(sent.filter((m: any) => m.userId === beto.id)).toHaveLength(1);
+    expect(sent.find((m: any) => m.userId === beto.id).text).toMatch(/Pagamento de R\$ 19,90 confirmado, obrigado por assinar o Planejai Pro/);
+    // indicação: Ana ganha 10% na próxima cobrança em aberto, uma vez só
+    expect(sent.find((m: any) => m.userId === ana.id).text).toMatch(/Beto assinou pelo seu convite[\s\S]*10% de desconto/);
+    const discount = asaasCalls.find((c) => c.method === "POST" && c.path === "/payments/pay_ana_2");
+    expect(discount?.body).toMatchObject({ value: 19.9, dueDate: "2026-12-01", discount: { value: 10, type: "PERCENTAGE", dueDateLimitDays: 0 } });
+    expect(await db.one("SELECT applied_payment_id FROM referral_credits WHERE from_user_id = $1", [beto.id])).toEqual({ applied_payment_id: "pay_ana_2" });
+    expect(await billing.creditReferral(beto.id)).toBeNull();
+
+    // venceu: avisa com o link na hora
+    await billing.handleAsaasEvent({ id: "evt_3", event: "PAYMENT_OVERDUE", payment: { id: "pay_b2", subscription: "sub_beto", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_b2" } });
+    expect((await outbox()).at(-1)).toMatchObject({ userId: beto.id, text: expect.stringContaining("https://sandbox.asaas.com/i/pay_b2") });
+
+    // lembrete de vencimento: quem paga por Pix ouve 3 dias antes; cartão não
+    await db.query("DELETE FROM pgboss.job WHERE name = 'outbound.send'");
+    await db.query("UPDATE subscriptions SET status = 'active', next_due_date = CURRENT_DATE + 3, last_billing_type = 'PIX', reminded_on = NULL WHERE user_id = $1", [beto.id]);
+    await db.query("UPDATE subscriptions SET next_due_date = CURRENT_DATE + 3, last_billing_type = 'CREDIT_CARD' WHERE user_id = $1", [ana.id]);
+    expect((await billing.billingReminders()).due).toBe(1);
+    expect((await outbox())[0]).toMatchObject({ userId: beto.id, text: expect.stringMatching(/vence a sua mensalidade de R\$ 19,90/) });
+    // mesmo dia: não repete
+    expect((await billing.billingReminders()).due).toBe(0);
   });
 });

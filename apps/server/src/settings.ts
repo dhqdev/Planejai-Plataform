@@ -31,6 +31,10 @@ export interface AgentSettings {
   billingTrialDays: number;
   /** quando a cobrança foi ligada (os dias grátis de quem já estava contam daqui); preenchido sozinho */
   billingStartedAt: string | null;
+  /** desconto (%) na próxima mensalidade de quem convidou, quando o convidado paga a primeira vez (0 = sem indicação) */
+  billingReferralPercent: number;
+  /** quantos dias antes do vencimento lembrar quem paga por Pix/boleto (também lembra no dia) */
+  billingReminderDays: number;
 }
 
 /** Faixas aceitas para cada trava (o painel não deixa salvar fora disso) */
@@ -43,6 +47,8 @@ export const GUARD_LIMITS: Record<string, [number, number]> = {
   maxMessageChars: [200, 50_000],
   billingPrice: [1, 100_000],
   billingTrialDays: [0, 60],
+  billingReferralPercent: [0, 100],
+  billingReminderDays: [0, 10],
 };
 
 const defaults = (): AgentSettings => ({
@@ -62,6 +68,8 @@ const defaults = (): AgentSettings => ({
   billingPrice: 29.9,
   billingTrialDays: 3,
   billingStartedAt: null,
+  billingReferralPercent: 10,
+  billingReminderDays: 3,
 });
 
 let cache: { at: number; value: AgentSettings } | null = null;

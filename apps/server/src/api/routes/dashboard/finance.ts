@@ -3,6 +3,7 @@ import { budgetStatus, CATEGORIES, guessCategory, parseAmount } from "../../../a
 import { config } from "../../../config.js";
 import { many, one, query } from "../../../db/pool.js";
 import { NOBODY, personalUser, selfUserId } from "../../../sharing.js";
+import { createBill, deleteBill, listBills, payBill, updateBill, type BillInput } from "../../../bills.js";
 
 /**
  * Finanças: lançamentos do mês, categorias e limites de gastos. Cada pessoa vê só as dela (o dono também);
@@ -128,4 +129,51 @@ export function financeRoutes(base: FastifyInstance) {
   });
 
   base.get("/api/finance/categories", async () => CATEGORIES);
+
+  // ---------- Contas fixas (lembrete antes do vencimento; "paguei" lança no mês) ----------
+  base.get<{ Querystring: { user?: string } }>("/api/bills", async (req, reply) => {
+    const uid = await personalUser(req.account, req.query.user, "finance");
+    if (!uid) return reply.code(403).send({ error: "Essa pessoa não compartilhou as finanças com você" });
+    return listBills(uid);
+  });
+
+  const mine = async (req: { account: any }, reply: any) => {
+    const uid = await selfUserId(req.account);
+    if (!uid) reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil para usar contas fixas" });
+    return uid;
+  };
+  const fail = (reply: any, err: unknown) => reply.code(400).send({ error: (err as Error).message });
+
+  base.post<{ Body: BillInput }>("/api/bills", async (req, reply) => {
+    const uid = await mine(req, reply);
+    if (!uid) return;
+    try {
+      return await createBill(uid, req.body ?? {});
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  base.patch<{ Params: { id: string }; Body: BillInput }>("/api/bills/:id", async (req, reply) => {
+    const uid = await mine(req, reply);
+    if (!uid) return;
+    try {
+      const row = await updateBill(uid, req.params.id, req.body ?? {});
+      return row ?? reply.code(404).send({ error: "Conta não encontrada" });
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  base.post<{ Params: { id: string }; Body: { amount?: number | string | null } }>("/api/bills/:id/pay", async (req, reply) => {
+    const uid = await mine(req, reply);
+    if (!uid) return;
+    try {
+      return await payBill(uid, req.params.id, { amount: req.body?.amount ?? null });
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  base.delete<{ Params: { id: string } }>("/api/bills/:id", async (req) => ({ ok: await deleteBill((await selfUserId(req.account)) ?? NOBODY, req.params.id) }));
 }

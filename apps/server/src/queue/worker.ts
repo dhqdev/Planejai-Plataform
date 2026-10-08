@@ -7,6 +7,8 @@ import { purgeOld } from "../maintenance.js";
 import { dailyImprovement } from "../improve.js";
 import { sendInvite } from "../social.js";
 import { checkDueWatches } from "../watches.js";
+import { billingReminders } from "../billing.js";
+import { remindBills } from "../bills.js";
 import { config } from "../config.js";
 import { afterFire } from "../reminders.js";
 import { QUEUES, getBoss } from "./boss.js";
@@ -72,6 +74,13 @@ export async function startWorker(log: { info: (...a: any[]) => void; error: (..
     await dailyImprovement(log);
   });
   await boss.schedule(QUEUES.improve, "0 19 * * *", undefined, { tz: config.DEFAULT_TIMEZONE });
+
+  // contas fixas e mensalidade: lembretes do dia, às 9h (sem IA)
+  await boss.work(QUEUES.financeDaily, { batchSize: 1, pollingIntervalSeconds: 60 }, async () => {
+    await remindBills(log).catch((err) => log.error({ err }, "lembretes de contas falharam"));
+    await billingReminders(log).catch((err) => log.error({ err }, "lembretes de assinatura falharam"));
+  });
+  await boss.schedule(QUEUES.financeDaily, "0 9 * * *", undefined, { tz: config.DEFAULT_TIMEZONE });
 
   // mensagens pedidas pelo n8n / automações (API interna)
   await boss.work<OutboundJob>(QUEUES.outbound, { batchSize: 1, pollingIntervalSeconds: 2 }, async ([job]) => {

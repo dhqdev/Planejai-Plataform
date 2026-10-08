@@ -2,6 +2,7 @@ import * as agenda from "./tools/agenda.js";
 import * as comm from "./tools/communication.js";
 import * as core from "./tools/core.js";
 import * as finance from "./tools/finance.js";
+import * as bills from "./tools/bills.js";
 import * as images from "./tools/images.js";
 import * as automations from "./tools/automations.js";
 import * as documents from "./tools/documents.js";
@@ -112,7 +113,7 @@ export const SPECIALISTS: AgentDef[] = [
     icon: "wallet",
     role:
       "Finanças pessoais com controle total: anotar, corrigir, apagar e recategorizar gastos e receitas (inclusive de comprovantes, notas, faturas e extratos), " +
-      "parcelas, limites, gráficos, resumos e comparações do mês, contas, divisão de despesas e links de pagamento (Mercado Pago/Stripe).",
+      "parcelas, contas fixas com lembrete de vencimento, limites, gráficos, resumos e comparações do mês, contas, divisão de despesas e links de pagamento (Mercado Pago/Stripe).",
     instructions:
       "Valores em reais. Nunca faça conta de cabeça: use calculate para qualquer soma, divisão, parcela, juros ou porcentagem, e use os totais " +
       "que as ferramentas devolvem. Para extratos/faturas em documento, leia com read_document e lance cada item com message_id para não duplicar. " +
@@ -124,7 +125,9 @@ export const SPECIALISTS: AgentDef[] = [
       "Pedido com mais de uma parte (ex.: apagar os antigos e lançar os da foto): faça todas; não ter nada para apagar não encerra a tarefa. " +
       "Seu relatório começa direto pelo resultado, sem prefixo [CTO]. " +
       "Data sem ano (??-MM-DD, 'dia 6', 'terça 06 de outubro') é do ano atual; se assim cair no futuro, é do ano passado. Nunca chute outro ano. " +
-      "Só diga que lançou, corrigiu ou apagou o que a ferramenta confirmou (ok e ids); se der erro, conte o erro.",
+      "Só diga que lançou, corrigiu ou apagou o que a ferramenta confirmou (ok e ids); se der erro, conte o erro. " +
+      "Contas fixas (aluguel, internet, parcela, salário todo mês): bill_save cria com o dia do vencimento e o sistema lembra sozinho; " +
+      "'paguei o aluguel' é bill_pay (já lança nas finanças, não use add_transaction junto).",
     tools: [
       finance.addTransaction,
       finance.listTransactions,
@@ -136,6 +139,10 @@ export const SPECIALISTS: AgentDef[] = [
       finance.setBudget,
       finance.budgetStatusTool,
       finance.makeChart,
+      bills.billSave,
+      bills.billList,
+      bills.billPay,
+      bills.billDelete,
       core.readDocument,
     ],
   },
@@ -195,6 +202,7 @@ export const CTO_TOOLS: Tool[] = [
   finance.calculate,
   finance.setBudget,
   finance.makeChart,
+  bills.billPay,
   images.makeImage,
   research.mapRoute,
   documents.documentSave,
@@ -254,6 +262,7 @@ export const CLIENT_AGENT_TOOLS: Record<string, Tool> = Object.fromEntries(
     finance.budgetStatusTool,
     finance.calculate,
     finance.makeChart,
+    bills.billList,
     agenda.calendarListEvents,
     agenda.scheduleReminder,
     agenda.listRemindersTool,

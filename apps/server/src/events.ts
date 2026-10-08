@@ -14,11 +14,22 @@ export type PlanejaiEvent =
   | "transaction.created"
   | "budget.alert"
   | "reminder.fired"
-  | "telegram.linked";
+  | "telegram.linked"
+  | "payment.confirmed"
+  | "payment.overdue"
+  | "subscription.canceled"
+  | "referral.credited";
 
 /** Chave da API interna. Vazia = API interna desligada (nada derivado de outro segredo). */
 export function internalKey() {
   return config.INTERNAL_API_KEY;
+}
+
+async function nameOf(userId: string | null) {
+  if (!userId) return "Alguém";
+  const { one } = await import("./db/pool.js");
+  const u = await one<{ n: string }>("SELECT COALESCE(full_name, name, '+' || phone) AS n FROM users WHERE id = $1", [userId]);
+  return u?.n ?? "Alguém";
 }
 
 /** O que cada evento vira no sino do painel (para a pessoa e/ou para o dono). */
@@ -39,6 +50,12 @@ async function toNotifications(event: PlanejaiEvent, data: Record<string, any>) 
     case "telegram.linked":
       if (uid) await notify({ userId: uid, kind: "conexao", title: "Telegram conectado", body: data.username ? `@${data.username}` : null, link: "/profile" });
       return;
+    case "payment.confirmed":
+      return notify({ userId: null, kind: "assinatura", title: `${await nameOf(uid)} pagou a mensalidade`, body: `R$ ${Number(data.value ?? 0).toFixed(2).replace(".", ",")}${data.first ? " (primeiro pagamento)" : ""}`, link: "/settings" });
+    case "payment.overdue":
+      return notify({ userId: null, kind: "assinatura", title: `Mensalidade de ${await nameOf(uid)} venceu`, body: "Avisei no WhatsApp com o link de pagamento.", link: "/settings" });
+    case "subscription.canceled":
+      return notify({ userId: null, kind: "assinatura", title: `${await nameOf(uid)} cancelou a assinatura`, link: "/settings" });
     default:
       return;
   }

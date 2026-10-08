@@ -9,7 +9,8 @@ interface Doc { id: string; name: string; mimetype: string; size: number; folder
 interface Resp { items: Doc[]; usage: { count: number; bytes: number; quota: number } | null; max_bytes: number }
 
 export const bytes = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`);
-const kind = (m: string) => (m === "application/pdf" ? "PDF" : m.startsWith("image/") ? "Imagem" : /sheet|excel|csv/.test(m) ? "Planilha" : /word|document|text/.test(m) ? "Texto" : "Arquivo");
+const kind = (m: string) =>
+  m === "application/pdf" ? "PDF" : m.startsWith("image/") ? "Imagem" : /sheet|excel|csv/.test(m) ? "Planilha" : /presentation|powerpoint/.test(m) ? "Apresentação" : /word|document|text/.test(m) ? "Texto" : "Arquivo";
 const readB64 = (f: File) =>
   new Promise<string>((ok, bad) => {
     const r = new FileReader();
@@ -58,8 +59,8 @@ export function DocumentsPage() {
         title="Documentos"
         subtitle="PDFs, fotos e arquivos guardados. Mande no WhatsApp com “guarda esse documento” e peça de volta quando precisar."
         actions={
-          <div className="row">
-            <input className="input" style={{ width: 200 }} placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <div className="row docs-actions">
+            <input className="input docs-search" placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} />
             <input ref={input} type="file" multiple hidden onChange={(e) => upload(e.target.files)} />
             <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => input.current?.click()}>
               <Icon name="plus" size={15} /> {busy ? "Enviando…" : "Enviar arquivo"}
@@ -86,7 +87,24 @@ export function DocumentsPage() {
           </div>
         )}
       </div>
-      <div className="card docs-list scroll-y">
+      {/* celular: lista em cartões (a tabela espreme o nome em 3 linhas) */}
+      <div className="doc-rows phone-only">
+        {items.map((d) => (
+          <div key={d.id} className="doc-row">
+            <a className="doc-row-main" href={`/api/documents/${d.id}/file?inline=1`} target="_blank" rel="noreferrer">
+              <span className="doc-row-ico"><Icon name={d.mimetype.startsWith("image/") ? "eye" : "file"} size={18} /></span>
+              <span className="doc-row-text">
+                <strong>{d.name}</strong>
+                <small>{[kind(d.mimetype), d.folder, bytes(d.size), day(d.created_at)].filter(Boolean).join(" · ")}</small>
+              </span>
+            </a>
+            <a className="icon-btn" href={`/api/documents/${d.id}/file`} aria-label="Baixar" onClick={() => haptic()}><Icon name="download" size={17} /></a>
+            <button className="icon-btn" aria-label="Apagar" onClick={() => { haptic(); setDel(d); }}><Icon name="trash" size={17} /></button>
+          </div>
+        ))}
+        {data && !items.length && <div className="card"><Empty>{all.length ? "Nada com esse filtro." : "Nenhum documento ainda. Envie aqui ou mande no WhatsApp pedindo para guardar."}</Empty></div>}
+      </div>
+      <div className="card docs-list scroll-y hide-phone">
         <table className="table">
           <thead>
             <tr><th>Nome</th><th className="hide-phone">Tipo</th><th className="hide-phone">Pasta</th><th className="hide-phone">Tamanho</th><th>Quando</th><th /></tr>

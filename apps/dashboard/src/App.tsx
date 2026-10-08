@@ -276,6 +276,10 @@ export function App() {
   if (!me) return <AuthPage onLogin={setMe} />;
 
   const has = (m: string) => isSuper || (tabs.data?.modules ?? []).includes(m);
+  // barra do celular: 3 abas fixas e o "Mais" (ativo no modal ou em qualquer outra tela)
+  const phoneTabs = links.filter((t) => PHONE_TABS.includes(t.to));
+  const here = phoneTabs.findIndex((t) => t.to === "/" + (loc.pathname.split("/")[1] ?? "") || groupOf(loc.pathname)?.[0]?.to === t.to);
+  const tabIndex = menu || here < 0 ? phoneTabs.length : here;
   return (
     <UnreadProvider>
     <div className="layout">
@@ -371,20 +375,19 @@ export function App() {
       )}
 
       <nav className="tabbar" aria-label="Navegação">
-        <div className="tabbar-pill">
+        <div className="tabbar-pill" style={{ ["--i" as any]: tabIndex }}>
+          {/* fundo que desliza até a aba ativa */}
+          <span className="tab-glider" aria-hidden />
           <div className="tabbar-scroll" ref={tabsRef}>
-            {links.filter((t) => PHONE_TABS.includes(t.to)).map((t) => (
-              <NavLink key={t.to} to={t.to} end={t.to === "/"} className={({ isActive }) => `tab${isActive || groupOf(loc.pathname)?.[0]?.to === t.to ? " active" : ""}`} onPointerEnter={() => preload(t.to)}>
-                <span className="tab-ico"><Icon name={t.icon} size={21} />{t.badge === "notif" && <UnreadDot className="tab-dot" />}</span>
+            {phoneTabs.map((t, i) => (
+              <NavLink key={t.to} to={t.to} end={t.to === "/"} aria-label={t.short ?? t.label} title={t.short ?? t.label} className={`tab${tabIndex === i ? " active" : ""}`} onClick={() => haptic(6)} onPointerEnter={() => preload(t.to)}>
+                <span className="tab-ico" key={tabIndex === i ? "on" : "off"}><Icon name={t.icon} size={23} />{t.badge === "notif" && <UnreadDot className="tab-dot" />}</span>
                 <span className="tab-label">{t.short ?? t.label}</span>
               </NavLink>
             ))}
           </div>
-          <button
-            className={`tab tab-more ${menu || !PHONE_TABS.includes("/" + (loc.pathname.split("/")[1] ?? "")) ? "active" : ""}`}
-            onClick={() => { haptic(); setMenu(true); }}
-          >
-            <span className="tab-ico"><Icon name="more" size={21} /><UnreadDot className="tab-dot" /></span>
+          <button className={`tab tab-more${tabIndex === phoneTabs.length ? " active" : ""}`} aria-label="Mais" title="Mais" onClick={() => { haptic(); setMenu(true); }}>
+            <span className="tab-ico" key={tabIndex === phoneTabs.length ? "on" : "off"}><Icon name="apps" size={23} /><UnreadDot className="tab-dot" /></span>
             <span className="tab-label">Mais</span>
           </button>
         </div>

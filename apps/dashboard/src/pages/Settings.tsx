@@ -37,6 +37,18 @@ function BillingCard({ form, setForm, save, saved }: { form: any; setForm: (f: a
         <label>Dias grátis</label>
         <input className="input" type="number" inputMode="numeric" step={1} min={0} value={form.billingTrialDays} onChange={(e) => setForm({ ...form, billingTrialDays: e.target.value === "" ? "" : Number(e.target.value) })} />
       </div>
+      <div className="grid grid-2" style={{ gap: 10 }}>
+        <div className="field">
+          <label>Lembrar o vencimento (dias antes)</label>
+          <input className="input" type="number" inputMode="numeric" step={1} min={0} max={10} value={form.billingReminderDays ?? 3} onChange={(e) => setForm({ ...form, billingReminderDays: e.target.value === "" ? "" : Number(e.target.value) })} />
+          <div className="help">Para quem paga por Pix ou boleto, e de novo no dia. Cartão renova sozinho.</div>
+        </div>
+        <div className="field">
+          <label>Desconto por indicação (%)</label>
+          <input className="input" type="number" inputMode="numeric" step={1} min={0} max={100} value={form.billingReferralPercent ?? 10} onChange={(e) => setForm({ ...form, billingReferralPercent: e.target.value === "" ? "" : Number(e.target.value) })} />
+          <div className="help">Quem convidou ganha na próxima mensalidade quando o convidado paga a primeira vez. 0 desliga.</div>
+        </div>
+      </div>
       {data?.webhookUrl && (
         <div className="field">
           <label>Webhook para cadastrar no Asaas</label>

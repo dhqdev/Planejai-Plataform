@@ -7,7 +7,7 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; tools: string[] }[] 
     what: "lançar gasto ou receita",
     says: /\b(anotei|registrei|lancei|lan[cç]ad[oa]s?|anotad[oa]s?|registrad[oa]s?)\b/i,
     about: /R\$|\bgastos?\b|\breceitas?\b|\bdespesas?\b|\blan[cç]amentos?\b/i,
-    tools: ["add_transaction", "update_transaction"],
+    tools: ["add_transaction", "update_transaction", "bill_pay"],
   },
   {
     what: "corrigir lançamento",
@@ -18,17 +18,17 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; tools: string[] }[] 
   {
     what: "apagar ou cancelar",
     says: /\b(apaguei|removi|exclu[ií]|deletei|cancelei)\b/i,
-    tools: ["delete_transaction", "cancel_reminder", "document_delete", "forget_memory", "watch_cancel", "watch_update", "automation_manage", "set_budget"],
+    tools: ["delete_transaction", "cancel_reminder", "document_delete", "forget_memory", "watch_cancel", "watch_update", "automation_manage", "set_budget", "bill_delete", "bill_save"],
   },
   {
     what: "agendar lembrete ou evento",
     says: /\b(agendei|marquei|lembrete (criado|marcado|agendado)|vou te lembrar|te lembro)\b/i,
-    tools: ["schedule_reminder", "calendar_create_event", "reschedule_reminder", "watch_create", "watch_update", "automation_save"],
+    tools: ["schedule_reminder", "calendar_create_event", "reschedule_reminder", "watch_create", "watch_update", "automation_save", "bill_save"],
   },
   {
     what: "guardar documento ou nota",
     says: /\b(salvei|guardei)\b/i,
-    tools: ["document_save", "save_memory", "automation_save", "set_budget", "add_transaction"],
+    tools: ["document_save", "save_memory", "automation_save", "set_budget", "add_transaction", "bill_save", "bill_pay"],
   },
 ];
 

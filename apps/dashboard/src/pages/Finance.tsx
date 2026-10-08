@@ -223,6 +223,7 @@ export function FinancePage() {
             </div>
 
             <div className="fin-col">
+              <BillsCard user={user} readonly={readonly} onPaid={() => void reload()} />
               <div className="card fin-side-card">
                 <div className="fin-card-head">
                   <span className="tone-ico" style={{ ["--c" as any]: "var(--brand-2)" }}><Icon name="target" size={15} /></span>
@@ -479,6 +480,170 @@ function BudgetModal({ initial, onClose }: { initial: { category: string | null;
       <div className="field"><label htmlFor="bd-amount">Limite por mês (R$)</label><input id="bd-amount" name="limit" className="input" inputMode="decimal" autoComplete="off" placeholder="800" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus /></div>
       <p className="muted" style={{ fontSize: 12, margin: 0 }}>O assistente avisa no WhatsApp quando chegar em 80% e quando passar do limite.</p>
       <ErrorBox error={error} />
+    </Modal>
+  );
+}
+
+type Bill = {
+  id: string;
+  kind: "expense" | "income";
+  description: string;
+  amount: number | null;
+  category: string;
+  due_day: number;
+  remind_days_before: number;
+  installments_left: number | null;
+  status: { paid: boolean; due: string; days: number; late: boolean };
+};
+
+const billWhen = (b: Bill) =>
+  b.status.paid ? (b.kind === "income" ? "recebida este mês" : "paga este mês") : b.status.late ? (b.kind === "income" ? `dia ${b.due_day}, ainda não caiu` : `atrasada ${-b.status.days} dia(s)`) : b.status.days === 0 ? "vence hoje" : b.status.days === 1 ? "vence amanhã" : `vence dia ${b.due_day}`;
+
+/** Contas fixas: aluguel, internet, parcelas, salário. Lembra no WhatsApp antes do vencimento; "Paguei" lança no mês. */
+function BillsCard({ user, readonly, onPaid }: { user: string; readonly: boolean; onPaid: () => void }) {
+  const { data, reload } = useApi<Bill[]>(`/api/bills${user ? `?user=${user}` : ""}`);
+  const [editing, setEditing] = useState<Bill | "new" | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  // conta de valor variável: pergunta quanto foi antes de lançar
+  const [asking, setAsking] = useState<{ bill: Bill; amount: string } | null>(null);
+  const pay = async (b: Bill, amount: string | null = null) => {
+    if (b.amount == null && !amount) return setAsking({ bill: b, amount: "" });
+    setAsking(null);
+    setBusy(b.id);
+    try {
+      await api(`/api/bills/${b.id}/pay`, { method: "POST", json: { amount } });
+      haptic(10);
+      onPaid();
+    } catch (e) {
+      void alertDialog("Não deu certo", (e as Error).message);
+    } finally {
+      setBusy(null);
+      reload();
+    }
+  };
+  const bills = data ?? [];
+  return (
+    <div className="card fin-side-card">
+      <div className="fin-card-head">
+        <span className="tone-ico" style={{ ["--c" as any]: "var(--violet)" }}><Icon name="repeat" size={15} /></span>
+        <h3>Contas fixas</h3>
+        <span className="spacer" />
+        {!readonly && <button className="link-btn" onClick={() => setEditing("new")}>Nova conta <Icon name="chevron-right" size={13} /></button>}
+      </div>
+      {bills.map((b) => (
+        <div key={b.id} className={`bill-row${b.status.paid ? " paid" : b.status.late && b.kind === "expense" ? " late" : ""}`}>
+          <span className="fin-rem-date"><strong>{b.due_day}</strong><small>dia</small></span>
+          <button className="bill-main" disabled={readonly} onClick={() => setEditing(b)}>
+            <span className="ellipsis">{b.description}</span>
+            <small>{b.amount != null ? brl(b.amount) : "valor varia"} · {billWhen(b)}{b.installments_left ? ` · faltam ${b.installments_left}` : ""}</small>
+          </button>
+          {!readonly && !b.status.paid && (
+            <button className="btn btn-sm bill-pay" disabled={busy === b.id} onClick={() => pay(b)}>
+              <Icon name="check" size={14} /> {b.kind === "income" ? "Caiu" : "Paguei"}
+            </button>
+          )}
+          {b.status.paid && <span className="bill-ok"><Icon name="check" size={15} /></span>}
+        </div>
+      ))}
+      {data && !bills.length && (
+        <div className="fin-empty-side">
+          <p className="muted">Aluguel, internet, parcelas, salário. Eu lembro no WhatsApp antes de vencer e lanço quando você disser "paguei".</p>
+          {!readonly && <button className="btn btn-brand btn-sm" onClick={() => setEditing("new")}><Icon name="plus" size={14} /> Criar conta fixa</button>}
+        </div>
+      )}
+      {editing && <BillForm initial={editing === "new" ? null : editing} onClose={() => { setEditing(null); reload(); }} />}
+      {asking && (
+        <Modal
+          title={`Quanto foi ${asking.bill.description}?`}
+          icon={<Icon name="receipt" />}
+          onClose={() => setAsking(null)}
+          footer={<button className="btn btn-primary" disabled={!asking.amount.trim()} onClick={() => pay(asking.bill, asking.amount)}>Lançar</button>}
+        >
+          <div className="field">
+            <label htmlFor="bl-paid">Valor deste mês (R$)</label>
+            <input id="bl-paid" className="input" inputMode="decimal" autoComplete="off" autoFocus value={asking.amount} onChange={(e) => setAsking({ ...asking, amount: e.target.value })} placeholder="230,50" />
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function BillForm({ initial, onClose }: { initial: Bill | null; onClose: () => void }) {
+  const [f, setF] = useState({
+    description: initial?.description ?? "",
+    kind: initial?.kind ?? "expense",
+    amount: initial?.amount != null ? String(initial.amount).replace(".", ",") : "",
+    due_day: initial?.due_day ?? 10,
+    remind_days_before: initial?.remind_days_before ?? 1,
+    installments_left: initial?.installments_left != null ? String(initial.installments_left) : "",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    const body = { ...f, amount: f.amount.trim() || null, installments_left: f.installments_left.trim() ? Number(f.installments_left) : null };
+    try {
+      if (initial) await api(`/api/bills/${initial.id}`, { method: "PATCH", json: body });
+      else await api("/api/bills", { method: "POST", json: body });
+      haptic(10);
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+  const remove = async () => {
+    if (!initial || !(await confirmDialog({ title: "Parar de lembrar?", body: initial.description, confirmLabel: "Remover", danger: true }))) return;
+    await api(`/api/bills/${initial.id}`, { method: "DELETE" }).catch(() => {});
+    onClose();
+  };
+  return (
+    <Modal
+      title={initial ? "Ajustar conta fixa" : "Nova conta fixa"}
+      icon={<Icon name="repeat" />}
+      onClose={onClose}
+      footer={
+        <>
+          {initial && <button className="btn btn-ghost" onClick={remove}><Icon name="trash" size={15} /> Remover</button>}
+          <span className="spacer" />
+          <button className="btn btn-primary" disabled={busy || !f.description.trim()} onClick={save}>{busy ? "Salvando…" : "Salvar"}</button>
+        </>
+      }
+    >
+      <ErrorBox error={error} />
+      <div className="tabs">
+        <button className={f.kind === "expense" ? "active" : ""} aria-pressed={f.kind === "expense"} onClick={() => setF({ ...f, kind: "expense" })}>Conta a pagar</button>
+        <button className={f.kind === "income" ? "active" : ""} aria-pressed={f.kind === "income"} onClick={() => setF({ ...f, kind: "income" })}>Dinheiro que entra</button>
+      </div>
+      <div className="field">
+        <label htmlFor="bl-desc">Nome</label>
+        <input id="bl-desc" className="input" autoComplete="off" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} placeholder={f.kind === "income" ? "Salário" : "Aluguel"} />
+      </div>
+      <div className="grid grid-2" style={{ gap: 10 }}>
+        <div className="field">
+          <label htmlFor="bl-amount">Valor (vazio se varia)</label>
+          <input id="bl-amount" className="input" inputMode="decimal" autoComplete="off" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} placeholder="1.500,00" />
+        </div>
+        <div className="field">
+          <label htmlFor="bl-day">Dia do vencimento</label>
+          <select id="bl-day" className="select" value={f.due_day} onChange={(e) => setF({ ...f, due_day: Number(e.target.value) })}>
+            {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>Dia {d}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="bl-remind">Lembrar</label>
+          <select id="bl-remind" className="select" value={f.remind_days_before} onChange={(e) => setF({ ...f, remind_days_before: Number(e.target.value) })}>
+            <option value={0}>Só no dia</option>
+            {[1, 2, 3, 5, 7].map((d) => <option key={d} value={d}>{d === 1 ? "1 dia antes" : `${d} dias antes`}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="bl-inst">Parcelas que faltam</label>
+          <input id="bl-inst" className="input" inputMode="numeric" autoComplete="off" value={f.installments_left} onChange={(e) => setF({ ...f, installments_left: e.target.value.replace(/\D/g, "") })} placeholder="sem fim" />
+        </div>
+      </div>
     </Modal>
   );
 }
