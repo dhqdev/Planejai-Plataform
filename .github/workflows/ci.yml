@@ -54,9 +54,35 @@ jobs:
           cache: npm
       - run: npm ci
       # ffmpeg (gravação do navegador) e o Chrome do runner para o teste do "computador" dos agentes
-      # ffmpeg estático (binário pronto): o apt-get do runner às vezes trava 10+ min no mirror ou no man-db
-      - uses: FedericoCarboni/setup-ffmpeg@v3
-        timeout-minutes: 3
+      # ffmpeg estático (binário pronto, com libx264) de uma release fixa no GitHub, em cache.
+      # O apt-get do runner às vezes trava 10+ min no mirror ou no man-db, e o setup-ffmpeg baixava
+      # do johnvansickle.com, que fica lento e estourava o tempo. Se o GitHub falhar, cai no apt sem man-db.
+      - uses: actions/cache@v4
+        id: ffmpeg-cache
+        with:
+          path: ~/.ffmpeg
+          key: ffmpeg-static-b6.0-linux-x64
+      - name: ffmpeg
+        timeout-minutes: 5
+        env:
+          FFMPEG_URL: https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffmpeg-linux-x64.gz
+          FFMPEG_SHA256: ed652b2f32e0851d1946894fb8333f5b677c1b2ce6b9d187910a67f8b99da028
+        run: |
+          mkdir -p ~/.ffmpeg
+          if [ ! -x ~/.ffmpeg/ffmpeg ]; then
+            if curl -fsSL --retry 3 --max-time 120 "$FFMPEG_URL" | gunzip > ~/.ffmpeg/ffmpeg \
+              && echo "$FFMPEG_SHA256  $HOME/.ffmpeg/ffmpeg" | sha256sum -c -; then
+              chmod +x ~/.ffmpeg/ffmpeg
+            else
+              rm -f ~/.ffmpeg/ffmpeg
+              echo "download falhou; instalando pelo apt"
+              sudo rm -f /var/lib/man-db/auto-update
+              timeout 180 sudo apt-get update -qq
+              timeout 180 sudo apt-get install -y -qq --no-install-recommends ffmpeg
+            fi
+          fi
+          [ -x ~/.ffmpeg/ffmpeg ] && echo "$HOME/.ffmpeg" >> "$GITHUB_PATH"
+          PATH="$HOME/.ffmpeg:$PATH" ffmpeg -hide_banner -version | head -1
       - run: echo "CHROME_PATH=$(which google-chrome || which chromium)" >> "$GITHUB_ENV"
       - run: npm run typecheck
       - run: npm run lint
