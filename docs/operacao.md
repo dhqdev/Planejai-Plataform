@@ -86,3 +86,18 @@ O Baileys usa o WhatsApp Web de um número comum, sem garantia da Meta. Se o nú
 2. Na stack: `WHATSAPP_PROVIDER: cloud`, `WHATSAPP_CLOUD_TOKEN`, `WHATSAPP_CLOUD_PHONE_NUMBER_ID`, `WHATSAPP_CLOUD_VERIFY_TOKEN` e `WHATSAPP_CLOUD_APP_SECRET` (sem ele o webhook recusa tudo).
 3. Webhook na Meta: `https://<seu domínio>/webhooks/whatsapp` com o mesmo verify token.
 4. Atenção às diferenças: fora da janela de 24 h depois da última mensagem da pessoa, só sai mensagem com template aprovado (convites, lembretes e avisos proativos precisam de template), e cada conversa iniciada pela empresa é cobrada pela Meta.
+
+## Repositório e imagem privados
+
+O app não depende do GitHub para rodar: a pílula "Atualizar" do painel lê o `/version.json` do próprio servidor. A única coisa que vem do GitHub é a imagem `ghcr.io/dhqdev/planejai-plataform`, e a visibilidade dela é separada da do repositório.
+
+Ordem para nunca deixar o servidor sem conseguir puxar a imagem:
+
+1. Token clássico só com `read:packages` (*GitHub > Settings > Developer settings > Personal access tokens > Tokens (classic)*). Tokens fine-grained não funcionam no GHCR.
+2. *Portainer > Registries > Add registry > Custom registry*: URL `ghcr.io`, usuário `dhqdev`, senha = token. No Swarm o Portainer repassa a credencial aos nós ao atualizar a stack.
+3. Teste: *Update the stack* com "Re-pull image" ligado. Tem que funcionar ainda com a imagem pública.
+4. Repositório privado: *Settings > General > Danger Zone > Change visibility*.
+5. Imagem privada: *github.com/users/dhqdev/packages/container/planejai-plataform/settings > Danger zone > Change visibility*. Se o GitHub não deixar voltar para privado, apague o pacote e rode *Actions > CI > Run workflow*: ele recria `latest` e `sha-…` já privados (perde só o rollback para os `sha-…` antigos; o servidor segue com a imagem que já tem).
+6. Confira a versão nova no painel ou no `/health` depois do próximo push.
+
+Com o repositório privado o Actions tem 2.000 min/mês no plano grátis. Pushes que só mudam `.claude/`, `docs/` ou arquivos `.md` não rodam o CI.

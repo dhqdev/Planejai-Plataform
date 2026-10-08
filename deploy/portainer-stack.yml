@@ -1,7 +1,7 @@
 # Stack do Planejai para o Portainer (Stacks > Add stack > Web editor ou Repository).
 # Preencha as variáveis em "Environment variables" do Portainer (veja .env.example).
 # Tem Postgres e Redis PRÓPRIOS (serviços "db" e "redis"), separados dos que já existam no servidor.
-# Imagens multi-arch: linux/amd64, linux/arm64 e linux/arm/v7.
+# Imagens multi-arch: linux/amd64 e linux/arm64.
 
 x-app-env: &app-env
   DATABASE_URL: postgres://planejai:${POSTGRES_PASSWORD}@db:5432/planejai
@@ -138,7 +138,7 @@ services:
     networks: [planejai]
 
   # Navegador headless para prints de páginas (sessões de cinema, cardápios...), numa rede só com app e worker:
-  # abre a internet, mas não enxerga o banco nem o Redis. Disponível para amd64 e arm64. Em arm/v7 remova este serviço.
+  # abre a internet, mas não enxerga o banco nem o Redis. Disponível para amd64 e arm64.
   browserless:
     image: ghcr.io/browserless/chromium:v2.57.0
     restart: unless-stopped

@@ -13,9 +13,13 @@
     "build": "npm run build -w apps/dashboard && npm run build -w apps/server",
     "typecheck": "npm run typecheck -w apps/server && npm run typecheck -w apps/dashboard",
     "test": "npm run test -w apps/server",
-    "migrate": "npm run migrate -w apps/server"
+    "migrate": "npm run migrate -w apps/server",
+    "lint": "biome lint"
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4"
   }
 }

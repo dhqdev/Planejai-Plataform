@@ -1,0 +1,25 @@
+{
+  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "files": { "include": ["apps/server/src/**/*.ts", "apps/server/test/**/*.ts", "apps/dashboard/src/**/*.ts", "apps/dashboard/src/**/*.tsx"] },
+  "formatter": { "enabled": false },
+  "organizeImports": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "style": { "recommended": false },
+      "complexity": { "recommended": false },
+      "performance": { "recommended": false },
+      "a11y": { "recommended": false },
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noArrayIndexKey": "off",
+        "noAssignInExpressions": "off",
+        "noImplicitAnyLet": "off",
+        "noMisleadingCharacterClass": "off",
+        "noControlCharactersInRegex": "off"
+      },
+      "correctness": { "useExhaustiveDependencies": "off" }
+    }
+  }
+}
