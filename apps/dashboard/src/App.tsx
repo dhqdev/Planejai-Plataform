@@ -138,6 +138,9 @@ const MY_DAY: NavItem[] = [
   { to: "/documentos", label: "Documentos", icon: "file" },
 ];
 
+/** Barra de baixo do celular: só as telas do dia a dia; o resto fica organizado por seção no "Mais". */
+const PHONE_TABS = ["/", "/agenda", "/finance"];
+
 /** Super admin (dono da stack): o dia a dia dele e, abaixo, a operação da plataforma. */
 const SUPER_NAV: NavItem[] = [
   { section: "Meu dia" },
@@ -370,14 +373,17 @@ export function App() {
       <nav className="tabbar" aria-label="Navegação">
         <div className="tabbar-pill">
           <div className="tabbar-scroll" ref={tabsRef}>
-            {links.map((t) => (
+            {links.filter((t) => PHONE_TABS.includes(t.to)).map((t) => (
               <NavLink key={t.to} to={t.to} end={t.to === "/"} className={({ isActive }) => `tab${isActive || groupOf(loc.pathname)?.[0]?.to === t.to ? " active" : ""}`} onPointerEnter={() => preload(t.to)}>
                 <span className="tab-ico"><Icon name={t.icon} size={21} />{t.badge === "notif" && <UnreadDot className="tab-dot" />}</span>
                 <span className="tab-label">{t.short ?? t.label}</span>
               </NavLink>
             ))}
           </div>
-          <button className={`tab tab-more ${menu ? "active" : ""}`} onClick={() => setMenu(true)}>
+          <button
+            className={`tab tab-more ${menu || !PHONE_TABS.includes("/" + (loc.pathname.split("/")[1] ?? "")) ? "active" : ""}`}
+            onClick={() => { haptic(); setMenu(true); }}
+          >
             <span className="tab-ico"><Icon name="more" size={21} /><UnreadDot className="tab-dot" /></span>
             <span className="tab-label">Mais</span>
           </button>
@@ -385,7 +391,7 @@ export function App() {
       </nav>
 
       {menu && (
-        <Modal title="Menu" onClose={() => setMenu(false)} className="more-sheet">
+        <Modal title="Mais" onClose={() => setMenu(false)} className="more-sheet">
           {!isStandalone() && (installable || isIos()) && (
             <div className="install-card">
               <img className="brand-logo app-icon" src="/icons/logo-256.png" alt="" width={40} height={40} />
@@ -405,32 +411,62 @@ export function App() {
               <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · <span className="app-version">v{__APP_VERSION__}</span></div>
             </div>
           </div>
-          <div className="more-grid">
-            {links.map((item) => (
-              <button key={item.to} className={`more-tile ${loc.pathname === item.to ? "active" : ""}`} onClick={() => { setMenu(false); nav(item.to); }}>
-                <Icon name={item.icon} size={26} />
-                <span>{item.short ?? item.label}</span>
-              </button>
-            ))}
-            <button className="more-tile" onClick={() => { setMenu(false); openWardrobe(); }}>
-              <MochiIcon size={40} />
-              <span>Mochi</span>
-            </button>
-            <button className="more-tile" onClick={toggleTheme}>
-              <Icon name={theme === "dark" ? "sun" : "moon"} size={26} />
-              <span>{theme === "dark" ? "Tema claro" : "Tema escuro"}</span>
-            </button>
-            <button className="more-tile" onClick={async () => { await api("/api/auth/logout", { method: "POST" }); setMenu(false); setMe(null); }}>
-              <Icon name="logout" size={26} />
-              <span>Sair</span>
-            </button>
-          </div>
+          {sectionsOf(NAV).map((sec) => {
+            const items = sec.items.filter((it) => !PHONE_TABS.includes(it.to));
+            const last = sec.title === "Conta";
+            if (!items.length && !last) return null;
+            return (
+              <section key={sec.title} className="more-section">
+                <h4>{sec.title}</h4>
+                <div className="more-grid">
+                  {items.map((item) => (
+                    <button key={item.to} className={`more-tile ${isOn(loc.pathname, item.to) ? "active" : ""}`} onClick={() => { setMenu(false); nav(item.to); }}>
+                      <span className="tab-ico"><Icon name={item.icon} size={24} />{item.badge === "notif" && <UnreadDot className="tab-dot" />}</span>
+                      <span>{item.short ?? item.label}</span>
+                    </button>
+                  ))}
+                  {last && (
+                    <>
+                      <button className="more-tile" onClick={() => { setMenu(false); openWardrobe(); }}>
+                        <MochiIcon size={34} />
+                        <span>Mochi</span>
+                      </button>
+                      <button className="more-tile" onClick={toggleTheme}>
+                        <Icon name={theme === "dark" ? "sun" : "moon"} size={24} />
+                        <span>{theme === "dark" ? "Tema claro" : "Tema escuro"}</span>
+                      </button>
+                      <button className="more-tile" onClick={async () => { await api("/api/auth/logout", { method: "POST" }); setMenu(false); setMe(null); }}>
+                        <Icon name="logout" size={24} />
+                        <span>Sair</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </section>
+            );
+          })}
         </Modal>
       )}
     </div>
     </UnreadProvider>
   );
 }
+
+/** Itens do menu agrupados pela seção (Meu dia, Plataforma, Conta…), para o "Mais" do celular. */
+function sectionsOf(items: NavItem[]) {
+  const out: { title: string; items: NavLinkItem[] }[] = [];
+  for (const it of items) {
+    if ("section" in it) out.push({ title: it.section, items: [] });
+    else (out[out.length - 1] ?? (out[out.length] = { title: "Menu", items: [] })).items.push(it);
+  }
+  return out;
+}
+
+/** Tela aberta é este item ou uma irmã dele (Filas conta como Execuções). */
+const isOn = (path: string, to: string) => {
+  const base = "/" + (path.split("/")[1] ?? "");
+  return base === to || groupOf(path)?.[0]?.to === to;
+};
 
 function titleFor(path: string, items: NavItem[]) {
   const base = "/" + (path.split("/")[1] ?? "");

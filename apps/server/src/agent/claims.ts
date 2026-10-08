@@ -18,12 +18,12 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; tools: string[] }[] 
   {
     what: "apagar ou cancelar",
     says: /\b(apaguei|removi|exclu[ií]|deletei|cancelei)\b/i,
-    tools: ["delete_transaction", "cancel_reminder", "document_delete", "forget_memory", "watch_cancel", "automation_manage", "set_budget"],
+    tools: ["delete_transaction", "cancel_reminder", "document_delete", "forget_memory", "watch_cancel", "watch_update", "automation_manage", "set_budget"],
   },
   {
     what: "agendar lembrete ou evento",
     says: /\b(agendei|marquei|lembrete (criado|marcado|agendado)|vou te lembrar|te lembro)\b/i,
-    tools: ["schedule_reminder", "calendar_create_event", "reschedule_reminder", "watch_create", "automation_save"],
+    tools: ["schedule_reminder", "calendar_create_event", "reschedule_reminder", "watch_create", "watch_update", "automation_save"],
   },
   {
     what: "guardar documento ou nota",

@@ -1,6 +1,6 @@
 import { createInvite, displayName, findContact, inviteStats, listContacts, notifyUser, relayText } from "../../social.js";
 import { SCOPE_LABEL, SHARE_SCOPES, setShare, type ShareScope } from "../../sharing.js";
-import { cancelWatch, createWatch, listWatches } from "../../watches.js";
+import { cancelWatch, createWatch, listWatches, updateWatch, type NotifyMode } from "../../watches.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 export const invitePerson = defineTool<{ name: string; phone: string; message_after_accept?: string; confirmed_by_user?: boolean }>({
@@ -92,23 +92,67 @@ export const sendToContact = defineTool<{ contact: string; message: string; atta
   },
 });
 
-export const watchCreate = defineTool<{ kind: "price" | "news"; query: string; target_price?: number; every_hours?: number }>({
+export const watchCreate = defineTool<{ kind: "price" | "news"; query: string; target_price?: number; every_hours?: number; days?: number; notify?: NotifyMode }>({
   name: "watch_create",
   description:
-    "Fica de olho em algo e avisa a pessoa sozinho quando achar algo melhor: kind=price acompanha o menor preço de um produto (Mercado Livre), " +
-    "kind=news avisa de novidades sobre um assunto. Ofereça quando a pessoa quer comprar algo, espera um preço ou uma notícia. A checagem não gasta IA.",
+    "Fica de olho em algo por 7 dias (ou o que a pessoa pedir) e, a cada olhada, manda para ela o que achou ou que não achou nada: " +
+    "kind=price acompanha o menor preço de um produto (Mercado Livre), kind=news acompanha novidades sobre qualquer assunto. " +
+    "notify=changes só avisa quando aparece algo melhor (use se a pessoa pedir menos mensagens). A checagem não gasta IA.",
   parameters: obj(
     {
       kind: { type: "string", enum: ["price", "news"] },
       query: { type: "string", description: "O que buscar, ex.: 'iPhone 16 128GB'" },
       target_price: { type: "number", description: "Preço alvo em reais (opcional)" },
-      every_hours: { type: "number", description: "De quantas em quantas horas olhar (padrão 6 para preço, 12 para notícia)" },
+      every_hours: { type: "number", description: "De quantas em quantas horas olhar (padrão 8 para preço, 12 para notícia)" },
+      days: { type: "number", description: "Por quantos dias acompanhar (padrão 7, máximo 30)" },
+      notify: { type: "string", enum: ["always", "changes"], description: "always (padrão): conta cada olhada; changes: só quando achar algo" },
     },
     ["kind", "query"],
   ),
   async run(args, ctx) {
-    const w = await createWatch({ userId: ctx.user.id, conversationId: ctx.conversation.id, kind: args.kind, query: args.query, target: args.target_price, everyHours: args.every_hours });
-    return { ok: true, id: w.id, every_hours: w.every_hours, until: w.expires_at };
+    const w = await createWatch({
+      userId: ctx.user.id,
+      conversationId: ctx.conversation.id,
+      kind: args.kind,
+      query: args.query,
+      target: args.target_price,
+      everyHours: args.every_hours,
+      days: args.days,
+      notifyMode: args.notify,
+    });
+    return { ok: true, id: w.id, every_hours: w.every_hours, until: w.expires_at, notify: w.notify_mode, note: "A primeira olhada sai em até 15 minutos." };
+  },
+});
+
+export const watchUpdate = defineTool<{ id: string; query?: string; target_price?: number; every_hours?: number; days?: number; notify?: NotifyMode; paused?: boolean; reactivate?: boolean }>({
+  name: "watch_update",
+  description:
+    "Ajusta um acompanhamento (id de watch_list): o que buscar, preço alvo, frequência, mais dias, só avisar quando achar (notify=changes), pausar ou reativar.",
+  parameters: obj(
+    {
+      id: { type: "string" },
+      query: { type: "string" },
+      target_price: { type: "number" },
+      every_hours: { type: "number" },
+      days: { type: "number", description: "Acompanhar por mais N dias a partir de agora" },
+      notify: { type: "string", enum: ["always", "changes"] },
+      paused: { type: "boolean" },
+      reactivate: { type: "boolean", description: "Volta a acompanhar um que já terminou" },
+    },
+    ["id"],
+  ),
+  async run(args, ctx) {
+    const w = await updateWatch(args.id, ctx.user.id, {
+      query: args.query,
+      target: args.target_price,
+      every_hours: args.every_hours,
+      days: args.days,
+      notify_mode: args.notify,
+      paused: args.paused,
+      reactivate: args.reactivate,
+    });
+    if (!w) return { ok: false, error: "Acompanhamento não encontrado" };
+    return { ok: true, id: w.id, query: w.query, every_hours: w.every_hours, until: w.expires_at, paused: w.paused, active: w.active, notify: w.notify_mode };
   },
 });
 
@@ -118,7 +162,19 @@ export const watchList = defineTool<Record<string, never>>({
   parameters: obj({}),
   async run(_args, ctx) {
     const rows = await listWatches(ctx.user.id);
-    return rows.filter((r) => r.active).map((r) => ({ id: r.id, kind: r.kind, query: r.query, target: r.target, best: r.best, every_hours: r.every_hours }));
+    return rows.slice(0, 20).map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      query: r.query,
+      active: r.active,
+      paused: r.paused,
+      target: r.target,
+      best: r.best,
+      every_hours: r.every_hours,
+      until: r.expires_at,
+      notify: r.notify_mode,
+      last: r.last_result?.summary ?? null,
+    }));
   },
 });
 

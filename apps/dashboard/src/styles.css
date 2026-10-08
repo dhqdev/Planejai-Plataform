@@ -1216,3 +1216,36 @@ button.chip { cursor: pointer; color: var(--text); }
 }
 /* marca na barra lateral: o Mochi sobre o fundo noite, como no ícone do app */
 .brand > .mochi-badge { padding: 5px; margin: 0; border-radius: 14px; background: radial-gradient(circle at 50% 45%, #7a14f5 0%, var(--midnight) 78%); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--magenta) 70%, transparent); }
+
+/* ---------- Celular: barra de baixo com 4 botões e o "Mais" organizado por seção ---------- */
+@media (max-width: 767px) {
+  /* as 3 abas e o "Mais" dividem a cápsula por igual */
+  .tabbar-scroll { display: contents; }
+  .tabbar-scroll .tab, .tab-more { flex: 1 1 0; min-width: 0; padding: 0 4px; }
+  .tabbar-pill { gap: 4px; }
+  .more-section + .more-section { margin-top: 18px; }
+  .more-section h4 { margin: 0 2px 10px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .more-section .more-tile { aspect-ratio: auto; min-height: 86px; gap: 8px; }
+  .more-section .tab-ico { display: inline-flex; }
+  .more-tile.active .tab-dot { box-shadow: 0 0 0 2px var(--ink); }
+}
+
+/* ---------- Acompanhamentos ---------- */
+.watch-list { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); }
+.watch-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius, 16px); background: var(--panel); min-width: 0; }
+.watch-card.off { opacity: .7; }
+.watch-top { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
+.watch-ico { flex-shrink: 0; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 12px; background: var(--violet-soft); color: var(--violet); }
+.watch-main { flex: 1; min-width: 0; }
+.watch-title { display: block; overflow-wrap: anywhere; }
+.watch-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+.watch-meta .chip { padding: 1px 8px; font-size: 11.5px; }
+.chip-on { background: var(--violet-soft); color: var(--violet); border-color: transparent; }
+.watch-last { display: flex; gap: 8px; align-items: baseline; font-size: 13px; line-height: 1.4; padding: 8px 10px; border-radius: 10px; background: var(--panel-2); overflow-wrap: anywhere; }
+.watch-last .dot { flex-shrink: 0; transform: translateY(-1px); }
+.watch-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+@media (max-width: 767px) {
+  .watch-actions { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 6px; }
+  .watch-actions .btn { padding-inline: 6px; font-size: 13px; justify-content: center; }
+  .watch-actions .spacer { display: none; }
+}

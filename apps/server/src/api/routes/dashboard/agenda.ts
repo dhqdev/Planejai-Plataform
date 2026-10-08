@@ -6,7 +6,8 @@ import { isConnected } from "../../../integrations/registry.js";
 import { cancelReminder, createReminder, listReminders, reminderOccurrences, rescheduleReminder } from "../../../reminders.js";
 import { NOBODY, personalUser, selfUserId } from "../../../sharing.js";
 import { parseLocalDateTime } from "../../../time.js";
-import { cancelWatch, listWatches } from "../../../watches.js";
+import { conversationOf } from "../../../social.js";
+import { cancelWatch, checkWatchNow, createWatch, listWatches, updateWatch, type NotifyMode } from "../../../watches.js";
 
 /**
  * Agenda: lembretes, calendário (com o Google Agenda do dono) e acompanhamentos. Particular como Finanças:
@@ -83,4 +84,42 @@ export function agendaRoutes(base: FastifyInstance) {
   // ---------- Acompanhamentos (o agente fica de olho e avisa sozinho) ----------
   base.get("/api/watches", async (req) => listWatches(await self(req.account)));
   base.delete<{ Params: { id: string } }>("/api/watches/:id", async (req) => ({ ok: await cancelWatch(req.params.id, await self(req.account)) }));
+  // criar pela tela: os avisos vão para a conversa da pessoa no WhatsApp
+  base.post<{ Body: { kind?: "price" | "news"; query?: string; target?: number | null; every_hours?: number; days?: number; notify_mode?: NotifyMode } }>(
+    "/api/watches",
+    async (req, reply) => {
+      const me = await selfUserId(req.account);
+      if (!me) return reply.code(400).send({ error: "Sua conta não está ligada a um número de WhatsApp" });
+      const b = req.body ?? {};
+      if (!b.query?.trim()) return reply.code(400).send({ error: "Diga o que acompanhar" });
+      const u = await one("SELECT id, phone FROM users WHERE id = $1", [me]);
+      const { conv } = await conversationOf(u.id, u.phone);
+      try {
+        return await createWatch({
+          userId: me,
+          conversationId: conv.id,
+          kind: b.kind === "price" ? "price" : "news",
+          query: b.query,
+          target: b.target ?? null,
+          everyHours: b.every_hours,
+          days: b.days,
+          notifyMode: b.notify_mode,
+        });
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    },
+  );
+  base.patch<{ Params: { id: string }; Body: Parameters<typeof updateWatch>[2] }>("/api/watches/:id", async (req, reply) => {
+    try {
+      const w = await updateWatch(req.params.id, await self(req.account), req.body ?? {});
+      return w ? { ok: true } : reply.code(404).send({ error: "Acompanhamento não encontrado" });
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+  base.post<{ Params: { id: string } }>("/api/watches/:id/check", async (req, reply) => {
+    const r = await checkWatchNow(req.params.id, await self(req.account));
+    return r ?? reply.code(404).send({ error: "Acompanhamento não encontrado ou parado" });
+  });
 }

@@ -172,7 +172,7 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     const { saveCredentials } = await import("../src/integrations/registry.js");
     await saveCredentials("tavily", { api_key: "tvly-teste" });
     const { createWatch, checkDueWatches } = await import("../src/watches.js");
-    const w = await createWatch({ userId: david.id, conversationId: davidConv, kind: "news", query: "show do Coldplay em SP" });
+    const w = await createWatch({ userId: david.id, conversationId: davidConv, kind: "news", query: "show do Coldplay em SP", notifyMode: "changes" });
     tavilyResults = [{ title: "Coldplay anuncia turnê", url: "https://ex.com/turne", content: "sem datas" }];
     const before = channels.playground.sent.length;
     expect(await checkDueWatches()).toEqual({ checked: 1, notified: 0 }); // primeira olhada só marca o que já existe
@@ -185,6 +185,30 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     expect(lastTexts(1)[0]).toContain("Coldplay em SP: 12/03");
     const llm = await db.many("SELECT e.id FROM executions e WHERE e.trigger = 'watch'");
     expect(llm.length).toBe(1);
+  });
+
+  it("acompanhamento padrão dura 7 dias e conta cada olhada, achando ou não", async () => {
+    const { createWatch, checkDueWatches, updateWatch } = await import("../src/watches.js");
+    await db.query("UPDATE watches SET active = false");
+    const w = await createWatch({ userId: david.id, conversationId: davidConv, kind: "news", query: "vagas de estágio em Campinas" });
+    expect(Math.round((new Date(w.expires_at).getTime() - Date.now()) / 86_400_000)).toBe(7);
+    tavilyResults = [{ title: "Vaga A", url: "https://ex.com/a", content: "" }];
+    const before = channels.playground.sent.length;
+    expect(await checkDueWatches()).toEqual({ checked: 1, notified: 1 });
+    expect(lastTexts(1)[0]).toContain("Comecei a acompanhar");
+    await db.query("UPDATE watches SET next_check_at = now() WHERE id = $1", [w.id]);
+    expect(await checkDueWatches()).toEqual({ checked: 1, notified: 1 });
+    expect(lastTexts(1)[0]).toContain("nada novo");
+    expect(channels.playground.sent.length).toBe(before + 2);
+    // pausado não olha; acabou o prazo: avisa uma vez e desliga
+    await updateWatch(w.id, david.id, { paused: true });
+    await db.query("UPDATE watches SET next_check_at = now() WHERE id = $1", [w.id]);
+    expect(await checkDueWatches()).toEqual({ checked: 0, notified: 0 });
+    await db.query("UPDATE watches SET expires_at = now() - interval '1 minute' WHERE id = $1", [w.id]);
+    await checkDueWatches();
+    expect(lastTexts(1)[0]).toContain("Terminei de acompanhar");
+    const row = await db.one("SELECT active, checks FROM watches WHERE id = $1", [w.id]);
+    expect(row).toEqual({ active: false, checks: 2 });
   });
 
   it("melhoria diária cria um agente sob medida só quando o assunto se repete", async () => {

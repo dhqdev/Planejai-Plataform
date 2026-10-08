@@ -210,6 +210,7 @@ export const CTO_TOOLS: Tool[] = [
   social.watchCreate,
   social.watchList,
   social.watchCancel,
+  social.watchUpdate,
 ];
 
 export const CTO: Omit<AgentDef, "tools"> = {
