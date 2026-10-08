@@ -2,11 +2,11 @@
 
 /* ---------- KPIs (mesmo desenho de Finanças) ---------- */
 .ex-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 14px; overflow: hidden; position: relative; }
-.ex-kpis::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--grad); }
+
 .ex-kpis > div { padding: 16px 20px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .ex-kpis > div + div { border-left: 1px solid var(--border); }
-.ex-kpis small { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ex-kpis strong { font-family: var(--mono); font-size: clamp(18px, 1.7vw, 24px); font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ex-kpis small { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ex-kpis strong { font-variant-numeric: tabular-nums; font-size: clamp(18px, 1.7vw, 24px); font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ex-kpis strong.neg { color: var(--err); }
 .ex-kpis span { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1em; }
 
@@ -20,7 +20,7 @@
 .ex-pills button { display: inline-flex; align-items: center; gap: 6px; border: none; background: none; padding: 6px 11px; border-radius: 9px; font-weight: 600; font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .ex-pills button:hover { color: var(--text); }
 .ex-pills button.active { background: var(--ink); color: var(--on-ink); }
-.ex-pills button.active .ico { color: var(--brand-1); }
+.ex-pills button.active .ico { color: var(--text); }
 .ex-pills .dot { width: 6px; height: 6px; animation: none; }
 .ex-select { width: auto; height: 38px; padding: 0 28px 0 12px; border-radius: 12px; font-size: 13px; max-width: 180px; flex: 0 1 auto; min-width: 108px; }
 .ex-clear { flex-shrink: 0; }
@@ -36,7 +36,7 @@
 button.ex-row:hover { background: var(--panel-2); }
 .ex-row.error { box-shadow: inset 3px 0 0 var(--err); }
 .ex-row-head { cursor: default; border-top: none; padding-top: 10px; padding-bottom: 10px; background: var(--panel); }
-.ex-row-head small, .ex-day small { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-family: var(--mono); }
+.ex-row-head small, .ex-day small { font-size: 12px; color: var(--muted); }
 .ex-c-num { text-align: right; font-size: 12.5px; white-space: nowrap; }
 .ex-c-when { text-align: right; display: flex; flex-direction: column; align-items: flex-end; font-size: 12.5px; white-space: nowrap; }
 .ex-c-when small { color: var(--muted); font-size: 11px; }
@@ -86,7 +86,7 @@ button.ex-row:hover .ex-faces > * { box-shadow: 0 0 0 2px var(--panel-2); }
 .exd-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; min-width: 0; }
 .exd-title { flex: 1; min-width: 0; }
 .exd-title small .ico { display: inline-block; vertical-align: -1px; margin-right: 3px; }
-.exd-title small { display: block; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.exd-title small { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .exd-title h1 { margin: 3px 0 0; font-size: 22px; font-weight: 650; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .exd-kpis strong.exd-model { font-size: clamp(14px, 1.2vw, 17px); padding: 3px 0; }
 .exd-body { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
@@ -94,7 +94,7 @@ button.ex-row:hover .ex-faces > * { box-shadow: 0 0 0 2px var(--panel-2); }
 .exd-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .exd-card { padding: 14px 16px; }
 .exd-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--muted); flex-wrap: wrap; }
-.exd-card-head small { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; font-family: var(--mono); }
+.exd-card-head small { font-size: 12px; }
 .exd-card-head strong { color: var(--text); font-weight: 600; }
 .exd-hint { font-size: 12px; }
 .exd-none { margin: 0; font-size: 13px; }
@@ -188,7 +188,7 @@ button.ex-row:hover .ex-faces > * { box-shadow: 0 0 0 2px var(--panel-2); }
 .tl-end.err .tl-title { color: var(--err); }
 
 .tl-io { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin-top: 10px; }
-.tl-io small { display: block; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-family: var(--mono); margin-bottom: 5px; }
+.tl-io small { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
 .tl-io .json { max-height: 320px; font-size: 11.5px; }
 
 /* ---------- Notebook: cabe na tela sem rolar a página ---------- */

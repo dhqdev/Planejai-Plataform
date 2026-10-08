@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { AgentFace, CORE_FACES } from "./faces";
 import { Icon } from "./icons";
-import { BlockLoader } from "./BlockLoader";
 import { haptic } from "./touch";
 
 export function PageHead({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
@@ -429,8 +428,9 @@ export function Json({ value }: { value: unknown }) {
   return <pre className="json">{text}</pre>;
 }
 
+/** Dentro do app nada de animação de carregando: a tela aparece quando os dados chegam (o carregando é só na abertura). */
 export function Loading() {
-  return <BlockLoader />;
+  return null;
 }
 
 export function ErrorBox({ error }: { error: string | null }) {

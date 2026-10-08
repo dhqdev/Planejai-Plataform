@@ -1,4 +1,4 @@
-/* Planejai: visual minimalista e neutro; o degradê da marca (laranja, coral, magenta, roxo) aparece só em pontos de destaque. Celular, iPad e desktop. */
+/* Planejai: tinta sobre papel. A única coisa colorida da tela é o Mochi (e as cores que informam: status, agendas, categorias). Celular, iPad e desktop. */
 :root {
   --bg: #f6f6f4;
   --panel: #ffffff;
@@ -34,10 +34,10 @@
   --brand-2: #ff4458;
   --brand-3: #e23382;
   --brand-4: #8b2be2;
-  --grad: linear-gradient(90deg, var(--brand-1), var(--brand-2) 40%, var(--brand-3) 70%, var(--brand-4));
-  /* versão mais escura do degradê para fundos com texto branco (lê bem em qualquer tela) */
-  --grad-strong: linear-gradient(100deg, #e8590c, #e03150 45%, #c2257a 75%, #7a2bd0);
-  --grad-soft: linear-gradient(135deg, rgba(255, 122, 26, 0.1), rgba(226, 51, 130, 0.08) 55%, rgba(139, 43, 226, 0.1));
+  /* destaque é tinta sólida (antes era um degradê laranja-roxo); o texto por cima usa --on-ink */
+  --grad: var(--ink);
+  --grad-strong: var(--ink);
+  --grad-soft: var(--panel-2);
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -68,6 +68,9 @@
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
+/* Sem barra de rolagem em lugar nenhum: rola com dedo, roda do mouse ou teclado, como num app */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
@@ -107,13 +110,13 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 @media (hover: hover) and (pointer: fine) { .nav a:hover { background: var(--panel-2); color: var(--text); } }
 .nav a { position: relative; }
 .nav a.active { background: var(--panel); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
-.nav a.active .ico { color: var(--brand-2); }
+.nav a.active .ico { color: var(--text); }
 .nav a.active::before { content: ""; position: absolute; left: -12px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--grad); }
 .nav .count { margin-left: auto; background: var(--ink); color: var(--on-ink); font-size: 12px; border-radius: 99px; padding: 0 7px; font-weight: 600; }
 .nav-section { font-size: 12px; letter-spacing: 0.04em; color: var(--muted); padding: 16px 10px 6px; font-weight: 500; }
 .sidebar-foot { margin-top: auto; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--muted); }
 .me { display: flex; align-items: center; gap: 10px; padding: 6px; }
-.avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 650; background: var(--grad); color: #fff; flex-shrink: 0; font-size: 13px; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 650; background: var(--grad); color: var(--on-ink); flex-shrink: 0; font-size: 13px; }
 .me .me-name { color: var(--text); font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .role-tag { font-size: 12px; color: var(--muted); }
 .app-version { font-family: var(--mono); }
@@ -305,7 +308,7 @@ table.table { width: 100%; border-collapse: collapse; }
 .bars { display: flex; align-items: flex-end; gap: 4px; height: 120px; }
 .bars .bar { flex: 1; background: var(--text); border-radius: 4px 4px 0 0; min-height: 2px; position: relative; opacity: 0.85; }
 .fin-page .bars .bar { background: var(--border-2); opacity: 1; }
-.fin-page .bars .bar.spent { background: linear-gradient(180deg, var(--brand-1), var(--brand-2)); }
+.fin-page .bars .bar.spent { background: var(--ink); }
 .bars .bar.err { background: var(--err); }
 .bars-labels { display: flex; gap: 4px; font-size: 10px; color: var(--muted); }
 .bars-labels span { flex: 1; text-align: center; }
@@ -350,7 +353,7 @@ table.table { width: 100%; border-collapse: collapse; }
 .corner.tr { top: 18px; right: 22px; }
 .corner.br { bottom: 22px; right: 22px; }
 .fab { width: 46px; height: 46px; border-radius: 16px; display: grid; place-items: center; border: 1px solid var(--border); background: var(--panel); cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.08); color: var(--text); }
-.fab.ink { background: var(--grad); color: #fff; border-color: transparent; box-shadow: 0 8px 22px rgba(255, 68, 88, .28); }
+.fab.ink { background: var(--grad); color: var(--on-ink); border-color: transparent; box-shadow: var(--shadow-lg); }
 @media (hover: hover) and (pointer: fine) { .fab:hover { transform: translateY(-1px); } }
 
 /* ---------- Login / cadastro ---------- */
@@ -471,7 +474,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
   }
   .tab-ico { line-height: 1; transition: transform 0.18s cubic-bezier(.3,1.6,.5,1); }
   .tab.active { color: var(--text); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--border); font-weight: 650; }
-  .tab.active .tab-ico { color: var(--brand-2); transform: translateY(-1px); }
+  .tab.active .tab-ico { color: var(--text); transform: translateY(-1px); }
   .tab-more { flex: 0 0 auto; }
 
   .page { padding: 18px 16px 28px; }
@@ -509,7 +512,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 /* ---------- Agenda (calendário) ---------- */
 .cal-nav { display: flex; align-items: center; gap: 6px; }
 .cal-person { width: 190px; }
-.cal-wd { padding: 10px 8px 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); text-align: center; border-bottom: 1px solid var(--border); }
+.cal-wd { padding: 10px 8px 6px; font-size: 12px; color: var(--muted); text-align: center; border-bottom: 1px solid var(--border); }
 .cal-cell { min-height: 118px; padding: 6px 5px; border-left: 1px solid var(--border); border-top: 1px solid var(--border); cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-width: 0; transition: background .12s; }
 @media (hover: hover) and (pointer: fine) { .cal-cell:hover { background: var(--panel-2); } }
 .cal-cell.out .cal-num { color: var(--muted); opacity: .55; }
@@ -534,7 +537,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .cal-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 6px; border: none; background: none; border-radius: 10px; text-align: left; cursor: pointer; color: inherit; min-width: 0; }
 @media (hover: hover) and (pointer: fine) { .cal-row:hover { background: var(--panel-2); } }
 .cal-row-time { width: 58px; white-space: nowrap; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.cal-bar { width: 3px; align-self: stretch; border-radius: 3px; background: linear-gradient(180deg, var(--brand-1), var(--brand-2), var(--brand-4)); flex-shrink: 0; }
+.cal-bar { width: 3px; align-self: stretch; border-radius: 3px; background: var(--ink); flex-shrink: 0; }
 .cal-bar.google { background: var(--muted); }
 .cal-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .cal-row-text small { font-size: 12px; }
@@ -542,9 +545,9 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .cal-week-head, .cal-week-body { display: grid; grid-template-columns: 52px repeat(var(--cols), 1fr); }
 .cal-week-head { border-bottom: 1px solid var(--border); }
 .cal-week-day { padding: 8px 4px; text-align: center; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.cal-week-day small { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.cal-week-day small { font-size: 12px; color: var(--muted); }
 .cal-week-day strong { font-size: 20px; font-weight: 600; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto; }
-.cal-week-day.today strong { background: var(--grad); color: #fff; }
+.cal-week-day.today strong { background: var(--grad); color: var(--on-ink); }
 .cal-week-body { max-height: 66dvh; overflow-y: auto; position: relative; overscroll-behavior: contain; }
 .cal-hours div { position: relative; }
 .cal-hours span { position: absolute; top: -8px; right: 6px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -560,8 +563,8 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .cal-list-day { display: flex; gap: 12px; align-items: flex-start; }
 .cal-list-date { width: 48px; text-align: center; padding-top: 8px; flex-shrink: 0; }
 .cal-list-date strong { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; margin: 0 auto; font-size: 18px; }
-.cal-list-date small { color: var(--muted); font-size: 12px; text-transform: uppercase; }
-.cal-list-date.today strong { background: var(--grad); color: #fff; }
+.cal-list-date small { color: var(--muted); font-size: 12px; }
+.cal-list-date.today strong { background: var(--grad); color: var(--on-ink); }
 .cal-list .card { padding: 4px; }
 .cal-detail-title { font-size: 18px; font-weight: 600; margin: 0 0 14px; overflow-wrap: anywhere; }
 
@@ -571,7 +574,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .fin-month strong { font-size: 22px; font-weight: 650; min-width: 150px; text-align: center; letter-spacing: -0.02em; }
 .fin-person { width: 190px; }
 .fin-hero { padding: 22px; margin-bottom: 18px; position: relative; overflow: hidden; }
-.fin-hero::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--grad); }
+
 .fin-total { font-size: clamp(26px, 8.5vw, 38px); overflow-wrap: anywhere; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.1; margin: 4px 0; }
 .fin-diff { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
 .fin-diff.up { color: var(--err); } .fin-diff.down { color: var(--ok); }
@@ -599,7 +602,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .fin-cat small { grid-area: meta; font-size: 12px; }
 .fin-grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; align-items: start; }
 .fin-list { padding: 4px 6px 8px; }
-.fin-day { display: flex; justify-content: space-between; padding: 12px 8px 6px; font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.fin-day { display: flex; justify-content: space-between; padding: 12px 8px 6px; font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
 .fin-tx { display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 8px; border: none; background: none; border-radius: 12px; text-align: left; cursor: pointer; color: inherit; font: inherit; min-width: 0; }
 @media (hover: hover) and (pointer: fine) { .fin-tx:hover { background: var(--panel-2); } }
 .fin-tx-ico { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; background: var(--panel-2); flex-shrink: 0; }
@@ -613,7 +616,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .fin-months button.active { color: var(--text); font-weight: 600; }
 .fin-month-bar { flex: 1; width: 100%; max-width: 34px; display: flex; align-items: flex-end; border-radius: 8px; background: var(--panel-2); overflow: hidden; }
 .fin-month-bar i { display: block; width: 100%; background: var(--border-2); border-radius: 8px; min-height: 3px; }
-.fin-months button.active .fin-month-bar i { background: linear-gradient(180deg, var(--brand-1), var(--brand-2) 55%, var(--brand-4)); }
+.fin-months button.active .fin-month-bar i { background: var(--ink); }
 .fin-months small { font-size: 12px; text-transform: capitalize; }
 
 /* ---------- Menu "Mais" e ajustes em quadrados ---------- */
@@ -666,14 +669,17 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
   .modal, .modal.wide { max-height: min(92dvh, calc(var(--vvh, 100dvh) - 12px)); }
 }
 
-@media (display-mode: standalone) {
-  body { user-select: none; -webkit-user-select: none; }
-  /* conteúdo continua copiável (e-mail, valores, erros); só os controles não selecionam */
-  input, textarea, [contenteditable], pre, code, .selectable, td, p, dd, li, .error-box, .notice { user-select: text; -webkit-user-select: text; }
+/* App instalado ou tela de toque: segurar o dedo não seleciona texto nem abre o menu do sistema.
+   O que é para copiar tem botão de copiar (CopyField); só campos de digitar continuam selecionáveis. */
+@media (display-mode: standalone), (pointer: coarse) {
+  body { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  input, textarea, [contenteditable], .selectable { user-select: text; -webkit-user-select: text; }
 }
 
 /* ---------- Carinhas e time ---------- */
-.agent-face { display: block; flex-shrink: 0; }
+/* o Mochi fica um pouco para cima do centro: os pés encostam na borda de baixo e o chapéu pode passar da de cima */
+.agent-face { display: inline-grid; place-items: center; flex-shrink: 0; border-radius: 50%; vertical-align: middle; }
+.agent-face .mochi { pointer-events: none; margin-top: -6%; }
 .face-tile { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
 .team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 .team-card { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 18px 14px; cursor: pointer; border: 1px solid var(--border); background: var(--panel); border-radius: var(--radius); }
@@ -709,25 +715,25 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .queue-nums div { display: flex; flex-direction: column; }
 .queue-nums strong { font-size: 20px; font-variant-numeric: tabular-nums; }
 .queue-nums small { color: var(--muted); font-size: 12px; }
-.queue-nums .live strong { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
 
 /* ---------- Uso por cliente ---------- */
 .costs-card { margin-bottom: 14px; }
-.costs-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
-.costs-total { font-family: var(--mono); overflow-wrap: anywhere; font-size: 26px; letter-spacing: -0.03em; font-weight: 600; margin: 2px 0; }
+.costs-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.costs-total { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; font-size: 26px; letter-spacing: -0.03em; font-weight: 600; margin: 2px 0; }
 .costs-bars { display: flex; align-items: stretch; gap: 2px; height: 72px; margin: 12px 0 4px; }
 .costs-bars span { flex: 1; display: flex; align-items: flex-end; cursor: pointer; padding-top: 4px; }
 .costs-bars i { width: 100%; border-radius: 4px 4px 0 0; background: var(--border-2); min-height: 0; }
 .costs-bars span.on i { background: var(--grad); }
 @media (hover: hover) and (pointer: fine) { .costs-bars span:hover i { background: var(--grad); } }
-.costs-axis { display: flex; justify-content: space-between; font-size: 12px; font-family: var(--mono); }
+.costs-axis { display: flex; justify-content: space-between; font-size: 12px; font-variant-numeric: tabular-nums; }
 .costs-row { display: grid; grid-template-columns: minmax(0, 160px) minmax(24px, 1fr) minmax(76px, auto) minmax(170px, auto); align-items: center; gap: 10px; width: 100%; background: none; border: none; padding: 7px 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border); }
 .costs-row:last-of-type { border-bottom: none; }
 .costs-name { font-size: 13px; }
 .costs-track { height: 8px; background: var(--panel-2); border-radius: 99px; overflow: hidden; }
 .costs-track i { display: block; height: 100%; border-radius: 99px; background: var(--grad); }
-.costs-val { font-family: var(--mono); font-size: 13px; text-align: right; white-space: nowrap; }
-.costs-sub { font-size: 12px; font-family: var(--mono); text-align: right; white-space: nowrap; }
+.costs-val { font-variant-numeric: tabular-nums; font-size: 13px; text-align: right; white-space: nowrap; }
+.costs-sub { font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 @media (max-width: 767px) { .costs-row { grid-template-columns: minmax(0, 110px) minmax(24px, 1fr) minmax(70px, auto); } }
 .usage-nums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0 16px; }
 .usage-nums div { background: var(--panel-2); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; min-width: 0; }
@@ -746,9 +752,9 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 }
 
 /* ---------- Toques de cor ---------- */
-.tone-ico { width: 24px; height: 24px; border-radius: 8px; display: inline-grid; place-items: center; background: color-mix(in srgb, var(--c) 15%, var(--panel)); color: var(--c); flex-shrink: 0; }
+.tone-ico { width: 24px; height: 24px; border-radius: 8px; display: inline-grid; place-items: center; background: var(--panel-2); color: var(--text); flex-shrink: 0; }
 .stat .label .tone-ico { width: 22px; height: 22px; border-radius: 7px; }
-.btn-brand { background: var(--grad-strong); background-origin: border-box; color: #fff; border-color: transparent; font-weight: 650; text-shadow: 0 1px 1px rgba(0, 0, 0, .12); }
+.btn-brand { background: var(--grad-strong); background-origin: border-box; color: var(--on-ink); border-color: transparent; font-weight: 650; }
 @media (hover: hover) and (pointer: fine) { .btn-brand:hover { opacity: .92; border-color: transparent; } }
 
 /* ---------- Versão nova ---------- */
@@ -777,7 +783,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .cal-page.with-side { grid-template-columns: 250px minmax(0, 1fr); }
 .cal-side { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 22px; }
 .cal-create { display: inline-flex; align-items: center; gap: 10px; align-self: flex-start; padding: 14px 22px 14px 18px; border-radius: 18px; border: none; cursor: pointer; font-weight: 650; font-size: 15px; background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 4px 14px rgba(0,0,0,.06); }
-.cal-create .ico { color: var(--brand-2); }
+.cal-create .ico { color: var(--text); }
 @media (hover: hover) and (pointer: fine) { .cal-create:hover { box-shadow: 0 2px 6px rgba(0,0,0,.14), 0 8px 22px rgba(0,0,0,.08); } }
 .cal-mini-head { display: flex; align-items: center; gap: 2px; margin-bottom: 6px; padding-left: 4px; }
 .cal-mini-head strong { font-size: 14px; }
@@ -788,7 +794,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 @media (hover: hover) and (pointer: fine) { .cal-mini-grid button:hover { background: var(--panel-2); } }
 .cal-mini-grid button.out { color: var(--muted); opacity: .6; font-weight: 500; }
 .cal-mini-grid button.today { color: var(--brand-2); }
-.cal-mini-grid button.sel { background: var(--grad); color: #fff; }
+.cal-mini-grid button.sel { background: var(--grad); color: var(--on-ink); }
 .cal-side-block h4 { margin: 0 0 8px; font-size: 14px; font-weight: 650; }
 .cal-side-block .select { width: 100%; }
 .cal-check { display: flex; align-items: center; gap: 12px; padding: 6px 4px; font-size: 14px; cursor: pointer; border-radius: 8px; }
@@ -812,7 +818,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .cal-wk { font-size: 11px; color: var(--muted); font-weight: 600; text-align: center; padding-top: 10px; border-top: 1px solid var(--border); }
 .cal-month:not(.compact) .cal-cell:nth-child(8n + 10) { border-left: 1px solid var(--border); }
 .cal-num { align-self: center; width: auto; min-width: 26px; padding: 0 6px; border-radius: 99px; font-size: 12.5px; font-weight: 650; }
-.cal-cell.today .cal-num { background: var(--grad); color: #fff; box-shadow: none; }
+.cal-cell.today .cal-num { background: var(--grad); color: var(--on-ink); box-shadow: none; }
 .cal-cell.sel:not(.today) .cal-num { background: var(--panel-2); color: var(--text); }
 .cal-chip { background: var(--cal-reminder); color: #fff; box-shadow: none; font-weight: 600; border-radius: 5px; }
 .cal-chip.rec { background: var(--brand-4); color: #fff; box-shadow: none; }
@@ -830,7 +836,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .cal-pills button.active { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
 .cal-picker { padding: 12px; margin-bottom: 12px; }
 .cal-picker .cal-side-block { margin-top: 10px; }
-.cal-fab { position: fixed; right: max(18px, env(safe-area-inset-right)); bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 45; width: 56px; height: 56px; border-radius: 18px; border: none; display: grid; place-items: center; cursor: pointer; background: var(--grad); color: #fff; box-shadow: 0 10px 26px rgba(255, 68, 88, .35); }
+.cal-fab { position: fixed; right: max(18px, env(safe-area-inset-right)); bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 45; width: 56px; height: 56px; border-radius: 18px; border: none; display: grid; place-items: center; cursor: pointer; background: var(--grad); color: var(--on-ink); box-shadow: var(--shadow-lg); }
 .cal-fab:active { transform: scale(.94); }
 @media (max-width: 1100px) {
   .cal-page.with-side { grid-template-columns: 220px minmax(0, 1fr); }
@@ -852,21 +858,21 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .fin-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); }
 .fin-tabs button { display: inline-flex; align-items: center; gap: 7px; border: none; background: none; padding: 8px 14px; border-radius: 10px; font-weight: 600; color: var(--muted); cursor: pointer; }
 .fin-tabs button.active { background: var(--ink); color: var(--on-ink); }
-.fin-tabs button.active .ico { color: var(--brand-1); }
+.fin-tabs button.active .ico { color: var(--text); }
 .fin-month-label { font-size: 12px; margin-left: 4px; }
 .fin-period { display: inline-flex; align-items: center; gap: 6px; }
 .icon-btn.round { border-radius: 50%; width: 34px; height: 34px; }
 .fin-range { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 99px; background: var(--panel); border: 1px solid var(--border); font-weight: 650; font-size: 13px; white-space: nowrap; }
-.fin-range .ico { color: var(--brand-2); }
+.fin-range .ico { color: var(--text); }
 .fin-people { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
 .fin-people button { border: 1px solid var(--border); background: var(--panel); color: var(--text); padding: 7px 14px; border-radius: 99px; font-weight: 600; font-size: 13px; cursor: pointer; white-space: nowrap; }
 .fin-people button.active { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
 .fin-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 18px; overflow: hidden; position: relative; }
 .fin-kpis > div { padding: 18px 20px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .fin-kpis > div + div { border-left: 1px solid var(--border); }
-.fin-kpis small { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-family: var(--mono); }
+.fin-kpis small { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 /* valor nunca é cortado: se for comprido a fonte diminui (.long) e, em último caso, quebra a linha */
-.fin-kpis strong { font-family: var(--mono); font-size: 24px; font-weight: 600; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.fin-kpis strong { font-variant-numeric: tabular-nums; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; overflow-wrap: anywhere; }
 .fin-kpis strong.long { font-size: 18px; }
 .fin-kpis strong.pos { color: var(--ok); }
 .fin-kpis strong.neg { color: var(--brand-2); }
@@ -876,7 +882,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .fin-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .fin-card-head h3 { margin: 0; font-size: 15px; }
 .chip-mini { font-size: 12px; font-weight: 600; padding: 2px 7px; border-radius: 99px; background: var(--panel-2); color: var(--muted); }
-.fin-insight { padding: 20px 22px; position: relative; overflow: hidden; background: linear-gradient(135deg, color-mix(in srgb, var(--brand-1) 6%, var(--panel)), var(--panel) 45%, color-mix(in srgb, var(--brand-4) 7%, var(--panel))); }
+.fin-insight { padding: 20px 22px; position: relative; overflow: hidden; background: var(--panel); }
 .fin-insight-text { font-size: 17px; font-weight: 600; line-height: 1.45; margin: 12px 0 16px; letter-spacing: -0.01em; }
 .fin-insight-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; padding-top: 14px; border-top: 1px solid var(--border); }
 .fin-pill { max-width: 100%; display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 99px; font-weight: 650; font-size: 12px; color: var(--c); background: color-mix(in srgb, var(--c) 14%, var(--panel)); margin-right: 6px; }
@@ -907,7 +913,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .fin-rem:last-child { border-bottom: none; }
 .fin-rem-date { width: 38px; height: 40px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: color-mix(in srgb, var(--brand-4) 12%, var(--panel)); color: var(--brand-4); flex-shrink: 0; line-height: 1.1; }
 .fin-rem-date strong { font-size: 15px; }
-.fin-rem-date small { font-size: 11px; text-transform: uppercase; }
+.fin-rem-date small { font-size: 11px; }
 .fin-tx-ico { background: color-mix(in srgb, var(--c, var(--text)) 13%, var(--panel)); color: var(--c, var(--text)); }
 @media (max-width: 1100px) {
   .fin-overview { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
@@ -942,9 +948,9 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 
 /* ---------- Tipografia: o estilo de Finanças vale para o app todo ---------- */
 /* números em fonte mono (alinhados e fáceis de comparar) e rótulos pequenos em caixa alta */
-.stat .value, .fin-legend .val, .fin-legend strong, .fin-tx strong, .fin-day span:last-child, .budget-row strong, .budget-meta, .queue-nums strong, .usage-nums strong, .fin-cat-value, .fin-total, .kv dd, .value-mono { font-family: var(--mono); letter-spacing: -0.02em; }
+.stat .value, .fin-legend .val, .fin-legend strong, .fin-tx strong, .fin-day span:last-child, .budget-row strong, .budget-meta, .queue-nums strong, .usage-nums strong, .fin-cat-value, .fin-total, .kv dd, .value-mono { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .stat .value { font-size: 24px; font-weight: 600; }
-.stat .label, .nav-section, .cal-side-block h4, .fin-day { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; font-weight: 500; color: var(--muted); }
+.stat .label, .nav-section, .cal-side-block h4, .fin-day { font-size: 12.5px; font-weight: 500; color: var(--muted); }
 .stat .label { gap: 8px; }
 .page-head h1 { font-size: 24px; font-weight: 650; letter-spacing: -0.02em; }
 .page-head p { font-size: 13px; }
@@ -1089,7 +1095,7 @@ button.chip { cursor: pointer; color: var(--text); }
 .chip .mono { opacity: .65; }
 .docs-newfolder { width: 190px; height: 28px; font-size: 12px; padding: 0 10px; }
 .docs-usage { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.label-sm { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+.label-sm { font-size: 12px; color: var(--muted); font-weight: 600; }
 .docs-meter { width: 90px; height: 5px; border-radius: 9px; background: var(--panel-2); overflow: hidden; }
 .docs-meter > span { display: block; height: 100%; background: var(--grad); }
 .docs-list { flex: 1 1 auto !important; min-height: 0; }
@@ -1098,22 +1104,20 @@ button.chip { cursor: pointer; color: var(--text); }
 .doc-notes { font-size: 12px; margin: 2px 0 0 24px; }
 .otp-input { font-size: 26px; letter-spacing: .4em; text-align: center; padding: 12px; }
 
-/* ---------- Carregando: blocos em onda ---------- */
-.pj-loader-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 48px 16px; color: var(--muted); font-size: 13px; }
-.pj-loader { width: 80px; height: 100px; }
-.pj-loader .block { position: relative; box-sizing: border-box; float: left; margin: 0 10px 10px 0; width: 12px; height: 12px; border-radius: 3px; background: var(--text); }
-.pj-loader .block:nth-child(4n+1) { animation: pj-wave 2s ease .0s infinite; }
-.pj-loader .block:nth-child(4n+2) { animation: pj-wave 2s ease .2s infinite; }
-.pj-loader .block:nth-child(4n+3) { animation: pj-wave 2s ease .4s infinite; }
-.pj-loader .block:nth-child(4n+4) { animation: pj-wave 2s ease .6s infinite; margin-right: 0; }
-.pj-loader-wrap.small .pj-loader { transform: scale(.6); margin: -20px 0; }
-@keyframes pj-wave {
-  0% { transform: none; opacity: 1; }
-  50% { transform: translateY(30px); opacity: .2; }
-  100% { transform: none; opacity: 1; }
+/* ---------- Carregando: blocos em onda, só na abertura do app, grande e sozinho no centro ---------- */
+.pj-loader-wrap {
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: var(--bg);
+  --b: clamp(20px, 5.5vmin, 34px);
 }
-.pj-loader-wrap { min-height: 40svh; }
-.pj-loader-wrap.full { min-height: 100vh; min-height: 100dvh; background: var(--bg); }
+.pj-loader { display: grid; grid-template-columns: repeat(4, var(--b)); gap: calc(var(--b) * .8); }
+.pj-loader .block { width: var(--b); height: var(--b); border-radius: calc(var(--b) * .26); background: var(--text); animation: pj-wave 2s ease infinite; }
+.pj-loader .block:nth-child(4n+2) { animation-delay: .2s; }
+.pj-loader .block:nth-child(4n+3) { animation-delay: .4s; }
+.pj-loader .block:nth-child(4n+4) { animation-delay: .6s; }
+@keyframes pj-wave {
+  0%, 100% { transform: none; opacity: 1; }
+  50% { transform: translateY(calc(var(--b) * 1.6)); opacity: .2; }
+}
 
 /* ---------- Tela de toque: alvos de 44px e campos de 16px (menos que isso o iOS dá zoom ao focar). Fica no fim para valer sobre os tamanhos acima. ---------- */
 @media (pointer: coarse) {
@@ -1125,3 +1129,29 @@ button.chip { cursor: pointer; color: var(--text); }
   .cal-mini-grid button { font-size: 13px; }
   .modal-head { padding-top: 8px; padding-bottom: 8px; }
 }
+
+/* ---------- Números do topo: uma faixa só com divisórias, em vez de vários cartões iguais ---------- */
+.fit-stats { gap: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); overflow: hidden; }
+.fit-stats .widget > .card { border: none; border-radius: 0; box-shadow: none; background: transparent; }
+.fit-stats .widget + .widget > .card { box-shadow: -1px 0 0 var(--border); }
+.board.editing.fit-stats { overflow: visible; }
+
+/* ---------- Assinatura: uma coluna estreita, só texto e um botão ---------- */
+.bill { max-width: 420px; }
+.bill-plan { margin: 0; color: var(--muted); font-size: 14px; }
+.bill-price { margin: 2px 0 0; font-size: clamp(34px, 9vw, 44px); font-weight: 650; letter-spacing: -0.035em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.bill-price span { font-size: 15px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
+.bill-status { margin: 14px 0 22px; font-size: 15px; }
+.bill-form { margin-top: 4px; }
+.bill-cta { width: 100%; justify-content: center; min-height: 46px; font-size: 15px; }
+.bill-facts { list-style: none; padding: 18px 0 0; margin: 22px 0 0; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; display: grid; gap: 6px; }
+.bill-cancel { margin-top: 18px; padding-left: 0; padding-right: 0; }
+.bill .error-box { margin-top: 14px; }
+
+/* Assinatura no admin: situação de cada pessoa */
+.bill-counts { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+.bill-counts strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.bill-people { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; border-top: 1px solid var(--border); }
+.bill-people li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.bill-people li > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bill-people small { color: var(--muted); white-space: nowrap; }
