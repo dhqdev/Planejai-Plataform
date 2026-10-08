@@ -296,7 +296,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
   {
     id: "mercadopago",
     name: "Mercado Pago",
-    description: "Gera links de pagamento (Pix, cartão, boleto) para cobrar ou pagar.",
+    description: "Links de pagamento (Pix, cartão, boleto) para cobrar alguém; o dinheiro cai na sua conta.",
     category: "Pagamentos",
     icon: "payment",
     docsUrl: "https://www.mercadopago.com.br/developers/panel/app",
@@ -313,29 +313,6 @@ export const INTEGRATIONS: IntegrationDef[] = [
     test: async (c) => {
       const j = await okJson(await fetch("https://api.mercadopago.com/users/me", { headers: { Authorization: `Bearer ${c.access_token}` }, signal: timed() }), "Mercado Pago");
       return `Conectado como ${j.nickname ?? j.email}${String(c.access_token).startsWith("TEST-") ? " (credencial de teste)" : ""}`;
-    },
-  },
-  {
-    id: "stripe",
-    name: "Stripe",
-    description: "Gera links de checkout do Stripe.",
-    category: "Pagamentos",
-    icon: "payment",
-    docsUrl: "https://dashboard.stripe.com/apikeys",
-    fields: [
-      {
-        key: "secret_key",
-        label: "Secret key ou Restricted key",
-        type: "password",
-        required: true,
-        placeholder: "sk_live_... ou rk_live_...",
-        help: "Recomendado: chave restrita só com Checkout Sessions: Write. Desenvolvedores > Chaves de API.",
-      },
-    ],
-    test: async (c) => {
-      const res = await fetch("https://api.stripe.com/v1/checkout/sessions?limit=1", { headers: { Authorization: `Bearer ${c.secret_key}` }, signal: timed() });
-      await okJson(res, "Stripe");
-      return `Conectado (${String(c.secret_key).includes("_live_") ? "produção" : "teste"})`;
     },
   },
   {
@@ -458,10 +435,11 @@ export function getDef(id: string) {
 }
 
 /**
- * Contas pessoais: cada cliente conecta a dele (user_integrations) e nunca cai na do dono.
+ * Contas pessoais: cada cliente conecta a dele (user_integrations) e nunca cai na do dono
+ * (no Mercado Pago, o dinheiro do link cai na conta de quem cobrou).
  * O dono continua usando as da plataforma (tela Integrações).
  */
-export const PERSONAL_INTEGRATIONS = new Set(["google", "notion", "github", "linear", "slack"]);
+export const PERSONAL_INTEGRATIONS = new Set(["google", "notion", "github", "linear", "slack", "mercadopago"]);
 
 /** Campos que o cliente preenche: no Google o app OAuth é da plataforma, ele só autoriza a conta dele. */
 export function personalFields(def: IntegrationDef) {

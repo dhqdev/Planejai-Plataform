@@ -14,11 +14,11 @@ const QUICK_TOOLS = new Set(["react_to_message", "save_memory"]);
 const SLOW_TOOL = /^(ask_|browser_|screenshot_url)/;
 
 /**
- * Integrações que são da stack do dono (o n8n, o caixa dele): uma conta só para a plataforma inteira,
- * então só o dono usa. Google, Notion, GitHub, Linear e Slack são pessoais (PERSONAL_INTEGRATIONS):
+ * Integrações que são da stack do dono (o n8n dele): uma conta só para a plataforma inteira, então só o dono usa.
+ * Google, Notion, GitHub, Linear, Slack e Mercado Pago são pessoais (PERSONAL_INTEGRATIONS):
  * cada cliente usa só a conta que ele mesmo conectou, nunca a do dono.
  */
-export const OWNER_INTEGRATIONS = new Set(["n8n", "mercadopago", "stripe"]);
+export const OWNER_INTEGRATIONS = new Set(["n8n"]);
 
 /** De quem são as credenciais pessoais (Google do cliente ou do dono) durante uma chamada. */
 export function personOf(user: { id: string; phone: string }) {

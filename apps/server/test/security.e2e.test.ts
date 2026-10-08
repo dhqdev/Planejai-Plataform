@@ -41,10 +41,14 @@ describe("integrações do dono", () => {
     try {
       // Gmail é pessoal: cada um usa o próprio (teste e2e abaixo), não é ferramenta só do dono
       expect(isOwnerOnly(comm.gmailSearch)).toBe(false);
-      expect(isOwnerOnly(fin.createPaymentLink)).toBe(true);
+      const n8n = await import("../src/agent/tools/n8n.js");
+      expect(isOwnerOnly(n8n.n8nWorkflows)).toBe(true);
+      // Mercado Pago é pessoal: o link cobra na conta de quem pediu
+      expect(isOwnerOnly(fin.createPaymentLink)).toBe(false);
+      const stackTool = { ...fin.calculate, name: "da_stack", ownerOnly: true };
       expect(isOwnerOnly(research.webSearch)).toBe(false);
-      expect(await availableTools([fin.createPaymentLink, fin.calculate], { id: "00000000-0000-0000-0000-000000000001", phone: "5511988887777" })).toEqual([fin.calculate]);
-      expect(await availableTools([fin.createPaymentLink, fin.calculate], { id: "00000000-0000-0000-0000-000000000002", phone: "5519990000001" })).toEqual([fin.createPaymentLink, fin.calculate]);
+      expect(await availableTools([stackTool, fin.calculate], { id: "00000000-0000-0000-0000-000000000001", phone: "5511988887777" })).toEqual([fin.calculate]);
+      expect(await availableTools([stackTool, fin.calculate], { id: "00000000-0000-0000-0000-000000000002", phone: "5519990000001" })).toEqual([stackTool, fin.calculate]);
     } finally {
       config.OWNER_PHONES = before;
     }

@@ -15,7 +15,6 @@ const CREDS: Record<string, Record<string, string>> = {
   browserless: { url: "http://browserless:3000/", token: "btok" },
   mercadolivre: { client_id: "mlid", client_secret: "mlsecret", refresh_token: "TG-old", user_id: "1" },
   mercadopago: { access_token: "APP_USR-x" },
-  stripe: { secret_key: "sk_test_x" },
 };
 let enabled = new Set(Object.keys(CREDS));
 
@@ -380,24 +379,5 @@ describe("Pagamentos", () => {
     expect(c.headers.get("authorization")).toBe("Bearer APP_USR-x");
     expect(c.headers.get("x-idempotency-key")).toMatch(/^[0-9a-f-]{36}$/);
     expect(c.body).toEqual({ items: [{ title: "Aula", quantity: 2, unit_price: 50.5, currency_id: "BRL" }] });
-  });
-
-  it("Stripe: Checkout Session form-encoded com unit_amount em centavos", async () => {
-    on(host("api.stripe.com", "/v1/checkout/sessions"), () => json({ id: "cs_1", url: "https://checkout.stripe.com/x", data: [] }));
-    expect(await getDef("stripe")!.test!(CREDS.stripe!)).toBe("Conectado (teste)");
-    expect(calls[0]).toMatchObject({ method: "GET", url: "https://api.stripe.com/v1/checkout/sessions?limit=1" });
-    const out = await finance.createPaymentLink.run({ title: "Aula", amount: 50.5, provider: "stripe" }, { ...ctx, approvedAction: true });
-    expect(out).toEqual({ provider: "stripe", url: "https://checkout.stripe.com/x", id: "cs_1" });
-    const c = calls[1]!;
-    expect(c.method).toBe("POST");
-    expect(c.headers.get("authorization")).toBe("Bearer sk_test_x");
-    expect(c.headers.get("content-type")).toBe("application/x-www-form-urlencoded");
-    expect(c.body).toMatchObject({
-      mode: "payment",
-      "line_items[0][quantity]": "1",
-      "line_items[0][price_data][currency]": "brl",
-      "line_items[0][price_data][unit_amount]": "5050",
-      "line_items[0][price_data][product_data][name]": "Aula",
-    });
   });
 });

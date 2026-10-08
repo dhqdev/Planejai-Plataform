@@ -607,18 +607,17 @@ export const deleteTransaction = defineTool<{ ids?: string[]; id?: string; from?
   },
 });
 
-export const createPaymentLink = defineTool<{ title: string; amount: number; quantity?: number; provider?: "mercadopago" | "stripe"; confirmed_by_user?: boolean }>({
+export const createPaymentLink = defineTool<{ title: string; amount: number; quantity?: number; confirmed_by_user?: boolean }>({
   name: "create_payment_link",
-  ownerOnly: true,
+  integration: "mercadopago",
   description:
-    "Gera um link de pagamento (Mercado Pago: Pix/cartão/boleto, ou Stripe) para cobrar alguém ou pagar algo. " +
+    "Gera um link de pagamento do Mercado Pago da própria pessoa (Pix, cartão, boleto) para cobrar alguém. " +
     "Exige confirmação explícita da pessoa com valor e descrição.",
   parameters: obj(
     {
       title: { type: "string" },
       amount: { type: "number", description: "Valor unitário em BRL" },
       quantity: { type: "number" },
-      provider: { type: "string", enum: ["mercadopago", "stripe"] },
       ...CONFIRM_PARAM,
     },
     ["title", "amount"],
@@ -628,7 +627,8 @@ export const createPaymentLink = defineTool<{ title: string; amount: number; qua
     const amount = parseAmount(args.amount);
     const c = await requireConfirmation(args, `gerar link de pagamento "${args.title}" de ${brl(Math.round(amount * qty * 100) / 100)}`, ctx);
     if (c) return c;
-    const mp = args.provider !== "stripe" ? await getCredentials("mercadopago") : null;
+    // conta da pessoa da conversa (integração pessoal): o dinheiro cai para quem cobrou
+    const mp = await getCredentials("mercadopago");
     if (mp) {
       const res = await fetch("https://api.mercadopago.com/checkout/preferences", {
         method: "POST",
@@ -639,25 +639,6 @@ export const createPaymentLink = defineTool<{ title: string; amount: number; qua
       if (!res.ok) throw new Error(`Mercado Pago: ${JSON.stringify(j).slice(0, 300)}`);
       return { provider: "mercadopago", url: j.init_point, id: j.id };
     }
-    const stripe = await getCredentials("stripe");
-    if (stripe) {
-      const body = new URLSearchParams({
-        mode: "payment",
-        success_url: `${config.PUBLIC_URL.replace(/\/$/, "")}/pagamento-ok`,
-        "line_items[0][quantity]": String(qty),
-        "line_items[0][price_data][currency]": "brl",
-        "line_items[0][price_data][unit_amount]": String(Math.round(amount * 100)),
-        "line_items[0][price_data][product_data][name]": args.title,
-      });
-      const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${stripe.secret_key}`, "Content-Type": "application/x-www-form-urlencoded" },
-        body,
-      });
-      const j: any = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(`Stripe: ${j.error?.message}`);
-      return { provider: "stripe", url: j.url, id: j.id };
-    }
-    return { ok: false, error: "Nenhuma integração de pagamento conectada (Mercado Pago ou Stripe). Conecte no dashboard." };
+    return { ok: false, error: "Mercado Pago não conectado. A pessoa conecta o dela no painel, em Minha conta > Contas conectadas." };
   },
 });

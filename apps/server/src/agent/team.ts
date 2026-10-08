@@ -118,7 +118,7 @@ export const SPECIALISTS: AgentDef[] = [
     icon: "wallet",
     role:
       "Finanças pessoais com controle total: anotar, corrigir, apagar e recategorizar gastos e receitas (inclusive de comprovantes, notas, faturas e extratos), " +
-      "parcelas, contas fixas com lembrete de vencimento, limites, gráficos, resumos e comparações do mês, contas, divisão de despesas e links de pagamento (Mercado Pago/Stripe).",
+      "parcelas, contas fixas com lembrete de vencimento, limites, gráficos, resumos e comparações do mês, contas, divisão de despesas e links de pagamento do Mercado Pago da pessoa.",
     instructions:
       "Valores em reais. Nunca faça conta de cabeça: use calculate para qualquer soma, divisão, parcela, juros ou porcentagem, e use os totais " +
       "que as ferramentas devolvem. Para extratos/faturas em documento, leia com read_document e lance cada item com message_id para não duplicar. " +

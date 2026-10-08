@@ -170,7 +170,7 @@ A lista completa, com comentários, está em [`.env.example`](.env.example). As 
 | `WORKER_CONCURRENCY` | não | Jobs em paralelo por worker (4, máximo 16) |
 | `DEFAULT_TIMEZONE` / `TZ` | não | `America/Sao_Paulo` |
 
-As integrações (Google, Notion, GitHub, Linear, Slack, Tavily, Brave, Mercado Pago, Stripe, Telegram e n8n) não usam variável de ambiente. Elas são configuradas na tela **Integrações** e guardadas criptografadas no banco.
+As integrações (Google, Notion, GitHub, Linear, Slack, Tavily, Brave, Mercado Pago, Telegram e n8n) não usam variável de ambiente. Elas são configuradas na tela **Integrações** e guardadas criptografadas no banco.
 
 ## WhatsApp
 
@@ -218,7 +218,7 @@ As integrações (Google, Notion, GitHub, Linear, Slack, Tavily, Brave, Mercado 
 
 ## Segurança e privacidade
 
-- As integrações da stack (Gmail, Agenda, Notion, Slack, GitHub, Linear, n8n, Mercado Pago e Stripe) são **só do dono**: somem do time de quem não é dono e são recusadas de novo na hora de executar.
+- O n8n da stack é **só do dono**: some do time de quem não é dono e é recusado de novo na hora de executar. Google (Gmail e Agenda), Notion, Slack, GitHub, Linear e Mercado Pago são **pessoais**: o dono usa os da tela Integrações e cada cliente conecta os dele em Minha conta, sem nunca cair na conta do dono.
 - Os agentes não acessam endereços internos ou privados (localhost, IPs da rede, metadata, nomes da stack), nem por redirecionamento.
 - Compras, pagamentos e mensagens para terceiros exigem confirmação explícita.
 - **Login:**
