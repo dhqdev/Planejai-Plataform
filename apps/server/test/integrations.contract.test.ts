@@ -303,7 +303,9 @@ describe("Busca na web", () => {
     on(host("api.tavily.com", "/search"), () => json({ answer: "a", results: [{ title: "t", url: "u", content: "c" }], images: ["i"] }));
     const out: any = await research.webSearch.run({ query: "cinema hoje", max_results: 3 }, ctx);
     expect(out).toMatchObject({ provider: "tavily", answer: "a", results: [{ title: "t", url: "u", content: "c" }] });
-    expect(calls[0]).toMatchObject({ method: "POST", body: { query: "cinema hoje", max_results: 3, include_answer: true, include_images: true } });
+    expect(calls[0]).toMatchObject({ method: "POST", body: { query: "cinema hoje", max_results: 3, include_answer: true } });
+    expect(calls[0]!.body.include_images).toBeUndefined();
+    expect(out.images).toBeUndefined();
     expect(calls[0]!.headers.get("authorization")).toBe("Bearer tvly-x");
     await getDef("tavily")!.test!(CREDS.tavily!);
   });

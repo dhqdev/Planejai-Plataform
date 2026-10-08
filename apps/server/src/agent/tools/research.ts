@@ -49,21 +49,23 @@ export const webSearch = defineTool<{ query: string; max_results?: number }>({
     ["query"],
   ),
   async run(args) {
-    const max = Math.min(args.max_results ?? 5, 8);
+    // poucos resultados e trechos curtos: tudo que volta daqui vira token na próxima chamada do agente
+    const max = Math.min(args.max_results ?? 3, 6);
     const tavily = await getCredentials("tavily");
     if (tavily) {
       const res = await fetch("https://api.tavily.com/search", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${tavily.api_key}` },
-        body: JSON.stringify({ query: args.query, max_results: max, include_answer: true, include_images: true }),
+        // a resposta pronta da Tavily (answer) costuma bastar; sem imagens (nenhuma ferramenta usa as URLs delas)
+        body: JSON.stringify({ query: args.query, max_results: max, include_answer: true }),
+        signal: AbortSignal.timeout(20_000),
       });
       const j: any = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(`Tavily: ${JSON.stringify(j).slice(0, 200)}`);
       return {
         provider: "tavily",
         answer: j.answer,
-        results: (j.results ?? []).map((r: any) => ({ title: r.title, url: r.url, content: String(r.content ?? "").slice(0, 800) })),
-        images: (j.images ?? []).slice(0, 4),
+        results: (j.results ?? []).map((r: any) => ({ title: r.title, url: r.url, content: String(r.content ?? "").slice(0, 500) })),
       };
     }
     const brave = await getCredentials("brave");
