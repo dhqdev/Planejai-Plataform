@@ -26,6 +26,8 @@ export class TeamRoom {
   board: { from: string; note: string }[] = [];
   /** quem conversou com quem, para o log/canvas */
   edges: { from: string; to: string }[] = [];
+  /** ferramentas que rodaram com sucesso nesta execução (trava: não dizer que fez o que não fez) */
+  done = new Set<string>();
   /** navegador ("computador") aberto nesta execução, compartilhado pelo time */
   browser?: BrowserSession;
   private locks = new Map<string, Promise<unknown>>();

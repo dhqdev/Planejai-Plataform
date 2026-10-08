@@ -15,6 +15,7 @@ import { finishBrowser } from "./tools/research.js";
 import { Guard, GuardTimeout, redactSecrets } from "./guard.js";
 import { isOwner } from "../ingest.js";
 import { describeMessage, preprocessMedia } from "./media.js";
+import { unbackedClaim } from "./claims.js";
 import { Progress } from "./progress.js";
 import { humanize } from "./humanize.js";
 import { isAckOnly, pickReaction } from "./reaction.js";
@@ -301,6 +302,30 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       if (ctx.room.browser) await finishBrowser(ctx).catch(() => {});
     }
 
+    // trava: disse que fez (anotei, apaguei, agendei…) sem nenhuma ferramenta confirmar? Faz agora ou admite.
+    const claim = result.text && !result.timedOut ? unbackedClaim(result.text, ctx.room.done) : null;
+    if (claim && !guard.expired) {
+      const step = await tracer.step({ agent: "cto", type: "info", name: "trava: ação não confirmada", input: { acao: claim, resposta: result.text.slice(0, 300) } });
+      const retry = await runToolLoop({
+        agent: "cto",
+        task: "agent:cto",
+        ctx,
+        tools,
+        maxSteps: 5,
+        messages: [
+          ...result.messages,
+          {
+            role: "system",
+            content:
+              `Sua resposta diz que fez "${claim}", mas nenhuma ferramenta confirmou isso nesta conversa. ` +
+              "Faça a ação agora com a ferramenta certa (ou peça ao especialista) e responda de novo. Se não der, diga com honestidade o que não foi feito.",
+          },
+        ],
+      }).catch(() => null);
+      const still = retry?.text ? unbackedClaim(retry.text, ctx.room.done) : claim;
+      await step.ok({ refeito: Boolean(retry?.text) && !still });
+      result.text = retry?.text && !still ? retry.text : `Não consegui concluir isso agora (${claim}), então nada foi feito. Pode me pedir de novo?`;
+    }
     if (result.timedOut || (guard.expired && !result.text)) {
       const step = await tracer.step({ agent: "cto", type: "info", name: "trava: tempo máximo", input: { minutos: guard.minutes, acoes: guard.toolCalls } });
       await step.ok({ stopped: true });

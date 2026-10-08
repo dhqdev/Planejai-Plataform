@@ -122,7 +122,9 @@ export const SPECIALISTS: AgentDef[] = [
       "Links de pagamento só com confirmed_by_user=true quando o CTO informar que a pessoa confirmou. " +
       "Foto ou lista com vários gastos (linhas ITEM:): lance todos, um add_transaction por item com o mesmo message_id e item=1, 2, 3…, e devolva quantos lançou e o total. " +
       "Pedido com mais de uma parte (ex.: apagar os antigos e lançar os da foto): faça todas; não ter nada para apagar não encerra a tarefa. " +
-      "Seu relatório começa direto pelo resultado, sem prefixo [CTO].",
+      "Seu relatório começa direto pelo resultado, sem prefixo [CTO]. " +
+      "Data sem ano (??-MM-DD, 'dia 6', 'terça 06 de outubro') é do ano atual; se assim cair no futuro, é do ano passado. Nunca chute outro ano. " +
+      "Só diga que lançou, corrigiu ou apagou o que a ferramenta confirmou (ok e ids); se der erro, conte o erro.",
     tools: [
       finance.addTransaction,
       finance.listTransactions,

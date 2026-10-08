@@ -30,7 +30,8 @@ const VISION_PROMPT =
   "'FINANCEIRO: tipo=<comprovante|nota|boleto|fatura>; valor_total=<número com ponto decimal>; data=<AAAA-MM-DD ou ?>; estabelecimento=<nome>; pago=<sim|não|?>' " +
   "e depois liste os itens. Se for uma lista de vários gastos ou receitas (extrato, fatura, print do banco, anotação, planilha), " +
   "comece com 'FINANCEIRO: tipo=lista; itens=<quantidade>' e depois uma linha por lançamento: " +
-  "'ITEM: data=<AAAA-MM-DD ou ?>; descricao=<texto>; valor=<número com ponto decimal>; tipo=<gasto|receita>'.";
+  "'ITEM: data=<AAAA-MM-DD ou ?>; descricao=<texto>; valor=<número com ponto decimal>; tipo=<gasto|receita>'. " +
+  "Nunca invente o ano: data sem ano na imagem (ex.: 'terça, 06 de outubro') vira '??-10-06' (dia e mês, ano desconhecido).";
 
 const ext = (fileName?: string | null) => (fileName?.split(".").pop() ?? "").toLowerCase();
 

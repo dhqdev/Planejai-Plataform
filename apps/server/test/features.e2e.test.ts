@@ -112,6 +112,11 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(i2.duplicate).toBeUndefined();
     expect(i2b.duplicate).toBe(true);
     await db.query("DELETE FROM transactions WHERE id = ANY($1)", [[...i1.ids, ...i2.ids]]);
+
+    // ano errado (print sem ano virou 2020): a ferramenta recusa e pede o ano certo
+    const old2020: any = await addTransaction.run({ kind: "expense", amount: 8.2, description: "padaria", date: "2020-10-06" }, ctx);
+    expect(old2020.ok).toBe(false);
+    expect(old2020.error).toContain("ano");
   });
 
   it("documento é lido localmente e entra resumido no contexto", async () => {

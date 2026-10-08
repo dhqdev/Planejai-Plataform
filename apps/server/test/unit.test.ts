@@ -245,3 +245,14 @@ describe("compactOldToolResults", () => {
     expect(msgs[4].content).toBe(big);
   });
 });
+
+describe("trava: dizer que fez sem ter feito", () => {
+  it("pega afirmação sem ferramenta e libera quando a ferramenta rodou ou é pergunta", async () => {
+    const { unbackedClaim } = await import("../src/agent/claims.js");
+    expect(unbackedClaim("Anotei os 4 ✅ Padaria R$ 8,20", new Set())).toBe("lançar gasto ou receita");
+    expect(unbackedClaim("Anotei os 4 ✅ Padaria R$ 8,20", new Set(["add_transaction"]))).toBeNull();
+    expect(unbackedClaim("Quer que eu anote esse gasto de R$ 10?", new Set())).toBeNull();
+    expect(unbackedClaim("Apaguei o uber de ontem.", new Set())).toBe("apagar ou cancelar");
+    expect(unbackedClaim("Bom dia! Hoje tem reunião às 10h.", new Set())).toBeNull();
+  });
+});

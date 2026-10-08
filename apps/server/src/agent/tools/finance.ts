@@ -373,6 +373,7 @@ export const addTransaction = defineTool<{
   source?: string;
   message_id?: string;
   item?: number;
+  date_confirmed?: boolean;
 }>({
   name: "add_transaction",
   description:
@@ -392,6 +393,7 @@ export const addTransaction = defineTool<{
       source: { type: "string", enum: ["conversa", "audio", "comprovante", "documento"] },
       message_id: { type: "string" },
       item: { type: "number", description: "Número do item quando a mesma mensagem traz vários gastos (1, 2, 3…)" },
+      date_confirmed: { type: "boolean", description: "Só true quando a pessoa disse explicitamente uma data de mais de um ano atrás" },
     },
     ["kind", "amount"],
   ),
@@ -400,6 +402,8 @@ export const addTransaction = defineTool<{
     if (total <= 0) return { ok: false, error: "Valor precisa ser maior que zero" };
     const category = await autoCategory(ctx.user.id, args.kind, args.category, args.description, args.merchant);
     const first = args.date ? parseLocalDateTime(args.date, ctx.timezone) : new Date();
+    const odd = suspiciousDate(first, args);
+    if (odd) return odd;
     const n = Math.min(Math.max(1, Math.floor(args.installments ?? 1)), 48);
     const parts = splitInstallments(total, n);
     const ids: string[] = [];
@@ -514,6 +518,22 @@ export const financeSummary = defineTool<{ month?: string; of_contact?: string }
   },
 });
 
+/**
+ * Trava de data: lançamento com data muito longe de hoje quase sempre é ano errado (foto ou print sem ano
+ * virou 2020). Sem date_confirmed, devolve erro e o agente refaz com o ano certo.
+ */
+function suspiciousDate(when: Date, args: { date?: string; date_confirmed?: boolean }) {
+  if (!args.date || args.date_confirmed) return null;
+  const days = (when.getTime() - Date.now()) / 86_400_000;
+  if (days > -400 && days < 62) return null;
+  return {
+    ok: false,
+    error:
+      `A data ${args.date} está longe de hoje. Data sem ano (foto, print, "dia 6") é do ano atual. ` +
+      "Refaça com o ano certo; só use essa data se a pessoa disse o ano, passando date_confirmed=true.",
+  };
+}
+
 export const updateTransaction = defineTool<{
   ids: string[];
   amount?: number | string;
@@ -522,6 +542,7 @@ export const updateTransaction = defineTool<{
   merchant?: string;
   date?: string;
   kind?: "expense" | "income";
+  date_confirmed?: boolean;
 }>({
   name: "update_transaction",
   description:
@@ -536,6 +557,7 @@ export const updateTransaction = defineTool<{
       merchant: { type: "string" },
       date: { type: "string", description: "AAAA-MM-DD ou AAAA-MM-DDTHH:MM local" },
       kind: { type: "string", enum: ["expense", "income"] },
+      date_confirmed: { type: "boolean", description: "Só true quando a pessoa disse explicitamente uma data de mais de um ano atrás" },
     },
     ["ids"],
   ),
@@ -545,6 +567,8 @@ export const updateTransaction = defineTool<{
     const amount = args.amount != null && args.amount !== "" ? parseAmount(args.amount) : null;
     if (amount !== null && amount <= 0) return { ok: false, error: "Valor precisa ser maior que zero" };
     const when = args.date ? parseLocalDateTime(args.date, ctx.timezone) : null;
+    const odd = when && suspiciousDate(when, args);
+    if (odd) return odd;
     const rows = await many(
       `UPDATE transactions SET amount = COALESCE($3, amount), category = COALESCE($4, category), description = COALESCE($5, description),
               merchant = COALESCE($6, merchant), occurred_at = COALESCE($7, occurred_at), kind = COALESCE($8, kind)
