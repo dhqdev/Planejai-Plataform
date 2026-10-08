@@ -431,7 +431,7 @@ export function App() {
                   {last && (
                     <>
                       <button className="more-tile" onClick={() => { setMenu(false); openWardrobe(); }}>
-                        <MochiIcon size={34} />
+                        <MochiIcon size={24} />
                         <span>Mochi</span>
                       </button>
                       <button className="more-tile" onClick={toggleTheme}>

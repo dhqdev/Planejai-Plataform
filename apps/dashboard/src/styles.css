@@ -461,7 +461,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
   .topbar {
     display: flex; align-items: center; gap: 10px; flex-shrink: 0;
     padding: calc(8px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
-    background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px);
+    background: color-mix(in srgb, var(--bg) 88%, transparent); -webkit-backdrop-filter: saturate(1.4) blur(14px); backdrop-filter: saturate(1.4) blur(14px);
     border-bottom: 1px solid var(--border); z-index: 30; user-select: none; -webkit-user-select: none;
   }
   .topbar-title { font-size: 17px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -474,7 +474,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
   /* barra flutuante em cápsula; as abas rolam para os lados e "Mais" fica fixo na ponta */
   .tabbar-pill {
     pointer-events: auto; display: flex; align-items: center; gap: 4px; padding: 5px; border-radius: 26px;
-    background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: saturate(1.5) blur(18px); -webkit-backdrop-filter: saturate(1.5) blur(18px);
+    background: color-mix(in srgb, var(--panel) 92%, transparent); -webkit-backdrop-filter: saturate(1.5) blur(18px); backdrop-filter: saturate(1.5) blur(18px);
     border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0, 0, 0, .14);
   }
   .tabbar-scroll { flex: 1; min-width: 0; display: flex; gap: 2px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch; mask-image: linear-gradient(90deg, #000 92%, transparent); -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent); }
@@ -1374,7 +1374,7 @@ button.chip { cursor: pointer; color: var(--text); }
   .tabbar { padding: 0 max(8px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
   .tabbar-pill {
     padding: 7px; border-radius: 30px; border: none; background: var(--night);
-    backdrop-filter: none; -webkit-backdrop-filter: none;
+    -webkit-backdrop-filter: none; backdrop-filter: none;
     box-shadow: 0 1px 0 rgba(255, 255, 255, .08) inset, 0 16px 34px -10px rgba(29, 11, 66, .6), 0 2px 6px rgba(0, 0, 0, .2);
   }
   .tabbar-scroll .tab, .tab-more { height: 58px; border-radius: 23px; }
@@ -1413,3 +1413,34 @@ button.chip { cursor: pointer; color: var(--text); }
 .bill-body .bill-facts { margin-top: 18px; }
 .bill-body .bill-cta + .bill-facts, .bill-body .bill-form + .bill-facts { margin-top: 20px; }
 @media (max-width: 767px) { .bill { border-radius: 22px; } .bill-head, .bill-body { padding-left: 20px; padding-right: 20px; } }
+
+/* ---------- Celular: "Mais" compacto, flutuando acima da barra, com fundo translúcido ---------- */
+@media (max-width: 767px) {
+  .modal-bg:has(.more-sheet) { padding: 0 10px calc(92px + env(safe-area-inset-bottom)); }
+  .modal.more-sheet {
+    min-height: 0; max-height: min(72dvh, 560px); border-radius: 26px; border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    padding-bottom: 0; background: color-mix(in srgb, var(--panel) 90%, transparent);
+    -webkit-backdrop-filter: saturate(1.6) blur(22px); backdrop-filter: saturate(1.6) blur(22px);
+    box-shadow: 0 24px 60px -20px rgba(20, 8, 48, .55);
+  }
+  .modal.more-sheet::after { display: none; }
+  .more-sheet .modal-head { padding: 10px 12px 8px 16px; border-bottom: none; }
+  .more-sheet .modal-head strong { font-size: 14px; }
+  .more-sheet .modal-head .icon-btn { width: 32px; height: 32px; }
+  .more-sheet .modal-body { padding: 2px 12px 14px; }
+  .more-sheet .install-card { padding: 8px 10px; margin-bottom: 8px; gap: 10px; border-radius: 14px; font-size: 13px; background: color-mix(in srgb, var(--panel-2) 70%, transparent); }
+  .more-sheet .install-card .app-icon { width: 30px; height: 30px; }
+  .more-sheet .more-me { padding: 2px 4px 8px; gap: 8px; }
+  .more-sheet .more-me .avatar { width: 28px; height: 28px; font-size: 12px; }
+  .more-sheet .more-section + .more-section { margin-top: 10px; }
+  .more-sheet .more-section h4 { margin: 0 4px 6px; font-size: 11.5px; }
+  .more-sheet .more-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .more-sheet .more-section .more-tile {
+    min-height: 64px; aspect-ratio: auto; gap: 5px; padding: 8px 4px; border-radius: 16px; font-size: 11px; font-weight: 550;
+    background: color-mix(in srgb, var(--text) 6%, transparent); border-color: transparent;
+  }
+  .more-sheet .more-tile svg.ico { width: 20px; height: 20px; }
+  .more-sheet .more-tile.active { background: var(--night); color: var(--marsh); }
+  .more-sheet .more-tile.active svg.ico { color: var(--marsh); }
+}
+@media (max-width: 767px) { .modal-bg:has(.more-sheet) .modal-scrim { background: rgba(10, 4, 24, .42); } }
