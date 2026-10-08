@@ -7,7 +7,11 @@ import { config } from "./config.js";
  */
 
 /** Paleta do Planejai: laranja, coral, magenta e roxo, usados em pontos de destaque. */
-export const PALETTE = ["#FF7A1A", "#FF4458", "#E23382", "#B830C8", "#8B2BE2", "#5B45E8", "#2F7BEA", "#16A3A3", "#9AA0A6", "#C9CCD1"];
+// cores do Mochi, iguais às do painel: roxo elétrico, magenta, noite e tons entre eles; cinzas para o resto
+export const PALETTE = ["#6510E0", "#C42BEA", "#210552", "#8B5CF6", "#A21CAF", "#4A3A8C", "#141414", "#7A7A75", "#B5B5AF", "#D9D9D4"];
+/** vermelho só para o que estourou e âmbar para o alerta de 80% (sinal, não marca) */
+const DANGER = "#E03150";
+const WARN = "#F59E0B";
 const INK = "#141414";
 const MUTED = "#7A7A75";
 const GRID = "#ECECE8";
@@ -24,7 +28,7 @@ const short = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 :
 
 function frame(title: string, subtitle: string, body: string, height: number) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}" font-family="Inter, 'Segoe UI', Roboto, Arial, sans-serif">
-  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FF7A1A"/><stop offset=".45" stop-color="#FF4458"/><stop offset="1" stop-color="#8B2BE2"/></linearGradient></defs>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6510E0"/><stop offset="1" stop-color="#C42BEA"/></linearGradient></defs>
   <rect width="${W}" height="${height}" rx="36" fill="#FFFFFF"/>
   <rect x="56" y="56" width="64" height="8" rx="4" fill="url(#g)"/>
   <text x="56" y="118" font-size="40" font-weight="700" fill="${INK}">${esc(title)}</text>
@@ -86,7 +90,7 @@ export function barChart(title: string, subtitle: string, bars: Slice[], opts: {
       const x = left + i * bw + bw * 0.18;
       const w = bw * 0.64;
       const last = i === bars.length - 1 && opts.highlightLast;
-      const fill = last ? "url(#g)" : opts.limit && b.value > opts.limit ? "#FF4458" : "#D9D9D4";
+      const fill = last ? "url(#g)" : opts.limit && b.value > opts.limit ? DANGER : "#D9D9D4";
       const label = bars.length > 16 ? (i % 5 === 0 || i === bars.length - 1 ? b.label : "") : b.label;
       return `<rect x="${x}" y="${y(b.value)}" width="${w}" height="${Math.max(0, bottom - y(b.value))}" rx="${Math.min(14, w / 3)}" fill="${fill}"/>
       ${label ? `<text x="${x + w / 2}" y="${bottom + 40}" font-size="22" fill="${MUTED}" text-anchor="middle">${esc(label)}</text>` : ""}
@@ -94,8 +98,8 @@ export function barChart(title: string, subtitle: string, bars: Slice[], opts: {
     })
     .join("");
   const limit = opts.limit
-    ? `<line x1="${left}" x2="${right}" y1="${y(opts.limit)}" y2="${y(opts.limit)}" stroke="#FF4458" stroke-width="3" stroke-dasharray="10 8"/>
-       <text x="${right}" y="${y(opts.limit) - 10}" font-size="20" fill="#FF4458" text-anchor="end">limite ${money(opts.limit)}</text>`
+    ? `<line x1="${left}" x2="${right}" y1="${y(opts.limit)}" y2="${y(opts.limit)}" stroke="${DANGER}" stroke-width="3" stroke-dasharray="10 8"/>
+       <text x="${right}" y="${y(opts.limit) - 10}" font-size="20" fill="${DANGER}" text-anchor="end">limite ${money(opts.limit)}</text>`
     : "";
   return frame(title, subtitle, grid + rects + limit, h);
 }
@@ -109,7 +113,7 @@ export function budgetChart(title: string, subtitle: string, rows: { label: stri
       const y = 240 + i * 96;
       const pct = r.limit ? r.spent / r.limit : 0;
       const w = 968;
-      const fill = pct >= 1 ? "#FF4458" : pct >= 0.8 ? "#FF7A1A" : "url(#g)";
+      const fill = pct >= 1 ? DANGER : pct >= 0.8 ? WARN : "url(#g)";
       return `<text x="56" y="${y}" font-size="28" fill="${INK}">${esc(r.label)}</text>
       <text x="1024" y="${y}" font-size="24" fill="${MUTED}" text-anchor="end">${money(r.spent)} de ${money(r.limit)} · ${Math.round(pct * 100)}%</text>
       <rect x="56" y="${y + 18}" width="${w}" height="20" rx="10" fill="${GRID}"/>

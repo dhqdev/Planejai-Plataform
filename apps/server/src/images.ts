@@ -27,7 +27,7 @@ const BASE_CSS = `
 *{box-sizing:border-box}html,body{margin:0;background:#F6F6F4}
 body{font-family:Inter,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color:#141414;-webkit-font-smoothing:antialiased}
 .page{margin:0;background:#fff;padding:56px;position:relative}
-.bar{width:64px;height:8px;border-radius:4px;background:linear-gradient(90deg,#FF7A1A,#FF4458 45%,#8B2BE2)}
+.bar{width:64px;height:8px;border-radius:4px;background:linear-gradient(90deg,#6510E0,#C42BEA)}
 h1{font-size:40px;line-height:1.15;margin:22px 0 6px;font-weight:700;letter-spacing:-.01em}
 .sub{font-size:24px;color:#7A7A75;margin:0 0 36px}
 .foot{text-align:right;color:#B5B5AF;font-size:18px;margin-top:36px}
@@ -63,7 +63,7 @@ function mindMap(s: ImageSpec) {
   const css = `
 .map{position:relative;display:grid;grid-template-columns:1fr 300px 1fr;gap:0 90px;align-items:center}
 .col{display:flex;flex-direction:column;gap:22px;position:relative;z-index:1}
-.center{z-index:1;background:linear-gradient(135deg,#FF7A1A,#FF4458 45%,#8B2BE2);color:#fff;border-radius:28px;padding:30px 26px;text-align:center;font-size:30px;font-weight:700;line-height:1.2;box-shadow:0 10px 30px rgba(139,43,226,.25)}
+.center{z-index:1;background:linear-gradient(135deg,#6510E0,#210552);color:#fff;border-radius:28px;padding:30px 26px;text-align:center;font-size:30px;font-weight:700;line-height:1.2;box-shadow:0 10px 30px rgba(101,16,224,.25)}
 .br{background:#fff;border:2px solid #ECECE8;border-radius:20px;padding:18px 20px}
 .bt{display:inline-block;background:var(--c);color:#fff;font-weight:700;font-size:22px;border-radius:12px;padding:6px 14px;margin-bottom:6px}
 .br p{font-size:20px;line-height:1.35;margin:8px 0 0;color:#3A3A36}
@@ -112,7 +112,7 @@ td{padding:14px 16px;border-bottom:2px solid #ECECE8;line-height:1.35}tr:nth-chi
 }
 
 function quote(s: ImageSpec) {
-  const css = `.q{font-size:44px;line-height:1.3;font-weight:700;letter-spacing:-.01em;margin:40px 0 20px}.q::before{content:"“";display:block;font-size:120px;line-height:.8;background:linear-gradient(90deg,#FF7A1A,#8B2BE2);-webkit-background-clip:text;color:transparent}
+  const css = `.q{font-size:44px;line-height:1.3;font-weight:700;letter-spacing:-.01em;margin:40px 0 20px}.q::before{content:"“";display:block;font-size:120px;line-height:.8;background:linear-gradient(90deg,#6510E0,#C42BEA);-webkit-background-clip:text;color:transparent}
 .who{font-size:24px;color:#7A7A75}`;
   return page(1080, `<div class="bar"></div><p class="q">${esc(clip(s.text || s.title, 400))}</p><p class="who">${esc(clip(s.subtitle ?? (s.text ? s.title : ""), 120))}</p>`, css);
 }
