@@ -27,7 +27,7 @@ const VISION_PROMPT =
   "Descreva esta imagem em português, objetivo e completo, para um assistente que não pode vê-la. " +
   "Transcreva todo texto visível (valores, datas, nomes, códigos). " +
   "Se for comprovante, Pix, nota fiscal, cupom, recibo, fatura ou boleto, comece com a linha " +
-  "'FINANCEIRO: tipo=<comprovante|nota|boleto|fatura>; valor_total=<número com ponto decimal>; data=<AAAA-MM-DD ou ?>; estabelecimento=<nome>; pago=<sim|não|?>' " +
+  "'FINANCEIRO: tipo=<comprovante|nota|boleto|fatura>; valor_total=<número com ponto decimal>; data=<AAAA-MM-DD ou ?>; estabelecimento=<nome de quem recebeu o dinheiro>; pago=<sim|não|?>; direcao=<saida|entrada|?>' " +
   "e depois liste os itens. Se for uma lista de vários gastos ou receitas (extrato, fatura, print do banco, anotação, planilha), " +
   "comece com 'FINANCEIRO: tipo=lista; itens=<quantidade>' e depois uma linha por lançamento: " +
   "'ITEM: data=<AAAA-MM-DD ou ?>; descricao=<texto>; valor=<número com ponto decimal>; tipo=<gasto|receita>'. " +

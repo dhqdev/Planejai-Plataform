@@ -301,3 +301,26 @@ describe("perguntas de boas-vindas do cadastro", () => {
     expect(prompt).toContain("Contou no cadastro (use para personalizar as respostas, não pergunte de novo): Quer ajuda com: Agenda e lembretes.");
   });
 });
+
+describe("comprovante na foto vira despesa sozinho", async () => {
+  const { parseReceipt, receiptDate } = await import("../src/agent/receipts.js");
+  it("lê a linha FINANCEIRO de comprovante pago", () => {
+    const r = parseReceipt("FINANCEIRO: tipo=comprovante; valor_total=89.90; data=2026-10-08; estabelecimento=PetCamp; pago=sim; direcao=saida\nItens: banho");
+    expect(r).toMatchObject({ tipo: "comprovante", valor: 89.9, data: "2026-10-08", estabelecimento: "PetCamp" });
+    expect(parseReceipt("FINANCEIRO: tipo=nota; valor_total=1234,56; data=?; estabelecimento=?; pago=?")?.valor).toBe(1234.56);
+  });
+  it("não lança boleto em aberto, lista nem foto comum", () => {
+    expect(parseReceipt("FINANCEIRO: tipo=boleto; valor_total=200.00; data=?; estabelecimento=Luz; pago=não")).toBeNull();
+    expect(parseReceipt("FINANCEIRO: tipo=fatura; valor_total=900.00; data=?; estabelecimento=Nubank; pago=?")).toBeNull();
+    expect(parseReceipt("FINANCEIRO: tipo=lista; itens=3")).toBeNull();
+    expect(parseReceipt("Um cachorro na praia")).toBeNull();
+    expect(parseReceipt("FINANCEIRO: tipo=comprovante; valor_total=?; data=?; estabelecimento=X; pago=sim")).toBeNull();
+  });
+  it("data sem ano é do ano atual, ou do passado se cairia no futuro", () => {
+    const now = new Date("2026-10-08T15:00:00Z");
+    expect(receiptDate("??-10-06", "America/Sao_Paulo", now)).toBe("2026-10-06");
+    expect(receiptDate("??-12-20", "America/Sao_Paulo", now)).toBe("2025-12-20");
+    expect(receiptDate("2026-09-01", "America/Sao_Paulo", now)).toBe("2026-09-01");
+    expect(receiptDate(null, "America/Sao_Paulo", now)).toBeUndefined();
+  });
+});

@@ -13,6 +13,7 @@ import { clientAgents, CTO_TOOLS, SPECIALISTS, type AgentDef } from "./team.js";
 import { TEAM_TOOLS } from "./tools/team.js";
 import { finishBrowser } from "./tools/research.js";
 import { Guard, GuardTimeout, redactSecrets } from "./guard.js";
+import { autoLaunchReceipts } from "./receipts.js";
 import { isOwner } from "../ingest.js";
 import { describeMessage, preprocessMedia } from "./media.js";
 import { unbackedClaim } from "./claims.js";
@@ -321,7 +322,9 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     );
     let result;
     try {
-      result = await runToolLoop({ agent: "cto", task: "agent:cto", ctx, tools, messages: [{ role: "system", content: system }, ...messages, ...confirmNotes], maxSteps: 10 });
+      // comprovante na foto vira despesa na hora, sem depender do modelo lembrar
+      const receiptNotes = opts.trigger !== "reminder" ? await autoLaunchReceipts(pending, ctx) : [];
+      result = await runToolLoop({ agent: "cto", task: "agent:cto", ctx, tools, messages: [{ role: "system", content: system }, ...messages, ...confirmNotes, ...receiptNotes], maxSteps: 10 });
     } finally {
       // navegador esquecido aberto: fecha e, se a pessoa pediu a gravação, manda junto
       if (ctx.room.browser) await finishBrowser(ctx).catch(() => {});

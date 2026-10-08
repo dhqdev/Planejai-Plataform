@@ -3,7 +3,7 @@
 Leia antes de mexer em lançamentos, limites, gráficos, imagens, assinatura do Asaas ou contas fixas.
 
 ## Gastos automáticos
-- Foto/documento de comprovante: a visão escreve `FINANCEIRO: tipo=...; valor_total=...; data=...; estabelecimento=...`; o CTO chama `add_transaction` direto com `message_id` (vira `external_ref`, então reprocessar não duplica).
+- Foto/documento de comprovante: a visão escreve `FINANCEIRO: tipo=...; valor_total=...; data=...; estabelecimento=...; pago=...; direcao=...` e o servidor lança sozinho antes do CTO (`agent/receipts.ts`, `autoLaunchReceipts`: categoria automática, `message_id` vira `external_ref`, então nada duplica se o CTO também chamar). Boleto/fatura em aberto, lista (`tipo=lista`, vai para o Financeiro) e legenda tipo "não lança" ficam de fora. O CTO recebe a nota "JÁ lançou" e só confirma com ✅.
 - Parcelado: `installments` com o valor TOTAL; `splitInstallments` distribui os centavos.
 - Respostas das tools financeiras já vêm formatadas (`brl`) para o modelo não errar conta.
 - Categoria é opcional em `add_transaction`: `autoCategory` usa o histórico da pessoa (mesmo lugar/descrição), depois `CATEGORY_RULES` (regex sem acento), depois "Outros". Regra nova = linha em `CATEGORY_RULES`.

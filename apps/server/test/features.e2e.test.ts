@@ -29,6 +29,10 @@ function fakeOpenRouter(body: any) {
     seen.push(userText);
     const msgId = userText.match(/\[msg_id=(\d+)\]/)?.[1];
     if (last.role === "tool") return completion("Anotado ✅");
+    // o servidor já lançou o comprovante sozinho: o modelo só confirma (não precisa lembrar de add_transaction)
+    if (body.messages.some((m: any) => m.role === "system" && String(m.content).includes("JÁ lançou"))) {
+      return completion("Anotado ✅", [call("react_to_message", { emoji: "✅" })]);
+    }
     if (userText.includes("FINANCEIRO:")) {
       return completion(null, [
         call("react_to_message", { emoji: "✅" }),
