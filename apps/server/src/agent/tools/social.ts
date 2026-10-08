@@ -26,7 +26,8 @@ export const invitePerson = defineTool<{ name: string; phone: string; message_af
     const r = await createInvite({ inviterUserId: ctx.user.id, name: args.name, phone: args.phone, afterAccept: msg });
     if ("already" in r) {
       // já são contatos (ou acabaram de virar, sem convite novo): o recado vai agora
-      if (msg) await notifyUser(r.contactId!, relayText(displayName(ctx.user as any), msg));
+      const sender = displayName(ctx.user as any);
+      if (msg) await notifyUser(r.contactId!, relayText(sender, msg), undefined, { from: sender });
       return {
         ok: true,
         invite_sent: false,
@@ -114,7 +115,7 @@ export const sendToContact = defineTool<{ contact: string; message: string; atta
       photoExpired = !photo;
     }
     const sender = displayName(ctx.user as any);
-    await notifyUser(to.id, relayText(sender, args.message), photo);
+    await notifyUser(to.id, relayText(sender, args.message), photo, { from: sender });
     return {
       ok: true,
       sent_to: to.name,
