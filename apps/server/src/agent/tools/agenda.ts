@@ -6,17 +6,16 @@ import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js"
 export const scheduleReminder = defineTool<{ intent: string; in_minutes?: number; at?: string; cron?: string }>({
   name: "schedule_reminder",
   description:
-    "Agenda um lembrete/mensagem proativa. Na hora, o CTO escreve uma mensagem natural para a pessoa com base no 'intent' " +
-    "(não existe template fixo). Use in_minutes para 'daqui X minutos', at para data/hora, cron para recorrência.",
+    "Lembrete ou mensagem proativa: na hora o CTO escreve a mensagem a partir do intent. in_minutes, at (data/hora) ou cron (recorrente).",
   parameters: obj(
     {
       intent: {
         type: "string",
-        description: "O que lembrar e o contexto, ex.: 'lembrar o David de ir ao banheiro (ele pediu há 15 min)'",
+        description: "O que lembrar, com contexto (quem pediu e por quê)",
       },
-      in_minutes: { type: "number", description: "Daqui a quantos minutos" },
-      at: { type: "string", description: "Data/hora local AAAA-MM-DDTHH:MM no fuso da pessoa" },
-      cron: { type: "string", description: "Recorrência em cron de 5 campos no fuso da pessoa, ex.: '0 8 * * 1-5'" },
+      in_minutes: { type: "number" },
+      at: { type: "string", description: "AAAA-MM-DDTHH:MM local" },
+      cron: { type: "string", description: "5 campos, fuso da pessoa, ex.: 0 8 * * 1-5" },
     },
     ["intent"],
   ),
@@ -120,19 +119,19 @@ export const calendarCreateEvent = defineTool<{
 }>({
   name: "calendar_create_event",
   description:
-    "Cria um evento no Google Agenda, com link do Google Meet (meet=true) e convidados por e-mail (o Google manda o convite e os lembretes para eles). " +
-    "Convidado exige confirmação: se a pessoa já escreveu o e-mail do convidado neste mesmo pedido, isso já vale; senão o sistema pede o sim dela.",
+    "Evento no Google Agenda; meet=true cria o Meet; attendees recebem convite e lembretes do Google. " +
+    "E-mail de convidado escrito no próprio pedido já vale como confirmação; senão o sistema pede o sim.",
   integration: "google",
   parameters: obj(
     {
       title: { type: "string" },
       start: { type: "string", description: "AAAA-MM-DDTHH:MM local" },
-      end: { type: "string", description: "AAAA-MM-DDTHH:MM local (padrão: 1 hora depois do início)" },
+      end: { type: "string", description: "Padrão: 1h depois" },
       description: { type: "string" },
       location: { type: "string" },
-      attendees: { type: "array", items: { type: "string" }, description: "e-mails dos convidados" },
-      meet: { type: "boolean", description: "true para criar a sala do Google Meet (reunião online, 'via meet')" },
-      remind_minutes: { type: "number", description: "aviso do Google antes do evento, em minutos (padrão 30)" },
+      attendees: { type: "array", items: { type: "string" }, description: "E-mails" },
+      meet: { type: "boolean" },
+      remind_minutes: { type: "number", description: "Padrão 30" },
       ...CONFIRM_PARAM,
     },
     ["title", "start"],

@@ -85,12 +85,11 @@ export function obj(properties: Record<string, unknown>, required: string[] = []
   return { type: "object", properties, required, additionalProperties: false };
 }
 
-export const CONFIRM_PARAM = {
-  confirmed_by_user: {
-    type: "boolean",
-    description: "Opcional. Quem confirma é o sistema, pela resposta da pessoa; este campo não libera a ação.",
-  },
-};
+/**
+ * Marca as ferramentas que pedem o "sim" da pessoa. Não vai nada para o modelo (quem confirma é o servidor,
+ * pela resposta da pessoa) e economiza token em toda chamada; se o modelo mandar confirmed_by_user, é descartado.
+ */
+export const CONFIRM_PARAM = {};
 
 /**
  * Trava de ação sensível (dinheiro, mensagem para terceiro, apagar). Quem libera é o servidor, não o modelo:

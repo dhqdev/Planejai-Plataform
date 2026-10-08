@@ -12,18 +12,16 @@ export const makeImage = defineTool<{
 }>({
   name: "make_image",
   description:
-    "Cria uma imagem simples e bonita com o conteúdo que VOCÊ escreve: mapa_mental (title = tema central, sections = ramos com items), " +
-    "lista (resumo em cartões), passos (passo a passo numerado), tabela (columns + rows) ou frase (text em destaque). " +
-    "Use quando a pessoa pedir mapa mental, resumo em imagem, infográfico, esquema, tabela ou card. Sai em segundos e quase sem custo. " +
-    "Textos curtos (ramos com 2 a 5 itens de poucas palavras). Retorna media_id para pôr [[media:ID]] na resposta.",
+    "Imagem com o conteúdo que VOCÊ escreve (sem custo): mapa_mental (title = tema, sections = ramos com items), lista (cartões), " +
+    "passos, tabela (columns + rows) ou frase (text). Textos curtos, 2 a 5 itens por ramo. Devolve media_id para [[media:ID]].",
   parameters: obj(
     {
       kind: { type: "string", enum: ["mapa_mental", "lista", "passos", "tabela", "frase"] },
-      title: { type: "string", description: "Título; no mapa mental é o tema central (ex.: nome do livro)" },
-      subtitle: { type: "string", description: "Linha de apoio (ex.: autor)" },
+      title: { type: "string" },
+      subtitle: { type: "string" },
       sections: {
         type: "array",
-        description: "Ramos/cartões/passos (até 10)",
+        description: "Até 10",
         items: obj(
           {
             title: { type: "string" },

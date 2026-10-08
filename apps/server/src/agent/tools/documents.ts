@@ -9,13 +9,12 @@ const panel = () => `${config.PUBLIC_URL.replace(/\/$/, "")}/documentos`;
 export const documentSave = defineTool<{ name?: string; folder?: string; notes?: string; all?: boolean }>({
   name: "document_save",
   description:
-    "Guarda na pasta de Documentos da pessoa o arquivo (PDF, foto, planilha) que ela acabou de mandar nesta conversa. " +
-    "Use quando ela pedir para guardar/salvar ('guarda esse PDF', 'salva meu RG'). name: nome claro (ex.: 'Contrato aluguel 2026.pdf'); folder opcional (ex.: Documentos pessoais, Contas, Saúde).",
+    "Guarda em Documentos o arquivo que a pessoa acabou de mandar, quando ela pedir. name claro (ex.: Contrato aluguel 2026.pdf); folder opcional.",
   parameters: obj({
     name: { type: "string" },
     folder: { type: "string" },
-    notes: { type: "string", description: "Uma linha do que é, para achar depois" },
-    all: { type: "boolean", description: "true guarda todos os arquivos desta rodada" },
+    notes: { type: "string" },
+    all: { type: "boolean", description: "Todos os arquivos desta rodada" },
   }),
   async run(args, ctx) {
     const files = ctx.inboundFiles ?? [];

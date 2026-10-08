@@ -6,15 +6,13 @@ import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js"
 export const invitePerson = defineTool<{ name: string; phone: string; message_after_accept?: string; confirmed_by_user?: boolean }>({
   name: "invite_person",
   description:
-    "Convida alguém para o Planejai pelo WhatsApp (a pessoa responde SIM ou NÃO). Quem aceita vira contato e vocês podem mandar coisas um pro outro. " +
-    "É mensagem para terceiro: o sistema só manda depois do \"sim\" da pessoa para nome e número. " +
-    "Se ela quer dizer algo a essa pessoa ('convida o Jonathan e chama ele pro cinema'), passe em message_after_accept: é entregue sozinho quando o convite for aceito, ou na hora se já forem contatos. " +
-    "Quem já usa o Planejai recebe só um pedido de contato, não o convite de novo.",
+    "Convida alguém para o Planejai pelo WhatsApp; quem aceita vira contato (quem já usa recebe só o pedido de contato). " +
+    "Só sai depois do \"sim\" da pessoa. Recado para o convidado vai em message_after_accept e é entregue no aceite.",
   parameters: obj(
     {
       name: { type: "string" },
-      phone: { type: "string", description: "Celular com DDD" },
-      message_after_accept: { type: "string", description: "Recado em nome da pessoa, curto e natural (opcional)" },
+      phone: { type: "string", description: "Com DDD" },
+      message_after_accept: { type: "string" },
       ...CONFIRM_PARAM,
     },
     ["name", "phone"],
@@ -62,12 +60,11 @@ export const listContactsTool = defineTool<Record<string, never>>({
 export const sendToContact = defineTool<{ contact: string; message: string; attach_photo?: boolean }>({
   name: "send_to_contact",
   description:
-    "Manda algo para um contato do Planejai pelo WhatsApp, a pedido da pessoa (ex.: 'manda esse look pro Giovani'). " +
-    "attach_photo=true encaminha a foto que a pessoa mandou agora. O contato aceitou receber, então não precisa de confirmação quando o pedido é claro.",
+    "Manda uma mensagem a um contato do Planejai em nome da pessoa (sem confirmação quando o pedido é claro). attach_photo=true encaminha a foto que ela mandou agora.",
   parameters: obj(
     {
       contact: { type: "string", description: "Nome do contato" },
-      message: { type: "string", description: "O que dizer, em nome da pessoa (curto, natural)" },
+      message: { type: "string", description: "Curto e natural" },
       attach_photo: { type: "boolean" },
     },
     ["contact", "message"],
@@ -95,17 +92,16 @@ export const sendToContact = defineTool<{ contact: string; message: string; atta
 export const watchCreate = defineTool<{ kind: "price" | "news"; query: string; target_price?: number; every_hours?: number; days?: number; notify?: NotifyMode }>({
   name: "watch_create",
   description:
-    "Fica de olho em algo por 7 dias (ou o que a pessoa pedir) e, a cada olhada, manda para ela o que achou ou que não achou nada: " +
-    "kind=price acompanha o menor preço de um produto (Mercado Livre), kind=news acompanha novidades sobre qualquer assunto. " +
-    "notify=changes só avisa quando aparece algo melhor (use se a pessoa pedir menos mensagens). A checagem não gasta IA.",
+    "Fica de olho (padrão 7 dias, sem gastar IA): price = menor preço no Mercado Livre; news = novidades de um assunto. " +
+    "Conta cada olhada; notify=changes só quando achar algo melhor.",
   parameters: obj(
     {
       kind: { type: "string", enum: ["price", "news"] },
-      query: { type: "string", description: "O que buscar, ex.: 'iPhone 16 128GB'" },
-      target_price: { type: "number", description: "Preço alvo em reais (opcional)" },
-      every_hours: { type: "number", description: "De quantas em quantas horas olhar (padrão 8 para preço, 12 para notícia)" },
-      days: { type: "number", description: "Por quantos dias acompanhar (padrão 7, máximo 30)" },
-      notify: { type: "string", enum: ["always", "changes"], description: "always (padrão): conta cada olhada; changes: só quando achar algo" },
+      query: { type: "string" },
+      target_price: { type: "number" },
+      every_hours: { type: "number", description: "Padrão 8 (preço) ou 12 (notícia)" },
+      days: { type: "number", description: "Padrão 7, máx. 30" },
+      notify: { type: "string", enum: ["always", "changes"] },
     },
     ["kind", "query"],
   ),
@@ -127,17 +123,17 @@ export const watchCreate = defineTool<{ kind: "price" | "news"; query: string; t
 export const watchUpdate = defineTool<{ id: string; query?: string; target_price?: number; every_hours?: number; days?: number; notify?: NotifyMode; paused?: boolean; reactivate?: boolean }>({
   name: "watch_update",
   description:
-    "Ajusta um acompanhamento (id de watch_list): o que buscar, preço alvo, frequência, mais dias, só avisar quando achar (notify=changes), pausar ou reativar.",
+    "Ajusta um acompanhamento (id de watch_list): busca, preço alvo, frequência, mais dias, notify, pausar ou reativar.",
   parameters: obj(
     {
       id: { type: "string" },
       query: { type: "string" },
       target_price: { type: "number" },
       every_hours: { type: "number" },
-      days: { type: "number", description: "Acompanhar por mais N dias a partir de agora" },
+      days: { type: "number", description: "Mais N dias a partir de agora" },
       notify: { type: "string", enum: ["always", "changes"] },
       paused: { type: "boolean" },
-      reactivate: { type: "boolean", description: "Volta a acompanhar um que já terminou" },
+      reactivate: { type: "boolean" },
     },
     ["id"],
   ),
@@ -190,13 +186,12 @@ export const watchCancel = defineTool<{ id: string }>({
 export const shareScreen = defineTool<{ contact: string; screen: ShareScope; allow: boolean }>({
   name: "share_screen",
   description:
-    "Finanças e Agenda de cada pessoa são particulares. Use quando ela pedir para deixar um contato ver (ou parar de ver) uma delas " +
-    "(ex.: 'deixa a Ana ver minhas finanças'). Só vale para contatos (quem aceitou convite). Ver é só leitura; o contato é avisado.",
+    "Libera (allow=true) ou tira um contato de ver as Finanças ou a Agenda da pessoa, só leitura. Só para contatos; o contato é avisado.",
   parameters: obj(
     {
       contact: { type: "string", description: "Nome do contato" },
       screen: { type: "string", enum: SHARE_SCOPES },
-      allow: { type: "boolean", description: "true = liberar, false = tirar o acesso" },
+      allow: { type: "boolean" },
     },
     ["contact", "screen", "allow"],
   ),

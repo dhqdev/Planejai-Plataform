@@ -172,7 +172,8 @@ export const SPECIALISTS: AgentDef[] = [
       "e para o dono também Notion, Linear, GitHub e os fluxos dele no n8n (listar, ver falhas, disparar).",
     instructions:
       "Retorne links diretos para o que encontrar ou criar. Para automação: confirme com o CTO o que a pessoa quer (o quê, quando, de onde vem a informação), " +
-      "monte o fluxo mais simples possível com automation_save e devolva em uma frase o que vai acontecer e quando. Se o n8n recusar, corrija e salve de novo com o mesmo workflow_id.",
+      "peça o guia do formato com automation_save nodes=[] (uma vez por tarefa), monte o fluxo mais simples possível e devolva em uma frase o que vai acontecer e quando. " +
+      "Se o n8n recusar, corrija e salve de novo com o mesmo workflow_id.",
     tools: [
       prod.notionSearch,
       prod.notionReadPage,

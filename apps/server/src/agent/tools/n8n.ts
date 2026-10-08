@@ -63,15 +63,14 @@ export const n8nExecutions = defineTool<{ status?: "error" | "success" | "waitin
 export const n8nTrigger = defineTool<{ path: string; method?: "POST" | "GET"; data?: Record<string, unknown>; test?: boolean; confirmed_by_user?: boolean }>({
   name: "n8n_trigger",
   description:
-    "Dispara um fluxo do n8n do dono pelo webhook (path vem de n8n_workflows) enviando data em JSON. " +
-    "Como pode mandar mensagens ou mexer em dados, só roda depois do \"sim\" da pessoa (o sistema confirma sozinho). Só funciona para o dono.",
+    "Dispara um fluxo do n8n do dono pelo webhook (path de n8n_workflows) com data em JSON. Só roda depois do \"sim\" da pessoa.",
   integration: "n8n",
   parameters: obj(
     {
-      path: { type: "string", description: "Caminho do webhook, ex.: criar-trial" },
+      path: { type: "string" },
       method: { type: "string", enum: ["POST", "GET"] },
-      data: { type: "object", description: "Corpo JSON enviado ao fluxo" },
-      test: { type: "boolean", description: "true usa /webhook-test (fluxo aberto no editor)" },
+      data: { type: "object" },
+      test: { type: "boolean", description: "Usa /webhook-test" },
       ...CONFIRM_PARAM,
     },
     ["path"],

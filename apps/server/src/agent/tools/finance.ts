@@ -127,8 +127,7 @@ export function calc(expression: string): number {
 export const calculate = defineTool<{ expression: string }>({
   name: "calculate",
   description:
-    "Calculadora exata. Use SEMPRE que precisar somar, dividir conta, calcular parcela, juros, porcentagem, troco ou média, em vez de fazer de cabeça. " +
-    "Ex.: '(89,90 + 45,50) / 3', '1200 * 12%', '2500 * (1 + 1,5%)^12'.",
+    "Calculadora exata para qualquer conta (nunca de cabeça). Ex.: (89,90 + 45,50) / 3, 1200 * 12%, 2500 * (1 + 1,5%)^12.",
   parameters: obj({ expression: { type: "string" } }, ["expression"]),
   async run(args) {
     const v = calc(args.expression);
@@ -239,13 +238,12 @@ async function budgetAlerts(userId: string, tz: string, category: string, when: 
 export const setBudget = defineTool<{ category?: string; amount: number | string; remove?: boolean }>({
   name: "set_budget",
   description:
-    "Cria, muda ou remove um limite mensal de gastos (ex.: 'meu limite de restaurante é 600', 'quero gastar no máximo 4 mil por mês'). " +
-    "Sem categoria = limite do total do mês. O sistema avisa sozinho ao chegar em 80% e ao estourar.",
+    "Cria, muda ou remove limite mensal de gastos (sem categoria = total do mês). O sistema avisa sozinho em 80% e ao estourar.",
   parameters: obj(
     {
       category: { type: "string", enum: [...CATEGORIES, "Total"] },
-      amount: { type: "number", description: "Limite por mês em reais" },
-      remove: { type: "boolean", description: "true para apagar o limite" },
+      amount: { type: "number", description: "Reais por mês" },
+      remove: { type: "boolean" },
     },
     ["amount"],
   ),
@@ -286,14 +284,13 @@ const monthLabel = (m: string) => `${MONTHS_PT[Number(m.slice(5)) - 1]}/${m.slic
 export const makeChart = defineTool<{ kind: "categorias" | "meses" | "dias" | "limites"; month?: string; category?: string; months?: number }>({
   name: "make_chart",
   description:
-    "Gera um gráfico bonito (imagem) dos gastos da pessoa, na hora e sem custo: categorias (rosca do mês), meses (barras dos últimos meses), " +
-    "dias (gasto por dia no mês) ou limites (quanto usou de cada limite). Retorna media_id para pôr [[media:ID]] na resposta.",
+    "Gráfico dos gastos (imagem, sem custo): categorias do mês, meses, dias do mês ou limites. Devolve media_id para [[media:ID]].",
   parameters: obj(
     {
       kind: { type: "string", enum: ["categorias", "meses", "dias", "limites"] },
-      month: { type: "string", description: "AAAA-MM; padrão mês atual" },
-      category: { type: "string", description: "Filtra meses/dias por uma categoria" },
-      months: { type: "number", description: "Quantos meses no gráfico de meses (padrão 6)" },
+      month: { type: "string", description: "AAAA-MM; padrão atual" },
+      category: { type: "string", description: "Filtra meses/dias" },
+      months: { type: "number", description: "Padrão 6" },
     },
     ["kind"],
   ),
@@ -377,23 +374,21 @@ export const addTransaction = defineTool<{
 }>({
   name: "add_transaction",
   description:
-    "Registra um gasto ou receita da pessoa (ex.: 'gastei 8,20 na padaria', foto de comprovante/nota, Pix, documento de fatura). " +
-    "Não precisa pedir confirmação. Para compra parcelada informe o valor TOTAL e installments (cria uma parcela por mês). " +
-    "Passe message_id da mensagem de origem (evita lançar o mesmo comprovante duas vezes). " +
-    "Foto, print ou lista com vários gastos: uma chamada por item, todas com o mesmo message_id e item=1, 2, 3…",
+    "Registra gasto ou receita, sem pedir confirmação. Parcelado: valor TOTAL + installments. " +
+    "message_id evita lançar o mesmo comprovante duas vezes; vários itens na mesma mensagem: uma chamada por item com item=1, 2, 3…",
   parameters: obj(
     {
       kind: { type: "string", enum: ["expense", "income"] },
-      amount: { type: "number", description: "Valor TOTAL em reais com ponto decimal (ex.: 1234.56)" },
-      category: { type: "string", enum: CATEGORIES, description: "Opcional: se não passar, a categoria é escolhida sozinha pela descrição e pelo histórico" },
-      description: { type: "string", description: "O que foi, curto (ex.: 'almoço', 'uber pro trabalho')" },
-      merchant: { type: "string", description: "Estabelecimento/pessoa" },
-      date: { type: "string", description: "AAAA-MM-DD ou AAAA-MM-DDTHH:MM local; padrão agora" },
-      installments: { type: "number", description: "Número de parcelas (padrão 1)" },
+      amount: { type: "number", description: "Reais, ex.: 1234.56" },
+      category: { type: "string", enum: CATEGORIES, description: "Só se a pessoa disser; senão é automática" },
+      description: { type: "string", description: "Curto, ex.: almoço" },
+      merchant: { type: "string" },
+      date: { type: "string", description: "AAAA-MM-DD[THH:MM]; padrão agora" },
+      installments: { type: "number" },
       source: { type: "string", enum: ["conversa", "audio", "comprovante", "documento"] },
       message_id: { type: "string" },
-      item: { type: "number", description: "Número do item quando a mesma mensagem traz vários gastos (1, 2, 3…)" },
-      date_confirmed: { type: "boolean", description: "Só true quando a pessoa disse explicitamente uma data de mais de um ano atrás" },
+      item: { type: "number" },
+      date_confirmed: { type: "boolean", description: "true só se a pessoa disse uma data de mais de um ano atrás" },
     },
     ["kind", "amount"],
   ),
@@ -546,18 +541,17 @@ export const updateTransaction = defineTool<{
 }>({
   name: "update_transaction",
   description:
-    "Corrige lançamentos da pessoa: valor, categoria, descrição, estabelecimento, data ou tipo (ex.: 'era 18 e não 81', 'muda o uber de ontem pra Trabalho'). " +
-    "Pegue os ids com list_transactions. Vários ids = mesma mudança em todos (ex.: recategorizar). Não precisa de confirmação.",
+    "Corrige lançamentos (ids de list_transactions): valor, categoria, descrição, estabelecimento, data ou tipo. Vários ids = mesma mudança em todos. Sem confirmação.",
   parameters: obj(
     {
-      ids: { type: "array", items: { type: "string" }, description: "Ids dos lançamentos" },
-      amount: { type: "number", description: "Novo valor em reais" },
+      ids: { type: "array", items: { type: "string" } },
+      amount: { type: "number" },
       category: { type: "string", enum: CATEGORIES },
       description: { type: "string" },
       merchant: { type: "string" },
-      date: { type: "string", description: "AAAA-MM-DD ou AAAA-MM-DDTHH:MM local" },
+      date: { type: "string", description: "AAAA-MM-DD[THH:MM]" },
       kind: { type: "string", enum: ["expense", "income"] },
-      date_confirmed: { type: "boolean", description: "Só true quando a pessoa disse explicitamente uma data de mais de um ano atrás" },
+      date_confirmed: { type: "boolean", description: "true só se a pessoa disse uma data de mais de um ano atrás" },
     },
     ["ids"],
   ),
@@ -584,14 +578,13 @@ export const updateTransaction = defineTool<{
 export const deleteTransaction = defineTool<{ ids?: string[]; id?: string; from?: string; to?: string; category?: string; search?: string; confirmed_by_user?: boolean }>({
   name: "delete_transaction",
   description:
-    "Apaga lançamentos da pessoa. Por ids (de list_transactions; 1 ou poucos itens que ela apontou, sem confirmação) " +
-    "ou por filtro (período, categoria, texto) para apagar vários de uma vez: com filtro, o sistema mostra quantos e o total e só apaga depois do \"sim\" da pessoa.",
+    "Apaga lançamentos: por ids (poucos que ela apontou, sem confirmação) ou por filtro (período, categoria, texto), que só apaga depois do \"sim\" dela.",
   parameters: obj({
     ids: { type: "array", items: { type: "string" } },
     from: { type: "string", description: "AAAA-MM-DD" },
     to: { type: "string", description: "AAAA-MM-DD (inclusivo)" },
     category: { type: "string" },
-    search: { type: "string", description: "Parte da descrição ou do estabelecimento" },
+    search: { type: "string", description: "Trecho da descrição ou do estabelecimento" },
     ...CONFIRM_PARAM,
   }),
   async run(args, ctx) {

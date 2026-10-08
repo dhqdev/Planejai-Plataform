@@ -7,8 +7,7 @@ import { defineTool, obj } from "./types.js";
 export const reactToMessage = defineTool<{ emoji: string; message_id?: string }>({
   name: "react_to_message",
   description:
-    "Reage com um emoji a uma mensagem da pessoa no WhatsApp, como um humano faria (👍 para confirmações, ❤️, 😂, 🙏, 🔥, ✅...). " +
-    "Use com naturalidade, não em toda mensagem. Sem message_id reage à última mensagem recebida.",
+    "Reage com um emoji a uma mensagem da pessoa (sem message_id: a última).",
   parameters: obj(
     {
       emoji: { type: "string", description: "Um único emoji" },
@@ -37,11 +36,10 @@ export const reactToMessage = defineTool<{ emoji: string; message_id?: string }>
 export const saveMemory = defineTool<{ content: string; tags?: string[] }>({
   name: "save_memory",
   description:
-    "Guarda um fato duradouro sobre a pessoa (preferências, nomes de família, cidade, rotina, gostos) para lembrar em conversas futuras. " +
-    "Não guarde coisas passageiras.",
+    "Guarda um fato duradouro sobre a pessoa (preferências, família, cidade, rotina). Nada passageiro.",
   parameters: obj(
     {
-      content: { type: "string", description: "O fato, em uma frase. Ex.: 'Prefere cinema legendado e mora em Campinas'" },
+      content: { type: "string", description: "Uma frase" },
       tags: { type: "array", items: { type: "string" } },
     },
     ["content"],

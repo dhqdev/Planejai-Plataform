@@ -268,14 +268,14 @@ export const automationSave = defineTool<{
 }>({
   name: "automation_save",
   description:
-    "Cria (ou substitui, com workflow_id) uma automação no n8n para a pessoa: avisos agendados, acompanhar RSS/sites/APIs, gatilhos por webhook. " +
-    "Já sai ativa. Se o n8n recusar, corrija pelo erro e chame de novo com o mesmo workflow_id. " +
-    NODE_GUIDE,
+    "Cria (ou substitui, com workflow_id) uma automação no n8n da pessoa: avisos agendados, RSS/sites/APIs, webhook. Já sai ativa. " +
+    "Primeira vez: chame com nodes=[] para receber o guia do formato (vai só quando precisa, não em toda chamada). " +
+    "Se o n8n recusar, corrija pelo erro e chame de novo com o mesmo workflow_id.",
   integration: "n8n",
   ownerOnly: false,
   parameters: obj(
     {
-      name: { type: "string", description: "Nome curto, ex.: Notícias de IA às 8h" },
+      name: { type: "string", description: "Curto, ex.: Notícias de IA às 8h" },
       description: { type: "string" },
       nodes: { type: "array", items: { type: "object" }, description: "Nós no formato curto" },
       connections: { type: "array", items: { type: "object" }, description: "Ligações {from,to,output?}" },
@@ -293,7 +293,14 @@ export const automationSave = defineTool<{
       if ((n?.n ?? 0) >= config.AUTOMATIONS_PER_USER)
         return { ok: false, error: `A pessoa já tem ${n!.n} automações (limite ${config.AUTOMATIONS_PER_USER}). Ofereça apagar uma antes.` };
     }
-    const built = await buildWorkflow({ nodes: args.nodes, connections: args.connections, userId: ctx.user.id, owner, webhookPrefix: `pj-${ctx.user.id.slice(0, 8)}` });
+    // o guia do formato (~1,5 KB) vai no resultado quando o agente precisa, e não na descrição de toda chamada
+    if (!Array.isArray(args.nodes) || !args.nodes.length) return { ok: false, guide: NODE_GUIDE, next: "Monte os nós neste formato e chame de novo." };
+    let built: Awaited<ReturnType<typeof buildWorkflow>>;
+    try {
+      built = await buildWorkflow({ nodes: args.nodes, connections: args.connections ?? [], userId: ctx.user.id, owner, webhookPrefix: `pj-${ctx.user.id.slice(0, 8)}` });
+    } catch (err) {
+      return { ok: false, error: (err as Error).message, guide: NODE_GUIDE };
+    }
     const label = String(args.name).trim().slice(0, 80) || "Automação";
     const who = String(ctx.user.name ?? ctx.user.phone).split(" ")[0];
     const body = {

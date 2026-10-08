@@ -27,20 +27,19 @@ export const billSave = defineTool<{
 }>({
   name: "bill_save",
   description:
-    "Cria ou ajusta uma conta fixa do mês (aluguel, internet, luz, parcela, salário que cai todo mês). O sistema lembra sozinho antes do vencimento " +
-    "e no dia, e pergunta no dia seguinte se não foi paga. Sem id/name cria; com id ou name ajusta. amount vazio = valor muda todo mês. " +
-    "installments_left = parcelas que faltam (encerra sozinha no fim).",
+    "Cria (sem id/name) ou ajusta (id ou name) conta fixa do mês: aluguel, internet, parcela, salário. O sistema lembra do vencimento sozinho. " +
+    "Sem amount = valor muda todo mês.",
   parameters: obj(
     {
-      id: { type: "string", description: "Para ajustar uma existente" },
-      name: { type: "string", description: "Nome de uma existente para ajustar" },
-      description: { type: "string", description: "Nome da conta (ex.: Aluguel, Parcela do carro)" },
+      id: { type: "string" },
+      name: { type: "string", description: "Nome de uma existente" },
+      description: { type: "string", description: "Nome da conta nova" },
       kind: { type: "string", enum: ["expense", "income"] },
-      amount: { type: "number", description: "Valor fixo em reais; omita se varia" },
+      amount: { type: "number" },
       category: { type: "string", enum: CATEGORIES },
-      due_day: { type: "number", description: "Dia do vencimento (1 a 31)" },
-      remind_days_before: { type: "number", description: "Quantos dias antes lembrar (padrão 1; 0 = só no dia)" },
-      installments_left: { type: "number", description: "Parcelas que faltam" },
+      due_day: { type: "number", description: "1 a 31" },
+      remind_days_before: { type: "number", description: "Padrão 1; 0 = só no dia" },
+      installments_left: { type: "number", description: "Parcelas que faltam (encerra sozinha)" },
     },
     [],
   ),
@@ -80,8 +79,8 @@ export const billList = defineTool<Record<string, never>>({
 
 export const billPay = defineTool<{ id?: string; name?: string; amount?: number }>({
   name: "bill_pay",
-  description: "Marca uma conta fixa como paga (ou recebida) neste mês e lança o valor nas finanças. Use quando a pessoa disser 'paguei o aluguel'. Conta de valor variável precisa de amount.",
-  parameters: obj({ id: { type: "string" }, name: { type: "string" }, amount: { type: "number", description: "Valor pago, se diferente ou se a conta varia" } }, []),
+  description: "Marca conta fixa como paga neste mês ('paguei o aluguel') e já lança nas finanças. Conta variável precisa de amount.",
+  parameters: obj({ id: { type: "string" }, name: { type: "string" }, amount: { type: "number" } }, []),
   async run(args, ctx) {
     const id = await pick(ctx.user.id, args);
     const r = await payBill(ctx.user.id, id, { amount: args.amount, tz: ctx.timezone });

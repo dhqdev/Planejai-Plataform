@@ -69,9 +69,9 @@ deploy/swarm-traefik-stack.yml  Swarm + Traefik (network_public), domínio autop
 ```
 
 ### Adicionar uma ferramenta
-1. Crie com `defineTool` no arquivo do domínio em `agent/tools/` (JSON Schema em `parameters`, use `obj()`).
+1. Crie com `defineTool` no arquivo do domínio em `agent/tools/` (JSON Schema em `parameters`, use `obj()`). Descrição curta: a definição vai em **toda** chamada do agente; regra de comportamento mora no prompt, e guia longo (como o formato do n8n) volta no resultado quando o agente precisa (ex.: `automation_save` com `nodes=[]`).
 2. Se depende de conector, ponha `integration: "<id>"`: a tool some do agente enquanto não estiver conectada.
-3. Ação com dinheiro, que fala com terceiros ou apaga: inclua `...CONFIRM_PARAM` e comece com `const c = await requireConfirmation(args, resumo, ctx); if (c) return c;`. O servidor guarda e só executa depois do "sim" da pessoa (ver `agentes.md`). Se só lê, confira se o nome cai em `NO_SIDE_EFFECT` (`orchestrator.ts`).
+3. Ação com dinheiro, que fala com terceiros ou apaga: inclua `...CONFIRM_PARAM` (marcador vazio: não manda nada ao modelo) e comece com `const c = await requireConfirmation(args, resumo, ctx); if (c) return c;`. O servidor guarda e só executa depois do "sim" da pessoa (ver `agentes.md`). Se só lê, confira se o nome cai em `NO_SIDE_EFFECT` (`orchestrator.ts`).
 4. Registre a tool no especialista certo em `agent/team.ts` (ou em `CTO_TOOLS` se for núcleo da conversa).
 5. Imagens para enviar: `ctx.outbox.addMedia(...)` e devolva o `media_id`; o CTO posiciona com `[[media:ID]]`.
 6. Se a tool chama um LLM, devolva `_usage` (o `ChatResult`) para o custo entrar no log.

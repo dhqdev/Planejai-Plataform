@@ -27,9 +27,9 @@ export async function chatCompletion(choice: ModelChoice, req: ChatRequest, atte
     body.tools = req.tools;
     body.tool_choice = "auto";
     body.parallel_tool_calls = true;
-    // agentes não precisam pensar muito para chamar ferramenta; raciocínio longo é saída cara
-    body.reasoning = { effort: "low", exclude: true };
   }
+  // raciocínio longo é saída cara: baixo em toda chamada, inclusive no último passo (sem ferramentas)
+  body.reasoning = { effort: "low", exclude: true };
   const temperature = req.temperature ?? choice.temperature;
   if (temperature != null) body.temperature = temperature;
   const maxTokens = req.maxTokens ?? choice.maxTokens;
