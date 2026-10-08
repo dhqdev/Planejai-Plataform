@@ -19,7 +19,12 @@ export function Story({ data, steps, clientAgents }: { data: any; steps: Step[];
   return (
     <div className="tl">
       {data.content_purged && (
-        <div className="tl-purged"><Icon name="shield" size={14} /> O texto desta execução foi apagado por privacidade. Ficaram os passos, tempos e custos.</div>
+        <div className="tl-purged">
+          <Icon name="shield" size={14} />{" "}
+          {data.private
+            ? "Conversa de um cliente: o texto é particular e fica só com ele. Aqui aparecem os passos, modelos, tempos e custos."
+            : "O texto desta execução foi apagado por privacidade. Ficaram os passos, tempos e custos."}
+        </div>
       )}
 
       <div className="tl-item tl-in">

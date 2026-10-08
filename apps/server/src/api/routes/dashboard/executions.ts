@@ -5,7 +5,11 @@ import { many, one, query } from "../../../db/pool.js";
 import { queueOverview, retryJob } from "../../../queue/boss.js";
 import { cacheStats, redisInfo } from "../../../shortmem.js";
 import { SESSION_ID } from "../../../whatsapp/session.js";
+import { selfUserId } from "../../../sharing.js";
 import { isUuid } from "./shared.js";
+
+/** Execução com texto visível: do próprio dono ($10), do playground ou do sistema (sem pessoa). */
+const OPEN = "(e.user_id IS NULL OR e.user_id = $10::uuid OR u.phone = 'playground')";
 
 /** Operação (só super admin): visão geral, filas e logs de execução. */
 export function executionRoutes(api: FastifyInstance) {
@@ -66,13 +70,18 @@ export function executionRoutes(api: FastifyInstance) {
   });
 
   // ---------- Execuções (logs) ----------
+  // Privacidade: o texto (o que a pessoa escreveu, o que o time respondeu, entradas e saídas das ferramentas) só aparece
+  // nas execuções do próprio dono, do playground e do sistema. As dos clientes mostram só métrica: modelo, custo, tempo,
+  // ferramentas e erro. Vale como content_purged para a tela, com private = true para ela explicar o porquê.
   // filtros: status, gatilho, pessoa, agente, período (horas), busca no texto e paginação por data (before)
   api.get<{ Querystring: { status?: string; trigger?: string; before?: string; limit?: string; conversation?: string; user?: string; agent?: string; since?: string; q?: string } }>("/api/executions", async (req) => {
+    const self = await selfUserId(req.account);
     const limit = Math.min(Number(req.query.limit ?? 50), 200);
     const since = Number(req.query.since ?? 0);
     const q = String(req.query.q ?? "").trim().slice(0, 100);
     return many(
-      `SELECT e.id, e.trigger, e.status, left(e.input, 400) AS input, left(e.output, 400) AS output, e.content_purged, left(e.error, 400) AS error,
+      `SELECT e.id, e.trigger, e.status, CASE WHEN ${OPEN} THEN left(e.input, 400) END AS input, CASE WHEN ${OPEN} THEN left(e.output, 400) END AS output,
+              (e.content_purged OR NOT ${OPEN}) AS content_purged, NOT ${OPEN} AS private, left(e.error, 400) AS error,
               e.tokens_in, e.tokens_out, e.cost_usd, e.started_at, e.duration_ms,
               e.user_id, u.name AS user_name, u.phone, e.conversation_id, c.channel,
               (SELECT COUNT(*) FROM execution_steps s WHERE s.execution_id = e.id) AS steps,
@@ -86,10 +95,11 @@ export function executionRoutes(api: FastifyInstance) {
           AND ($6::uuid IS NULL OR e.user_id = $6)
           AND ($7::text IS NULL OR EXISTS (SELECT 1 FROM execution_steps s WHERE s.execution_id = e.id AND s.agent = $7))
           AND ($8::int = 0 OR e.started_at > now() - make_interval(hours => $8))
-          AND ($9::text IS NULL OR e.input ILIKE '%' || $9 || '%' OR e.output ILIKE '%' || $9 || '%' OR e.error ILIKE '%' || $9 || '%' OR u.name ILIKE '%' || $9 || '%' OR u.phone LIKE '%' || $9 || '%')
+          AND ($9::text IS NULL OR (${OPEN} AND (e.input ILIKE '%' || $9 || '%' OR e.output ILIKE '%' || $9 || '%')) OR e.error ILIKE '%' || $9 || '%' OR u.name ILIKE '%' || $9 || '%' OR u.phone LIKE '%' || $9 || '%')
         ORDER BY e.started_at DESC LIMIT $4`,
       [req.query.status || null, req.query.trigger || null, req.query.before || null, limit, req.query.conversation || null,
-        req.query.user || null, req.query.agent || null, Number.isFinite(since) ? Math.max(0, Math.min(Math.round(since), 24 * 365)) : 0, q ? q.replace(/[%_\\]/g, "\\$&") : null],
+        req.query.user || null, req.query.agent || null, Number.isFinite(since) ? Math.max(0, Math.min(Math.round(since), 24 * 365)) : 0, q ? q.replace(/[%_\\]/g, "\\$&") : null,
+        self],
     );
   });
 
@@ -126,7 +136,14 @@ export function executionRoutes(api: FastifyInstance) {
       [req.params.id],
     );
     if (!exec) return reply.code(404).send({ error: "não encontrada" });
-    const steps = await many("SELECT * FROM execution_steps WHERE execution_id = $1 ORDER BY id", [req.params.id]);
+    const open = !exec.user_id || exec.user_id === (await selfUserId(req.account)) || exec.phone === "playground";
+    const steps = await many(
+      open
+        ? "SELECT * FROM execution_steps WHERE execution_id = $1 ORDER BY id"
+        : "SELECT id, execution_id, parent_id, agent, type, name, model, status, error, tokens_in, tokens_out, cost_usd, started_at, duration_ms FROM execution_steps WHERE execution_id = $1 ORDER BY id",
+      [req.params.id],
+    );
+    if (!open) Object.assign(exec, { input: null, output: null, content_purged: true, private: true });
     // agentes criados para a pessoa (c_<slug>): nome e carinha para a linha do tempo
     const clientAgents = exec.user_id
       ? await many("SELECT 'c_' || slug AS id, name, persona, face FROM client_agents WHERE user_id = $1", [exec.user_id])

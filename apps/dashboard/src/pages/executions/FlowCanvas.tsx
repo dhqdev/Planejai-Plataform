@@ -27,8 +27,8 @@ function StepPanel({ step, data, clientAgents }: { step: Step | null; data: any;
       <div className="card exd-step">
         <div className="exd-card-head"><Icon name="send" size={14} /><small>Entrada e saída</small><span className="spacer" /><span className="muted exd-hint">toque num nó para ver o passo</span></div>
         <div className="tl-io">
-          <div><small>Mensagens recebidas</small><Json value={data.content_purged ? "apagado por privacidade" : data.input} /></div>
-          <div><small>Resposta do CTO</small><Json value={data.content_purged ? "apagado por privacidade" : data.output} /></div>
+          <div><small>Mensagens recebidas</small><Json value={data.content_purged ? (data.private ? "particular do cliente" : "apagado por privacidade") : data.input} /></div>
+          <div><small>Resposta do CTO</small><Json value={data.content_purged ? (data.private ? "particular do cliente" : "apagado por privacidade") : data.output} /></div>
         </div>
       </div>
     );

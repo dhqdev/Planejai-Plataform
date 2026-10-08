@@ -20,7 +20,8 @@ export function PrivacyPage() {
         <ul>
           <li>Seu nome, número de WhatsApp e e-mail (se você criar login no painel): enquanto sua conta existir.</li>
           <li>Suas mensagens: ficam só na memória curta do assistente por até 24 horas e depois viram um resumo curto. A conversa completa continua só no seu WhatsApp.</li>
-          <li>Registros técnicos de cada resposta (para achar erros e medir custo): o texto é apagado depois de 24 horas; ficam só números como tempo, custo e modelo usado, por até 7 dias.</li>
+          <li>Registros técnicos de cada resposta (para achar erros e medir custo): o texto é apagado depois de 24 horas; ficam só números como tempo, custo e modelo usado, por até 7 dias. Quem administra a plataforma vê só esses números das suas respostas, nunca o texto.</li>
+          <li>Uma vez por dia, uma revisão automática (sem ninguém lendo) usa os registros do dia para ajustar como o assistente fala com você e quais agentes te ajudam.</li>
           <li>Gastos, receitas, limites, lembretes, memórias que você pediu para guardar e acompanhamentos: até você apagar ou pedir para apagar tudo.</li>
           <li>Fotos, áudios e documentos que você manda: são lidos para entender o pedido e não ficam guardados. O que foi extraído deles (por exemplo, o valor de um comprovante) entra nos seus dados.</li>
         </ul>

@@ -126,6 +126,37 @@ describe.skipIf(!enabled)("segurança e privacidade (e2e)", () => {
     expect(h["x-frame-options"]).toBe("DENY");
   });
 
+  it("Execuções e gravações de cliente mostram só métrica para o dono", async () => {
+    const { config } = await import("../src/config.js");
+    const before = config.OWNER_PHONES;
+    config.OWNER_PHONES = ["5519990009999"];
+    try {
+      const me = await db.one("INSERT INTO users (phone, name, status) VALUES ('5519990009999', 'Dono', 'active') RETURNING id");
+      const cli = await db.one("INSERT INTO users (phone, name, status) VALUES ('5519955554444', 'Cliente', 'active') RETURNING id");
+      const mine = await db.one("INSERT INTO executions (trigger, status, user_id, input, output) VALUES ('message', 'success', $1, 'meu segredo', 'ok') RETURNING id", [me.id]);
+      const theirs = await db.one("INSERT INTO executions (trigger, status, user_id, input, output, cost_usd) VALUES ('message', 'success', $1, 'diagnóstico do médico', 'certo', 0.01) RETURNING id", [cli.id]);
+      await db.query("INSERT INTO execution_steps (execution_id, agent, type, name, model, input, output) VALUES ($1, 'cto', 'llm', 'cto', 'm', '{\"q\":\"diagnóstico\"}', '{\"a\":1}')", [theirs.id]);
+      const media = await db.one("INSERT INTO media_files (user_id, kind, mimetype, size, data) VALUES ($1, 'recording', 'video/mp4', 1, '\\x00') RETURNING id", [cli.id]);
+      const owner = cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } }));
+      const list = (await app.inject({ method: "GET", url: "/api/executions", headers: { cookie: owner } })).json();
+      const a = list.find((e: any) => e.id === mine.id);
+      const b = list.find((e: any) => e.id === theirs.id);
+      expect(a.input).toBe("meu segredo");
+      expect(b).toMatchObject({ input: null, output: null, content_purged: true, private: true, cost_usd: 0.01 });
+      // busca no texto não serve de atalho para ler a conversa do cliente
+      expect((await app.inject({ method: "GET", url: "/api/executions?q=médico", headers: { cookie: owner } })).json()).toHaveLength(0);
+      const detail = (await app.inject({ method: "GET", url: `/api/executions/${theirs.id}`, headers: { cookie: owner } })).json();
+      expect(detail.input).toBeNull();
+      expect(detail.steps[0]).toMatchObject({ agent: "cto", model: "m" });
+      expect(detail.steps[0].input).toBeUndefined();
+      expect(JSON.stringify(detail)).not.toMatch(/diagnóstico/);
+      expect((await app.inject({ method: "GET", url: `/api/media/${media.id}`, headers: { cookie: owner } })).statusCode).toBe(404);
+      expect((await app.inject({ method: "GET", url: "/api/recordings", headers: { cookie: owner } })).json()).toHaveLength(0);
+    } finally {
+      config.OWNER_PHONES = before;
+    }
+  });
+
   it("login trava depois de várias senhas erradas", async () => {
     const codes: number[] = [];
     for (let i = 0; i < 10; i++) codes.push((await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "alvo@x.com", password: `errada-${i}` } })).statusCode);
