@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { billingAccess, billingOverview, cancelSubscription, getSubscription, planOf, subscribe, trialEnd } from "../../../billing.js";
+import { asaasMode, billingAccess, billingOverview, cancelSubscription, getSubscription, planOf, subscribe, trialEnd } from "../../../billing.js";
 import { config } from "../../../config.js";
 import { one, query } from "../../../db/pool.js";
 import { isConnected } from "../../../integrations/registry.js";
@@ -59,6 +59,8 @@ export function billingAdminRoutes(api: FastifyInstance) {
   api.get("/api/billing/admin", async () => ({
     ...(await billingOverview()),
     connected: await isConnected("asaas"),
+    // chave errada cai no sandbox sem ninguém ser cobrado de verdade: a tela mostra qual está valendo
+    mode: await asaasMode(),
     webhookUrl: `${config.PUBLIC_URL.replace(/\/$/, "")}/webhooks/asaas`,
   }));
 

@@ -24,7 +24,7 @@ function BillingCard({ form, setForm, save, saved }: { form: any; setForm: (f: a
           Cobrar assinatura
         </label>
         <div className="help">
-          {data?.connected ? "Asaas conectado." : "Antes de ligar, cole a chave de API e o token do webhook em Integrações > Asaas."} Ao ligar, quem já é cliente ganha os dias grátis a partir de agora.
+          {data?.connected ? (data.mode === "sandbox" ? <><b>Asaas em sandbox:</b> ninguém é cobrado de verdade. Troque por uma chave $aact_prod_ em Integrações &gt; Asaas.</> : "Asaas conectado (produção).") : "Antes de ligar, cole a chave de API e o token do webhook em Integrações > Asaas."} Ao ligar, quem já é cliente ganha os dias grátis a partir de agora.
         </div>
       </div>
       <div className="field"><label>Nome do plano</label><input className="input" value={form.billingPlanName ?? ""} onChange={(e) => setForm({ ...form, billingPlanName: e.target.value })} /></div>

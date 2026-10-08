@@ -66,6 +66,13 @@ export function asaasBase(apiKey: string) {
   return apiKey.startsWith("$aact_prod_") ? "https://api.asaas.com/v3" : "https://api-sandbox.asaas.com/v3";
 }
 
+/** "produção" ou "sandbox" pela chave salva; null sem Asaas conectado. */
+export async function asaasMode(): Promise<"produção" | "sandbox" | null> {
+  const c = await getCredentials("asaas").catch(() => null);
+  if (!c?.api_key) return null;
+  return asaasBase(c.api_key).includes("sandbox") ? "sandbox" : "produção";
+}
+
 async function asaas(method: string, path: string, body?: unknown) {
   const c = await getCredentials("asaas");
   if (!c?.api_key) throw new Error("Asaas não conectado (Integrações > Asaas)");
@@ -208,8 +215,12 @@ const addMonth = (isoDate: string) => {
 const brl = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n).replace(/\u00a0/g, " ");
 const ddmm = (iso?: string | null) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "");
 
-/** Mensagem para a pessoa no WhatsApp. O webhook roda na API e quem segura o WhatsApp é o worker: vai pela fila de envios. */
+/**
+ * Mensagem para a pessoa no WhatsApp. O webhook roda na API e quem segura o WhatsApp é o worker: vai pela fila de envios.
+ * Também fica no sininho do painel dela: se o número cair, o aviso de cobrança não some junto.
+ */
 async function tell(userId: string, text: string) {
+  await notify({ userId, kind: "assinatura", title: text.split(/(?<=[.!?])\s/)[0]!, body: text, link: "/assinatura" });
   await (await getBoss()).send(QUEUES.outbound, { type: "send", userId, text }, { retryLimit: 2, retryDelay: 20 });
 }
 
@@ -240,7 +251,7 @@ function eventKey(body: any) {
 /**
  * Evento do Asaas. Só mexe em assinatura que criamos (casa pelo id da assinatura).
  * Pagamento confirmado libera até o próximo vencimento; vencido trava; assinatura apagada vira cancelada.
- * Cada mudança avisa a pessoa no WhatsApp (o Asaas não manda nada: o cliente é criado com notificationDisabled)
+ * Cada mudança avisa a pessoa no WhatsApp e no sininho do painel (o Asaas não manda nada: o cliente é criado com notificationDisabled)
  * e vira evento para o n8n (payment.confirmed, payment.overdue, subscription.canceled).
  */
 export async function handleAsaasEvent(body: any): Promise<{ handled: boolean; status?: SubStatus; duplicate?: boolean }> {
@@ -289,6 +300,7 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
     }
     case "PAYMENT_CREATED":
     case "PAYMENT_UPDATED":
+    case "PAYMENT_RESTORED":
       // a próxima cobrança do mês: guarda o link para a pessoa pagar e aplica desconto de indicação que esteja esperando
       if (p.status === "PENDING" || p.status === "OVERDUE") {
         await query("UPDATE subscriptions SET invoice_url = $2, next_due_date = COALESCE($3, next_due_date), updated_at = now() WHERE user_id = $1", [sub.user_id, p.invoiceUrl ?? null, p.dueDate ?? null]);
@@ -304,6 +316,15 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
       void emitEvent("payment.overdue", { user_id: sub.user_id, value, invoice_url: link, due_date: p.dueDate ?? null });
       return r;
     }
+    case "PAYMENT_DELETED":
+      // cobrança apagada no Asaas: o link dela não serve mais
+      if (p.invoiceUrl && p.invoiceUrl === sub.invoice_url) await query("UPDATE subscriptions SET invoice_url = NULL, updated_at = now() WHERE user_id = $1", [sub.user_id]);
+      await notify({ userId: null, kind: "assinatura", title: "Cobrança apagada no Asaas", body: `${brl(value)}${p.dueDate ? `, vencimento ${ddmm(p.dueDate)}` : ""}.`, link: "/settings" });
+      return { handled: true, status: sub.status };
+    case "PAYMENT_REFUND_REQUESTED":
+      // o estorno de verdade chega depois como PAYMENT_REFUNDED (aí trava); por enquanto só avisa o dono
+      await notify({ userId: null, kind: "assinatura", title: "Pedido de estorno", body: `${brl(value)}. Se o estorno sair, a pessoa fica travada até pagar de novo.`, link: "/settings" });
+      return { handled: true, status: sub.status };
     case "PAYMENT_REFUNDED":
     case "PAYMENT_CHARGEBACK_REQUESTED": {
       const r = await set("overdue", { paid_until: null });

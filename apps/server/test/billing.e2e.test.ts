@@ -200,6 +200,14 @@ describe.skipIf(!enabled)("assinatura pelo Asaas (e2e)", () => {
     // venceu: avisa com o link na hora
     await billing.handleAsaasEvent({ id: "evt_3", event: "PAYMENT_OVERDUE", payment: { id: "pay_b2", subscription: "sub_beto", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_b2" } });
     expect((await outbox()).at(-1)).toMatchObject({ userId: beto.id, text: expect.stringContaining("https://sandbox.asaas.com/i/pay_b2") });
+    // o mesmo aviso fica no sininho do painel, caso o WhatsApp esteja fora
+    expect(await db.one("SELECT body FROM notifications WHERE user_id = $1 AND kind = 'assinatura' ORDER BY created_at DESC LIMIT 1", [beto.id])).toMatchObject({
+      body: expect.stringContaining("pay_b2"),
+    });
+    // pedido de estorno só avisa o dono; cobrança apagada tira o link que não serve mais
+    expect(await billing.handleAsaasEvent({ id: "evt_rr", event: "PAYMENT_REFUND_REQUESTED", payment: { id: "pay_b2", subscription: "sub_beto", value: 19.9 } })).toMatchObject({ handled: true, status: "overdue" });
+    expect(await billing.handleAsaasEvent({ id: "evt_del", event: "PAYMENT_DELETED", payment: { id: "pay_b2", subscription: "sub_beto", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_b2" } })).toMatchObject({ handled: true });
+    expect(await db.one("SELECT invoice_url FROM subscriptions WHERE user_id = $1", [beto.id])).toEqual({ invoice_url: null });
 
     // lembrete de vencimento: quem paga por Pix ouve 3 dias antes; cartão não
     await db.query("DELETE FROM pgboss.job WHERE name = 'outbound.send'");
