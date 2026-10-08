@@ -45,6 +45,8 @@ const schema = z.object({
   // n8n na mesma rede da stack: preenchido aqui, a integração já nasce conectada (sem tela de Integrações)
   N8N_URL: z.string().default(""),
   N8N_API_KEY: z.string().default(""),
+  /** busca web da Tavily pela stack (sem precisar colar na tela de Integrações) */
+  TAVILY_API_KEY: z.string().default(""),
   N8N_EVENTS_URL: z.string().default(""),
   // automações que cada cliente pode ter ativas no n8n (criadas pelo assistente)
   // Login em navegador novo pede um código no WhatsApp da pessoa (desligue com LOGIN_CODE=false)

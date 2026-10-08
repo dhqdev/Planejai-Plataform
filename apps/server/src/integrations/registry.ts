@@ -187,6 +187,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     icon: "search",
     docsUrl: "https://app.tavily.com",
     fields: [{ key: "api_key", label: "API key", type: "password", required: true, placeholder: "tvly-...", help: "O plano grátis dá 1.000 buscas por mês." }],
+    envFallback: () => (config.TAVILY_API_KEY ? { api_key: config.TAVILY_API_KEY } : null),
     test: async (c) => {
       const j = await okJson(
         await fetch("https://api.tavily.com/search", {

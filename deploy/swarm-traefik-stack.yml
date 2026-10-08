@@ -30,6 +30,8 @@ x-env: &env
   N8N_URL: http://n8n-interno:5678
   # Para o assistente listar e CRIAR fluxos: no n8n, Settings > n8n API > Create an API key, e cole aqui.
   N8N_API_KEY: ""
+  # Busca web do Pesquisador (Tavily, plano grátis 1.000 buscas/mês). Sem ela usa a busca paga do OpenRouter.
+  TAVILY_API_KEY: ""
   # Automações que cada cliente pode ter (criadas pelo assistente no n8n)
   AUTOMATIONS_PER_USER: "5"
   # --- Login no painel: navegador novo recebe código de 6 dígitos no WhatsApp (OWNER_PHONES para o dono) ---
