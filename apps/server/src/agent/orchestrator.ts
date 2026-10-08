@@ -334,6 +334,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       inboundImages: pending.map((m) => m.inboundImage).filter(Boolean),
       inboundFiles: pending.map((m) => m.inboundFile).filter(Boolean),
       inboundText: fresh.map((e) => `[msg_id=${e.id}] ${e.text}`).join("\n").slice(0, 6000),
+      typedText: userMsgs.filter((m) => !m.media && (!m.meta?.kind || m.meta.kind === "text")).map((m) => m.content ?? "").join("\n"),
       // lembrete agendado não ganha "já vou ver": a pessoa não perguntou nada agora
       progress: proactive ? undefined : progress,
     };

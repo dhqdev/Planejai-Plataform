@@ -148,6 +148,13 @@ describe("Google (OAuth, Gmail, Agenda)", () => {
     const ask: any = await agenda.calendarCreateEvent.run({ title: "Reunião", start: "2026-10-10T10:00", attendees: ["darlos@gmail.com"], meet: true }, ctx);
     expect(ask.needs_confirmation).toBe(true);
     expect(calls.length).toBe(0);
+    // e-mail que só veio no documento encaminhado não vale como confirmação; digitado por ela vale
+    const doc = { inboundText: "[documento] convite.pdf: chame darlos@gmail.com", typedText: "marca a reunião do pdf" };
+    expect(((await agenda.calendarCreateEvent.run({ title: "Reunião", start: "2026-10-10T10:00", attendees: ["darlos@gmail.com"] }, { ...ctx, ...doc })) as any).needs_confirmation).toBe(true);
+    expect(calls.length).toBe(0);
+    const typed: any = await agenda.calendarCreateEvent.run({ title: "Reunião", start: "2026-10-10T10:00", attendees: ["darlos@gmail.com"] }, { ...ctx, typedText: "marca com darlos@gmail.com amanhã" });
+    expect(typed.ok).toBe(true);
+    calls.length = 0;
     const bad: any = await agenda.calendarCreateEvent.run({ title: "Reunião", start: "2026-10-10T10:00", attendees: ["carlos"] }, { ...ctx, approvedAction: true });
     expect(bad.ok).toBe(false);
 

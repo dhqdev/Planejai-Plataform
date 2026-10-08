@@ -55,6 +55,8 @@ export interface ToolContext {
   inboundImages?: { base64: string; mimetype: string }[];
   /** mensagens novas desta rodada já interpretadas (foto descrita, documento lido), com msg_id; o especialista recebe junto quando há mídia */
   inboundText?: string;
+  /** só o que a pessoa digitou nesta rodada (sem descrição de foto nem texto de documento): vale como confirmação dela */
+  typedText?: string;
   /** arquivos (documentos e fotos) que chegaram nesta rodada, só em memória, para guardar em Documentos */
   inboundFiles?: { base64: string; mimetype: string; fileName?: string }[];
   /** avisos de andamento e "digitando..." para a pessoa enquanto o time trabalha */

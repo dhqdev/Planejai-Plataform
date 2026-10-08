@@ -140,8 +140,9 @@ export const calendarCreateEvent = defineTool<{
     const attendees = [...new Set((args.attendees ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean))];
     const bad = attendees.filter((e) => !EMAIL.test(e));
     if (bad.length) return { ok: false, error: `E-mail inválido: ${bad.join(", ")}. Peça o e-mail certo.` };
-    // e-mail do convidado escrito pela própria pessoa nesta mensagem já é a confirmação (conferido no texto dela, não no modelo)
-    const said = (ctx.inboundText ?? "").toLowerCase();
+    // e-mail do convidado digitado pela própria pessoa nesta mensagem já é a confirmação (conferido no texto dela, não no
+    // modelo); e-mail que só aparece num documento ou foto encaminhada não conta
+    const said = (ctx.typedText ?? "").toLowerCase();
     if (attendees.some((e) => !said.includes(e))) {
       const c = await requireConfirmation(args, `convidar ${attendees.join(", ")} para "${args.title}"`, ctx);
       if (c) return c;
