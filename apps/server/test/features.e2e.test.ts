@@ -296,6 +296,20 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     const adm = cookieOf(login);
     const fin = (await app.inject({ method: "GET", url: "/api/finance?month=2026-10", headers: { cookie: adm } })).json();
     expect(fin.transactions.map((t: any) => t.user_name)).toEqual(["Ana"]);
+
+    // perguntas de boas-vindas: aparecem para quem acabou de entrar; resposta fora do caminho escolhido é descartada
+    const ob = (await app.inject({ method: "GET", url: "/api/me/onboarding", headers: { cookie: adm } })).json();
+    expect(ob.due).toBe(true);
+    const saved = await app.inject({
+      method: "PUT",
+      url: "/api/me/onboarding",
+      headers: { cookie: adm },
+      payload: { answers: { goal: ["money", "hack"], money_now: "short", debt_plan: "yes", habit: ["water"], tone: "short", more: "recebo dia 5" } },
+    });
+    expect(saved.json().summary).toBe("Quer ajuda com: Organizar meu dinheiro. Fim do mês: Falta, ou tenho dívidas. Plano de dívidas: Quero. Prefere conversa: Direto e curto. Contou: recebo dia 5");
+    expect((await app.inject({ method: "GET", url: "/api/me/onboarding", headers: { cookie: adm } })).json().due).toBe(false);
+    const prof = await db.one("SELECT profile FROM users WHERE phone = '5519911111111'");
+    expect(prof.profile.onboarding.answers.habit).toBeUndefined();
     const all = (await app.inject({ method: "GET", url: "/api/finance?month=2026-03", headers: { cookie: adm } })).json();
     expect(all.transactions).toEqual([]); // os de março são da Bia
     // nem papel gravado no banco nem pedido pelo painel vira super admin: só o dono (ADMIN_EMAIL)

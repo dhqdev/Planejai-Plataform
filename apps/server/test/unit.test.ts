@@ -286,3 +286,14 @@ describe("humanize", () => {
     expect(humanize("- pão\n- leite")).toBe("pão\nleite");
   });
 });
+
+describe("perguntas de boas-vindas do cadastro", () => {
+  it("só abre a pergunta seguinte pelo caminho escolhido e resume em uma linha", async () => {
+    const { activeQuestions, cleanAnswers, onboardingSummary } = await import("../src/onboarding.js");
+    expect(activeQuestions({}).map((q) => q.id)).toEqual(["goal", "home", "tone", "more"]);
+    expect(activeQuestions({ goal: ["work"], income: "business" }).map((q) => q.id)).toEqual(["goal", "income", "split", "forget", "home", "tone", "more"]);
+    const a = cleanAnswers({ goal: "agenda", forget: ["meds", "x"], home: "alone", shared: "split", more: "  tenho   um gato " });
+    expect(a).toEqual({ goal: ["agenda"], forget: ["meds"], home: "alone", more: "tenho um gato" });
+    expect(onboardingSummary(a)).toBe("Quer ajuda com: Agenda e lembretes. Costuma esquecer: Remédios. Mora: Sozinho(a). Contou: tenho um gato");
+  });
+});

@@ -10,6 +10,7 @@ import { MochiButton, MochiIcon, WardrobeHost } from "./mochi/Wardrobe";
 import { useUnread } from "./notify";
 import { AuthPage } from "./pages/Login";
 import { PrivacyPage } from "./pages/Privacy";
+import { Welcome, type Onboarding } from "./pages/Welcome";
 import { PullToRefresh } from "./PullToRefresh";
 import { canInstall, haptic, isIos, isStandalone, onInstallAvailable, promptInstall } from "./touch";
 import { applyUpdate, onUpdateAvailable } from "./update";
@@ -265,6 +266,16 @@ export function App() {
     return () => window.removeEventListener("pj:logout", onLogout);
   }, []);
 
+  // perguntas de boas-vindas: abrem sozinhas na primeira entrada de quem acabou de se cadastrar (e pelo Perfil, quando quiser)
+  const [welcome, setWelcome] = useState<Onboarding | null>(null);
+  useEffect(() => {
+    if (!me) return;
+    api<Onboarding>("/api/me/onboarding").then((d) => d.due && setWelcome(d), () => {});
+    const open = () => api<Onboarding>("/api/me/onboarding").then(setWelcome, () => {});
+    window.addEventListener("pj:welcome", open);
+    return () => window.removeEventListener("pj:welcome", open);
+  }, [me?.id]);
+
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
@@ -372,6 +383,7 @@ export function App() {
       </main>
 
       <WardrobeHost />
+      {welcome && <Welcome data={welcome} name={me.name} onDone={() => (setWelcome(null), window.dispatchEvent(new Event("pj:welcome-done")))} />}
 
       {update && (
         <div className="update-pill" role="status">

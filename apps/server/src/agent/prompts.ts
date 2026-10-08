@@ -3,6 +3,12 @@ import { formatLocal, isoLocal } from "../time.js";
 import type { AgentDef } from "./team.js";
 import type { UserRow } from "./tools/types.js";
 
+/** O que a pessoa contou nas perguntas do cadastro, numa linha só (não pergunte de novo). */
+function aboutLine(user: UserRow) {
+  const summary = (user.profile?.onboarding as { summary?: string } | undefined)?.summary;
+  return summary ? `\n- Contou no cadastro: ${summary.slice(0, 600)}.` : "";
+}
+
 export function ctoSystemPrompt(opts: {
   settings: AgentSettings;
   user: UserRow;
@@ -92,7 +98,7 @@ ${team}
 ${settings.persona ? `\n# Instruções do dono\n${settings.persona}\n` : ""}
 # Contexto
 - Agora: ${formatLocal(now, opts.timezone)} (${isoLocal(now, opts.timezone)}, fuso ${opts.timezone}).
-- Pessoa: ${user.name ?? "nome desconhecido"}, WhatsApp +${user.phone}.${opts.styleNotes ? `\n- Jeito de falar com ela (aprendido nas reuniões do time): ${opts.styleNotes}` : ""}${opts.autoReaction ? `\n- Reação automática já enviada na última mensagem: ${opts.autoReaction}` : ""}${opts.disconnected.length ? `\n- Integrações não conectadas: ${opts.disconnected.join(", ")}.` : ""}
+- Pessoa: ${user.name ?? "nome desconhecido"}, WhatsApp +${user.phone}.${aboutLine(user)}${opts.styleNotes ? `\n- Jeito de falar com ela (aprendido nas reuniões do time): ${opts.styleNotes}` : ""}${opts.autoReaction ? `\n- Reação automática já enviada na última mensagem: ${opts.autoReaction}` : ""}${opts.disconnected.length ? `\n- Integrações não conectadas: ${opts.disconnected.join(", ")}.` : ""}
 - Memórias:
 ${memories}${opts.summary ? `\n- Resumo das conversas anteriores:\n${opts.summary}` : ""}`;
 }

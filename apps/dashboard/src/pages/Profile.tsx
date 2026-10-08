@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, phoneFmt } from "../api";
 import type { Me } from "../App";
 import { ErrorBox, PageHead, alertDialog, confirmDialog } from "../components";
@@ -53,10 +53,27 @@ export function ProfilePage({ me }: { me: Me }) {
       </div>
       </>
       )}
+      {(me.linked || me.owner) && <AboutMe />}
       <Sharing />
       <Connections owner={me.owner} />
       <Security me={me} />
       </div>
+    </div>
+  );
+}
+
+/** O que a pessoa contou nas perguntas de boas-vindas (o assistente lê isso antes de cada conversa). */
+function AboutMe() {
+  const { data, reload } = useApi<{ summary: string }>("/api/me/onboarding");
+  useEffect(() => {
+    window.addEventListener("pj:welcome-done", reload);
+    return () => window.removeEventListener("pj:welcome-done", reload);
+  }, [reload]);
+  return (
+    <div className="card card-pad">
+      <h3>Sobre você</h3>
+      <p className="muted" style={{ marginTop: 0 }}>{data?.summary ? data.summary + "." : "Responda umas perguntas rápidas e o assistente já começa a conversa te conhecendo."}</p>
+      <button className="btn" onClick={() => window.dispatchEvent(new Event("pj:welcome"))}>{data?.summary ? "Refazer as perguntas" : "Responder as perguntas"}</button>
     </div>
   );
 }

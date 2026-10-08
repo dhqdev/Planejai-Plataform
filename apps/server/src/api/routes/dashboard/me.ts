@@ -3,6 +3,7 @@ import { hashPassword, loadAccount, verifyPassword } from "../../../accounts.js"
 import { config } from "../../../config.js";
 import { many, one, query } from "../../../db/pool.js";
 import { eraseUserData } from "../../../privacy.js";
+import { getOnboarding, ONBOARDING, saveOnboarding } from "../../../onboarding.js";
 import { NOBODY, selfUserId } from "../../../sharing.js";
 import { ESSENTIAL, getTabs, OPTIONAL } from "../../../tabs.js";
 import { botUsername, connections, telegramLink, unlink } from "../../../telegram.js";
@@ -78,6 +79,19 @@ export function meRoutes(base: FastifyInstance) {
   base.get("/api/me/profile", async (req) => {
     const user = req.account.userId ? await one("SELECT id, phone, name, status, timezone FROM users WHERE id = $1", [req.account.userId]) : null;
     return { account: { email: req.account.email, name: req.account.name, role: req.account.role, phone: req.account.phone, owner: req.account.owner }, user };
+  });
+
+  // ---------- Perguntas de boas-vindas (cadastro): o resumo vai para o prompt do CTO ----------
+  base.get("/api/me/onboarding", async (req) => {
+    const uid = await selfUserId(req.account);
+    const ob = uid ? await getOnboarding(uid) : null;
+    return { questions: ONBOARDING, due: Boolean(uid) && !ob, answers: ob?.answers ?? {}, summary: ob?.summary ?? "" };
+  });
+  base.put<{ Body: { answers?: unknown; skip?: boolean } }>("/api/me/onboarding", async (req, reply) => {
+    const uid = await selfUserId(req.account);
+    if (!uid) return reply.code(400).send({ error: "Conta sem WhatsApp ligado" });
+    const saved = await saveOnboarding(uid, req.body?.answers, req.body?.skip === true);
+    return { ok: true, summary: saved.summary };
   });
 
   // ---------- Painel editável: layout de cada conta ----------
