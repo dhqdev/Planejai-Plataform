@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ago, api, brl, phoneFmt, usd } from "../api";
 import { AgentTag, CopyField, Empty, ErrorBox, Loading, Modal, PageHead, Status, confirmDialog, initial } from "../components";
-import { AgentFace } from "../faces";
+import { AgentFace, CORE_FACES } from "../faces";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 
@@ -318,7 +318,7 @@ function ClientUsage({ id }: { id: string }) {
       {(data.styleNotes || data.notes?.length > 0) && (
         <>
           <h3 style={{ marginTop: 16 }}>O que o time aprendeu</h3>
-          {data.styleNotes && <div className="line-item" style={{ alignItems: "flex-start" }}><span className="persona">Téo</span><span className="grow">{data.styleNotes}</span></div>}
+          {data.styleNotes && <div className="line-item" style={{ alignItems: "flex-start" }}><span className="persona">{CORE_FACES.cto.persona}</span><span className="grow">{data.styleNotes}</span></div>}
           {(data.notes ?? []).map((n: any) => (
             <div key={n.agent} className="line-item row-wrap" style={{ alignItems: "flex-start" }}><span style={{ width: 150, flexShrink: 0 }}><AgentTag id={n.agent} /></span><span className="grow" style={{ flexBasis: 180 }}>{n.user_note && <>Pedido dela: {n.user_note}{n.note ? ". " : ""}</>}{n.note && <>Aprendido nas reuniões: {n.note}</>}</span></div>
           ))}

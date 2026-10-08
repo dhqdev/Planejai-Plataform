@@ -16,7 +16,7 @@ interface Member {
   kind?: string;
 }
 
-/** Meu time: o Téo (CTO), os especialistas e os agentes criados só para esta pessoa, cada um com nome e carinha. */
+/** Meu time: o Maestro (CTO), os especialistas e os agentes criados só para esta pessoa, cada um com nome e carinha. */
 export function TeamPage() {
   const { data, error } = useApi<{ core: Member[]; mine: Member[]; notes?: { agent: string; note: string | null; user_note?: string | null }[] }>("/api/me/team");
   const [sel, setSel] = useState<Member | null>(null);
@@ -34,7 +34,7 @@ export function TeamPage() {
 
   return (
     <div className="page">
-      <PageHead title="Meu time" subtitle="Quem cuida de você no WhatsApp. Toda noite o Téo reúne o time e ajusta cada um ao seu jeito." />
+      <PageHead title="Meu time" subtitle="Quem cuida de você no WhatsApp. Toda noite o Maestro reúne o time e ajusta cada um ao seu jeito." />
       <div className="team-grid" style={{ marginBottom: 22 }}>
         {data.core.map((m) => <Card key={m.id} m={m} lead={m.id === "cto"} />)}
       </div>

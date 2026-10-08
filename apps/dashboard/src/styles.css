@@ -1228,7 +1228,7 @@ button.chip { cursor: pointer; color: var(--text); }
 
 /* ---------- Preto e branco; o roxo do Mochi só nos pontos estratégicos ----------
    Roxo: ação principal da tela (.btn-brand e o + flutuante), item ativo do menu e da barra, hoje na agenda,
-   foco do teclado, o Téo no mapa e as bolinhas de novidade (magenta). O resto é tinta sobre branco. */
+   foco do teclado, o Maestro no mapa e as bolinhas de novidade (magenta). O resto é tinta sobre branco. */
 .avatar, .cal-mini-grid button.sel { color: var(--on-ink); }
 .btn-brand, .fab.ink, .cal-fab { background: var(--violet); border-color: var(--violet); color: var(--on-brand); }
 .cal-cell.today .cal-num, .cal-week-day.today strong, .cal-list-date.today strong { background: var(--violet); color: var(--on-brand); }

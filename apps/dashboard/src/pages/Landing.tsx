@@ -630,7 +630,7 @@ export function LandingPage() {
         <section id="time" className="lp-section lp-team">
           <div className="lp-wrap">
             <h2 className="lp-h2" data-reveal>Por trás de cada resposta, um time inteiro.</h2>
-            <p className="lp-sub" data-reveal>Cada especialista é um Mochi com uma função. Você não precisa escolher com quem falar: o Téo chama quem precisa, eles conversam entre si e você recebe uma resposta só.</p>
+            <p className="lp-sub" data-reveal>Cada especialista é um Mochi com uma função. Você não precisa escolher com quem falar: o Maestro chama quem precisa, eles conversam entre si e você recebe uma resposta só.</p>
             <div className="lp-team-grid">
               {TEAM.map((m, i) => (
                 <article key={m.id} className={`lp-agent ${m.id === "cto" ? "lead" : ""}`} data-reveal style={{ ["--d" as string]: i }}>

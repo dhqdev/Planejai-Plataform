@@ -31,7 +31,7 @@ export function flowLayout(data: any, steps: Step[]): Flow {
 
   const nodes: FlowNode[] = [
     { key: "trigger", x: col(0), y: midY, icon: TRIGGER_ICON[data.trigger] ?? "play", title: "Gatilho", sub: TRIGGER_LABEL[data.trigger] ?? data.trigger, status: "ok" },
-    { key: "cto", x: col(1), y: midY, icon: "brain", face: CORE_FACES.cto?.face, title: "Téo · CTO", sub: `${ctoLlm.length} chamadas · ${shortModel(ctoLlm[0]?.model)}`, status: statusOf(ctoLlm), step: ctoLlm[0] },
+    { key: "cto", x: col(1), y: midY, icon: "brain", face: CORE_FACES.cto?.face, title: `${CORE_FACES.cto?.persona ?? "CTO"} · CTO`, sub: `${ctoLlm.length} chamadas · ${shortModel(ctoLlm[0]?.model)}`, status: statusOf(ctoLlm), step: ctoLlm[0] },
     ...agents.map((a, i) => {
       const own = steps.filter((s) => s.agent === a);
       const tools = [...new Set(own.filter((s) => s.type === "tool").map((s) => toolLabel(s.name).toLowerCase()))];

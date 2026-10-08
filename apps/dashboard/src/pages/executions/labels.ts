@@ -118,7 +118,7 @@ const TOOL_ICON: [RegExp, string][] = [
   [/video/, "play"],
 ];
 export const toolLabel = (name: string) => TOOL_LABEL[name] ?? name.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
-/** O que o modelo decidiu fazer, em português ("chamar Nico", "pesquisou na internet"). */
+/** O que o modelo decidiu fazer, em português ("chamar Tostão", "pesquisou na internet"). */
 export function callLabel(name: string, clientAgents: any[], cap = false) {
   const m = /^(ask|consult)_(.+)$/.exec(name);
   const t = m ? `chamar ${who(agentMeta(m[2]!, clientAgents))}` : toolLabel(name).toLowerCase();

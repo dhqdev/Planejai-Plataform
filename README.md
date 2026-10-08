@@ -2,7 +2,7 @@
 
 Assistente pessoal no WhatsApp, no estilo do Instinct. Numa conversa só, ele pesquisa na internet, manda prints e gravações de tela, agenda lembretes do jeito que você fala, anota gastos sozinho, fica de olho em preços e notícias e reage às suas mensagens com emoji. Também tem um painel web (PWA) com agenda, finanças, execuções no estilo n8n e administração.
 
-Por dentro, quem trabalha é um **time de agentes de IA que conversam entre si**. O **CTO** (Téo) fala com você e lidera o time. Os especialistas trabalham em paralelo, consultam uns aos outros (`consult_*`) e anotam descobertas num quadro compartilhado. Antes de a resposta sair, o CTO revisa o trabalho e devolve o que estiver incompleto.
+Por dentro, quem trabalha é um **time de agentes de IA que conversam entre si**. O **CTO** (Maestro) fala com você e lidera o time. Os especialistas trabalham em paralelo, consultam uns aos outros (`consult_*`) e anotam descobertas num quadro compartilhado. Antes de a resposta sair, o CTO revisa o trabalho e devolve o que estiver incompleto.
 
 ---
 
@@ -57,7 +57,7 @@ Por dentro, quem trabalha é um **time de agentes de IA que conversam entre si**
 
 | Agente | O que faz | Modelo padrão (OpenRouter) |
 | --- | --- | --- |
-| CTO (Téo) | Conversa, reage, guarda memórias, delega e escreve a resposta | `deepseek/deepseek-v4.1-flash` |
+| CTO (Maestro) | Conversa, reage, guarda memórias, delega e escreve a resposta | `deepseek/deepseek-v4.1-flash` |
 | Pesquisador | Busca na web, lê páginas, tira prints, usa o navegador gravado | `xiaomi/mimo-v2.6-flash` |
 | Agenda | Lembretes e Google Agenda | `deepseek/deepseek-v4.1-flash` |
 | Financeiro | Gastos, receitas, limites, gráficos e links de pagamento | `deepseek/deepseek-v4.1-flash` |

@@ -5,13 +5,13 @@ Leia antes de mexer no orquestrador, no time (CTO, especialistas, agentes sob me
 ## O time
 | id (rota `agent:<id>`) | Apelido | Papel |
 | --- | --- | --- |
-| `cto` | Téo | conversa com a pessoa, decide, delega com `ask_*` e revisa |
-| `pesquisador` | Pipo | web, páginas, navegador, prints e gravações |
-| `agenda` | Lia | lembretes e calendário |
-| `financeiro` | Nico | lançamentos, limites, contas fixas, gráficos |
-| `comunicacao` | Bia | e-mail e Slack |
-| `produtividade` | Duda | Notion, Linear, GitHub, n8n do dono |
-| `recados` | Zeca | fala com estabelecimentos pela pessoa |
+| `cto` | Maestro | conversa com a pessoa, decide, delega com `ask_*` e revisa |
+| `pesquisador` | Lupa | web, páginas, navegador, prints e gravações |
+| `agenda` | Sininho | lembretes e calendário |
+| `financeiro` | Tostão | lançamentos, limites, contas fixas, gráficos |
+| `comunicacao` | Carta | e-mail e Slack |
+| `produtividade` | Bloco | Notion, Linear, GitHub, n8n do dono |
+| `recados` | Pombo | fala com estabelecimentos pela pessoa |
 | `c_<slug>` | da pessoa | agentes sob medida de cada cliente (rota `agent:cliente`) |
 
 A fonte é `SPECIALISTS`/`persona` em `agent/team.ts`; o painel repete os rótulos em `AGENT_LABEL` (`components.tsx`) e as carinhas em `CORE_FACES` (`faces.tsx`). Renomeou? Troque nos três e nesta tabela, e procure o nome antigo em prompts, landing e testes (`rg -n "<Nome>" apps`).
@@ -51,11 +51,11 @@ Cada item tem teste; rode `npm test` depois de mexer em `orchestrator.ts`, `runn
 - Todo texto que sai (balões, avisos, notifyUser) passa por `humanize()` (`agent/humanize.ts`): sem "-", "•" ou travessão, para soar como gente. Não reintroduza listas com marcador no prompt.
 
 ## Reunião noturna do time e proatividade
-- `improve.ts` (fila `improve.daily`, 19h no `DEFAULT_TIMEZONE`): a "reunião" do Téo (CTO) é UMA chamada barata em JSON por pessoa ativa. Ela devolve: `style` (vai para `users.style_notes` e entra no prompt do CTO), `agent_notes` (uma dica por especialista em `agent_notes.note`; o que a pessoa pediu fica em `user_note`, que a reunião nunca toca; `noteText` em `collab.ts` monta "Pedido dela: ... Aprendido nas reuniões: ..." para o prompt dele), `tabs` (libera módulos e no máximo 1 aba nova por noite) e `create` (agente do cliente com `persona`; a carinha sai de `faceFor(userId:slug)`). Assuntos somam em `user_topics` e viram agente (`client_agents`, até 3, ferramentas só de `CLIENT_AGENT_TOOLS`) quando aparecem em 2 dias diferentes. Botão "Reunião agora" em Agentes.
+- `improve.ts` (fila `improve.daily`, 19h no `DEFAULT_TIMEZONE`): a "reunião" do Maestro (CTO) é UMA chamada barata em JSON por pessoa ativa. Ela devolve: `style` (vai para `users.style_notes` e entra no prompt do CTO), `agent_notes` (uma dica por especialista em `agent_notes.note`; o que a pessoa pediu fica em `user_note`, que a reunião nunca toca; `noteText` em `collab.ts` monta "Pedido dela: ... Aprendido nas reuniões: ..." para o prompt dele), `tabs` (libera módulos e no máximo 1 aba nova por noite) e `create` (agente do cliente com `persona`; a carinha sai de `faceFor(userId:slug)`). Assuntos somam em `user_topics` e viram agente (`client_agents`, até 3, ferramentas só de `CLIENT_AGENT_TOOLS`) quando aparecem em 2 dias diferentes. Botão "Reunião agora" em Agentes.
 - **Time de cada pessoa** (`agent/tools/team.ts`): o CTO também cria agentes na conversa com `team_create_agent` (com `first_task` o agente novo já trabalha na mesma resposta), ajusta com `team_adjust_agent` (agente sob medida: instruções, foco, ferramentas, aposentar; especialista fixo: grava `agent_notes.user_note` só daquela pessoa) e lista com `team_list`. Limite `MAX_CLIENT_AGENTS` (6) por pessoa; `client_agents.origin` diz se nasceu na reunião (`melhoria`) ou a pedido (`pedido`), e a reunião noturna só aposenta, atualiza ou recria os que ela criou (`origin = 'melhoria'`): agente pedido só muda a pedido da pessoa. A `TeamRoom` de cada execução recebe o time da pessoa (fixos + sob medida), então agentes sob medida consultam e são consultados (`consult_c_<slug>`) como qualquer colega.
 - Uso por cliente (super admin, Clientes > pessoa): `GET /api/clients/:id/usage` traz execuções, custo, mensagens por dia, quem trabalhou (por agente), agentes criados, o que o time aprendeu e as abas (`PUT /api/clients/:id/tabs`).
 - `watches.ts` (fila `watch.check`, a cada 15 min): preço (Mercado Livre) e notícias (busca) são conferidos sem LLM. Duram 7 dias por padrão (1 a 30). `notify_mode` "always" (padrão) manda o resultado de cada olhada, achando ou não (texto pronto, sem IA); "changes" só fala quando algo melhora. Quando há novidade, o modelo `proactive` escreve o aviso. No fim do prazo avisa uma vez (`ended_notice`). Tela /watches cria, ajusta (PATCH), pausa, "Olhar já" (POST /api/watches/:id/check) e reativa; no WhatsApp `watch_create`/`watch_update`.
-## Recados com estabelecimentos (Zeca)
+## Recados com estabelecimentos (Pombo)
 - "Acha o petshop, pergunta se tem 18h e, se tiver, marca": o CTO chama `ask_recados`; o Recados acha o lugar (`places_nearby`) e chama `errand_start` (`agent/tools/errands.ts`), que passa por `requireConfirmation` com o texto e o que fica liberado (`allowed`). Só depois do "sim" `startErrand` (`errands.ts`) manda a mensagem (sempre se apresentando como assistente virtual da pessoa) e grava em `errands`.
 - A resposta do número entra no `ingest` antes de virar usuário (`handleErrandInbound`) e vai para a fila `errand.reply` (15 s de folga, uma por recado). `runErrandTurn` (`agent/errand-agent.ts`, rota `agent:recados`, trigger `errand` em Execuções) interpreta áudio/foto deles e roda um agente com só `errand_reply`, `errand_done` e `errand_ask_person`. Fechou com horário: o servidor cria o lembrete (1h antes) e o CTO conta à pessoa por um `[evento do sistema]`; decisão fora do liberado vira status `asking`, o CTO pergunta e a resposta dela vai com `errand_continue` (também com confirmação).
 - Travas no servidor: só fala com aquele número, `MAX_ERRAND_MESSAGES` (6) mensagens, `MAX_OPEN_ERRANDS` (3) abertos e 10 por dia, vence em 24h (padrão; `expireErrands` no job de limpeza avisa a pessoa sem IA), recusa número da própria pessoa e de quem usa o Planejai, e dinheiro ou dado pessoal sempre volta para a pessoa.

@@ -49,11 +49,11 @@ export function AgentFace({ face, size = 40, title }: { face?: Face | null; size
 
 /** Time fixo (espelho de apps/server/src/agent/team.ts) para telas que só têm o id do agente. */
 export const CORE_FACES: Record<string, { persona: string; face: Face }> = {
-  cto: { persona: "Téo", face: { color: 4, eyes: "happy", mouth: "smile", extra: "crown" } },
-  pesquisador: { persona: "Pipo", face: { color: 6, eyes: "glasses", mouth: "open", extra: "antenna" } },
-  agenda: { persona: "Lia", face: { color: 2, eyes: "happy", mouth: "smile", extra: "bow" } },
-  financeiro: { persona: "Nico", face: { color: 7, eyes: "dot", mouth: "grin", extra: "cap" } },
-  comunicacao: { persona: "Bia", face: { color: 1, eyes: "wink", mouth: "cat", extra: "headset" } },
-  produtividade: { persona: "Duda", face: { color: 0, eyes: "wide", mouth: "smile", extra: "leaf" } },
-  recados: { persona: "Zeca", face: { color: 3, eyes: "dot", mouth: "open", extra: "none" } },
+  cto: { persona: "Maestro", face: { color: 4, eyes: "happy", mouth: "smile", extra: "crown" } },
+  pesquisador: { persona: "Lupa", face: { color: 6, eyes: "glasses", mouth: "open", extra: "antenna" } },
+  agenda: { persona: "Sininho", face: { color: 2, eyes: "happy", mouth: "smile", extra: "bow" } },
+  financeiro: { persona: "Tostão", face: { color: 7, eyes: "dot", mouth: "grin", extra: "cap" } },
+  comunicacao: { persona: "Carta", face: { color: 1, eyes: "wink", mouth: "cat", extra: "headset" } },
+  produtividade: { persona: "Bloco", face: { color: 0, eyes: "wide", mouth: "smile", extra: "leaf" } },
+  recados: { persona: "Pombo", face: { color: 3, eyes: "dot", mouth: "open", extra: "none" } },
 };

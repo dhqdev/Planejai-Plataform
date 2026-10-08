@@ -1,5 +1,5 @@
 /* Landing pública (pages/Landing.tsx). Sempre clara: tinta sobre branco, com o roxo do Mochi só nos pontos
-   estratégicos (botão principal, o Téo, a barra do limite e a faixa final na noite do Mochi). Uma família (Inter), títulos grandes e apertados, muito respiro. O que se move:
+   estratégicos (botão principal, o Maestro, a barra do limite e a faixa final na noite do Mochi). Uma família (Inter), títulos grandes e apertados, muito respiro. O que se move:
    a conversa do celular (com o Mochi reagindo) e as cenas de cada recurso, só enquanto estão na tela. */
 .lp {
   --lp-bg: #ffffff;
@@ -180,7 +180,7 @@
 .lp-team-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 48px 40px; margin-top: 64px; align-items: start; }
 .lp-agent .agent-face { display: grid; place-items: center; border-radius: 50%; overflow: hidden; transition: transform .3s cubic-bezier(.34, 1.56, .64, 1); }
 .lp-agent.lead .agent-face { box-shadow: 0 0 0 3px var(--lp-sand), 0 0 0 5px var(--lp-violet); }
-/* o Téo ocupa a linha toda (rosto ao lado do texto) e os seis especialistas fecham duas linhas certas */
+/* o Maestro ocupa a linha toda (rosto ao lado do texto) e os seis especialistas fecham duas linhas certas */
 .lp-agent.lead { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 32px; align-items: start; max-width: 760px; }
 .lp-agent.lead .agent-face { grid-row: 1 / span 3; }
 .lp-agent.lead > :not(.agent-face) { grid-column: 2; }
