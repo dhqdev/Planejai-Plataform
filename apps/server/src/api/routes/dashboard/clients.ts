@@ -133,9 +133,11 @@ export function clientRoutes(api: FastifyInstance) {
     const agents = (await many("SELECT id, slug, name, persona, face, focus, uses, active, created_at FROM client_agents WHERE user_id = $1 ORDER BY created_at", [id])).map((a) =>
       withLook(a, id),
     );
-    const topics = await many("SELECT topic, round(score::numeric, 1)::float AS score, days FROM user_topics WHERE user_id = $1 ORDER BY score DESC LIMIT 10", [id]);
-    const person = await one("SELECT style_notes FROM users WHERE id = $1", [id]);
-    const notes = await many("SELECT agent, note, user_note, updated_at FROM agent_notes WHERE user_id = $1 ORDER BY agent", [id]);
+    // decisão do dono (D1): assuntos, jeito de falar e notas dos agentes são da pessoa; o painel só mostra os do próprio dono
+    const own = id === req.account.userId;
+    const topics = own ? await many("SELECT topic, round(score::numeric, 1)::float AS score, days FROM user_topics WHERE user_id = $1 ORDER BY score DESC LIMIT 10", [id]) : [];
+    const person = own ? await one("SELECT style_notes FROM users WHERE id = $1", [id]) : null;
+    const notes = own ? await many("SELECT agent, note, user_note, updated_at FROM agent_notes WHERE user_id = $1 ORDER BY agent", [id]) : [];
     const money = await one(
       `SELECT COUNT(*)::int AS transactions, (SELECT COUNT(*)::int FROM budgets WHERE user_id = $1) AS budgets,
               (SELECT COUNT(*)::int FROM reminders WHERE user_id = $1 AND status = 'scheduled') AS reminders,
@@ -144,7 +146,7 @@ export function clientRoutes(api: FastifyInstance) {
          FROM transactions WHERE user_id = $1`,
       [id],
     ).catch(() => null);
-    return { totals, daily, byAgent, tools, agents, topics, styleNotes: person?.style_notes ?? null, notes, counts: money, tabs: await getTabs(id) };
+    return { totals, daily, byAgent, tools, agents, topics, styleNotes: person?.style_notes ?? null, notes, private: !own, counts: money, tabs: await getTabs(id) };
   });
   api.put<{ Params: { id: string }; Body: { modules?: string[]; custom?: unknown[] } }>("/api/clients/:id/tabs", async (req) => {
     const cur = await getTabs(req.params.id);

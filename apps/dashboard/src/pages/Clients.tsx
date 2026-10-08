@@ -315,6 +315,9 @@ function ClientUsage({ id }: { id: string }) {
       ))}
       {!data.agents?.length && <p className="muted">Nenhum ainda. A reunião das 19h cria quando um assunto se repete.</p>}
 
+      {data.private && (
+        <p className="muted" style={{ fontSize: 12 }}>O que o time aprendeu sobre a pessoa e os assuntos dela ficam só com ela.</p>
+      )}
       {(data.styleNotes || data.notes?.length > 0) && (
         <>
           <h3 style={{ marginTop: 16 }}>O que o time aprendeu</h3>

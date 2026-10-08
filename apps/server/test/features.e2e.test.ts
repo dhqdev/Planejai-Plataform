@@ -419,4 +419,36 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(wa.status).toBe("active");
     await app.close();
   });
+
+  it("painel do dono: de cliente mostra só nome, foco e uso; instruções, notas e assuntos ficam com a pessoa (D1)", async () => {
+    const { buildServer } = await import("../src/api/server.js");
+    const app = await buildServer();
+    const cookieOf = (res: any) => String(res.headers["set-cookie"]).split(";")[0]!;
+    const sup = cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } }));
+    const cli = await db.one("INSERT INTO users (phone, name, status) VALUES ('5519966660000', 'Lia', 'active') RETURNING *");
+    const ag = await db.one(
+      "INSERT INTO client_agents (user_id, slug, name, persona, focus, instructions, tools) VALUES ($1, 'cinema', 'Cinema', 'Pipoca', 'filmes', 'Mora em Campinas, gosta do Iguatemi', '{web_search}') RETURNING id",
+      [cli.id],
+    );
+    await db.query("INSERT INTO user_topics (user_id, topic, score, days) VALUES ($1, 'cinema', 3, 2)", [cli.id]);
+    await db.query("INSERT INTO agent_notes (user_id, agent, note, user_note) VALUES ($1, 'pesquisador', 'prefere sessões à noite', 'sempre em Campinas')", [cli.id]);
+
+    const list = (await app.inject({ method: "GET", url: "/api/client-agents", headers: { cookie: sup } })).json();
+    const mine = list.find((a: any) => a.id === ag.id);
+    expect(mine).toMatchObject({ persona: "Pipoca", focus: "filmes", tools: ["web_search"], owner: "Lia" });
+    expect(mine.instructions ?? null).toBeNull();
+    expect(JSON.stringify(list)).not.toContain("Iguatemi");
+    // pausar pode; trocar as instruções do agente de outra pessoa, não
+    const edit = await app.inject({ method: "PATCH", url: `/api/client-agents/${ag.id}`, headers: { cookie: sup }, payload: { instructions: "outra coisa" } });
+    expect(edit.statusCode).toBe(403);
+    expect((await app.inject({ method: "PATCH", url: `/api/client-agents/${ag.id}`, headers: { cookie: sup }, payload: { active: false } })).json()).toEqual({ id: ag.id, active: false });
+    expect((await db.one("SELECT instructions FROM client_agents WHERE id = $1", [ag.id])).instructions).toBe("Mora em Campinas, gosta do Iguatemi");
+    // assuntos e notas da pessoa não aparecem
+    const topics = (await app.inject({ method: "GET", url: "/api/topics", headers: { cookie: sup } })).json();
+    expect(topics.some((t: any) => t.topic === "cinema")).toBe(false);
+    const usage = (await app.inject({ method: "GET", url: `/api/clients/${cli.id}/usage`, headers: { cookie: sup } })).json();
+    expect(usage).toMatchObject({ topics: [], notes: [], styleNotes: null, private: true });
+    expect(usage.agents).toMatchObject([{ persona: "Pipoca", focus: "filmes" }]);
+    await app.close();
+  });
 });

@@ -5,7 +5,7 @@ import { many, one } from "../../../db/pool.js";
 import { dailyImprovement, improveUser } from "../../../improve.js";
 import { isConnected } from "../../../integrations/registry.js";
 import { resolveModel } from "../../../llm/router.js";
-import { withLook } from "./shared.js";
+import { isUuid, withLook } from "./shared.js";
 
 /** Time de agentes como cada conta vê: o próprio time e o mapa de quem conversa com quem. */
 export function teamRoutes(base: FastifyInstance) {
@@ -74,21 +74,34 @@ export function teamAdminRoutes(api: FastifyInstance) {
   });
 
   // ---------- Agentes de cada cliente (melhoria diária) ----------
-  api.get("/api/client-agents", async () =>
-    many(`SELECT ca.*, COALESCE(u.full_name, u.name, '+' || u.phone) AS owner FROM client_agents ca JOIN users u ON u.id = ca.user_id ORDER BY ca.active DESC, ca.uses DESC`).then((rows) =>
-      rows.map((r) => withLook(r, r.user_id)),
-    ),
+  // Decisão do dono (D1): de cliente o painel mostra só nome, foco, ferramentas e uso. Instruções e assuntos
+  // (preferências, cidade, marcas) ficam com a pessoa; o dono vê os dele.
+  api.get("/api/client-agents", async (req) =>
+    many(
+      `SELECT ca.id, ca.user_id, ca.slug, ca.name, ca.persona, ca.face, ca.focus, ca.tools, ca.uses, ca.active, ca.origin, ca.created_at, ca.updated_at,
+              CASE WHEN ca.user_id = $1 THEN ca.instructions END AS instructions,
+              COALESCE(u.full_name, u.name, '+' || u.phone) AS owner
+         FROM client_agents ca JOIN users u ON u.id = ca.user_id ORDER BY ca.active DESC, ca.uses DESC`,
+      [req.account.userId ?? null],
+    ).then((rows) => rows.map((r) => withLook(r, r.user_id))),
   );
 
-  api.patch<{ Params: { id: string }; Body: { active?: boolean; instructions?: string } }>("/api/client-agents/:id", async (req) =>
-    one("UPDATE client_agents SET active = COALESCE($2, active), instructions = COALESCE($3, instructions), updated_at = now() WHERE id = $1 RETURNING *", [
+  api.patch<{ Params: { id: string }; Body: { active?: boolean; instructions?: string } }>("/api/client-agents/:id", async (req, reply) => {
+    if (!isUuid(req.params.id)) return reply.code(404).send({ error: "Agente não encontrado" });
+    // pausar/reativar vale para qualquer um; mudar as instruções, só nos agentes do próprio dono
+    const own = req.body.instructions != null ? await one("SELECT 1 FROM client_agents WHERE id = $1 AND user_id = $2", [req.params.id, req.account.userId ?? null]) : null;
+    if (req.body.instructions != null && !own) return reply.code(403).send({ error: "As instruções do agente de um cliente são só dele." });
+    const row = await one("UPDATE client_agents SET active = COALESCE($2, active), instructions = COALESCE($3, instructions), updated_at = now() WHERE id = $1 RETURNING id, active", [
       req.params.id,
       typeof req.body.active === "boolean" ? req.body.active : null,
       req.body.instructions ?? null,
-    ]),
-  );
-  api.get("/api/topics", async () =>
-    many(`SELECT t.topic, round(t.score::numeric, 1) AS score, t.days, t.last_at, COALESCE(u.full_name, u.name) AS owner FROM user_topics t JOIN users u ON u.id = t.user_id ORDER BY t.score DESC LIMIT 100`),
+    ]);
+    return row ?? reply.code(404).send({ error: "Agente não encontrado" });
+  });
+  api.get("/api/topics", async (req) =>
+    req.account.userId
+      ? many(`SELECT topic, round(score::numeric, 1) AS score, days, last_at FROM user_topics WHERE user_id = $1 ORDER BY score DESC LIMIT 100`, [req.account.userId])
+      : [],
   );
   api.post<{ Body: { user?: string } }>("/api/improve/run", async (req) => (req.body?.user ? improveUser(req.body.user) : dailyImprovement()));
 }

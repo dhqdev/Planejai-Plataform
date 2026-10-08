@@ -89,10 +89,11 @@ export function AgentsPage() {
           {clients.data && !clients.data.length && <Empty>Ainda nenhum. Quando um assunto aparece em dois dias diferentes, a melhoria das 19h cria um especialista para a pessoa.</Empty>}
 
           <div className="card-pad" style={{ borderTop: "1px solid var(--border)" }}>
-            <h3 style={{ marginTop: 0 }}>Assuntos que mais aparecem</h3>
+            <h3 style={{ marginTop: 0 }}>Seus assuntos que mais aparecem</h3>
+            <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>Os assuntos e as instruções dos agentes de cada cliente ficam só com ele.</p>
             {(topics.data ?? []).slice(0, 12).map((t) => (
-              <div key={`${t.owner}-${t.topic}`} className="line-item">
-                <span style={{ flex: 1 }}>{t.topic} <span className="muted">· {t.owner}</span></span>
+              <div key={t.topic} className="line-item">
+                <span style={{ flex: 1 }}>{t.topic}</span>
                 <span className="muted" style={{ fontSize: 12 }}>{t.days} dia(s) · {ago(t.last_at)}</span>
               </div>
             ))}
