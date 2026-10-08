@@ -8,6 +8,7 @@ const TOOL_CACHE_SECONDS: Record<string, number> = {
   web_search: 6 * 3600,
   fetch_url: 6 * 3600,
   mercadolivre_search: 3600,
+  places_nearby: 6 * 3600,
 };
 
 export function toolCacheKey(name: string, args: unknown): { key: string; ttl: number } | null {

@@ -52,6 +52,8 @@ const schema = z.object({
   N8N_API_KEY: z.string().default(""),
   /** busca web da Tavily pela stack (sem precisar colar na tela de Integrações) */
   TAVILY_API_KEY: z.string().default(""),
+  /** Google Places (lugares perto, com telefone) pela stack; sem ela a busca de lugares usa o OpenStreetMap */
+  GOOGLE_MAPS_API_KEY: z.string().default(""),
   N8N_EVENTS_URL: z.string().default(""),
   // automações que cada cliente pode ter ativas no n8n (criadas pelo assistente)
   // Login em navegador novo pede um código no WhatsApp da pessoa (desligue com LOGIN_CODE=false)

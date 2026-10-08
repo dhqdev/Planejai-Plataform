@@ -32,6 +32,8 @@ x-env: &env
   N8N_API_KEY: ""
   # Busca web do Pesquisador (Tavily, plano grátis 1.000 buscas/mês). Sem ela usa a busca paga do OpenRouter.
   TAVILY_API_KEY: ""
+  # Lugares perto com telefone (Google Places API New). Sem ela usa o OpenStreetMap, grátis.
+  GOOGLE_MAPS_API_KEY: ""
   # Automações que cada cliente pode ter (criadas pelo assistente no n8n)
   AUTOMATIONS_PER_USER: "5"
   # --- Login no painel: navegador novo recebe código de 6 dígitos no WhatsApp (OWNER_PHONES para o dono) ---

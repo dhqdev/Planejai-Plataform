@@ -500,6 +500,7 @@ const ICONS: Record<string, string> = {
   slack: "hash",
   search: "search",
   browser: "globe",
+  map: "target",
   payment: "card",
   shop: "shop",
   send: "send",

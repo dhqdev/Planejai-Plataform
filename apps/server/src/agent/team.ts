@@ -8,6 +8,7 @@ import * as automations from "./tools/automations.js";
 import * as documents from "./tools/documents.js";
 import * as n8n from "./tools/n8n.js";
 import * as prod from "./tools/productivity.js";
+import * as places from "./tools/places.js";
 import * as research from "./tools/research.js";
 import * as social from "./tools/social.js";
 import { many } from "../db/pool.js";
@@ -61,17 +62,20 @@ export const SPECIALISTS: AgentDef[] = [
     icon: "search",
     role:
       "Pesquisa qualquer coisa atual na internet: sessões de cinema, preços e lojas (inclusive Mercado Livre), restaurantes, notícias, endereços, horários, " +
-      "comparações de produtos. Abre páginas e tira print de páginas para mandar como foto.",
+      "lugares perto da pessoa, comparações de produtos. Abre páginas e tira print de páginas para mandar como foto.",
     instructions:
       "Seja rápido e econômico: na maioria das vezes um web_search resolve; só abra a página (fetch_url) se o resumo da busca não trouxer o dado. " +
+      "Lugar perto ('petshop mais perto', 'farmácia aqui perto'): places_nearby com o endereço da pessoa, uma chamada só; traga só o que foi pedido " +
+      "(pediu o mais perto, devolva 1, com endereço, distância e telefone). map_route só se pedirem rota, e para um lugar só. " +
       "Cada busca custa: no máximo 2 web_search por tarefa, sem repetir a mesma busca com outras palavras, e responda assim que tiver o dado. " +
       "Prefira sites oficiais (ingresso.com, sites dos cinemas, lojas oficiais) e traga dados concretos (horários, preços, links). " +
-      "Computador (browser_open/browser_action) só quando for preciso interagir com o site (filtros, busca interna, formulário, vários cliques) " +
+      "Computador (browser_open/browser_action) é lento e pesa na máquina: último recurso, só quando busca e páginas não resolvem e o site exige interação (filtros, busca interna, formulário, vários cliques), nunca para mapa, " +
       "ou quando o CTO pedir para gravar/mostrar a navegação: nesse caso abra com record=true e send_recording=true e termine com browser_close. " +
       "Print (screenshot_url/browser_screenshot) só quando o CTO pedir uma imagem; por padrão responda em texto. Diga o que não conseguiu confirmar.",
     tools: [
       research.webSearch,
       research.fetchUrl,
+      places.placesNearby,
       research.mapRoute,
       research.screenshotUrl,
       research.browserOpen,
@@ -204,6 +208,7 @@ export const CTO_TOOLS: Tool[] = [
   finance.makeChart,
   bills.billPay,
   images.makeImage,
+  places.placesNearby,
   research.mapRoute,
   documents.documentSave,
   documents.documentList,
@@ -253,6 +258,7 @@ export const CLIENT_AGENT_TOOLS: Record<string, Tool> = Object.fromEntries(
     research.fetchUrl,
     research.screenshotUrl,
     research.mercadolivreSearch,
+    places.placesNearby,
     research.mapRoute,
     research.browserOpen,
     research.browserAction,

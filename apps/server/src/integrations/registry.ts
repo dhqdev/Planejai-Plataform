@@ -218,6 +218,37 @@ export const INTEGRATIONS: IntegrationDef[] = [
     },
   },
   {
+    id: "google_maps",
+    name: "Google Maps (Places)",
+    description: "Acha lugares perto da pessoa (petshop, farmácia, mercado) com telefone e se está aberto, em segundos e sem abrir navegador. Sem ela, usa o OpenStreetMap, que é grátis mas tem menos telefones.",
+    category: "Pesquisa",
+    icon: "map",
+    docsUrl: "https://console.cloud.google.com/google/maps-apis/credentials",
+    fields: [
+      {
+        key: "api_key",
+        label: "API key",
+        type: "password",
+        required: true,
+        placeholder: "AIza...",
+        help: "No Google Cloud, ative a Places API (New) e crie uma chave em Credenciais (restrinja à Places API). Tem cota mensal grátis.",
+      },
+    ],
+    envFallback: () => (config.GOOGLE_MAPS_API_KEY ? { api_key: config.GOOGLE_MAPS_API_KEY } : null),
+    test: async (c) => {
+      const j = await okJson(
+        await fetch("https://places.googleapis.com/v1/places:searchText", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Goog-Api-Key": c.api_key!, "X-Goog-FieldMask": "places.displayName" },
+          body: JSON.stringify({ textQuery: "farmácia em Campinas", maxResultCount: 1, languageCode: "pt-BR" }),
+          signal: timed(),
+        }),
+        "Google Maps",
+      );
+      return `Busca de lugares funcionando (${j.places?.[0]?.displayName?.text ?? "ok"})`;
+    },
+  },
+  {
     id: "browserless",
     name: "Navegador (Browserless)",
     description: "Navegador dos agentes: prints de páginas e pesquisa navegando no site, com gravação da tela em vídeo. Já vem na stack.",

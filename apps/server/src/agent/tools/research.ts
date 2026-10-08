@@ -140,6 +140,9 @@ export const screenshotUrl = defineTool<{ url: string; full_page?: boolean; capt
 
 // ---------- Mapas (rota com print do Google Maps) ----------
 
+/** Prints de mapa por resposta: cada um abre um navegador (~25 s); a partir daí vai só o link. */
+export const MAX_MAP_PRINTS = 2;
+
 const TRAVEL = { onibus: "transit", transporte: "transit", carro: "driving", pe: "walking", bike: "bicycling" } as const;
 
 /** Link do Google Maps: rota (com origem) ou o lugar (só destino). */
@@ -164,6 +167,10 @@ export const mapRoute = defineTool<{ destination: string; origin?: string; mode?
   ),
   async run(args, ctx) {
     const url = mapsUrl(args.destination, args.origin, args.mode ?? "onibus");
+    if (ctx.room && ctx.room.usage.mapPrints >= MAX_MAP_PRINTS) {
+      return { link: url, note: `Já saíram ${MAX_MAP_PRINTS} mapas nesta resposta: mande só este link, sem print.` };
+    }
+    if (ctx.room) ctx.room.usage.mapPrints++;
     let b: BrowserSession | null = null;
     try {
       b = await BrowserSession.open(false);
@@ -199,6 +206,21 @@ export const mapRoute = defineTool<{ destination: string; origin?: string; mode?
 });
 
 // ---------- Computador (navegador controlado pelo agente, com gravação) ----------
+
+/** Travas do navegador por resposta: abrir e clicar é lento e pesa na máquina. */
+export const MAX_BROWSER_OPENS = 2;
+export const MAX_BROWSER_ACTIONS = 10;
+
+/** Google Maps no navegador é lento e pesado: para lugar perto e rota há ferramentas próprias. */
+export function isMapsUrl(raw: string) {
+  try {
+    const u = new URL(raw);
+    if (u.hostname === "maps.app.goo.gl" || /^maps\.google\./.test(u.hostname)) return true;
+    return /(^|\.)google\.[a-z.]+$/.test(u.hostname) && u.pathname.startsWith("/maps");
+  } catch {
+    return false;
+  }
+}
 
 async function saveMediaFile(ctx: ToolContext, kind: string, mimetype: string, data: Buffer, fileName: string) {
   const row = await one<{ id: string }>(
@@ -237,11 +259,18 @@ export async function finishBrowser(ctx: ToolContext, opts: { send?: boolean; ca
 export const browserOpen = defineTool<{ url: string; record?: boolean; send_recording?: boolean }>({
   name: "browser_open",
   description:
-    "Abre um navegador de verdade (computador) numa URL para navegar como uma pessoa: clicar, preencher, rolar. " +
-    "Use quando a pesquisa precisa interagir com o site (filtros, formulários, login público, vários cliques) ou quando a pessoa pede para ver/gravar. " +
+    "Abre um navegador de verdade (computador) numa URL para navegar como uma pessoa: clicar, preencher, rolar. É LENTO (segundos por clique) e pesa na máquina: último recurso. " +
+    "Só use quando web_search/fetch_url/places_nearby não resolvem e o site exige interação (filtros, formulário, vários cliques), ou quando a pessoa pede para ver/gravar. Nunca para Google Maps. " +
     "record=true grava a tela em vídeo; send_recording=true manda o vídeo para a pessoa no fim. Retorna o texto da página e os elementos clicáveis numerados.",
   parameters: obj({ url: { type: "string" }, record: { type: "boolean" }, send_recording: { type: "boolean" } }, ["url"]),
   async run(args, ctx) {
+    if (isMapsUrl(args.url) && !args.record && !args.send_recording) {
+      return { error: "Não abra o Google Maps no navegador: use places_nearby para achar lugares perto (com telefone e distância) e map_route para rota." };
+    }
+    if (ctx.room.usage.browserOpens >= MAX_BROWSER_OPENS) {
+      return { error: `O navegador já foi aberto ${MAX_BROWSER_OPENS} vezes nesta tarefa. Responda com o que já tem.` };
+    }
+    ctx.room.usage.browserOpens++;
     if (ctx.room.browser) await finishBrowser(ctx, { send: false });
     const b = await BrowserSession.open(Boolean(args.record || args.send_recording));
     b.sendRecording = Boolean(args.send_recording);
@@ -270,6 +299,10 @@ export const browserAction = defineTool<{ action: string; ref?: number; text?: s
   async run(args, ctx) {
     const b = ctx.room.browser;
     if (!b) return { error: "Abra o navegador primeiro com browser_open" };
+    if (ctx.room.usage.browserActions >= MAX_BROWSER_ACTIONS && !b.sendRecording) {
+      return { error: `Já foram ${MAX_BROWSER_ACTIONS} ações no navegador nesta tarefa. Feche (browser_close) e responda com o que já tem.` };
+    }
+    ctx.room.usage.browserActions++;
     await b.act(args);
     return snapshotText(await b.snapshot());
   },

@@ -4,8 +4,11 @@ import type { AgentSettings } from "../settings.js";
 const WRAP_UP_MS = 45_000;
 
 export class GuardTimeout extends Error {
-  constructor(readonly minutes: number) {
-    super(`Tempo máximo de execução atingido (${minutes} min)`);
+  constructor(
+    readonly minutes: number,
+    message = `Tempo máximo de execução atingido (${minutes} min)`,
+  ) {
+    super(message);
   }
 }
 
@@ -18,21 +21,50 @@ export class Guard {
   readonly deadline: number;
   readonly minutes: number;
   readonly maxToolCalls: number;
-  toolCalls = 0;
+  /** ações contadas para a execução inteira (o prazo de um especialista divide o mesmo contador) */
+  private counter: { n: number };
   private controller = new AbortController();
   private timer: NodeJS.Timeout;
 
-  constructor(opts: { maxExecutionMinutes: number; maxToolCalls: number }) {
+  constructor(opts: { maxExecutionMinutes: number; maxToolCalls: number; deadline?: number; counter?: { n: number }; reason?: string }) {
     this.minutes = opts.maxExecutionMinutes;
     this.maxToolCalls = opts.maxToolCalls;
-    const ms = Math.max(1000, opts.maxExecutionMinutes * 60_000);
+    this.counter = opts.counter ?? { n: 0 };
+    const ms = Math.max(1000, opts.deadline != null ? opts.deadline - Date.now() : opts.maxExecutionMinutes * 60_000);
     this.deadline = Date.now() + ms;
-    this.timer = setTimeout(() => this.controller.abort(new GuardTimeout(this.minutes)), ms);
+    this.timer = setTimeout(() => this.controller.abort(new GuardTimeout(this.minutes, opts.reason)), ms);
     this.timer.unref();
   }
 
   static fromSettings(s: AgentSettings) {
     return new Guard({ maxExecutionMinutes: s.maxExecutionMinutes, maxToolCalls: s.maxToolCalls });
+  }
+
+  get toolCalls() {
+    return this.counter.n;
+  }
+  set toolCalls(n: number) {
+    this.counter.n = n;
+  }
+
+  /**
+   * Prazo de um especialista: termina `reserveMs` antes do prazo da execução, para quem chamou ainda ter tempo
+   * de ler o relatório e responder. Cai junto se a execução inteira cair.
+   */
+  sub(reserveMs: number) {
+    const left = this.remainingMs;
+    const deadline = Date.now() + Math.max(Math.min(left, 15_000), left - reserveMs);
+    const child = new Guard({
+      maxExecutionMinutes: this.minutes,
+      maxToolCalls: this.maxToolCalls,
+      deadline,
+      counter: this.counter,
+      reason: "Tempo do especialista acabou: devolveu o que tinha",
+    });
+    const onAbort = () => child.controller.abort(this.signal.reason);
+    if (this.expired) onAbort();
+    else this.signal.addEventListener("abort", onAbort, { once: true });
+    return child;
   }
 
   get signal() {

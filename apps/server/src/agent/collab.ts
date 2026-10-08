@@ -10,6 +10,25 @@ import { defineTool, obj, type Tool, type ToolContext } from "./tools/types.js";
 
 /** Profundidade máxima de conversa: CTO -> especialista -> colega. */
 const MAX_CHAIN = 3;
+/** Quanto antes do prazo da execução o especialista para, para o CTO ler e responder (modelo lento leva ~1 min por passo). */
+const ASK_RESERVE_MS = 90_000;
+/** Mesma folga para quem consultou um colega. */
+const CONSULT_RESERVE_MS = 45_000;
+
+/**
+ * O especialista parou sem escrever o relatório (tempo ou passos acabaram): devolve o que as ferramentas
+ * dele já trouxeram, encurtado, para o CTO responder com isso em vez de "não deu".
+ */
+export function partialReport(messages: ChatMessage[], timedOut?: boolean) {
+  const found = messages
+    .filter((m) => m.role === "tool" && typeof m.content === "string" && !/^\{"error"/.test(m.content))
+    .slice(-4)
+    .map((m) => String(m.content).slice(0, 700));
+  const why = timedOut ? "Parei por falta de tempo" : "Parei sem fechar o relatório";
+  return found.length
+    ? `${why}. O que já levantei (dados brutos das ferramentas, confira antes de usar):\n${found.join("\n---\n")}`
+    : `${why} e não consegui levantar nada útil.`;
+}
 
 /**
  * Sala do time durante uma execução. É aqui que os agentes conversam:
@@ -30,6 +49,8 @@ export class TeamRoom {
   done = new Set<string>();
   /** navegador ("computador") aberto nesta execução, compartilhado pelo time */
   browser?: BrowserSession;
+  /** quanto do navegador esta execução já usou (cada abertura e clique custa segundos e memória da máquina) */
+  usage = { browserOpens: 0, browserActions: 0, mapPrints: 0 };
   private locks = new Map<string, Promise<unknown>>();
 
   constructor(team: AgentDef[] = SPECIALISTS) {
@@ -107,9 +128,15 @@ export function delegationTool(def: AgentDef): Tool<{ message: string }> {
         thread.push({ role: "user", content: `[CTO] ${args.message}${original}${ctx.room.boardText()}` });
         ctx.room.edges.push({ from: ctx.agent, to: def.id });
         if (def.clientAgentId) void query("UPDATE client_agents SET uses = uses + 1 WHERE id = $1", [def.clientAgentId]).catch(() => {});
-        const r = await runToolLoop({ agent: def.id, task: def.task ?? `agent:${def.id}`, ctx: { ...ctx, agent: def.id, callChain: chain }, tools: all, maxSteps: 7, messages: thread });
-        ctx.room.threads.set(def.id, r.messages);
-        return { report: r.text || "(o especialista não retornou relatório)" };
+        // prazo próprio: o especialista para antes e o CTO ainda tem tempo de responder com o que voltou
+        const guard = ctx.guard?.sub(ASK_RESERVE_MS);
+        try {
+          const r = await runToolLoop({ agent: def.id, task: def.task ?? `agent:${def.id}`, ctx: { ...ctx, guard, agent: def.id, callChain: chain }, tools: all, maxSteps: 7, messages: thread });
+          ctx.room.threads.set(def.id, r.messages);
+          return { report: r.text || partialReport(r.messages, r.timedOut) };
+        } finally {
+          guard?.dispose();
+        }
       });
     },
   });
@@ -142,16 +169,21 @@ export function consultTool(def: AgentDef): Tool<{ question: string }> {
         if (def.clientAgentId) void query("UPDATE client_agents SET uses = uses + 1 WHERE id = $1", [def.clientAgentId]).catch(() => {});
         const thread = ctx.room.threads.get(key) ?? [{ role: "system", content: await systemFor(def, ctx, own) } as ChatMessage];
         thread.push({ role: "user", content: `[${ctx.room.nameOf(ctx.agent)}, seu colega de time, pergunta] ${args.question}${ctx.room.boardText()}` });
-        const r = await runToolLoop({
-          agent: def.id,
-          task: def.task ?? `agent:${def.id}`,
-          ctx: { ...ctx, agent: def.id, callChain: chain },
-          tools: all,
-          maxSteps: 5,
-          messages: thread,
-        });
-        ctx.room.threads.set(key, r.messages);
-        return { answer: r.text || "(sem resposta)" };
+        const guard = ctx.guard?.sub(CONSULT_RESERVE_MS);
+        try {
+          const r = await runToolLoop({
+            agent: def.id,
+            task: def.task ?? `agent:${def.id}`,
+            ctx: { ...ctx, guard, agent: def.id, callChain: chain },
+            tools: all,
+            maxSteps: 5,
+            messages: thread,
+          });
+          ctx.room.threads.set(key, r.messages);
+          return { answer: r.text || partialReport(r.messages, r.timedOut) };
+        } finally {
+          guard?.dispose();
+        }
       });
     },
   });
