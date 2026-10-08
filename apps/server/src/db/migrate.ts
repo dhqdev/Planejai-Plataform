@@ -1,12 +1,13 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { pool } from "./pool.js";
+import { pool, waitLonger } from "./pool.js";
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), "migrations");
 
 export async function migrate(log: (msg: string) => void = console.log) {
   const client = await pool.connect();
+  const restore = await waitLonger(client);
   try {
     await client.query("SELECT pg_advisory_lock(727274)");
     await client.query(
@@ -29,6 +30,7 @@ export async function migrate(log: (msg: string) => void = console.log) {
     }
   } finally {
     await client.query("SELECT pg_advisory_unlock(727274)").catch(() => {});
+    await restore();
     client.release();
   }
 }

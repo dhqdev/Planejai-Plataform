@@ -17,6 +17,7 @@ import { registerDashboardRoutes } from "./routes/dashboard.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { registerInternalRoutes } from "./routes/internal.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
+import { registerSecurity, trustProxySetting } from "./security.js";
 import { DEVICE_COOKIE, isTrustedDevice, startChallenge, trustDevice, verifyChallenge } from "../logincode.js";
 import { notify } from "../notifications.js";
 import { QUEUES, getBoss } from "../queue/boss.js";
@@ -61,9 +62,11 @@ export async function buildServer() {
   const app = Fastify({
     logger: { level: config.LOG_LEVEL },
     bodyLimit: 25 * 1024 * 1024,
-    trustProxy: true,
+    trustProxy: trustProxySetting(),
   });
   await app.register(cookie);
+  const publicDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "public");
+  registerSecurity(app, publicDir);
 
   // Guarda o corpo bruto para validar assinaturas de webhook (Meta X-Hub-Signature-256)
   app.removeContentTypeParser("application/json");
@@ -258,7 +261,6 @@ export async function buildServer() {
   await registerNotificationRoutes(app);
 
   // Dashboard (SPA) servido pelo mesmo container
-  const publicDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "public");
   if (existsSync(publicDir)) {
     await app.register(fastifyStatic, {
       root: publicDir,

@@ -1,6 +1,6 @@
 import { getChannel } from "../channels/index.js";
 import type { Channel } from "../channels/types.js";
-import { many, one, pool, query } from "../db/pool.js";
+import { many, one, pool, query, waitLonger } from "../db/pool.js";
 import { INTEGRATIONS, isConnected } from "../integrations/registry.js";
 import { chatCompletion, LlmError } from "../llm/openrouter.js";
 import { resolveModel } from "../llm/router.js";
@@ -94,6 +94,7 @@ export async function processConversation(
 ): Promise<ProcessResult> {
   // Um processamento por conversa por vez
   const lock = await pool.connect();
+  const restore = await waitLonger(lock).catch(() => null);
   let locked = false;
   try {
     if (opts.wait === false) {
@@ -107,6 +108,7 @@ export async function processConversation(
     return await processLocked(conversationId, opts);
   } finally {
     if (locked) await lock.query("SELECT pg_advisory_unlock(hashtext($1))", [conversationId]).catch(() => {});
+    await restore?.();
     lock.release();
   }
 }

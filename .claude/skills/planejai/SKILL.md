@@ -55,6 +55,8 @@ apps/server/src/
   integrations/mercadolivre.ts  OAuth do ML: o refresh_token GIRA a cada uso e é salvo de novo; precisa do escopo offline_access
   reminders.ts             lembretes (pg-boss + cron-parser), o CTO escreve a mensagem na hora; o único que disparou é apagado com as memórias criadas junto; reminderOccurrences() expande o cron para a Agenda
   api/server.ts            login (dono ou conta), cadastro, requireAuth/requireSuper
+  api/security.ts          cabeçalhos de segurança (CSP no HTML com hash do script inline, nosniff, DENY), erro do Postgres
+                           nunca vai ao navegador (id malformado = 404) e TRUST_PROXY (padrão: 1 salto vindo da rede interna)
   api/routes/              webhooks.ts e dashboard.ts (REST do painel: bloco com escopo + bloco só super admin)
   db/migrations/*.sql      migrações numeradas, aplicadas no boot
 apps/dashboard/src/        React + Vite; App.tsx monta o menu por papel (SUPER_NAV / ADMIN_NAV) e, no celular, a barra de abas

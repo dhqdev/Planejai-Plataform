@@ -11,6 +11,11 @@ const schema = z.object({
   PORT: z.coerce.number().default(3000),
   PUBLIC_URL: z.string().default("http://localhost:3000"),
   LOG_LEVEL: z.string().default("info"),
+  // Em quem confiar no X-Forwarded-For: número de proxies na frente (padrão 1 = o Traefik),
+  // ou faixas/IPs separados por vírgula. "true" confiaria em qualquer cabeçalho (burla o limite de login).
+  TRUST_PROXY: z.string().default("1"),
+  // Tempo máximo (ms) de uma consulta no banco; a que travar solta a conexão em vez de prender o pool
+  DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(30_000),
 
   DATABASE_URL: z.string().min(1, "DATABASE_URL é obrigatório"),
 

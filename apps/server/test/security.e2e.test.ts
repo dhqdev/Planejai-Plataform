@@ -50,6 +50,18 @@ describe("integrações do dono", () => {
   });
 });
 
+describe("proxy confiável", () => {
+  it("só aceita X-Forwarded-For vindo da rede interna, e de um salto", async () => {
+    const { trustProxySetting } = await import("../src/api/security.js");
+    const trust = trustProxySetting("1") as (addr: string, i: number) => boolean;
+    expect(trust("10.0.1.7", 0)).toBe(true);
+    expect(trust("::ffff:172.18.0.3", 0)).toBe(true);
+    expect(trust("8.8.8.8", 0)).toBe(false);
+    expect(trust("10.0.1.7", 1)).toBe(false);
+    expect(trustProxySetting("10.0.1.0/24, 10.0.2.5")).toEqual(["10.0.1.0/24", "10.0.2.5"]);
+  });
+});
+
 describe("logs sem dado sensível", () => {
   it("mascara CPF, cartão e senha", async () => {
     const { maskPersonal } = await import("../src/agent/trace.js");
@@ -93,6 +105,25 @@ describe.skipIf(!enabled)("segurança e privacidade (e2e)", () => {
     } finally {
       config.INTERNAL_API_KEY = before;
     }
+  });
+
+  it("id malformado vira 404 sem detalhe do banco, e toda resposta leva cabeçalhos de segurança", async () => {
+    const owner = cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } }));
+    for (const [method, url] of [
+      ["DELETE", "/api/finance/abc"],
+      ["DELETE", "/api/reminders/abc"],
+      ["DELETE", "/api/bills/abc"],
+      ["DELETE", "/api/memories/abc"],
+      ["DELETE", "/api/invites/abc"],
+      ["PATCH", "/api/clients/abc"],
+    ]) {
+      const r = await app.inject({ method, url, headers: { cookie: owner }, payload: {} });
+      expect(r.statusCode, url).toBe(404);
+      expect(r.body, url).not.toMatch(/uuid|syntax|22P02/);
+    }
+    const h = (await app.inject({ method: "GET", url: "/health" })).headers;
+    expect(h["x-content-type-options"]).toBe("nosniff");
+    expect(h["x-frame-options"]).toBe("DENY");
   });
 
   it("login trava depois de várias senhas erradas", async () => {
