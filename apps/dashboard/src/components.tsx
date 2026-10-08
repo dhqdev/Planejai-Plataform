@@ -41,6 +41,8 @@ export function Status({ status }: { status: string }) {
 }
 
 const isPhone = () => matchMedia("(max-width: 767px)").matches;
+/** Campo que abre teclado ou a roleta do sistema (select também, no iOS). */
+const isEditable = (el: Element | null) => !!el?.matches("input:not([type=checkbox]):not([type=radio]):not([type=button]), textarea, select, [contenteditable]");
 const lessMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const FOCUSABLE = "a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])";
 /** Janelas abertas, da mais antiga para a mais nova: Esc fecha só a de cima. */
@@ -195,21 +197,70 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
     };
   }, [close]);
 
-  // celular: com o teclado aberto, a folha sobe junto e o campo não fica escondido
+  // celular: o fundo da janela acompanha a área visível de verdade (visualViewport). Com teclado ou a roleta
+  // do select abertos a folha fica logo acima deles; quando fecham, ela volta para o pé da tela.
+  // O iOS às vezes não avisa que o teclado fechou (comum ao sair de um campo para um select), então
+  // também mede de novo ao trocar de campo e desfaz a rolagem que ele deixa na página.
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv) return;
+    const bg = sheet.current?.parentElement;
+    if (!vv || !bg) return;
+    let raf = 0;
+    const timers: number[] = [];
     const fit = () => {
+      raf = 0;
       const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      sheet.current?.parentElement?.style.setProperty("--kb", `${kb}px`);
-      sheet.current?.parentElement?.style.setProperty("--vvh", `${vv.height}px`);
+      bg.style.setProperty("--vvtop", `${vv.offsetTop}px`);
+      bg.style.setProperty("--vvh", `${vv.height}px`);
+      bg.classList.toggle("kb-open", kb > 120);
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(fit);
+    };
+    const later = (...ms: number[]) => {
+      for (const t of ms) timers.push(window.setTimeout(schedule, t));
+    };
+    // campo focado fica visível dentro da folha (o teclado tira metade da altura)
+    const reveal = (field: Element) => {
+      const body = sheet.current?.querySelector<HTMLElement>(".modal-body");
+      if (!body || !body.contains(field)) return;
+      const f = field.getBoundingClientRect();
+      const b = body.getBoundingClientRect();
+      if (f.bottom > b.bottom - 12) body.scrollTop += f.bottom - b.bottom + 12;
+      else if (f.top < b.top + 12) body.scrollTop -= b.top + 12 - f.top;
+    };
+    const onFocusIn = (e: FocusEvent) => {
+      later(50, 300);
+      const t = e.target as Element;
+      if (isEditable(t)) timers.push(window.setTimeout(() => reveal(t), 350));
+    };
+    const onFocusOut = () => {
+      later(50, 300, 700);
+      timers.push(
+        window.setTimeout(() => {
+          // saiu de um campo e não entrou em outro: teclado fechou, página volta para o lugar
+          if (!isEditable(document.activeElement) && (window.scrollY || vv.offsetTop)) window.scrollTo(0, 0);
+          schedule();
+        }, 120),
+      );
     };
     fit();
-    vv.addEventListener("resize", fit);
-    vv.addEventListener("scroll", fit);
+    vv.addEventListener("resize", schedule);
+    vv.addEventListener("scroll", schedule);
+    window.addEventListener("resize", schedule);
+    bg.addEventListener("focusin", onFocusIn);
+    bg.addEventListener("focusout", onFocusOut);
+    const onChange = () => later(50, 400);
+    bg.addEventListener("change", onChange);
     return () => {
-      vv.removeEventListener("resize", fit);
-      vv.removeEventListener("scroll", fit);
+      cancelAnimationFrame(raf);
+      timers.forEach(clearTimeout);
+      vv.removeEventListener("resize", schedule);
+      vv.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      bg.removeEventListener("focusin", onFocusIn);
+      bg.removeEventListener("focusout", onFocusOut);
+      bg.removeEventListener("change", onChange);
     };
   }, []);
 

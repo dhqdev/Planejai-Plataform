@@ -237,7 +237,9 @@ table.table { width: 100%; border-collapse: collapse; }
 .modal-head:active { cursor: grabbing; }
 .modal-head strong { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .modal-head .ico, .modal-head .icon-btn { flex-shrink: 0; }
-.modal-body { padding: 16px; overflow: auto; overscroll-behavior: contain; }
+/* min-height 0: sem isso a folha não encolhe o miolo e o conteúdo some embaixo do rodapé (Safari) */
+.modal-body { padding: 16px; overflow: auto; overscroll-behavior: contain; flex: 1 1 auto; min-height: 0; scroll-padding: 16px; }
+.modal-head, .modal-foot, .sheet-handle { flex-shrink: 0; }
 .modal-body:empty { display: none; }
 .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
 .confirm .modal-head { border-bottom: none; padding-bottom: 4px; }
@@ -512,7 +514,8 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
   /* puxou para cima além do limite: não abre fresta embaixo */
   .modal::after { content: ""; position: absolute; left: -1px; right: -1px; top: 100%; height: 50vh; background: var(--panel); }
   .sheet-handle { display: block; }
-  .modal-head { border-bottom: none; padding-top: 8px; }
+  .modal-head { border-bottom: none; padding-top: 8px; padding-bottom: 4px; }
+  .modal-body .kv { font-size: 15px; gap: 10px 16px; }
   .confirm .modal-head { padding-bottom: 14px; }
   .modal-foot { position: sticky; bottom: 0; background: var(--panel); }
   .modal-foot .btn { flex: 1; min-height: 44px; }
@@ -673,10 +676,17 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 
   .more-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   .more-tile { border-radius: 18px; font-size: 12.5px; }
-  .modal.more-sheet { min-height: 70dvh; }
-  /* teclado aberto: a folha fica acima dele */
-  .modal-bg { padding-bottom: var(--kb, 0px); }
+  /* o fundo ocupa só a área visível (o Modal mede o visualViewport): com teclado ou roleta do select
+     abertos a folha fica logo acima deles e volta para o pé da tela quando fecham */
+  .modal-bg { top: var(--vvtop, 0px); bottom: auto; height: var(--vvh, 100dvh); }
   .modal, .modal.wide { max-height: min(92dvh, calc(var(--vvh, 100dvh) - 12px)); }
+  .modal.more-sheet { min-height: min(70dvh, calc(var(--vvh, 100dvh) - 12px)); }
+  /* teclado aberto: sobra pouca altura, então a moldura encolhe e o espaço vai para os campos */
+  .kb-open .sheet-handle { display: none; }
+  .kb-open .modal { border-radius: 16px 16px 0 0; padding-bottom: 0; }
+  .kb-open .modal-head { padding-top: 10px; padding-bottom: 6px; }
+  .kb-open .modal-foot { padding-top: 8px; padding-bottom: 8px; }
+  .modal-body .select { text-overflow: ellipsis; }
 }
 
 /* App instalado ou tela de toque: segurar o dedo não seleciona texto nem abre o menu do sistema.
