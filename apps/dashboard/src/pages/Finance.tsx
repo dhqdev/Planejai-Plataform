@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api, brl, day } from "../api";
-import { CATEGORY_COLORS, Donut, Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
+import { CATEGORY_COLORS, Donut, Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
@@ -28,6 +28,10 @@ const CAT_ICON: Record<string, string> = {
   Investimentos: "trend",
   Outros: "hash",
 };
+/** Valor curto para onde o espaço é fixo (miolo da rosca): R$ 1,2 mi em vez de R$ 1.234.567,89. */
+const brlShort = (v: number) => (Math.abs(v) < 100000 ? brl(v) : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", notation: "compact", maximumFractionDigits: 1 }).format(v));
+/** Valor que nunca é cortado: acima de R$ 99.999,99 ganha a classe "long" (fonte menor). */
+const longMoney = (v: number) => (brl(v).length > 12 ? " long" : "");
 const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const monthName = (m: string) => MONTHS[Number(m.slice(5)) - 1] ?? m;
 
@@ -113,7 +117,7 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
           <div className="fin-people">
             <button className={!user ? "active" : ""} onClick={() => setUser("")}>Todos</button>
             {(people.data ?? []).map((p) => (
-              <button key={p.id} className={user === p.id ? "active" : ""} onClick={() => { haptic(5); setUser(p.id); }}>{(p.name ?? `+${p.phone}`).split(" ")[0]}</button>
+              <button key={p.id} className={user === p.id ? "active" : ""} title={p.name ?? undefined} onClick={() => { haptic(5); setUser(p.id); }}>{(p.name || `+${p.phone}`).trim().split(" ")[0]}</button>
             ))}
           </div>
         )}
@@ -125,13 +129,13 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
       {!data ? <Loading /> : tab === "overview" ? (
         <>
           <div className="card fin-kpis">
-            <div><small>Entradas</small><strong className="pos">{brl(income)}</strong><span>no período</span></div>
-            <div><small>Saídas</small><strong className="neg">{brl(expenses)}</strong><span>{income ? `${Math.round((expenses / income) * 100)}% das entradas` : diff != null ? `${diff > 0 ? "+" : "−"}${brl(Math.abs(diff))} vs ${monthName(shift(month, -1)).slice(0, 3)}` : "no período"}</span></div>
-            <div><small>Saldo</small><strong className={income - expenses < 0 ? "neg" : ""}>{brl(income - expenses)}</strong><span>{income - expenses < 0 ? "negativo" : "positivo"}</span></div>
+            <div><small>Entradas</small><strong className={`pos${longMoney(income)}`}>{brl(income)}</strong><span>no período</span></div>
+            <div><small>Saídas</small><strong className={`neg${longMoney(expenses)}`}>{brl(expenses)}</strong><span>{income ? `${Math.round((expenses / income) * 100)}% das entradas` : diff != null ? `${diff > 0 ? "+" : "−"}${brl(Math.abs(diff))} vs ${monthName(shift(month, -1)).slice(0, 3)}` : "no período"}</span></div>
+            <div><small>Saldo</small><strong className={`${income - expenses < 0 ? "neg" : ""}${longMoney(income - expenses)}`}>{brl(income - expenses)}</strong><span>{income - expenses < 0 ? "negativo" : "positivo"}</span></div>
             {totalBudget ? (
-              <div><small>Limite do mês</small><strong className={totalBudget.spent > totalBudget.limit ? "neg" : ""}>{brl(Math.max(0, totalBudget.limit - totalBudget.spent))}</strong><span>restante de {brl(totalBudget.limit)}</span></div>
+              <div><small>Limite do mês</small><strong className={`${totalBudget.spent > totalBudget.limit ? "neg" : ""}${longMoney(totalBudget.limit - totalBudget.spent)}`}>{brl(Math.max(0, totalBudget.limit - totalBudget.spent))}</strong><span>restante de {brl(totalBudget.limit)}</span></div>
             ) : (
-              <div><small>Média por dia</small><strong>{brl(expenses / Math.max(1, elapsed))}</strong><span>{data.totals.count} lançamentos</span></div>
+              <div><small>Média por dia</small><strong className={longMoney(expenses / Math.max(1, elapsed))}>{brl(expenses / Math.max(1, elapsed))}</strong><span>{Number(data.totals?.count ?? 0)} {Number(data.totals?.count ?? 0) === 1 ? "lançamento" : "lançamentos"}</span></div>
             )}
           </div>
 
@@ -160,7 +164,8 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
 
               <div className="card card-pad fin-trend">
                 <div className="fin-card-head"><h3>Últimos meses</h3></div>
-                <div className="fin-months">
+                {!months.length && <p className="muted" style={{ fontSize: 13, margin: "4px 0 0" }}>O histórico aparece aqui depois do primeiro mês com gastos.</p>}
+                <div className="fin-months" style={months.length ? undefined : { display: "none" }}>
                   {months.map((m: any) => (
                     <button key={m.month} className={m.month === month ? "active" : ""} onClick={() => { haptic(5); setCat(null); setMonth(m.month); }} title={`${m.month}: ${brl(m.expenses)}`}>
                       <span className="fin-month-bar"><i style={{ height: `${(Number(m.expenses) / maxMonth) * 100}%` }} /></span>
@@ -186,14 +191,14 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                 </div>
                 {cats.length ? (
                   <div className="fin-donut">
-                    <Donut items={cats} size={150} center={<div><small className="muted">Total</small><div style={{ fontWeight: 700, fontSize: 13 }}>{brl(expenses)}</div></div>} />
+                    <Donut items={cats} size={150} center={<div><small className="muted">Total</small><div style={{ fontWeight: 700, fontSize: 13 }} title={brl(expenses)}>{brlShort(expenses)}</div></div>} />
                     <div className="fin-legend">
                       {cats.map((c: any, i: number) => {
                         const b = budgetOf.get(c.label);
                         return (
                           <button key={c.label} style={{ ["--c" as any]: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} onClick={() => { haptic(5); setCat(c.label); setTab("list"); }}>
                             <span className="dot" />
-                            <span className="name">{c.label}</span>
+                            <span className="name" title={c.label}>{c.label}</span>
                             <span className="muted val">{brl(c.value)}</span>
                             <strong>{expenses ? Math.round((c.value / expenses) * 100) : 0}%</strong>
                             <span className="bar"><i style={{ width: `${expenses ? (c.value / expenses) * 100 : 0}%` }} /></span>
@@ -220,8 +225,19 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                 {budgets.map((b) => {
                   const pct = b.limit ? b.spent / b.limit : 0;
                   return (
-                    <div key={b.id} className="budget-row" onClick={() => setBudget({ category: b.category, amount: b.limit, user: b.user_id ?? (user || undefined) })}>
-                      <span className="budget-name">{b.category ?? "Total do mês"}</span>
+                    <div
+                      key={b.id}
+                      className="budget-row"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setBudget({ category: b.category, amount: b.limit, user: b.user_id ?? (user || undefined) })}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        e.preventDefault();
+                        setBudget({ category: b.category, amount: b.limit, user: b.user_id ?? (user || undefined) });
+                      }}
+                    >
+                      <span className="budget-name" title={b.category ?? undefined}>{b.category ?? "Total do mês"}</span>
                       <strong className={pct >= 1 ? "over" : ""}>{Math.round(pct * 100)}%</strong>
                       <span className={`budget-bar ${pct >= 1 ? "over" : pct >= 0.8 ? "warn" : ""}`}><i style={{ width: `${Math.min(100, pct * 100)}%` }} /></span>
                       <small className="budget-meta">{brl(b.spent)} de {brl(b.limit)}{everyone && b.user_name ? ` · ${b.user_name.split(" ")[0]}` : ""}</small>
@@ -244,7 +260,7 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                 {upcoming.map((e) => (
                   <div key={e.id} className="fin-rem">
                     <span className="fin-rem-date"><strong>{new Date(e.start).getDate()}</strong><small>{monthName(new Date(e.start).toISOString().slice(0, 7)).slice(0, 3)}</small></span>
-                    <span className="ellipsis" style={{ flex: 1 }}>{e.title}</span>
+                    <span className="ellipsis" style={{ flex: 1 }} title={e.title}>{e.title || "(sem título)"}</span>
                     <small className="muted">{new Date(e.start).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small>
                   </div>
                 ))}
@@ -258,7 +274,7 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
           <div className="fin-list-page">
           <div className="fin-section-head">
             <h3>Por categoria</h3>
-            {cat && <button className="btn btn-sm btn-ghost" onClick={() => setCat(null)}><Icon name="x" size={14} /> {cat}</button>}
+            {cat && <button className="btn btn-sm btn-ghost" aria-label={`Tirar o filtro ${cat}`} onClick={() => setCat(null)}><Icon name="x" size={14} /> <span>{cat}</span></button>}
           </div>
           {cats.length ? (
             <div className="fin-cats">
@@ -268,8 +284,8 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
                 return (
                   <button key={c.label} style={{ ["--c" as any]: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} className={`card fin-cat ${cat === c.label ? "active" : ""} ${cat && cat !== c.label ? "dim" : ""}`} onClick={() => { haptic(5); setCat(cat === c.label ? null : c.label); }}>
                     <span className="fin-cat-ico"><Icon name={CAT_ICON[c.label] ?? "hash"} size={18} /></span>
-                    <span className="fin-cat-name">{c.label}</span>
-                    <strong className="fin-cat-value">{brl(c.value)}</strong>
+                    <span className="fin-cat-name" title={c.label}>{c.label}</span>
+                    <strong className={`fin-cat-value${longMoney(c.value)}`}>{brl(c.value)}</strong>
                     <span className="fin-cat-bar"><i style={{ width: `${expenses ? (c.value / expenses) * 100 : 0}%` }} /></span>
                     <small className="muted">
                       {expenses ? Math.round((c.value / expenses) * 100) : 0}% · {c.count} {c.count === 1 ? "gasto" : "gastos"}
@@ -315,7 +331,20 @@ export function FinancePage({ isSuper }: { isSuper: boolean }) {
           icon={<Icon name={CAT_ICON[detail.category] ?? "wallet"} />}
           onClose={() => setDetail(null)}
           footer={
-            <button className="btn btn-danger" onClick={async () => { if (confirm("Apagar este lançamento?")) { await api(`/api/finance/${detail.id}`, { method: "DELETE" }); setDetail(null); void reload(); } }}>
+            <button
+              className="btn btn-danger"
+              onClick={async () => {
+                const what = `${detail.kind === "income" ? "+" : "−"}${brl(detail.amount)}${detail.description ? ` · ${detail.description}` : ""}`;
+                if (!(await confirmDialog({ title: "Apagar este lançamento?", body: `${what}. Ele sai dos totais do mês e não dá para recuperar.`, confirmLabel: "Apagar", danger: true }))) return;
+                try {
+                  await api(`/api/finance/${detail.id}`, { method: "DELETE" });
+                  setDetail(null);
+                  void reload();
+                } catch (e) {
+                  void alertDialog("Não deu para apagar", (e as Error).message);
+                }
+              }}
+            >
               <Icon name="trash" size={16} /> Apagar
             </button>
           }
@@ -379,26 +408,26 @@ function AddTransaction({ user: preset, people, onClose }: { user: string; peopl
       }
     >
       {people && !preset && (
-        <div className="field"><label>Pessoa</label>
-          <select className="select" value={user} onChange={(e) => setUser(e.target.value)}>
+        <div className="field"><label htmlFor="tx-user">Pessoa</label>
+          <select id="tx-user" className="select" value={user} onChange={(e) => setUser(e.target.value)}>
             <option value="">Escolha</option>
-            {people.map((p) => <option key={p.id} value={p.id}>{p.full_name ?? p.name ?? `+${p.phone}`}</option>)}
+            {people.map((p) => <option key={p.id} value={p.id}>{p.full_name || p.name || `+${p.phone}`}</option>)}
           </select>
         </div>
       )}
       <div className="tabs">
-        <button className={f.kind === "expense" ? "active" : ""} onClick={() => setF({ ...f, kind: "expense" })}>Gasto</button>
-        <button className={f.kind === "income" ? "active" : ""} onClick={() => setF({ ...f, kind: "income" })}>Receita</button>
+        <button className={f.kind === "expense" ? "active" : ""} aria-pressed={f.kind === "expense"} onClick={() => setF({ ...f, kind: "expense" })}>Gasto</button>
+        <button className={f.kind === "income" ? "active" : ""} aria-pressed={f.kind === "income"} onClick={() => setF({ ...f, kind: "income" })}>Receita</button>
       </div>
-      <div className="field"><label>Valor (R$)</label><input className="input" inputMode="decimal" placeholder="89,90" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} autoFocus /></div>
-      <div className="field"><label>Categoria</label>
-        <select className="select" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>
+      <div className="field"><label htmlFor="tx-amount">Valor (R$)</label><input id="tx-amount" name="amount" className="input" inputMode="decimal" autoComplete="off" placeholder="89,90" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} autoFocus /></div>
+      <div className="field"><label htmlFor="tx-cat">Categoria</label>
+        <select id="tx-cat" className="select" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>
           <option value="">Automática (pela descrição)</option>
           {(cats.data ?? []).map((c) => <option key={c}>{c}</option>)}
         </select>
       </div>
-      <div className="field"><label>Descrição</label><input className="input" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
-      <div className="field"><label>Data</label><input className="input" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></div>
+      <div className="field"><label htmlFor="tx-desc">Descrição</label><input id="tx-desc" name="description" className="input" autoComplete="off" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
+      <div className="field"><label htmlFor="tx-date">Data</label><input id="tx-date" name="date" className="input" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></div>
       <ErrorBox error={error} />
     </Modal>
   );
@@ -432,20 +461,20 @@ function BudgetModal({ user: preset, people, initial, onClose }: { user: string;
       }
     >
       {people && !preset && (
-        <div className="field"><label>Pessoa</label>
-          <select className="select" value={user} onChange={(e) => setUser(e.target.value)}>
+        <div className="field"><label htmlFor="bd-user">Pessoa</label>
+          <select id="bd-user" className="select" value={user} onChange={(e) => setUser(e.target.value)}>
             <option value="">Escolha</option>
-            {people.map((p) => <option key={p.id} value={p.id}>{p.full_name ?? p.name ?? `+${p.phone}`}</option>)}
+            {people.map((p) => <option key={p.id} value={p.id}>{p.full_name || p.name || `+${p.phone}`}</option>)}
           </select>
         </div>
       )}
-      <div className="field"><label>Para</label>
-        <select className="select" value={category} disabled={initial.amount != null} onChange={(e) => setCategory(e.target.value)}>
+      <div className="field"><label htmlFor="bd-cat">Para</label>
+        <select id="bd-cat" className="select" value={category} disabled={initial.amount != null} onChange={(e) => setCategory(e.target.value)}>
           <option value="">Total do mês</option>
           {(cats.data ?? []).filter((c) => c !== "Salário" && c !== "Investimentos").map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
-      <div className="field"><label>Limite por mês (R$)</label><input className="input" inputMode="decimal" placeholder="800" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus /></div>
+      <div className="field"><label htmlFor="bd-amount">Limite por mês (R$)</label><input id="bd-amount" name="limit" className="input" inputMode="decimal" autoComplete="off" placeholder="800" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus /></div>
       <p className="muted" style={{ fontSize: 12, margin: 0 }}>O assistente avisa no WhatsApp quando chegar em 80% e quando passar do limite.</p>
       <ErrorBox error={error} />
     </Modal>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ago, api } from "../api";
-import { ErrorBox, Loading, PageHead } from "../components";
+import { ErrorBox, Loading, PageHead, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 
 const LABEL: Record<string, [string, string]> = {
@@ -60,14 +60,22 @@ export function WhatsAppPage() {
           s.status === "connected" || s.status === "reconnecting" ? (
             <>
               <button className="btn" disabled={busy} onClick={() => act("/api/whatsapp/restart")}>Reiniciar conexão</button>
-              <button className="btn btn-danger" disabled={busy} onClick={() => confirm("Desconectar este número do agente?") && act("/api/whatsapp/logout")}>Desconectar</button>
+              <button className="btn btn-danger" disabled={busy} onClick={async () => {
+                  const ok = await confirmDialog({
+                    title: "Desconectar este número?",
+                    body: "O assistente para de receber e responder mensagens até você ler um QR code novo.",
+                    confirmLabel: "Desconectar",
+                    danger: true,
+                  });
+                  if (ok) void act("/api/whatsapp/logout");
+                }}>Desconectar</button>
             </>
           ) : null
         }
       />
       <div className="grid grid-2">
         <div className="card card-pad">
-          <div className="row" style={{ marginBottom: 14 }}>
+          <div className="row row-wrap" style={{ marginBottom: 14 }}>
             <span className={`badge ${cls}`}>{label}</span>
             {s.listening ? (
               <span className="badge badge-ok"><span className="dot dot-ok" /> escutando agora</span>
@@ -75,7 +83,7 @@ export function WhatsAppPage() {
               <span className="badge badge-err">worker sem sinal{s.heartbeat_at ? ` há ${ago(s.heartbeat_at).replace(/^há /, "")}` : ""}</span>
             )}
           </div>
-          <div className="muted" style={{ fontSize: 12, marginTop: -8, marginBottom: 12 }}>
+          <div className="muted" style={{ fontSize: 13, marginTop: -8, marginBottom: 12 }}>
             Última mensagem recebida: {s.last_message_at ? ago(s.last_message_at) : "nenhuma ainda"}
           </div>
           {!s.listening && (
@@ -86,8 +94,8 @@ export function WhatsAppPage() {
 
           {s.status === "connected" && (
             <div>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>{s.name ?? "WhatsApp"}</div>
-              <div className="mono">+{s.phone}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, overflowWrap: "anywhere" }}>{s.name || "WhatsApp"}</div>
+              <div className="mono">{s.phone ? `+${s.phone}` : ""}</div>
               <p className="muted">Mensagens que chegarem neste número vão para o time de agentes. Pessoas novas aparecem em <Link to="/people" style={{ color: "var(--accent)" }}>Pessoas</Link> para você aprovar.</p>
             </div>
           )}
@@ -132,8 +140,8 @@ export function WhatsAppPage() {
                   {s.status === "qr" ? "Gerar novo QR code" : "Gerar QR code"}
                 </button>
               ) : (
-                <div className="row">
-                  <input className="input" placeholder="Número com DDI, ex.: 5519999999999" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                <div className="row row-wrap">
+                  <input className="input" style={{ flex: "1 1 220px", width: "auto" }} type="tel" name="tel" inputMode="tel" autoComplete="tel" aria-label="Número com DDI" placeholder="Número com DDI, ex.: 5519999999999" value={phone} onChange={(e) => setPhone(e.target.value)} />
                   <button className="btn btn-primary" disabled={busy || phone.replace(/\D/g, "").length < 10} onClick={() => act("/api/whatsapp/connect", { phone })}>
                     Gerar código
                   </button>

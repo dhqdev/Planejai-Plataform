@@ -1,7 +1,7 @@
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { ErrorBox, Modal } from "../components";
+import { ErrorBox, Modal, alertDialog, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
@@ -84,9 +84,9 @@ function holidays(year: number): Ev[] {
 }
 
 const CALENDARS: { id: Kind; label: string; color: string; group: "mine" | "other" }[] = [
-  { id: "reminder", label: "Lembretes", color: "var(--brand-2)", group: "mine" },
-  { id: "google", label: "Google Agenda", color: "#2F7BEA", group: "mine" },
-  { id: "holiday", label: "Feriados no Brasil", color: "#12A150", group: "other" },
+  { id: "reminder", label: "Lembretes", color: "var(--cal-reminder)", group: "mine" },
+  { id: "google", label: "Google Agenda", color: "var(--cal-google)", group: "mine" },
+  { id: "holiday", label: "Feriados no Brasil", color: "var(--cal-holiday)", group: "other" },
 ];
 
 function loadHidden(): Kind[] {
@@ -151,7 +151,10 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
       return t >= range.from && t < range.to;
     });
     const q = search?.trim().toLowerCase();
-    return [...hol, ...(data?.events ?? [])].filter((e) => !hidden.includes(e.kind) && (!q || e.title.toLowerCase().includes(q)));
+    // evento do Google pode vir sem título
+    return [...hol, ...(data?.events ?? [])]
+      .map((e) => (e.title?.trim() ? e : { ...e, title: "(sem título)" }))
+      .filter((e) => !hidden.includes(e.kind) && (!q || e.title.toLowerCase().includes(q)));
   }, [data, range, hidden, search]);
   const byDay = useMemo(() => {
     const m = new Map<string, Ev[]>();
@@ -198,7 +201,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
       await api(`/api/reminders/${ev.reminderId}`, { method: "PATCH", json: { at: to.toISOString() } });
       haptic(12);
     } catch (e) {
-      alert((e as Error).message);
+      void alertDialog("Não deu para mover o lembrete", (e as Error).message);
     }
     void reload();
   };
@@ -207,9 +210,9 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
     view === "month"
       ? `${cap(MONTHS[cursor.getMonth()]!)} ${phone ? "" : "de "}${cursor.getFullYear()}`
       : view === "week"
-        ? weekTitle(range.from, addDays(range.to, -1))
+        ? weekTitle(range.from, addDays(range.to, -1), phone)
         : view === "day"
-          ? cap(cursor.toLocaleDateString("pt-BR", { weekday: phone ? "short" : "long", day: "numeric", month: "long" })).replace(".", "")
+          ? cap(cursor.toLocaleDateString("pt-BR", { weekday: phone ? "short" : "long", day: "numeric", month: phone ? "short" : "long" })).replace(/\./g, "")
           : "Próximos dias";
 
   // deslizar para os lados troca o período
@@ -239,7 +242,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
           {isSuper && (
             <div className="cal-side-block">
               <h4>Pessoa</h4>
-              <select className="select" value={person} onChange={(e) => setPerson(e.target.value)}>
+              <select className="select" aria-label="Pessoa" value={person} onChange={(e) => setPerson(e.target.value)}>
                 <option value="">Todas as pessoas</option>
                 {(people.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name ?? `+${p.phone}`}</option>)}
               </select>
@@ -254,11 +257,11 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
             <button className="icon-btn" aria-label="Hoje" onClick={today}><Icon name="calendar" size={20} /></button>
             <button className="icon-btn" aria-label="Anterior" onClick={() => step(-1)} disabled={view === "list"}><Icon name="chevron-left" size={18} /></button>
             <button className="icon-btn" aria-label="Próximo" onClick={() => step(1)} disabled={view === "list"}><Icon name="chevron-right" size={18} /></button>
-            <button className="cal-title-btn" onClick={() => { haptic(5); setPicker((v) => !v); }}>
-              {title} <Icon name="chevron-right" size={14} style={{ transform: `rotate(${picker ? -90 : 90}deg)` }} />
+            <button className="cal-title-btn" aria-expanded={picker} onClick={() => { haptic(5); setPicker((v) => !v); }}>
+              <span>{title}</span> <Icon name="chevron-right" size={14} style={{ transform: `rotate(${picker ? -90 : 90}deg)` }} />
             </button>
             <span className="spacer" />
-            <button className="icon-btn" aria-label="Buscar" onClick={() => setSearch(search == null ? "" : null)}><Icon name={search == null ? "search" : "x"} size={19} /></button>
+            <button className="icon-btn" aria-label={search == null ? "Buscar" : "Fechar a busca"} onClick={() => setSearch(search == null ? "" : null)}><Icon name={search == null ? "search" : "x"} size={19} /></button>
           </div>
         ) : (
           <div className="cal-bar-top">
@@ -269,10 +272,10 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
             <h1 className="cal-h1">{title}</h1>
             <span className="spacer" />
             {search != null ? (
-              <input className="input cal-search" autoFocus placeholder="Buscar na agenda" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setSearch(null)} />
+              <input className="input cal-search" type="search" name="q" aria-label="Buscar na agenda" autoComplete="off" enterKeyHint="search" autoFocus placeholder="Buscar na agenda…" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setSearch(null)} />
             ) : null}
-            <button className="icon-btn" aria-label="Buscar" onClick={() => setSearch(search == null ? "" : null)}><Icon name={search == null ? "search" : "x"} size={19} /></button>
-            <select className="select cal-view" value={view} onChange={(e) => changeView(e.target.value as View)}>
+            <button className="icon-btn" aria-label={search == null ? "Buscar" : "Fechar a busca"} onClick={() => setSearch(search == null ? "" : null)}><Icon name={search == null ? "search" : "x"} size={19} /></button>
+            <select className="select cal-view" aria-label="Visualização" value={view} onChange={(e) => changeView(e.target.value as View)}>
               {VIEWS.slice().reverse().map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
             {!side && (
@@ -283,13 +286,13 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
 
         {phone && (
           <>
-            {search != null && <input className="input cal-search" autoFocus placeholder="Buscar na agenda" value={search} onChange={(e) => setSearch(e.target.value)} style={{ marginBottom: 10 }} />}
+            {search != null && <input className="input cal-search" type="search" name="q" aria-label="Buscar na agenda" autoComplete="off" enterKeyHint="search" autoFocus placeholder="Buscar na agenda…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ marginBottom: 10 }} />}
             {picker && (
               <div className="card cal-picker">
                 <MiniMonth selected={selected} onPick={pick} />
                 <CalendarList title="Agendas" items={calendars} hidden={hidden} onToggle={toggleCal} />
                 {isSuper && (
-                  <select className="select" style={{ marginTop: 10 }} value={person} onChange={(e) => setPerson(e.target.value)}>
+                  <select className="select" aria-label="Pessoa" style={{ marginTop: 10 }} value={person} onChange={(e) => setPerson(e.target.value)}>
                     <option value="">Todas as pessoas</option>
                     {(people.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name ?? `+${p.phone}`}</option>)}
                   </select>
@@ -304,6 +307,9 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
           </>
         )}
         <ErrorBox error={error} />
+        {search?.trim() && data && !events.length && view !== "list" && (
+          <p className="muted cal-empty" role="status">Nada encontrado para “{search.trim()}” neste período.</p>
+        )}
 
         <div className={`cal-body cal-body-${view}`} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
           {view === "month" && (
@@ -408,8 +414,9 @@ function withTime(d: Date) {
   return out;
 }
 
-function weekTitle(a: Date, b: Date) {
-  if (a.getMonth() === b.getMonth()) return `${a.getDate()} a ${b.getDate()} de ${MONTHS[a.getMonth()]}`;
+function weekTitle(a: Date, b: Date, short = false) {
+  // no celular o título divide a barra com os botões: mês abreviado
+  if (a.getMonth() === b.getMonth()) return `${a.getDate()} a ${b.getDate()} de ${short ? MONTHS[a.getMonth()]!.slice(0, 3) : MONTHS[a.getMonth()]}`;
   return `${a.getDate()} ${MONTHS[a.getMonth()]!.slice(0, 3)} a ${b.getDate()} ${MONTHS[b.getMonth()]!.slice(0, 3)}`;
 }
 
@@ -478,6 +485,32 @@ function useDrag(onDrop: (ev: Ev, target: HTMLElement, e: PointerEvent) => void)
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", cleanup);
   };
+}
+
+/** Eventos que se cruzam dividem a coluna lado a lado (senão um cobre o outro e some). */
+function lanes(evs: Ev[]) {
+  const items = evs
+    .map((e) => {
+      const s = new Date(e.start).getTime();
+      return { e, s, end: Math.max(e.end ? new Date(e.end).getTime() : s + 3600000, s + 1800000), lane: 0, of: 1 };
+    })
+    .sort((a, b) => a.s - b.s || b.end - a.end);
+  let group: typeof items = [];
+  let groupEnd = -Infinity;
+  const closeGroup = () => {
+    const n = Math.max(0, ...group.map((i) => i.lane)) + 1;
+    for (const i of group) i.of = n;
+    group = [];
+  };
+  for (const it of items) {
+    if (it.s >= groupEnd) closeGroup();
+    const taken = new Set(group.filter((o) => o.end > it.s).map((o) => o.lane));
+    while (taken.has(it.lane)) it.lane++;
+    group.push(it);
+    groupEnd = group.length === 1 ? it.end : Math.max(groupEnd, it.end);
+  }
+  closeGroup();
+  return items;
 }
 
 function MonthView(p: {
@@ -559,7 +592,7 @@ function WeekView(p: { from: Date; days: number; byDay: Map<string, Ev[]>; onOpe
             <small>{WEEKDAYS[d.getDay()]}</small>
             <strong>{d.getDate()}</strong>
             {allDay[i]!.map((e) => (
-              <button key={e.id} className={`cal-chip ${e.kind}`} onClick={() => p.onOpen(e)}>{e.title}</button>
+              <button key={e.id} className={`cal-chip ${e.kind}`} title={e.title} onClick={() => p.onOpen(e)}>{e.title}</button>
             ))}
           </div>
         ))}
@@ -584,16 +617,18 @@ function WeekView(p: { from: Date; days: number; byDay: Map<string, Ev[]>; onOpe
             >
               {hours.map((h) => <div key={h} className="cal-slot" style={{ height: HOUR_PX }} />)}
               {sameDay(d, now) && <div className="cal-now" style={{ top: ((now.getHours() - FIRST_HOUR) * 60 + now.getMinutes()) * (HOUR_PX / 60) }} />}
-              {evs.map((e) => {
+              {lanes(evs).map(({ e, lane, of }) => {
                 const s = new Date(e.start);
                 const end = e.end ? new Date(e.end) : new Date(s.getTime() + 60 * 60000);
                 const top = ((s.getHours() - FIRST_HOUR) * 60 + s.getMinutes()) * (HOUR_PX / 60);
                 const h = Math.max(30, ((end.getTime() - s.getTime()) / 60000) * (HOUR_PX / 60) - 2);
+                const side = of > 1 ? { left: `calc(${(lane / of) * 100}% + 2px)`, right: "auto", width: `calc(${100 / of}% - 4px)` } : undefined;
                 return (
                   <button
                     key={e.id}
                     className={`cal-block ${e.kind} ${e.recurring ? "rec" : ""}`}
-                    style={{ top, height: h }}
+                    style={{ top, height: h, ...side }}
+                    title={`${hhmm(s)} ${e.title}`}
                     onPointerDown={drag(e)}
                     onClick={(c) => { c.stopPropagation(); p.onOpen(e); }}
                   >
@@ -636,7 +671,7 @@ function EventRow({ ev, onOpen }: { ev: Ev; onOpen: (e: Ev) => void }) {
       <span className="cal-row-time">{ev.allDay ? "dia todo" : hhmm(s)}</span>
       <span className={`cal-bar ${ev.kind}`} />
       <span className="cal-row-text">
-        <span className="ellipsis">{ev.title}</span>
+        <span className="ellipsis" title={ev.title}>{ev.title}</span>
         <small className="muted">
           {ev.kind === "google" ? "Google Agenda" : ev.kind === "holiday" ? "Feriado nacional" : ev.recurring ? "Lembrete recorrente" : "Lembrete"}
           {ev.person ? ` · ${ev.person}` : ""}
@@ -661,10 +696,22 @@ function EventDetail({ ev, onClose, onChanged }: { ev: Ev; onClose: () => void; 
             className="btn btn-danger"
             disabled={busy}
             onClick={async () => {
-              if (!confirm(ev.recurring ? "Cancelar todas as repetições deste lembrete?" : "Cancelar este lembrete?")) return;
+              const ok = await confirmDialog({
+                title: ev.recurring ? "Cancelar todas as repetições?" : "Cancelar este lembrete?",
+                body: ev.recurring ? `“${ev.title}” deixa de repetir e nenhum aviso futuro é enviado.` : `“${ev.title}” não será mais enviado no WhatsApp.`,
+                confirmLabel: "Cancelar lembrete",
+                cancelLabel: "Manter",
+                danger: true,
+              });
+              if (!ok) return;
               setBusy(true);
-              await api(`/api/reminders/${ev.reminderId}`, { method: "DELETE" });
-              onChanged();
+              try {
+                await api(`/api/reminders/${ev.reminderId}`, { method: "DELETE" });
+                onChanged();
+              } catch (e) {
+                setBusy(false);
+                void alertDialog("Não deu para cancelar", (e as Error).message);
+              }
             }}
           >
             <Icon name="trash" size={16} /> Cancelar lembrete
@@ -712,17 +759,17 @@ function NewReminder({ at, isSuper, people, defaultPerson, onClose }: { at: Date
     >
       <ErrorBox error={error} />
       <div className="field">
-        <label>O que lembrar</label>
-        <textarea className="input" rows={2} value={f.intent} onChange={(e) => setF({ ...f, intent: e.target.value })} placeholder="Ligar para o dentista" />
+        <label htmlFor="rm-intent">O que lembrar</label>
+        <textarea id="rm-intent" name="intent" className="input" rows={2} value={f.intent} onChange={(e) => setF({ ...f, intent: e.target.value })} placeholder="Ligar para o dentista…" />
       </div>
       <div className="grid grid-2" style={{ gap: 10 }}>
-        <div className="field"><label>Dia</label><input className="input" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></div>
-        <div className="field"><label>Hora</label><input className="input" type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} /></div>
+        <div className="field"><label htmlFor="rm-date">Dia</label><input id="rm-date" name="date" className="input" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></div>
+        <div className="field"><label htmlFor="rm-time">Hora</label><input id="rm-time" name="time" className="input" type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} /></div>
       </div>
       {isSuper && (
         <div className="field">
-          <label>Para quem</label>
-          <select className="select" value={f.user} onChange={(e) => setF({ ...f, user: e.target.value })}>
+          <label htmlFor="rm-user">Para quem</label>
+          <select id="rm-user" className="select" value={f.user} onChange={(e) => setF({ ...f, user: e.target.value })}>
             <option value="">Escolha a pessoa</option>
             {people.map((p) => <option key={p.id} value={p.id}>{p.name ?? `+${p.phone}`}</option>)}
           </select>

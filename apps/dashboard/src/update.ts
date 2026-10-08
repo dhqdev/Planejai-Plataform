@@ -101,18 +101,27 @@ export function watchForUpdates() {
   setInterval(() => !document.hidden && checkForUpdate(), 5 * 60_000);
   document.addEventListener("visibilitychange", () => !document.hidden && checkForUpdate());
   window.addEventListener("focus", () => checkForUpdate());
-  // aba antiga aberta depois de um deploy: o pedaço da tela que ela pede não existe mais
+  // uma tela (pedaço carregado sob demanda) não baixou: quem pediu mostra o aviso, aqui se decide se é caso de atualizar
   window.addEventListener("vite:preloadError", (e) => {
     e.preventDefault();
-    set(true);
-    try {
-      const last = Number(sessionStorage.getItem("pj-reloaded") ?? 0);
-      if (Date.now() - last > 15_000) {
-        sessionStorage.setItem("pj-reloaded", String(Date.now()));
-        void applyUpdate();
-      }
-    } catch {
-      /* sem storage: fica o botão */
-    }
+    void recoverMissingChunk();
   });
+}
+
+/**
+ * Aba antiga aberta depois de um deploy: o pedaço da tela que ela pede não existe mais, então abre
+ * a versão nova (uma vez só). Sem versão nova foi a internet que falhou: aí não recarrega nem limpa
+ * o cache, senão o app deixaria de abrir offline.
+ */
+async function recoverMissingChunk() {
+  if (!(await checkForUpdate())) return;
+  try {
+    const last = Number(sessionStorage.getItem("pj-reloaded") ?? 0);
+    if (Date.now() - last > 15_000) {
+      sessionStorage.setItem("pj-reloaded", String(Date.now()));
+      void applyUpdate();
+    }
+  } catch {
+    /* sem storage: fica o botão */
+  }
 }

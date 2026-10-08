@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import type { Me } from "../App";
-import { ErrorBox, PageHead } from "../components";
+import { ErrorBox, PageHead, alertDialog, confirmDialog } from "../components";
 import { Connections } from "../Connections";
 import { useApi } from "../hooks";
 
@@ -25,27 +25,27 @@ export function ProfilePage({ me }: { me: Me }) {
   return (
     <div className="page" style={{ maxWidth: 1080 }}>
       <PageHead title="Minha conta" subtitle={me.email} />
-      {msg && <div className="ok-box" style={{ marginBottom: 12 }}>{msg}</div>}
+      {msg && <div className="ok-box" role="status" style={{ marginBottom: 12 }}>{msg}</div>}
       <ErrorBox error={error} />
       <div className="grid grid-2" style={{ alignItems: "start" }}>
       <div className="card card-pad">
         <h3>Perfil</h3>
-        <div className="field"><label>Nome</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
+        <div className="field"><label htmlFor="pf-name">Nome</label><input id="pf-name" name="name" autoComplete="name" className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
         <div className="field">
-          <label>WhatsApp ligado</label>
-          <input className="input" value={data?.user ? `+${data.user.phone}` : "nenhum"} disabled />
-          <span className="help">É por esse número que o assistente sabe que é você.</span>
+          <label htmlFor="pf-phone">WhatsApp ligado</label>
+          <input id="pf-phone" className="input" aria-describedby="pf-phone-help" value={data?.user ? `+${data.user.phone}` : "nenhum"} disabled />
+          <span className="help" id="pf-phone-help">É por esse número que o assistente sabe que é você.</span>
         </div>
         <div className="field">
-          <label>Fuso horário</label>
-          <input className="input" placeholder={data?.user?.timezone ?? "America/Sao_Paulo"} value={tz} onChange={(e) => setTz(e.target.value)} />
+          <label htmlFor="pf-tz">Fuso horário</label>
+          <input id="pf-tz" name="timezone" autoComplete="off" spellCheck={false} autoCapitalize="none" className="input" placeholder={data?.user?.timezone ?? "America/Sao_Paulo"} value={tz} onChange={(e) => setTz(e.target.value)} />
         </div>
         <button className="btn btn-primary" onClick={() => save({ name, timezone: tz || undefined })}>Salvar perfil</button>
       </div>
       <div className="card card-pad">
         <h3>Trocar senha</h3>
-        <div className="field"><label>Senha atual</label><input className="input" type="password" value={pw.current_password} onChange={(e) => setPw({ ...pw, current_password: e.target.value })} /></div>
-        <div className="field"><label>Nova senha</label><input className="input" type="password" value={pw.password} onChange={(e) => setPw({ ...pw, password: e.target.value })} /></div>
+        <div className="field"><label htmlFor="pf-pw">Senha atual</label><input id="pf-pw" name="current-password" autoComplete="current-password" className="input" type="password" value={pw.current_password} onChange={(e) => setPw({ ...pw, current_password: e.target.value })} /></div>
+        <div className="field"><label htmlFor="pf-newpw">Nova senha</label><input id="pf-newpw" name="new-password" autoComplete="new-password" className="input" type="password" value={pw.password} onChange={(e) => setPw({ ...pw, password: e.target.value })} /></div>
         <button className="btn" onClick={() => save(pw)}>Trocar senha</button>
       </div>
       <Connections />
@@ -61,9 +61,19 @@ function Security({ me }: { me: Me }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const leaveAll = async () => {
-    if (!confirm("Sair de todos os aparelhos, inclusive deste?")) return;
-    await api("/api/auth/logout-all", { method: "POST" });
-    location.href = "/";
+    const ok = await confirmDialog({
+      title: "Sair de todos os aparelhos?",
+      body: "Todos os logins caem, inclusive este. Você vai precisar entrar de novo.",
+      confirmLabel: "Sair de todos",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api("/api/auth/logout-all", { method: "POST" });
+      location.href = "/";
+    } catch (e) {
+      void alertDialog("Não deu para sair", (e as Error).message);
+    }
   };
   const eraseAll = async () => {
     setError(null);
@@ -91,10 +101,10 @@ function Security({ me }: { me: Me }) {
             <button className="btn btn-danger" onClick={() => setErase(true)}>Apagar minha conta e meus dados</button>
           ) : (
             <>
-              <div className="field"><label>Confirme com sua senha</label><input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus /></div>
+              <div className="field"><label htmlFor="pf-erase">Confirme com sua senha</label><input id="pf-erase" name="password" autoComplete="current-password" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus /></div>
               <ErrorBox error={error} />
-              <div className="row" style={{ gap: 8 }}>
-                <button className="btn btn-danger" disabled={!password} onClick={eraseAll}>Apagar tudo</button>
+              <div className="row row-wrap" style={{ gap: 8 }}>
+                <button className="btn btn-danger-solid" disabled={!password} onClick={eraseAll}>Apagar tudo</button>
                 <button className="btn btn-ghost" onClick={() => setErase(false)}>Cancelar</button>
               </div>
             </>

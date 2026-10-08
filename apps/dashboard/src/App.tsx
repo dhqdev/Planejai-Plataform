@@ -1,54 +1,101 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
-import { Loading, Modal } from "./components";
-import { AuthPage } from "./pages/Login";
-import { PrivacyPage } from "./pages/Privacy";
-import { canInstall, haptic, isIos, isStandalone, onInstallAvailable, promptInstall } from "./touch";
-
-// Cada tela é carregada só quando abre (o app inicia leve no celular) e, logo depois, baixada em segundo plano
-const PAGE_LOADERS = [
-  () => import("./pages/Dashboard"),
-  () => import("./pages/Finance"),
-  () => import("./pages/Calendar"),
-  () => import("./pages/Watches"),
-  () => import("./pages/Invites"),
-  () => import("./pages/Team"),
-  () => import("./pages/Memories"),
-  () => import("./pages/Profile"),
-  () => import("./pages/Agents"),
-  () => import("./pages/Clients"),
-  () => import("./pages/Executions"),
-  () => import("./pages/Queues"),
-];
-const AgentsPage = lazy(() => import("./pages/Agents").then((m) => ({ default: m.AgentsPage })));
-const ClientsPage = lazy(() => import("./pages/Clients").then((m) => ({ default: m.ClientsPage })));
-const DashboardPage = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.DashboardPage })));
-const ExecutionDetailPage = lazy(() => import("./pages/Executions").then((m) => ({ default: m.ExecutionDetailPage })));
-const ExecutionsPage = lazy(() => import("./pages/Executions").then((m) => ({ default: m.ExecutionsPage })));
-const FinancePage = lazy(() => import("./pages/Finance").then((m) => ({ default: m.FinancePage })));
-const IntegrationsPage = lazy(() => import("./pages/Integrations").then((m) => ({ default: m.IntegrationsPage })));
-const InvitesPage = lazy(() => import("./pages/Invites").then((m) => ({ default: m.InvitesPage })));
-const MemoriesPage = lazy(() => import("./pages/Memories").then((m) => ({ default: m.MemoriesPage })));
-const ModelsPage = lazy(() => import("./pages/Models").then((m) => ({ default: m.ModelsPage })));
-const ProfilePage = lazy(() => import("./pages/Profile").then((m) => ({ default: m.ProfilePage })));
-const CalendarPage = lazy(() => import("./pages/Calendar").then((m) => ({ default: m.CalendarPage })));
-const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
-const WatchesPage = lazy(() => import("./pages/Watches").then((m) => ({ default: m.WatchesPage })));
-const QueuesPage = lazy(() => import("./pages/Queues").then((m) => ({ default: m.QueuesPage })));
-const TeamPage = lazy(() => import("./pages/Team").then((m) => ({ default: m.TeamPage })));
-const CustomTabPage = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.CustomTabPage })));
-const NotificationsPage = lazy(() => import("./pages/Notifications").then((m) => ({ default: m.NotificationsPage })));
-const DocumentsPage = lazy(() => import("./pages/Documents").then((m) => ({ default: m.DocumentsPage })));
-const WhatsAppPage = lazy(() => import("./pages/WhatsApp").then((m) => ({ default: m.WhatsAppPage })));
-import { clearApiCache, prefetchApi, useApi } from "./hooks";
-import { PullToRefresh } from "./PullToRefresh";
-import { applyUpdate, onUpdateAvailable } from "./update";
-import { Icon } from "./icons";
-import { useUnread } from "./notify";
 import { BlockLoader } from "./BlockLoader";
+import { Empty, Loading, Modal } from "./components";
+import { clearApiCache, prefetchApi, useApi } from "./hooks";
+import { Icon } from "./icons";
 import { openWardrobe } from "./mochi/state";
 import { MochiButton, MochiIcon, WardrobeHost } from "./mochi/Wardrobe";
+import { useUnread } from "./notify";
+import { AuthPage } from "./pages/Login";
+import { PrivacyPage } from "./pages/Privacy";
+import { PullToRefresh } from "./PullToRefresh";
+import { canInstall, haptic, isIos, isStandalone, onInstallAvailable, promptInstall } from "./touch";
+import { applyUpdate, onUpdateAvailable } from "./update";
+
+// Cada tela é um pedaço à parte: baixa só quando abre (o app inicia leve no celular)
+const load = {
+  agents: () => import("./pages/Agents"),
+  calendar: () => import("./pages/Calendar"),
+  clients: () => import("./pages/Clients"),
+  dashboard: () => import("./pages/Dashboard"),
+  documents: () => import("./pages/Documents"),
+  executions: () => import("./pages/Executions"),
+  finance: () => import("./pages/Finance"),
+  integrations: () => import("./pages/Integrations"),
+  invites: () => import("./pages/Invites"),
+  memories: () => import("./pages/Memories"),
+  models: () => import("./pages/Models"),
+  notifications: () => import("./pages/Notifications"),
+  profile: () => import("./pages/Profile"),
+  queues: () => import("./pages/Queues"),
+  settings: () => import("./pages/Settings"),
+  team: () => import("./pages/Team"),
+  watches: () => import("./pages/Watches"),
+  whatsapp: () => import("./pages/WhatsApp"),
+};
+
+/** Tela sob demanda. Se o pedaço não baixar (sem internet), mostra um aviso no lugar em vez de derrubar o app. */
+function page<P>(pick: () => Promise<ComponentType<P>>) {
+  return lazy(() => pick().then((c) => ({ default: c }), () => ({ default: PageUnavailable as ComponentType<P> })));
+}
+function PageUnavailable() {
+  return (
+    <div className="page">
+      <Empty>
+        Não deu para abrir esta tela. Confira a internet e tente de novo.{" "}
+        <button className="btn btn-sm" onClick={() => location.reload()}>Tentar de novo</button>
+      </Empty>
+    </div>
+  );
+}
+
+const AgentsPage = page(() => load.agents().then((m) => m.AgentsPage));
+const ClientsPage = page(() => load.clients().then((m) => m.ClientsPage));
+const DashboardPage = page(() => load.dashboard().then((m) => m.DashboardPage));
+const ExecutionDetailPage = page(() => load.executions().then((m) => m.ExecutionDetailPage));
+const ExecutionsPage = page(() => load.executions().then((m) => m.ExecutionsPage));
+const FinancePage = page(() => load.finance().then((m) => m.FinancePage));
+const IntegrationsPage = page(() => load.integrations().then((m) => m.IntegrationsPage));
+const InvitesPage = page(() => load.invites().then((m) => m.InvitesPage));
+const MemoriesPage = page(() => load.memories().then((m) => m.MemoriesPage));
+const ModelsPage = page(() => load.models().then((m) => m.ModelsPage));
+const ProfilePage = page(() => load.profile().then((m) => m.ProfilePage));
+const CalendarPage = page(() => load.calendar().then((m) => m.CalendarPage));
+const SettingsPage = page(() => load.settings().then((m) => m.SettingsPage));
+const WatchesPage = page(() => load.watches().then((m) => m.WatchesPage));
+const QueuesPage = page(() => load.queues().then((m) => m.QueuesPage));
+const TeamPage = page(() => load.team().then((m) => m.TeamPage));
+const CustomTabPage = page(() => load.dashboard().then((m) => m.CustomTabPage));
+const NotificationsPage = page(() => load.notifications().then((m) => m.NotificationsPage));
+const DocumentsPage = page(() => load.documents().then((m) => m.DocumentsPage));
+const WhatsAppPage = page(() => load.whatsapp().then((m) => m.WhatsAppPage));
+
+/** Qual pedaço cada rota do menu abre: para baixar antes do toque (e deixar pronto para abrir sem internet). */
+const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
+  "/": load.dashboard,
+  "/notificacoes": load.notifications,
+  "/executions": load.executions,
+  "/queues": load.queues,
+  "/clients": load.clients,
+  "/invites": load.invites,
+  "/agents": load.agents,
+  "/whatsapp": load.whatsapp,
+  "/integrations": load.integrations,
+  "/models": load.models,
+  "/finance": load.finance,
+  "/agenda": load.calendar,
+  "/watches": load.watches,
+  "/documentos": load.documents,
+  "/memories": load.memories,
+  "/settings": load.settings,
+  "/profile": load.profile,
+  "/time": load.team,
+};
+function preload(to: string) {
+  ROUTE_CHUNK[to]?.().catch(() => {});
+}
 
 /** Versão do app (package.json), igual à release vX.Y.Z no GitHub. */
 declare const __APP_VERSION__: string;
@@ -62,7 +109,9 @@ export interface Me {
   linked: boolean;
 }
 
-type NavItem = { section: string } | { to: string; label: string; icon: string; badge?: string; short?: string };
+type NavLinkItem = { to: string; label: string; icon: string; badge?: string; short?: string };
+type NavItem = { section: string } | NavLinkItem;
+const NO_NAV: NavItem[] = [];
 
 /** Super admin (dono da stack): tudo. Admin (cliente com acesso ao painel): só os próprios dados. */
 const SUPER_NAV: NavItem[] = [
@@ -119,6 +168,29 @@ function adminNav(tabs: AppTabs | null): NavItem[] {
   ];
 }
 
+/**
+ * Não lidas: o poll (30 s) mora neste provedor e só as bolinhas escutam, então o App e a tela aberta
+ * não redesenham a cada consulta.
+ */
+const UnreadContext = createContext(0);
+function UnreadProvider({ children }: { children: ReactNode }) {
+  return <UnreadContext value={useUnread(true)}>{children}</UnreadContext>;
+}
+function UnreadDot({ className, count }: { className: string; count?: boolean }) {
+  const unread = useContext(UnreadContext);
+  return unread > 0 ? <span className={className} aria-label={count ? `${unread} não lidas` : undefined} /> : null;
+}
+function BellButton() {
+  const unread = useContext(UnreadContext);
+  const nav = useNavigate();
+  return (
+    <button className="icon-btn" onClick={() => { haptic(); nav("/notificacoes"); }} aria-label={unread ? `${unread} notificações não lidas` : "Notificações"}>
+      <Icon name="bell" />
+      {unread > 0 && <span className="bell-dot" />}
+    </button>
+  );
+}
+
 export function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? "light");
@@ -138,7 +210,7 @@ export function App() {
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 });
   }, [loc.pathname]);
-  // conta nova: nada do cache da anterior; depois esquenta as telas que mais se abre e baixa o código delas
+  // conta nova: nada do cache da anterior; depois esquenta os dados das telas que mais se abre
   useEffect(() => {
     clearApiCache();
     if (!me) return;
@@ -146,14 +218,22 @@ export function App() {
     const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const t = setTimeout(() => {
       ["/api/me/overview", `/api/finance?month=${month}`, "/api/watches", "/api/me/dashboard"].forEach(prefetchApi);
-      for (const load of PAGE_LOADERS) load().catch(() => {});
     }, 1200);
     return () => clearTimeout(t);
   }, [me?.id]);
   const nav = useNavigate();
   useEffect(() => onInstallAvailable(() => setInstallable(true)), []);
   const tabs = useApi<AppTabs>(me ? `/api/me/tabs?for=${me.id}` : null);
-  const unread = useUnread(!!me);
+  const isSuper = me?.role === "superadmin";
+  const NAV = !me ? NO_NAV : isSuper ? SUPER_NAV : adminNav(tabs.data ?? null);
+  const links = NAV.filter((i): i is NavLinkItem => "to" in i);
+  // com o app parado, baixa em segundo plano o código das telas do menu desta pessoa (e só delas)
+  const routes = links.map((l) => l.to).join(" ");
+  useEffect(() => {
+    if (!routes) return;
+    const t = setTimeout(() => routes.split(" ").forEach(preload), 1200);
+    return () => clearTimeout(t);
+  }, [routes]);
 
   useEffect(() => {
     api<Me>("/api/auth/me").then(setMe, () => setMe(null));
@@ -178,19 +258,15 @@ export function App() {
   if (me === undefined) return <BlockLoader full />;
   if (!me) return <AuthPage onLogin={setMe} />;
 
-  const isSuper = me.role === "superadmin";
-  const NAV = isSuper ? SUPER_NAV : adminNav(tabs.data ?? null);
   const has = (m: string) => isSuper || (tabs.data?.modules ?? []).includes(m);
   return (
+    <UnreadProvider>
     <div className="layout">
       <header className="topbar">
         <MochiButton size={50} />
         <strong className="topbar-title">{titleFor(loc.pathname, NAV)}</strong>
         <span className="spacer" />
-        <button className="icon-btn" onClick={() => { haptic(); nav("/notificacoes"); }} aria-label={unread ? `${unread} notificações não lidas` : "Notificações"}>
-          <Icon name="bell" />
-          {unread > 0 && <span className="bell-dot" />}
-        </button>
+        <BellButton />
         <button className="icon-btn" onClick={toggleTheme} aria-label="Trocar tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button>
       </header>
       <aside className="sidebar">
@@ -201,7 +277,7 @@ export function App() {
             <small>{isSuper ? "Super admin" : "Painel"}</small>
           </div>
         </div>
-        <Nav items={NAV} isSuper={isSuper} unread={unread} />
+        <Nav items={NAV} isSuper={isSuper} />
         <div className="sidebar-foot">
           <div className="me">
             <div className="avatar">{(me.name ?? me.email).slice(0, 1).toUpperCase()}</div>
@@ -278,15 +354,15 @@ export function App() {
       <nav className="tabbar" aria-label="Navegação">
         <div className="tabbar-pill">
           <div className="tabbar-scroll" ref={tabsRef}>
-            {NAV.filter((i): i is Exclude<NavItem, { section: string }> => "to" in i).map((t) => (
-              <NavLink key={t.to} to={t.to} end={t.to === "/"} className="tab">
-                <span className="tab-ico"><Icon name={t.icon} size={21} />{t.badge === "notif" && unread > 0 && <span className="tab-dot" />}</span>
+            {links.map((t) => (
+              <NavLink key={t.to} to={t.to} end={t.to === "/"} className="tab" onPointerEnter={() => preload(t.to)}>
+                <span className="tab-ico"><Icon name={t.icon} size={21} />{t.badge === "notif" && <UnreadDot className="tab-dot" />}</span>
                 <span className="tab-label">{t.short ?? t.label}</span>
               </NavLink>
             ))}
           </div>
           <button className={`tab tab-more ${menu ? "active" : ""}`} onClick={() => setMenu(true)}>
-            <span className="tab-ico"><Icon name="more" size={21} />{unread > 0 && <span className="tab-dot" />}</span>
+            <span className="tab-ico"><Icon name="more" size={21} /><UnreadDot className="tab-dot" /></span>
             <span className="tab-label">Mais</span>
           </button>
         </div>
@@ -314,7 +390,7 @@ export function App() {
             </div>
           </div>
           <div className="more-grid">
-            {NAV.filter((i): i is Exclude<NavItem, { section: string }> => "to" in i).map((item) => (
+            {links.map((item) => (
               <button key={item.to} className={`more-tile ${loc.pathname === item.to ? "active" : ""}`} onClick={() => { setMenu(false); nav(item.to); }}>
                 <Icon name={item.icon} size={26} />
                 <span>{item.short ?? item.label}</span>
@@ -336,6 +412,7 @@ export function App() {
         </Modal>
       )}
     </div>
+    </UnreadProvider>
   );
 }
 
@@ -345,7 +422,7 @@ function titleFor(path: string, items: NavItem[]) {
   return hit?.label ?? "Planejai";
 }
 
-function Nav({ items, isSuper, unread }: { items: NavItem[]; isSuper: boolean; unread: number }) {
+function Nav({ items, isSuper }: { items: NavItem[]; isSuper: boolean }) {
   const clients = useApi<any[]>(isSuper ? "/api/clients" : null, { poll: 60000 });
   const pending = (clients.data ?? []).filter((c) => c.status === "pending" || c.account_status === "pending").length;
   return (
@@ -356,11 +433,11 @@ function Nav({ items, isSuper, unread }: { items: NavItem[]; isSuper: boolean; u
             {item.section}
           </div>
         ) : (
-          <NavLink key={item.to} to={item.to} end={item.to === "/"} title={item.label} data-count={item.badge === "clients" && pending > 0 ? pending : undefined}>
+          <NavLink key={item.to} to={item.to} end={item.to === "/"} title={item.label} onPointerEnter={() => preload(item.to)} data-count={item.badge === "clients" && pending > 0 ? pending : undefined}>
             <Icon name={item.icon} />
             <span className="label">{item.label}</span>
             {item.badge === "clients" && pending > 0 && <span className="count">{pending}</span>}
-            {item.badge === "notif" && unread > 0 && <span className="nav-dot" aria-label={`${unread} não lidas`} />}
+            {item.badge === "notif" && <UnreadDot className="nav-dot" count />}
           </NavLink>
         ),
       )}

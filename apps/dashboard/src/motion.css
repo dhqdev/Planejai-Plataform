@@ -1,12 +1,13 @@
 /* Movimento do Planejai: cada tipo de componente tem um jeito próprio de reagir, sempre curto e discreto.
-   - botões: afundam com mola e soltam com um quique; onda a partir do dedo (motion.ts)
+   - botões: afundam ao apertar e soltam com mola; onda a partir do dedo (motion.ts)
    - botão da marca: o degradê corre ao passar o mouse
    - cards clicáveis: sobem um pouco; cards da página entram em cascata
-   - abas: o traço nasce do centro; segmentos trocam com um "pop"
+   - abas: o traço nasce do centro
    - menu lateral: ícone dá um passinho; item ativo ganha a barrinha crescendo
-   - ícones: giram de leve; o + do botão flutuante gira 90°
    - campos: o anel de foco abre em vez de aparecer
-   Tudo desliga com "reduzir movimento". */
+   Regras: só transform e opacity se movem; nada de interface passa de 300 ms; efeito de hover só com mouse
+   (no toque ele ficaria preso depois do tap); o que responde a clique repetido é transition, não keyframes.
+   Com "reduzir movimento" o deslocamento sai e ficam só cor e opacidade (bloco no fim). */
 
 :root {
   --spring: cubic-bezier(.34, 1.56, .64, 1);
@@ -17,103 +18,98 @@
 .btn, .icon-btn, .fab, .more-tile { position: relative; overflow: hidden; isolation: isolate; }
 /* o + da Agenda fica preso no canto da tela (fixed), não pode virar relative */
 .cal-fab { overflow: hidden; isolation: isolate; }
-.btn { transition: background .15s, border-color .15s, color .15s, opacity .15s, transform .32s var(--spring), box-shadow .2s; }
-.btn:hover:not(:disabled) { transform: translateY(-1px); }
-.btn:active:not(:disabled) { transform: scale(.95); transition-duration: .08s; }
-.btn-primary:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(0, 0, 0, .14); }
-.btn .ico { transition: transform .3s var(--spring); }
-.btn:hover:not(:disabled) .ico { transform: translateX(1px) scale(1.08); }
+.btn { transition: background .15s, border-color .15s, color .15s, opacity .15s, transform .24s var(--spring), box-shadow .2s; }
+/* apertar é na hora; a mola fica só para a volta */
+.btn:active:not(:disabled) { transform: scale(.97); transition-duration: .08s; }
+.btn .ico { transition: transform .2s var(--soft); }
 
-/* degradê vivo: corre devagar no hover */
-.btn-brand { background-size: 180% 100%; background-position: 0 50%; transition: background-position .6s var(--soft), transform .32s var(--spring), box-shadow .2s; }
-.btn-brand:hover:not(:disabled) { background-position: 100% 50%; box-shadow: 0 8px 22px rgba(226, 51, 130, .28); }
+/* degradê vivo: corre no hover */
+.btn-brand { background-size: 180% 100%; background-position: 0 50%; transition: background-position .3s var(--soft), transform .24s var(--spring), box-shadow .2s; }
 
 /* onda do toque (motion.ts coloca o span) */
-.pj-ripple { position: absolute; border-radius: 50%; pointer-events: none; background: currentColor; opacity: .16; transform: scale(0); animation: pj-ripple .55s var(--soft) forwards; z-index: -1; }
+.pj-ripple { position: absolute; border-radius: 50%; pointer-events: none; background: currentColor; opacity: .16; transform: scale(0); animation: pj-ripple .45s var(--soft) forwards; z-index: -1; }
 @keyframes pj-ripple { to { transform: scale(1); opacity: 0; } }
 
-.icon-btn { transition: transform .3s var(--spring), border-color .15s, background .15s; }
-.icon-btn .ico { transition: transform .4s var(--spring); }
-.icon-btn:hover .ico { transform: rotate(-12deg) scale(1.1); }
-.icon-btn:active { transform: scale(.88); transition-duration: .08s; }
+.icon-btn { transition: transform .24s var(--spring), border-color .15s, background .15s; }
+.icon-btn .ico { transition: transform .2s var(--soft); }
+.icon-btn:active:not(:disabled) { transform: scale(.92); transition-duration: .08s; }
 
-.fab { transition: transform .35s var(--spring), box-shadow .2s; }
-.fab .ico, .cal-fab .ico { transition: transform .45s var(--spring); }
-.fab:hover .ico, .cal-fab:hover .ico { transform: rotate(90deg); }
-.fab:active, .cal-fab:active { transform: scale(.9); }
+.fab, .cal-fab { transition: transform .24s var(--spring), box-shadow .2s; }
+.fab .ico, .cal-fab .ico { transition: transform .25s var(--soft); }
+.fab:active, .cal-fab:active { transform: scale(.94); transition-duration: .08s; }
 
 /* ---------- cards ---------- */
-.card.clickable { transition: transform .3s var(--spring), box-shadow .25s, border-color .15s; }
-.card.clickable:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0, 0, 0, .08); }
-:root[data-theme="dark"] .card.clickable:hover { box-shadow: 0 10px 28px rgba(0, 0, 0, .4); }
+.card.clickable { transition: transform .2s var(--soft), box-shadow .2s, border-color .15s; }
 
-/* entrada em cascata dos blocos da página */
+/* entrada em cascata dos blocos da página (uma vez por tela e curta: troca-se de tela o dia todo) */
 .route-fade .grid > *, .route-fade .grid-2 > *, .route-fade .grid-3 > *, .route-fade .grid-4 > *,
-.route-fade .more-grid > *, .route-fade .team-grid > *, .route-fade .fin-kpis > * { animation: pj-rise .42s var(--soft) backwards; }
-.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(2) { animation-delay: .04s; }
-.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(3) { animation-delay: .08s; }
-.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(4) { animation-delay: .12s; }
-.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(5) { animation-delay: .16s; }
-.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(6) { animation-delay: .2s; }
-.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(n + 7) { animation-delay: .24s; }
-@keyframes pj-rise { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+.route-fade .more-grid > *, .route-fade .team-grid > *, .route-fade .fin-kpis > * { animation: pj-rise .26s var(--soft) backwards; }
+.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(2) { animation-delay: .03s; }
+.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(3) { animation-delay: .06s; }
+.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(4) { animation-delay: .09s; }
+.route-fade :is(.grid, .grid-2, .grid-3, .grid-4, .more-grid, .team-grid, .fin-kpis) > :nth-child(n + 5) { animation-delay: .12s; }
+@keyframes pj-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 /* números dos indicadores sobem ao aparecer */
-.stat .value { animation: pj-num .5s var(--soft) .1s backwards; }
+.stat .value { animation: pj-num .28s var(--soft) .04s backwards; }
 @keyframes pj-num { from { opacity: 0; transform: translateY(6px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
 
 /* ---------- abas e segmentos ---------- */
-.tabs button { position: relative; transition: color .2s; }
-.tabs button::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--text); transform: scaleX(0); transition: transform .35s var(--spring); }
+.tabs button { position: relative; transition: color .15s, opacity .15s; }
+.tabs button::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--text); transform: scaleX(0); transition: transform .22s var(--soft); }
 .tabs button.active { border-bottom-color: transparent; }
 .tabs button.active::after { transform: scaleX(1); }
-.tabs button:hover:not(.active) { color: var(--text); }
 
-.seg button { transition: color .2s, background .2s, box-shadow .2s, transform .3s var(--spring); }
-.seg button.active { animation: pj-pop .32s var(--spring); }
-.seg button:active { transform: scale(.94); }
-@keyframes pj-pop { 0% { transform: scale(.9); } 100% { transform: scale(1); } }
-
-/* barra de baixo do celular: o ícone ativo quica */
-.tab.active .tab-ico { animation: pj-hop .45s var(--spring); }
-@keyframes pj-hop { 0% { transform: translateY(0) scale(.86); } 45% { transform: translateY(-3px) scale(1.08); } 100% { transform: none; } }
+/* o "pop" do segmento é a volta do :active (transition): trocar rápido não reinicia nada */
+.seg button { transition: color .15s, background .15s, box-shadow .15s, transform .24s var(--spring); }
+.seg button:active { transform: scale(.94); transition-duration: .08s; }
+.fin-tabs button, .fin-people button, .cal-pills button, button.chip, .cal-create, .team-card, .catalog button { transition: transform .2s var(--soft), background .15s, color .15s, border-color .15s, box-shadow .15s; }
+.fin-cat { transition: transform .2s var(--soft), opacity .15s, box-shadow .15s; }
 
 /* ---------- menu lateral ---------- */
-.nav a { transition: background .15s, color .15s, transform .25s var(--spring); }
-.nav a .ico { transition: transform .35s var(--spring); }
-.nav a:hover .ico { transform: translateX(2px); }
-.nav a.active::before { animation: pj-grow .4s var(--spring) both; transform-origin: center; }
-@keyframes pj-grow { from { transform: scaleY(0); } to { transform: none; } }
+.nav a { transition: background .15s, color .15s, transform .2s var(--soft); }
+.nav a .ico { transition: transform .2s var(--soft); }
+.nav a.active::before { animation: pj-grow .22s var(--soft) both; transform-origin: center; }
+@keyframes pj-grow { from { transform: scaleY(.3); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* ---------- listas ---------- */
-.list-item { transition: background .15s, box-shadow .25s var(--soft); }
-.list-item:hover, .list-item.active { box-shadow: inset 2px 0 0 var(--text); }
-.more-tile { transition: transform .32s var(--spring), background .15s, border-color .15s; }
-.more-tile:hover { transform: translateY(-2px); border-color: var(--border-2); }
-.more-tile:active { transform: scale(.94); transition-duration: .08s; }
-.more-tile > :first-child { transition: transform .4s var(--spring); }
-.more-tile:hover > :first-child { transform: scale(1.12) rotate(-4deg); }
+.list-item { transition: background .15s, box-shadow .2s var(--soft); }
+.list-item.active { box-shadow: inset 2px 0 0 var(--text); }
+.more-tile { transition: transform .24s var(--spring), background .15s, border-color .15s; }
+.more-tile:active { transform: scale(.95); transition-duration: .08s; }
+.more-tile > :first-child { transition: transform .2s var(--soft); }
 
 /* ---------- campos ---------- */
-.input, .textarea, select.input { transition: border-color .15s, box-shadow .25s var(--soft); }
+.input, .textarea, select.input { transition: border-color .15s, box-shadow .2s var(--soft); }
 .input:focus, .textarea:focus { box-shadow: 0 0 0 4px color-mix(in srgb, var(--text) 8%, transparent); }
-input[type="checkbox"]:not([switch]), input[type="radio"] { transition: transform .25s var(--spring); }
-input[type="checkbox"]:not([switch]):checked, input[type="radio"]:checked { animation: pj-pop .3s var(--spring); }
+input[type="checkbox"]:not([switch]), input[type="radio"] { transition: transform .2s var(--spring); }
+input[type="checkbox"]:not([switch]):active, input[type="radio"]:active { transform: scale(.88); transition-duration: .08s; }
 
-/* ---------- selos e avisos ---------- */
-.badge, .chip { transition: transform .25s var(--spring); }
-.chip:hover { transform: translateY(-1px); }
-.notice, .ok-box, .error-box { animation: pj-rise .35s var(--soft) backwards; }
+/* ---------- avisos ---------- */
+.notice, .ok-box, .error-box { animation: pj-rise .22s var(--soft) backwards; }
 .update-pill::before { animation: pj-breathe 1.8s ease-in-out infinite; }
 @keyframes pj-breathe { 50% { transform: scale(1.35); opacity: .7; } }
 
-/* ---------- janelas ---------- */
-.modal-body > * { animation: pj-rise .36s var(--soft) backwards; }
-.modal-body > :nth-child(2) { animation-delay: .03s; }
-.modal-body > :nth-child(3) { animation-delay: .06s; }
-.modal-body > :nth-child(4) { animation-delay: .09s; }
-.modal-body > :nth-child(n + 5) { animation-delay: .12s; }
-.modal-foot .btn { animation: pj-rise .36s var(--soft) .1s backwards; }
+/* ---------- hover: só onde existe mouse ---------- */
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled) { transform: translateY(-1px); }
+  .btn-primary:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(0, 0, 0, .14); }
+  .btn:hover:not(:disabled) .ico { transform: translateX(1px); }
+  .btn-brand:hover:not(:disabled) { background-position: 100% 50%; box-shadow: 0 8px 22px rgba(226, 51, 130, .28); }
+  .icon-btn:hover:not(:disabled) .ico { transform: scale(1.08); }
+  .fab:hover .ico, .cal-fab:hover .ico { transform: rotate(90deg); }
+  .card.clickable:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0, 0, 0, .08); }
+  :root[data-theme="dark"] .card.clickable:hover { box-shadow: 0 10px 28px rgba(0, 0, 0, .4); }
+  .tabs button:hover:not(.active) { color: var(--text); }
+  .nav a:hover .ico { transform: translateX(2px); }
+  .list-item:hover { box-shadow: inset 2px 0 0 var(--text); }
+  .more-tile:hover { transform: translateY(-2px); border-color: var(--border-2); }
+  .more-tile:hover > :first-child { transform: scale(1.06); }
+  /* apertar ganha do hover */
+  .btn:active:not(:disabled) { transform: scale(.97); }
+  .card.clickable:active { transform: scale(.98); }
+  .more-tile:active { transform: scale(.95); }
+}
 
 /* ---------- atualizando ---------- */
 .pj-updating {
@@ -123,6 +119,25 @@ input[type="checkbox"]:not([switch]):checked, input[type="radio"]:checked { anim
 }
 .pj-updating-dot { width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid var(--border-2); border-top-color: var(--text); animation: ptr-spin .7s linear infinite; }
 
+/* ---------- Reduzir movimento: vale para o app inteiro ----------
+   Sai tudo que desloca, gira ou escala; ficam as trocas de cor e opacidade, que ajudam a entender o que mudou.
+   (A folha do celular e a onda do toque são feitas em JS e conferem a mesma preferência: components.tsx, motion.ts.) */
 @media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important;
+    transition-property: color, background-color, border-color, outline-color, opacity, box-shadow !important;
+    scroll-behavior: auto !important;
+  }
+  /* aparecer e sumir continuam suaves, sem deslizar */
+  .modal, .modal-scrim, .update-pill, .pj-updating { animation: fade-in .2s ease both !important; }
+  .modal-bg.closing .modal, .modal-bg.closing .modal-scrim { animation: fade-out .16s ease both !important; }
+  .route-fade { animation: fade-in .14s ease both !important; }
   .pj-ripple { display: none; }
+  /* "carregando" não pode parecer travado: os blocos piscam no lugar e os giros continuam, mais lentos */
+  .pj-loader .block { animation: pj-blink 2s ease-in-out infinite !important; }
+  .pj-loader .block:nth-child(4n + 2) { animation-delay: .2s !important; }
+  .pj-loader .block:nth-child(4n + 3) { animation-delay: .4s !important; }
+  .pj-loader .block:nth-child(4n + 4) { animation-delay: .6s !important; }
+  .ptr.busy svg, .pj-updating-dot, .ex-spin { animation-duration: 1.4s !important; animation-iteration-count: infinite !important; }
 }
+@keyframes pj-blink { 50% { opacity: .25; } }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, ago, brl, ms, usd, when } from "../api";
 import type { Me } from "../App";
@@ -367,6 +367,11 @@ const WIDGETS: Record<string, WidgetDef> = {
   },
 };
 
+/** O miolo do widget só redesenha quando chegam dados novos, não a cada arrasto, modal aberto ou troca do modo de edição. */
+const WidgetBody = memo(function WidgetBody({ type, sys, mine, isSuper }: Ctx & { type: string }) {
+  return WIDGETS[type]!.render({ sys, mine, isSuper });
+});
+
 let seq = 0;
 const w = (type: string, size: Size): Widget => ({ id: `${type}-${Date.now().toString(36)}-${seq++}`, type, size });
 
@@ -410,11 +415,12 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
   const dragging = useRef<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (saved.loading || widgets) return;
+  // o painel salvo entra uma vez; daí em diante vale a edição local. Ajuste feito no render (não em
+  // efeito): com o dado já em cache o painel aparece na primeira pintura, sem um quadro vazio antes
+  if (!widgets && !saved.loading) {
     const list = (saved.data?.widgets ?? []).filter((x) => WIDGETS[x.type] && allowed(WIDGETS[x.type]!, isSuper));
     setWidgets(list.length ? list : isSuper ? DEFAULT_SUPER() : DEFAULT_ADMIN());
-  }, [saved.loading, saved.data, widgets, isSuper]);
+  }
 
   const persist = (list: Widget[]) => {
     setWidgets(list);
@@ -467,7 +473,6 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
     setModal(null);
   };
 
-  const ctx: Ctx = { sys: sys.data, mine: mine.data, isSuper };
   // no notebook a tela cabe inteira: números em cima, mapa do time à esquerda e o resto numa coluna que rola por dentro
   const fit = useMedia(FIT_QUERY) && !editing && !!widgets?.length;
   const renderWidget = (x: Widget) => {
@@ -489,7 +494,7 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
             </button>
           </div>
         )}
-        {def.render(ctx)}
+        <WidgetBody type={x.type} sys={sys.data} mine={mine.data} isSuper={isSuper} />
       </div>
     );
   };
@@ -632,7 +637,6 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
 export function CustomTabPage({ me, tab }: { me: Me; tab: { title: string; widgets: string[] } }) {
   const isSuper = me.role === "superadmin";
   const mine = useApi<any>("/api/me/overview", { poll: 30000 });
-  const ctx: Ctx = { sys: null, mine: mine.data, isSuper };
   const list = tab.widgets.filter((t) => WIDGETS[t] && allowed(WIDGETS[t]!, isSuper));
   return (
     <div className="page page-wide">
@@ -643,7 +647,7 @@ export function CustomTabPage({ me, tab }: { me: Me; tab: { title: string; widge
           const size = def.sizes.includes("l") ? "l" : def.sizes[def.sizes.length - 1]!;
           return (
             <div key={t} className={`widget ${size}`}>
-              {def.render(ctx)}
+              <WidgetBody type={t} sys={null} mine={mine.data} isSuper={isSuper} />
             </div>
           );
         })}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ago, api, brl, usd } from "../api";
-import { AgentTag, CopyField, Empty, ErrorBox, Modal, PageHead, Status } from "../components";
+import { AgentTag, CopyField, Empty, ErrorBox, Loading, Modal, PageHead, Status, confirmDialog, initial } from "../components";
 import { AgentFace } from "../faces";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
@@ -28,30 +28,49 @@ export function ClientsPage() {
       <ErrorBox error={error} />
       <CostsCard onOpen={(id) => setDetail((data ?? []).find((c) => c.id === id) ?? null)} />
       <div className="field" style={{ maxWidth: 360 }}>
-        <input className="input" placeholder="Buscar por nome, telefone ou e-mail" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input" type="search" name="q" aria-label="Buscar cliente" placeholder="Buscar por nome, telefone ou e-mail…" autoComplete="off" enterKeyHint="search" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       <div className="card">
-        {list.map((c) => (
-          <div key={c.id} className="line-item clickable" style={{ padding: "12px 16px" }} onClick={() => setDetail(c)}>
-            <div className="avatar">{(c.full_name ?? c.name ?? "?").slice(0, 1).toUpperCase()}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="ellipsis">
-                <strong>{c.full_name ?? c.name ?? "Sem nome"}</strong>
+        {list.map((c) => {
+          const name = c.full_name || c.name || "Sem nome";
+          // a linha inteira é um botão: abre com toque, Enter ou espaço
+          return (
+            <div
+              key={c.id}
+              className="line-item clickable"
+              style={{ padding: "12px 16px" }}
+              role="button"
+              tabIndex={0}
+              onClick={() => setDetail(c)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                setDetail(c);
+              }}
+            >
+              <div className="avatar" aria-hidden="true">{initial(c.full_name || c.name)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="ellipsis" style={{ maxWidth: "none" }} title={name}>
+                  <strong>{name}</strong>
+                </div>
+                <div className="muted ellipsis" style={{ fontSize: 13, maxWidth: "none" }}>
+                  {[c.phone && `+${c.phone}`, c.email, c.invited_by_name && `convidado por ${c.invited_by_name}`].filter(Boolean).join(" · ") || "sem contato"}
+                </div>
+                {/* no celular o status desce para baixo do nome: ao lado ele espremia o nome */}
+                <div className="phone-only" style={{ marginTop: 4 }}><Status status={c.status} /></div>
               </div>
-              <div className="muted ellipsis" style={{ fontSize: 12 }}>
-                +{c.phone}
-                {c.email && ` · ${c.email}`}
-                {c.invited_by_name && ` · convidado por ${c.invited_by_name}`}
-              </div>
+              <span className="muted hide-phone nowrap" style={{ fontSize: 12, minWidth: 110, textAlign: "right", flexShrink: 0 }}>
+                {c.invites_accepted ?? 0}/{c.invites_sent ?? 0} convites
+              </span>
+              <span className="hide-phone"><Status status={c.status} /></span>
+              <Icon name="chevron-right" size={16} />
             </div>
-            <span className="muted hide-phone" style={{ fontSize: 12, width: 110, textAlign: "right" }}>
-              {c.invites_accepted}/{c.invites_sent} convites
-            </span>
-            <Status status={c.status} />
-            <Icon name="chevron-right" size={16} />
-          </div>
-        ))}
-        {data && !list.length && <Empty>Nenhum cliente encontrado.</Empty>}
+          );
+        })}
+        {!data && !error && <Loading />}
+        {data && !list.length && (
+          <Empty>{q ? `Nenhum cliente para “${q}”. Confira o nome, o telefone ou o e-mail.` : "Nenhum cliente ainda. Cadastre o primeiro em Novo cliente."}</Empty>
+        )}
       </div>
       {adding && <NewClient onClose={() => { setAdding(false); void reload(); }} />}
       {detail && <ClientDetail client={detail} onClose={() => { setDetail(null); void reload(); }} />}
@@ -98,9 +117,9 @@ function NewClient({ onClose }: { onClose: () => void }) {
       ) : (
         <>
           <ErrorBox error={error} />
-          <div className="field"><label>Nome completo</label><input className="input" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Maria da Silva" autoComplete="name" /></div>
-          <div className="field"><label>E-mail</label><input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="maria@email.com" autoComplete="email" /></div>
-          <div className="field"><label>WhatsApp com DDD</label><input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="11 99999-0000" inputMode="tel" /></div>
+          <div className="field"><label htmlFor="nc-name">Nome completo</label><input id="nc-name" name="name" className="input" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Maria da Silva" autoComplete="name" /></div>
+          <div className="field"><label htmlFor="nc-email">E-mail</label><input id="nc-email" name="email" className="input" type="email" spellCheck={false} autoCapitalize="none" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="maria@email.com" autoComplete="email" /></div>
+          <div className="field"><label htmlFor="nc-phone">WhatsApp com DDD</label><input id="nc-phone" name="tel" className="input" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="11 99999-0000" inputMode="tel" autoComplete="tel-national" /></div>
           <label className="row" style={{ gap: 8, fontSize: 14 }}>
             <input type="checkbox" checked={form.notify} onChange={(e) => setForm({ ...form, notify: e.target.checked })} />
             Mandar boas-vindas no WhatsApp
@@ -120,18 +139,18 @@ function ClientDetail({ client, onClose }: { client: any; onClose: () => void })
     setStatus(r.status);
   };
   return (
-    <Modal title={client.full_name ?? client.name ?? `+${client.phone}`} icon={<Icon name="user" />} onClose={onClose} wide>
+    <Modal title={client.full_name || client.name || (client.phone ? `+${client.phone}` : "Cliente")} icon={<Icon name="user" />} onClose={onClose} wide>
       <dl className="kv">
-        <dt>WhatsApp</dt><dd>+{client.phone}</dd>
+        <dt>WhatsApp</dt><dd>{client.phone ? `+${client.phone}` : "–"}</dd>
         <dt>E-mail</dt><dd>{client.email ?? "–"}</dd>
         <dt>Convidado por</dt><dd>{client.invited_by_name ?? "–"}</dd>
-        <dt>Convites</dt><dd>{client.invites_accepted} aceitos de {client.invites_sent} enviados · {client.contacts} contatos</dd>
+        <dt>Convites</dt><dd>{client.invites_accepted ?? 0} aceitos de {client.invites_sent ?? 0} enviados · {client.contacts ?? 0} contatos</dd>
         <dt>Última mensagem</dt><dd>{ago(client.last_seen_at)}</dd>
         <dt>Painel</dt>
         <dd>
           {client.account_id ? (
-            <span className="row" style={{ gap: 8, display: "inline-flex" }}>
-              {client.account_email} <Status status={client.account_status === "disabled" ? "blocked" : client.account_status} />
+            <span className="row row-wrap" style={{ gap: 8, display: "inline-flex", maxWidth: "100%" }}>
+              <span className="grow">{client.account_email}</span> <Status status={client.account_status === "disabled" ? "blocked" : client.account_status} />
               {client.account_status === "pending" && (
                 <button className="btn btn-sm btn-primary" onClick={() => api(`/api/accounts/${client.account_id}`, { method: "PATCH", json: { status: "active" } }).then(onClose)}>
                   Liberar painel
@@ -143,7 +162,7 @@ function ClientDetail({ client, onClose }: { client: any; onClose: () => void })
           )}
         </dd>
       </dl>
-      <div className="row" style={{ margin: "14px 0" }}>
+      <div className="row row-wrap" style={{ margin: "14px 0" }}>
         <Status status={status} />
         <span className="spacer" />
         {status !== "active" && <button className="btn btn-sm btn-primary" onClick={() => patch({ status: "active" })}>Liberar</button>}
@@ -152,7 +171,13 @@ function ClientDetail({ client, onClose }: { client: any; onClose: () => void })
           className="btn btn-sm btn-danger"
           title="Pedido de exclusão (LGPD): apaga a pessoa e tudo dela"
           onClick={async () => {
-            if (!confirm(`Apagar ${client.full_name ?? client.name ?? "esta pessoa"} e todos os dados dela? Não tem volta.`)) return;
+            const ok = await confirmDialog({
+              title: `Apagar ${client.full_name || client.name || "esta pessoa"}?`,
+              body: "Some o cadastro e tudo dela: gastos, limites, lembretes, memórias e contatos. Não tem volta.",
+              confirmLabel: "Apagar dados",
+              danger: true,
+            });
+            if (!ok) return;
             await api(`/api/clients/${client.id}`, { method: "DELETE" });
             onClose();
           }}
@@ -166,8 +191,8 @@ function ClientDetail({ client, onClose }: { client: any; onClose: () => void })
       <h3 style={{ marginTop: 16 }}>O que ele sabe</h3>
       {(memories.data ?? []).slice(0, 12).map((m) => (
         <div key={m.id} className="line-item">
-          <span style={{ flex: 1 }}>{m.content}</span>
-          <button className="icon-btn" aria-label="Apagar" onClick={async () => { await api(`/api/memories/${m.id}`, { method: "DELETE" }); void memories.reload(); }}>
+          <span className="grow">{m.content}</span>
+          <button className="icon-btn" aria-label="Apagar memória" onClick={async () => { await api(`/api/memories/${m.id}`, { method: "DELETE" }); void memories.reload(); }}>
             <Icon name="x" size={14} />
           </button>
         </div>
@@ -176,7 +201,7 @@ function ClientDetail({ client, onClose }: { client: any; onClose: () => void })
 
       <h3 style={{ marginTop: 16 }}>Gastos do mês</h3>
       {(finance.data?.byCategory ?? []).map((c: any) => (
-        <div key={c.category} className="line-item"><span style={{ flex: 1 }}>{c.category}</span><strong>{brl(c.total)}</strong></div>
+        <div key={c.category} className="line-item"><span className="grow">{c.category}</span><strong className="amount-out nowrap">{brl(c.total)}</strong></div>
       ))}
       {finance.data && !finance.data.byCategory?.length && <p className="muted">Sem gastos no mês.</p>}
     </Modal>
@@ -189,9 +214,12 @@ function CostsCard({ onOpen }: { onOpen: (id: string) => void }) {
   const { data } = useApi<any>(`/api/costs?days=${days}`);
   const [hover, setHover] = useState<any | null>(null);
   if (!data) return null;
-  const max = Math.max(1e-9, ...data.daily.map((d: any) => d.cost));
-  const top = Math.max(1e-9, ...data.clients.map((c: any) => c.cost));
-  const shown = hover ?? data.daily[data.daily.length - 1];
+  // período sem dias ou sem clientes não pode derrubar a tela
+  const daily: any[] = data.daily ?? [];
+  const clients: any[] = data.clients ?? [];
+  const max = Math.max(1e-9, ...daily.map((d: any) => d.cost));
+  const top = Math.max(1e-9, ...clients.map((c: any) => c.cost));
+  const shown = hover ?? daily[daily.length - 1];
   const fmtDay = (d: string) => d.split("-").reverse().slice(0, 2).join("/");
   return (
     <div className="card card-pad costs-card">
@@ -199,34 +227,34 @@ function CostsCard({ onOpen }: { onOpen: (id: string) => void }) {
         <div style={{ flex: 1, minWidth: 180 }}>
           <div className="costs-label">Custo de IA (US$)</div>
           <div className="costs-total">{usd(data.total)}</div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            {hover ? `${fmtDay(shown.day)}: ${usd(shown.cost)} · ${shown.executions} respostas` : `últimos ${days} dias · ${data.clients.length} clientes`}
+          <div className="muted" style={{ fontSize: 13 }}>
+            {hover ? `${fmtDay(shown.day)}: ${usd(shown.cost)} · ${shown.executions} ${shown.executions === 1 ? "resposta" : "respostas"}` : `últimos ${days} dias · ${clients.length} ${clients.length === 1 ? "cliente" : "clientes"}`}
           </div>
         </div>
-        <div className="seg" role="tablist" aria-label="Período">
+        <div className="seg" role="group" aria-label="Período">
           {[7, 30, 90].map((d) => (
-            <button key={d} className={days === d ? "active" : ""} onClick={() => setDays(d)}>{d} dias</button>
+            <button key={d} className={days === d ? "active" : ""} aria-pressed={days === d} onClick={() => setDays(d)}>{d} dias</button>
           ))}
         </div>
       </div>
       <div className="costs-bars" onMouseLeave={() => setHover(null)} aria-label="Custo por dia">
-        {data.daily.map((d: any) => (
+        {daily.map((d: any) => (
           <span key={d.day} className={hover?.day === d.day ? "on" : ""} onMouseEnter={() => setHover(d)} onClick={() => setHover(d)} title={`${fmtDay(d.day)}: ${usd(d.cost)}`}>
             <i style={{ height: `${Math.max(d.cost > 0 ? 3 : 0, (d.cost / max) * 100)}%` }} />
           </span>
         ))}
       </div>
-      <div className="costs-axis muted"><span>{fmtDay(data.daily[0].day)}</span><span>hoje</span></div>
+      {daily[0] && <div className="costs-axis muted"><span>{fmtDay(daily[0].day)}</span><span>hoje</span></div>}
       <div className="costs-label" style={{ marginTop: 14 }}>Por cliente</div>
-      {data.clients.slice(0, 8).map((c: any) => (
+      {clients.slice(0, 8).map((c: any) => (
         <button key={c.id} className="costs-row" onClick={() => onOpen(c.id)}>
-          <span className="ellipsis costs-name">{c.name}</span>
+          <span className="ellipsis costs-name" title={c.name ?? undefined}>{c.name || "Sem nome"}</span>
           <span className="costs-track"><i style={{ width: `${(c.cost / top) * 100}%` }} /></span>
           <span className="costs-val">{usd(c.cost)}</span>
           <span className="costs-sub muted hide-phone">{c.executions} resp. · {usd(c.executions ? c.cost / c.executions : 0)}/resp.</span>
         </button>
       ))}
-      {!data.clients.length && <p className="muted" style={{ fontSize: 13 }}>Ainda sem uso no período.</p>}
+      {!clients.length && <p className="muted" style={{ fontSize: 13 }}>Ainda sem uso no período.</p>}
     </div>
   );
 }
@@ -267,8 +295,8 @@ function ClientUsage({ id }: { id: string }) {
           <h3 style={{ marginTop: 16 }}>Quem trabalhou para ele (7 dias)</h3>
           {data.byAgent.map((a: any) => (
             <div key={a.agent} className="line-item">
-              <span style={{ flex: 1 }}><AgentTag id={a.agent} /></span>
-              <span className="muted" style={{ fontSize: 12 }}>{a.calls} chamadas · {a.tokens.toLocaleString("pt-BR")} tokens · {usd(a.cost)}</span>
+              <span className="grow"><AgentTag id={a.agent} /></span>
+              <span className="muted" style={{ fontSize: 12, textAlign: "right" }}>{a.calls} chamadas · {Number(a.tokens ?? 0).toLocaleString("pt-BR")} tokens · {usd(a.cost)}</span>
             </div>
           ))}
         </>
@@ -282,7 +310,7 @@ function ClientUsage({ id }: { id: string }) {
             <strong>{a.persona}</strong> <span className="muted">· {a.name}</span>
             <div className="muted ellipsis" style={{ fontSize: 12 }}>{a.focus} · criado {ago(a.created_at)}</div>
           </span>
-          <span className="muted" style={{ fontSize: 12 }}>{a.uses} usos</span>
+          <span className="muted nowrap" style={{ fontSize: 12 }}>{a.uses} {a.uses === 1 ? "uso" : "usos"}</span>
         </div>
       ))}
       {!data.agents?.length && <p className="muted">Nenhum ainda. A reunião das 19h cria quando um assunto se repete.</p>}
@@ -290,9 +318,9 @@ function ClientUsage({ id }: { id: string }) {
       {(data.styleNotes || data.notes?.length > 0) && (
         <>
           <h3 style={{ marginTop: 16 }}>O que o time aprendeu</h3>
-          {data.styleNotes && <div className="line-item"><span className="persona">Téo</span><span style={{ flex: 1 }}>{data.styleNotes}</span></div>}
+          {data.styleNotes && <div className="line-item" style={{ alignItems: "flex-start" }}><span className="persona">Téo</span><span className="grow">{data.styleNotes}</span></div>}
           {(data.notes ?? []).map((n: any) => (
-            <div key={n.agent} className="line-item"><span style={{ width: 150, flexShrink: 0 }}><AgentTag id={n.agent} /></span><span style={{ flex: 1 }}>{n.note}</span></div>
+            <div key={n.agent} className="line-item row-wrap" style={{ alignItems: "flex-start" }}><span style={{ width: 150, flexShrink: 0 }}><AgentTag id={n.agent} /></span><span className="grow" style={{ flexBasis: 180 }}>{n.note}</span></div>
           ))}
         </>
       )}
@@ -302,14 +330,14 @@ function ClientUsage({ id }: { id: string }) {
       {Object.keys(MODULE_LABEL).map((m) => (
         <label key={m} className="toggle-row">
           <input type="checkbox" checked={data.tabs.modules.includes(m)} onChange={() => toggle(m)} />
-          <span style={{ flex: 1 }}>{MODULE_LABEL[m]}</span>
+          <span className="grow">{MODULE_LABEL[m]}</span>
         </label>
       ))}
       {(data.tabs.custom ?? []).map((c: any) => (
         <div key={c.slug} className="toggle-row">
           <Icon name={c.icon} size={16} />
-          <span style={{ flex: 1 }}>{c.title} <span className="muted">· aba sob medida</span></span>
-          <button className="icon-btn" aria-label="Remover aba" onClick={() => removeTab(c.slug)}><Icon name="x" size={14} /></button>
+          <span className="grow">{c.title} <span className="muted">· aba sob medida</span></span>
+          <button className="icon-btn" aria-label={`Remover a aba ${c.title}`} onClick={() => removeTab(c.slug)}><Icon name="x" size={14} /></button>
         </div>
       ))}
       {data.counts && (
