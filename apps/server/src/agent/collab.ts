@@ -113,9 +113,8 @@ export function delegationTool(def: AgentDef): Tool<{ message: string }> {
   return defineTool({
     name: `ask_${def.id}`,
     description:
-      `${def.name}: ${def.role} ` +
-      "É uma conversa: chamar de novo continua de onde parou (use para cobrar, corrigir ou pedir mais). Mande a tarefa completa na primeira vez.",
-    parameters: obj({ message: { type: "string", description: "Tarefa ou resposta para o especialista, com todo o contexto necessário" } }, ["message"]),
+      `${def.name}: ${def.role} Chamar de novo continua a conversa.`,
+    parameters: obj({ message: { type: "string", description: "Tarefa completa, com o contexto" } }, ["message"]),
     async run(args, ctx) {
       return ctx.room.withLock(def.id, async () => {
         const chain = [...ctx.callChain, def.id];

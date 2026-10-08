@@ -39,3 +39,4 @@ Leia antes de mexer no orquestrador, no time (CTO, especialistas, agentes sob me
 
 ## Trocar modelos
 Padrões em `ROUTE_DEFAULTS` com o porquê de cada escolha e `maxTokens` por rota; em produção troque pela tela **Modelos** (grava em `model_routes`, sem redeploy). Critério: entrada barata para quem lê muito histórico (CTO, Pesquisador), saída barata para quem escreve muito, modelo omni para áudio, e sempre `fallbacks`. Confira IDs e preços no catálogo ao vivo (`GET /api/models/catalog`).
+- Token: o prompt do CTO não repete o que a descrição da ferramenta já diz (e vice-versa); `ask_*` leva só nome + papel. Passo de LLM cortado pelo `maxTokens` grava `finish_reason: "length"` na saída do passo: `SELECT count(*) FROM execution_steps WHERE output->>'finish_reason' = 'length'` mostra se o teto está apertado. `reasoning: { effort: "low" }` vai em toda chamada.

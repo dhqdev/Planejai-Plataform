@@ -102,7 +102,8 @@ export async function runToolLoop(opts: {
       if (guard?.expired) return { text: "", steps: step, messages, timedOut: true };
       throw err;
     }
-    await llmStep.ok(res.message, { model: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costUsd: res.costUsd });
+    // resposta cortada pelo maxTokens fica marcada no log (dá para medir se o teto está apertado)
+    await llmStep.ok(res.finishReason === "length" ? { ...res.message, finish_reason: "length" } : res.message, { model: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costUsd: res.costUsd });
 
     const calls = res.message.tool_calls ?? [];
     if (!calls.length) {
