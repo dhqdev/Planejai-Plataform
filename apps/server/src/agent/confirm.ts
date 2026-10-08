@@ -72,7 +72,19 @@ export async function resolvePending(pending: PendingAction[], userTexts: string
     });
     return notes;
   }
-  for (const p of pending) {
+  let run = pending;
+  if (answer === "yes" && pending.length > 1) {
+    // um "sim" responde só à última pergunta: o resto cai e o CTO pergunta de novo, uma por vez
+    const latest = pending.reduce((a, b) => (b.id > a.id ? b : a));
+    const rest = pending.filter((p) => p !== latest);
+    await query("UPDATE pending_actions SET status = 'expired', resolved_at = now() WHERE id = ANY($1) AND status = 'pending'", [rest.map((p) => p.id)]);
+    notes.push({
+      role: "system",
+      content: `Não executei: ${rest.map((p) => p.summary).join("; ")}. Se ela ainda quiser, pergunte de novo, uma por vez.`,
+    });
+    run = [latest];
+  }
+  for (const p of run) {
     // fecha antes de rodar: uma nova tentativa da fila não executa a mesma ação duas vezes
     const claimed = await query("UPDATE pending_actions SET status = $2, resolved_at = now() WHERE id = $1 AND status = 'pending'", [
       p.id,

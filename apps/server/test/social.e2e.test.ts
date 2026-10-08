@@ -183,6 +183,18 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     expect(await shared()).toBeUndefined();
   });
 
+  it("um sim aprova só a pendência mais recente; a outra cai", async () => {
+    const ins = (tool: string, args: unknown, summary: string) =>
+      db.one("INSERT INTO pending_actions (conversation_id, user_id, tool, agent, args, summary) VALUES ($1, $2, $3, 'cto', $4, $5) RETURNING id", [davidConv, david.id, tool, JSON.stringify(args), summary]);
+    const older = await ins("share_screen", { contact: "giovani", screen: "agenda", allow: true }, "Liberar a agenda para Giovani Silva ver no painel");
+    const newer = await ins("send_to_contact", { contact: "giovani", message: "Teste do sim único" }, 'Mandar para Giovani Silva: "Teste do sim único"');
+    await say("sim");
+    expect(await db.one("SELECT status FROM pending_actions WHERE id = $1", [older.id])).toEqual({ status: "expired" });
+    expect(await db.one("SELECT status FROM pending_actions WHERE id = $1", [newer.id])).toEqual({ status: "approved" });
+    expect(lastTexts(3).some((t) => t.includes("Teste do sim único"))).toBe(true);
+    expect(await db.one("SELECT 1 AS ok FROM shares WHERE owner_id = $1 AND scope = 'agenda'", [david.id])).toBeUndefined();
+  });
+
   it("cadastro no painel só com convite, e o convite conta para quem convidou", async () => {
     const { buildServer } = await import("../src/api/server.js");
     const app = await buildServer();

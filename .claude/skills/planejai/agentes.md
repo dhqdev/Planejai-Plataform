@@ -3,7 +3,7 @@
 Leia antes de mexer no orquestrador, no time (CTO, especialistas, agentes sob medida), em prompts, filas, modelos ou no navegador dos agentes.
 
 ## Confirmação de ação sensível
-- Ação com dinheiro, mensagem para terceiro ou apagar chama `requireConfirmation(args, resumo, ctx)` (`agent/tools/types.ts`). Ela NÃO executa: guarda em `pending_actions` e devolve o resumo para o agente perguntar. Quem libera é a próxima mensagem da pessoa, lida sem IA em `agent/confirm.ts` (`confirmationAnswer`): "sim" executa exatamente o que foi guardado, "não" descarta, outra coisa deixa o pedido cair. O campo `confirmed_by_user` não libera nada.
+- Ação com dinheiro, mensagem para terceiro ou apagar chama `requireConfirmation(args, resumo, ctx)` (`agent/tools/types.ts`). Ela NÃO executa: guarda em `pending_actions` e devolve o resumo para o agente perguntar. Quem libera é a próxima mensagem da pessoa, lida sem IA em `agent/confirm.ts` (`confirmationAnswer`): "sim" executa exatamente o que foi guardado (com mais de uma pendência, só a mais recente; as outras viram `expired` e o CTO pergunta de novo, uma por vez), "não" descarta todas, outra coisa deixa o pedido cair. O campo `confirmed_by_user` não libera nada.
 - Teste chamando a ferramenta direto: passe `{ ...ctx, approvedAction: true }`.
 - Nova tentativa da fila (erro passageiro do LLM) só refaz a rodada se nenhuma ferramenta com efeito rodou (`sideEffectsDone` em `orchestrator.ts`). Ferramenta nova só de leitura: confira se o nome cai em `NO_SIDE_EFFECT`.
 - O worker processa com `wait: false`: conversa ocupada volta para a fila em 5 s em vez de prender uma vaga.
