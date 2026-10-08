@@ -4,7 +4,8 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
 /** Cada build ganha um id. O app compara com /version.json e mostra "Atualizar" quando sai versão nova. */
-const APP_VERSION: string = JSON.parse(fs.readFileSync(new URL("./package.json", import.meta.url), "utf8")).version;
+// a versão do push vem do CI (APP_VERSION); sem ela, a do package.json
+const APP_VERSION: string = process.env.APP_VERSION || JSON.parse(fs.readFileSync(new URL("./package.json", import.meta.url), "utf8")).version;
 const BUILD = `${Date.now().toString(36)}${process.env.GITHUB_SHA ? `-${process.env.GITHUB_SHA.slice(0, 7)}` : ""}`;
 
 function buildVersion(): Plugin {

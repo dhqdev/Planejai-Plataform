@@ -11,7 +11,9 @@ COPY apps/server/package.json apps/server/
 COPY apps/dashboard/package.json apps/dashboard/
 RUN npm ci
 COPY . .
-RUN npm run build
+# versão do push (CI) também no painel; vazio = a do package.json
+ARG APP_VERSION=""
+RUN APP_VERSION=$APP_VERSION npm run build
 
 FROM --platform=$BUILDPLATFORM node:22-alpine AS prod-deps
 WORKDIR /app

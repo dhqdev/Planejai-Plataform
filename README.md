@@ -238,6 +238,7 @@ O projeto segue versões `MAJOR.MINOR.PATCH` (começou em 1.0.0). A versão apar
 
 - **Gerar uma versão:** GitHub > Actions > **Release** > *Run workflow* e escolha `patch` (correções), `minor` (novidades) ou `major` (mudança grande).
 - O workflow sobe o número nos `package.json`, escreve o [`CHANGELOG.md`](CHANGELOG.md) com os commits desde a última versão, cria a tag `vX.Y.Z` e a release no GitHub, e roda o CI na tag.
+- Além disso, cada push na `main` que passa no CI vira uma versão patch nova sozinha (`v1.2.0` → `v1.2.1`…), com tag e release.
 - O CI testa e publica a imagem com as tags `X.Y.Z`, `X.Y` e `latest`. Para fixar uma versão na stack, troque `:latest` por `:1.2.0`.
 
 ## Operação: backup, rollback e saúde
