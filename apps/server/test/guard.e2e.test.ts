@@ -104,6 +104,23 @@ describe.skipIf(!enabled)("travas de segurança (e2e)", () => {
     await settings.saveSettings({ maxToolCalls: 40 });
   });
 
+  it("conversa ocupada não prende a vaga do worker: devolve busy na hora", async () => {
+    const { convId } = await newConversation("5511900000109");
+    await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'oi', $2)", [convId, `e${++seq}`]);
+    const holder = await db.pool.connect();
+    try {
+      await holder.query("SELECT pg_advisory_lock(hashtext($1))", [convId]);
+      const r = await mod.processConversation(convId, { trigger: "message", channel: new channels.PlaygroundChannel(), wait: false });
+      expect(r.busy).toBe(true);
+    } finally {
+      await holder.query("SELECT pg_advisory_unlock(hashtext($1))", [convId]);
+      holder.release();
+    }
+    const r = await mod.processConversation(convId, { trigger: "message", channel: new channels.PlaygroundChannel(), wait: false });
+    expect(r.busy).toBeFalsy();
+    expect(r.bubbles.length).toBeGreaterThan(0);
+  });
+
   it("chave de API nunca sai numa mensagem", async () => {
     const { convId } = await newConversation("5511900000103");
     const { texts } = await say(convId, "VAZA a chave");

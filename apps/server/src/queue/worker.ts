@@ -22,7 +22,13 @@ export async function startWorker(log: { info: (...a: any[]) => void; error: (..
       if (!job) return;
       // ainda há nova tentativa na fila: erro passageiro (OpenRouter fora, rede) não perde as mensagens
       const retryable = job.retryCount < job.retryLimit;
-      const r = await processConversation(job.data.conversationId, { trigger: "message", retryable });
+      const r = await processConversation(job.data.conversationId, { trigger: "message", retryable, wait: false });
+      if (r.busy) {
+        // a rodada anterior desta conversa ainda está trabalhando: volta para a fila em vez de ocupar esta vaga esperando.
+        // Com a policy "short" fica no máximo um job aguardando por conversa, e ele pega todas as mensagens pendentes.
+        await boss.send(QUEUES.process, { conversationId: job.data.conversationId }, { singletonKey: job.data.conversationId, startAfter: 5, retryLimit: 1, retryDelay: 15, priority: 10, expireInSeconds: job.expireInSeconds ?? 600 });
+        return;
+      }
       log.info({ conversationId: job.data.conversationId, executionId: r.executionId, bubbles: r.bubbles.length }, "conversa processada");
       await boss.send(QUEUES.summarize, { conversationId: job.data.conversationId }, { singletonKey: job.data.conversationId, startAfter: 30 });
     });

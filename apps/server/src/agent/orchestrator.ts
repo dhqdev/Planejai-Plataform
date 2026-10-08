@@ -77,6 +77,8 @@ async function loadMemories(userId: string, text: string) {
 }
 
 export interface ProcessResult {
+  /** outra rodada desta conversa ainda está em andamento (só com wait: false) */
+  busy?: boolean;
   executionId: string | null;
   bubbles: Bubble[];
   outbox: Outbox;
@@ -92,11 +94,19 @@ export async function processConversation(
 ): Promise<ProcessResult> {
   // Um processamento por conversa por vez
   const lock = await pool.connect();
+  let locked = false;
   try {
-    await lock.query("SELECT pg_advisory_lock(hashtext($1))", [conversationId]);
+    if (opts.wait === false) {
+      // a fila não espera: com a conversa ocupada, devolve "busy" e o job volta para a fila em vez de prender uma vaga do worker
+      locked = (await lock.query("SELECT pg_try_advisory_lock(hashtext($1)) AS ok", [conversationId])).rows[0].ok;
+      if (!locked) return { busy: true, executionId: null, bubbles: [], outbox: new Outbox() };
+    } else {
+      await lock.query("SELECT pg_advisory_lock(hashtext($1))", [conversationId]);
+      locked = true;
+    }
     return await processLocked(conversationId, opts);
   } finally {
-    await lock.query("SELECT pg_advisory_unlock(hashtext($1))", [conversationId]).catch(() => {});
+    if (locked) await lock.query("SELECT pg_advisory_unlock(hashtext($1))", [conversationId]).catch(() => {});
     lock.release();
   }
 }
@@ -107,6 +117,8 @@ export interface ProcessOpts {
   channel?: Channel;
   /** a fila ainda vai tentar de novo: erro passageiro deixa as mensagens pendentes em vez de perder */
   retryable?: boolean;
+  /** false = se a conversa já está sendo processada, devolve busy na hora em vez de esperar a trava */
+  wait?: boolean;
 }
 
 /** OpenRouter fora do ar, limite de taxa, rede caída ou tempo de rede esgotado: vale tentar de novo. */
