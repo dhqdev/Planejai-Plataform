@@ -71,6 +71,24 @@ export interface InviteInput {
   name?: string | null;
   phone: string;
   email?: string | null;
+  /** recado de quem convidou, entregue assim que a pessoa aceitar */
+  afterAccept?: string | null;
+}
+
+/** Usuário de WhatsApp do dono da stack (a conta de dono do painel não tem um ligado). */
+export async function ownerUserId(): Promise<string | null> {
+  const phones = config.OWNER_PHONES.flatMap(phoneVariants);
+  if (!phones.length) return null;
+  return (await one("SELECT id FROM users WHERE phone = ANY($1) ORDER BY created_at LIMIT 1", [phones]))?.id ?? null;
+}
+
+async function link(a: string, b: string) {
+  await query("INSERT INTO contacts (user_id, contact_id) VALUES ($1, $2), ($2, $1) ON CONFLICT DO NOTHING", [a, b]);
+}
+
+/** O que alguém manda a um contato pelo assistente, com a dica de como responder. */
+export function relayText(sender: string, message: string) {
+  return `*${sender}* te mandou pelo Planejai:\n\n${message}\n\n_Para responder, é só me dizer o que falar pro ${sender.split(" ")[0]}._`;
 }
 
 /** Convites que cada pessoa (fora o dono) pode mandar por dia. */
@@ -92,20 +110,48 @@ export async function createInvite(input: InviteInput) {
       "SELECT u.id FROM contacts c JOIN users u ON u.id = c.contact_id WHERE c.user_id = $1 AND u.phone = ANY($2)",
       [input.inviterUserId, variants],
     );
-    if (already) return { already: true as const };
+    if (already) return { already: true as const, contactId: already.id as string, linked: false };
+    // Já é cliente ativo e foi esta pessoa que trouxe (convite antigo sem contato, ex.: feito pelo painel do dono):
+    // os dois já disseram sim um ao outro, então viram contatos direto, sem mandar outro convite.
+    const target = await one("SELECT id, invited_by FROM users WHERE phone = ANY($1) AND status = 'active'", [variants]);
+    if (target) {
+      const mine =
+        target.invited_by === input.inviterUserId ||
+        (me && isOwner(me.phone) && (await one("SELECT 1 FROM invites WHERE phone = ANY($1) AND status = 'accepted' AND inviter_user_id IS NULL", [variants])));
+      if (mine) {
+        await link(input.inviterUserId, target.id);
+        await query(
+          "UPDATE invites SET status = 'accepted', responded_at = now(), invitee_user_id = $3 WHERE inviter_user_id = $1 AND phone = ANY($2) AND status = 'pending'",
+          [input.inviterUserId, variants, target.id],
+        );
+        return { already: true as const, contactId: target.id as string, linked: true };
+      }
+    }
     const pending = await one(
       "SELECT * FROM invites WHERE inviter_user_id = $1 AND phone = ANY($2) AND status = 'pending' AND expires_at > now()",
       [input.inviterUserId, variants],
     );
-    if (pending) return { invite: pending, resent: false };
+    if (pending) {
+      if (input.afterAccept?.trim()) await query("UPDATE invites SET after_accept = $2 WHERE id = $1", [pending.id, input.afterAccept.trim().slice(0, 1000)]);
+      return { invite: pending, resent: false, existing: Boolean(target) };
+    }
   }
   const code = randomBytes(6).toString("base64url").replace(/[-_]/g, "x").slice(0, 8).toUpperCase();
   const invite = await one(
-    `INSERT INTO invites (code, inviter_user_id, inviter_account_id, name, phone, email) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [code, input.inviterUserId ?? null, input.inviterAccountId ?? null, input.name?.trim().slice(0, 80) || null, phone, input.email?.trim().toLowerCase() || null],
+    `INSERT INTO invites (code, inviter_user_id, inviter_account_id, name, phone, email, after_accept) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [
+      code,
+      input.inviterUserId ?? null,
+      input.inviterAccountId ?? null,
+      input.name?.trim().slice(0, 80) || null,
+      phone,
+      input.email?.trim().toLowerCase() || null,
+      input.afterAccept?.trim().slice(0, 1000) || null,
+    ],
   );
   await (await getBoss()).send(QUEUES.invite, { inviteId: invite.id }, { retryLimit: 3, retryDelay: 60 });
-  return { invite, resent: false };
+  const existing = Boolean(await one("SELECT 1 FROM users WHERE phone = ANY($1) AND status = 'active'", [variants]));
+  return { invite, resent: false, existing };
 }
 
 export function inviteLink(code: string) {
@@ -132,7 +178,11 @@ export async function sendInvite(inviteId: string) {
   if (pace.since_last < config.INVITE_GAP_SECONDS) return void (await later(config.INVITE_GAP_SECONDS - pace.since_last + Math.random() * 30));
   const inviter = inv.inviter_user_id ? displayName({ full_name: inv.inviter_full_name, name: inv.inviter_name, phone: inv.inviter_phone }) : inv.account_name || "A equipe do Planejai";
   const hello = inv.name ? `Oi, ${String(inv.name).split(" ")[0]}! ` : "Oi! ";
-  const text =
+  // quem já usa o Planejai não recebe o convite de novo: é só um pedido de contato
+  const member = inv.inviter_user_id ? await one("SELECT 1 FROM users WHERE phone = ANY($1) AND status = 'active'", [phoneVariants(inv.phone)]) : null;
+  const text = member
+    ? `${hello}${inviter} quer te adicionar como contato aqui no Planejai, pra vocês mandarem coisas um pro outro por mim.\n\nResponda *SIM* para aceitar ou *NÃO* para recusar.`
+    :
     `${hello}${inviter} te convidou para o *Planejai*, um assistente aqui no WhatsApp que organiza gastos, lembretes e pesquisas` +
     (inv.inviter_user_id ? `, e deixa vocês mandarem coisas um pro outro por aqui.` : ".") +
     `\n\nResponda *SIM* para aceitar ou *NÃO* para recusar. Ao aceitar, você concorda com os termos e a política de privacidade: ` +
@@ -169,6 +219,7 @@ export async function handleInviteReply(opts: { user: any; text: string; channel
     return true;
   }
   const first = pending[0];
+  const wasMember = user.status === "active";
   if (yes) {
     await query(
       `UPDATE users SET status = 'active', full_name = COALESCE(full_name, $2), email = COALESCE(email, $3),
@@ -179,23 +230,33 @@ export async function handleInviteReply(opts: { user: any; text: string; channel
   for (const inv of pending) {
     await query("UPDATE invites SET status = $2, responded_at = now(), invitee_user_id = $3 WHERE id = $1", [inv.id, yes ? "accepted" : "declined", user.id]);
     if (yes) void import("./events.js").then((e) => e.emitEvent("user.activated", { user_id: user.id, phone: user.phone, name: inv.name ?? null, invite_id: inv.id }));
-    if (yes && inv.inviter_user_id) {
-      await query("INSERT INTO contacts (user_id, contact_id) VALUES ($1, $2), ($2, $1) ON CONFLICT DO NOTHING", [inv.inviter_user_id, user.id]);
-    }
+    if (yes && inv.inviter_user_id) await link(inv.inviter_user_id, user.id);
     if (inv.inviter_user_id) {
       const who = displayName({ full_name: user.full_name ?? inv.name, name: user.name, phone: user.phone });
       const note = yes
-        ? `${who} aceitou seu convite para o Planejai. Agora vocês podem mandar coisas um pro outro por aqui, é só me pedir.`
+        ? `${who} aceitou seu convite${wasMember ? "" : " para o Planejai"}. Agora vocês podem mandar coisas um pro outro por aqui, é só me pedir.` +
+          (inv.after_accept ? " Já entreguei o seu recado." : "")
         : `${who} preferiu não entrar no Planejai agora.`;
       await notifyUser(inv.inviter_user_id, note).catch(() => {});
     }
   }
   const inviters = pending.filter((p) => p.inviter_user_id).map((p) => displayName({ full_name: p.inviter_full_name, name: p.inviter_name, phone: p.inviter_phone }));
-  const welcome = yes
-    ? `Pronto, você está no Planejai!\n\nPode me mandar gastos, comprovantes, pedir lembretes ou pesquisas, tudo por aqui.` +
-      (inviters.length ? ` E para mandar algo para ${inviters.join(" ou ")}, é só pedir: "manda isso pro ${inviters[0]!.split(" ")[0]}".` : "")
-    : "Tudo bem, não vou te mandar mais nada. Se mudar de ideia, é só pedir um novo convite.";
+  const how = inviters.length ? `para mandar algo para ${inviters.join(" ou ")}, é só pedir: "manda isso pro ${inviters[0]!.split(" ")[0]}".` : "";
+  const welcome = !yes
+    ? wasMember
+      ? "Tudo bem, não adicionei."
+      : "Tudo bem, não vou te mandar mais nada. Se mudar de ideia, é só pedir um novo convite."
+    : wasMember
+      ? `Pronto, vocês agora são contatos! ${how ? how[0]!.toUpperCase() + how.slice(1) : ""}`.trim()
+      : `Pronto, você está no Planejai!\n\nPode me mandar gastos, comprovantes, pedir lembretes ou pesquisas, tudo por aqui.` + (how ? ` E ${how}` : "");
   await channel.sendText(remoteJid, welcome).catch(() => {});
+  // recado que quem convidou deixou para a hora do aceite
+  if (yes) {
+    for (const inv of pending.filter((p) => p.inviter_user_id && p.after_accept)) {
+      const sender = displayName({ full_name: inv.inviter_full_name, name: inv.inviter_name, phone: inv.inviter_phone });
+      await notifyUser(user.id, relayText(sender, inv.after_accept)).catch(() => {});
+    }
+  }
   return true;
 }
 

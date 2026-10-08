@@ -134,7 +134,11 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     const look = { base64: Buffer.from("foto-do-look").toString("base64"), mimetype: "image/jpeg" };
     await say("manda esse look pro Giovani", look);
     const sent = channels.playground.sent.slice(-2);
-    expect(sent[0]).toMatchObject({ type: "text", text: "*David Queiroz* te mandou pelo Planejai:\n\nOlha esse look, o que acha?" });
+    // o recado chega com a dica de como responder: a conversa é de ida e volta
+    expect(sent[0]).toMatchObject({
+      type: "text",
+      text: "*David Queiroz* te mandou pelo Planejai:\n\nOlha esse look, o que acha?\n\n_Para responder, é só me dizer o que falar pro David._",
+    });
     expect(sent[1]).toMatchObject({ type: "image", image: { base64: look.base64, mimetype: "image/jpeg" } });
     // o assistente do Giovani fica sabendo, se ele perguntar depois
     const gioConv = await db.one("SELECT c.id FROM conversations c JOIN users u ON u.id = c.user_id WHERE u.phone = '5519922223333'");
@@ -210,5 +214,43 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     const { toolCacheKey } = await import("../src/agent/cache.js");
     expect(toolCacheKey("web_search", { query: "Cinema", max_results: 3 })?.key).toBe(toolCacheKey("web_search", { max_results: 3, query: "cinema" })?.key);
     expect(toolCacheKey("add_transaction", { amount: 1 })).toBeNull();
+  });
+
+  it("quem já usa o Planejai não recebe o convite de novo: vira contato direto ou recebe só um pedido de contato", async () => {
+    const { upsertUser, ingest } = await import("../src/ingest.js");
+    const invitesBefore = (await db.one("SELECT COUNT(*)::int AS n FROM invites")).n;
+
+    // Jonathan entrou trazido pelo David (convite antigo que não criou o contato): liga os dois na hora, sem mensagem de convite
+    const jon = await upsertUser("5519955556666", "Jonathan");
+    await db.query("UPDATE users SET status = 'active', invited_by = $2 WHERE id = $1", [jon.id, david.id]);
+    const sentBefore = channels.playground.sent.length;
+    const r = await social.createInvite({ inviterUserId: david.id, name: "Jonathan", phone: "19 95555-6666", afterAccept: "bora no cinema amanhã?" });
+    expect(r).toMatchObject({ already: true, linked: true, contactId: jon.id });
+    expect((await db.one("SELECT COUNT(*)::int AS n FROM invites")).n).toBe(invitesBefore);
+    expect(channels.playground.sent.length).toBe(sentBefore);
+    expect((await social.findContact(david.id, "jonathan")).map((c) => c.id)).toEqual([jon.id]);
+    // e o Jonathan responde de volta pelo assistente dele
+    expect((await social.findContact(jon.id, "david")).map((c) => c.id)).toEqual([david.id]);
+    // de novo: continua sendo só "já é contato"
+    expect(await social.createInvite({ inviterUserId: david.id, name: "Jonathan", phone: "19 95555-6666" })).toMatchObject({ already: true, linked: false });
+
+    // Ana já usa o Planejai, mas não foi o David que trouxe: recebe um pedido de contato curto, com o recado guardado para o aceite
+    const ana = await upsertUser("5519977778888", "Ana");
+    await db.query("UPDATE users SET status = 'active' WHERE id = $1", [ana.id]);
+    const req = await social.createInvite({ inviterUserId: david.id, name: "Ana", phone: "19 97777-8888", afterAccept: "bora no cinema amanhã?" });
+    if ("already" in req) throw new Error("não devia virar contato sem a Ana aceitar");
+    expect(req.existing).toBe(true);
+    await social.sendInvite(req.invite.id);
+    expect(lastTexts(1)[0]).toMatch(/^Oi, Ana! David Queiroz quer te adicionar como contato aqui no Planejai/);
+    expect(lastTexts(1)[0]).not.toContain("te convidou");
+    expect(await social.findContact(david.id, "ana")).toEqual([]);
+
+    const base = { channel: "playground", remoteJid: "jid-ana", phone: "5519977778888", pushName: "Ana", kind: "text" as const, timestamp: new Date(), raw: null };
+    expect(await ingest({ ...base, externalId: "a1", text: "sim" })).toEqual({ queued: false, reason: "convite" });
+    const texts = lastTexts(3);
+    expect(texts.some((t) => t.startsWith("Ana aceitou seu convite.") && t.endsWith("Já entreguei o seu recado."))).toBe(true);
+    expect(texts.some((t) => t.startsWith("Pronto, vocês agora são contatos!"))).toBe(true);
+    expect(texts.at(-1)).toBe("*David Queiroz* te mandou pelo Planejai:\n\nbora no cinema amanhã?\n\n_Para responder, é só me dizer o que falar pro David._");
+    expect((await social.findContact(david.id, "ana")).map((c) => c.id)).toEqual([ana.id]);
   });
 });

@@ -1,20 +1,50 @@
-import { createInvite, displayName, findContact, inviteStats, listContacts, notifyUser } from "../../social.js";
+import { createInvite, displayName, findContact, inviteStats, listContacts, notifyUser, relayText } from "../../social.js";
 import { cancelWatch, createWatch, listWatches } from "../../watches.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
-export const invitePerson = defineTool<{ name: string; phone: string; confirmed_by_user?: boolean }>({
+export const invitePerson = defineTool<{ name: string; phone: string; message_after_accept?: string; confirmed_by_user?: boolean }>({
   name: "invite_person",
   description:
     "Convida alguém para o Planejai pelo WhatsApp (a pessoa responde SIM ou NÃO). Quem aceita vira contato e vocês podem mandar coisas um pro outro. " +
-    "É mensagem para terceiro: só com confirmed_by_user=true depois que a pessoa confirmar nome e número.",
-  parameters: obj({ name: { type: "string" }, phone: { type: "string", description: "Celular com DDD" }, ...CONFIRM_PARAM }, ["name", "phone"]),
+    "É mensagem para terceiro: só com confirmed_by_user=true depois que a pessoa confirmar nome e número. " +
+    "Se ela quer dizer algo a essa pessoa ('convida o Jonathan e chama ele pro cinema'), passe em message_after_accept: é entregue sozinho quando o convite for aceito, ou na hora se já forem contatos. " +
+    "Quem já usa o Planejai recebe só um pedido de contato, não o convite de novo.",
+  parameters: obj(
+    {
+      name: { type: "string" },
+      phone: { type: "string", description: "Celular com DDD" },
+      message_after_accept: { type: "string", description: "Recado em nome da pessoa, curto e natural (opcional)" },
+      ...CONFIRM_PARAM,
+    },
+    ["name", "phone"],
+  ),
   async run(args, ctx) {
     const gate = requireConfirmation(args, `Convidar ${args.name} (${args.phone}) para o Planejai pelo WhatsApp`);
     if (gate) return gate;
-    const r = await createInvite({ inviterUserId: ctx.user.id, name: args.name, phone: args.phone });
-    if ("already" in r) return { ok: true, note: `${args.name} já é seu contato.` };
+    const msg = args.message_after_accept?.trim();
+    const r = await createInvite({ inviterUserId: ctx.user.id, name: args.name, phone: args.phone, afterAccept: msg });
+    if ("already" in r) {
+      // já são contatos (ou acabaram de virar, sem convite novo): o recado vai agora
+      if (msg) await notifyUser(r.contactId!, relayText(displayName(ctx.user as any), msg));
+      return {
+        ok: true,
+        invite_sent: false,
+        note:
+          `${args.name} já ${r.linked ? "usava o Planejai e agora é seu contato" : "é seu contato"}; não mandei convite.` +
+          (msg ? " O recado foi entregue agora." : " Para falar com ele, use send_to_contact."),
+      };
+    }
     const stats = await inviteStats(ctx.user.id);
-    return { ok: true, sent_to: r.invite.phone, invites_sent_total: stats?.total, accepted_total: stats?.accepted };
+    return {
+      ok: true,
+      sent_to: r.invite.phone,
+      ...(r.existing ? { note: `${args.name} já usa o Planejai: foi um pedido de contato, não um convite novo.` } : {}),
+      ...(msg
+        ? { message_after_accept: "guardado; entrego sozinho quando aceitar" }
+        : { hint: "Nada será enviado depois do aceite; se a pessoa quer mandar um recado, chame de novo com message_after_accept." }),
+      invites_sent_total: stats?.total,
+      accepted_total: stats?.accepted,
+    };
   },
 });
 
@@ -45,14 +75,18 @@ export const sendToContact = defineTool<{ contact: string; message: string; atta
     const found = await findContact(ctx.user.id, args.contact);
     if (!found.length) {
       const all = await listContacts(ctx.user.id);
-      return { error: `${args.contact} não é contato no Planejai.`, contacts: all.map((c) => c.name), hint: "Ofereça convidar com invite_person." };
+      return {
+        error: `${args.contact} não é contato no Planejai.`,
+        contacts: all.map((c) => c.name),
+        hint: "Peça o número e use invite_person com o recado em message_after_accept (se a pessoa já usa o Planejai, vira contato sem convite novo).",
+      };
     }
     if (found.length > 1) return { error: "Mais de um contato com esse nome", options: found.map((c) => c.name) };
     const to = found[0]!;
     const photo = args.attach_photo ? ctx.inboundImages?.at(-1) : undefined;
     if (args.attach_photo && !photo) return { error: "Não há foto nesta mensagem para encaminhar." };
     const sender = displayName(ctx.user as any);
-    await notifyUser(to.id, `*${sender}* te mandou pelo Planejai:\n\n${args.message}`, photo);
+    await notifyUser(to.id, relayText(sender, args.message), photo);
     return { ok: true, sent_to: to.name, with_photo: Boolean(photo) };
   },
 });
