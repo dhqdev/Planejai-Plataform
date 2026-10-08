@@ -17,6 +17,7 @@ import { applyUpdate, onUpdateAvailable } from "./update";
 // Cada tela é um pedaço à parte: baixa só quando abre (o app inicia leve no celular)
 const load = {
   agents: () => import("./pages/Agents"),
+  billing: () => import("./pages/Billing"),
   calendar: () => import("./pages/Calendar"),
   clients: () => import("./pages/Clients"),
   dashboard: () => import("./pages/Dashboard"),
@@ -52,6 +53,7 @@ function PageUnavailable() {
 }
 
 const AgentsPage = page(() => load.agents().then((m) => m.AgentsPage));
+const BillingPage = page(() => load.billing().then((m) => m.BillingPage));
 const ClientsPage = page(() => load.clients().then((m) => m.ClientsPage));
 const DashboardPage = page(() => load.dashboard().then((m) => m.DashboardPage));
 const ExecutionDetailPage = page(() => load.executions().then((m) => m.ExecutionDetailPage));
@@ -91,6 +93,7 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/memories": load.memories,
   "/settings": load.settings,
   "/profile": load.profile,
+  "/assinatura": load.billing,
   "/time": load.team,
 };
 function preload(to: string) {
@@ -149,7 +152,7 @@ interface AppTabs {
  * Cliente começa só com o essencial (Início, Agenda, Finanças e De olho). Módulos e abas sob medida
  * aparecem quando a reunião noturna do time libera para a pessoa.
  */
-function adminNav(tabs: AppTabs | null): NavItem[] {
+function adminNav(tabs: AppTabs | null, billing = false): NavItem[] {
   const extra: NavItem[] = [
     ...(tabs?.modules ?? []).map((m) => tabs!.catalog[m]).filter(Boolean).map((m) => ({ to: m!.to, label: m!.label, icon: m!.icon })),
     ...(tabs?.custom ?? []).map((t) => ({ to: `/aba/${t.slug}`, label: t.title, icon: t.icon })),
@@ -164,6 +167,8 @@ function adminNav(tabs: AppTabs | null): NavItem[] {
     ...(extra.length ? [{ section: "Feito para você" }, ...extra] : []),
     { section: "Conta" },
     { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
+    // só aparece quando o dono ligou a cobrança
+    ...(billing ? [{ to: "/assinatura", label: "Assinatura", icon: "card" }] : []),
     { to: "/profile", label: "Minha conta", icon: "user" },
   ];
 }
@@ -225,7 +230,8 @@ export function App() {
   useEffect(() => onInstallAvailable(() => setInstallable(true)), []);
   const tabs = useApi<AppTabs>(me ? `/api/me/tabs?for=${me.id}` : null);
   const isSuper = me?.role === "superadmin";
-  const NAV = !me ? NO_NAV : isSuper ? SUPER_NAV : adminNav(tabs.data ?? null);
+  const billing = useApi<{ plan: { enabled: boolean } }>(me && !isSuper ? "/api/billing" : null);
+  const NAV = !me ? NO_NAV : isSuper ? SUPER_NAV : adminNav(tabs.data ?? null, billing.data?.plan.enabled);
   const links = NAV.filter((i): i is NavLinkItem => "to" in i);
   // com o app parado, baixa em segundo plano o código das telas do menu desta pessoa (e só delas)
   const routes = links.map((l) => l.to).join(" ");
@@ -255,7 +261,7 @@ export function App() {
 
   // termos e privacidade abrem sem login (link do cadastro e do convite no WhatsApp)
   if (loc.pathname === "/privacidade") return <PrivacyPage />;
-  if (me === undefined) return <BlockLoader full />;
+  if (me === undefined) return <BlockLoader />;
   if (!me) return <AuthPage onLogin={setMe} />;
 
   const has = (m: string) => isSuper || (tabs.data?.modules ?? []).includes(m);
@@ -321,7 +327,10 @@ export function App() {
               <Route path="/settings" element={<SettingsPage />} />
             </>
           ) : (
-            <Route path="/profile" element={<ProfilePage me={me} />} />
+            <>
+              <Route path="/profile" element={<ProfilePage me={me} />} />
+              <Route path="/assinatura" element={<BillingPage />} />
+            </>
           )}
           <Route path="/notificacoes" element={<NotificationsPage />} />
           <Route path="/documentos" element={<DocumentsPage isSuper={isSuper} />} />

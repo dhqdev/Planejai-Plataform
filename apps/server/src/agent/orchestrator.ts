@@ -20,6 +20,7 @@ import { humanize } from "./humanize.js";
 import { isAckOnly, pickReaction } from "./reaction.js";
 import { Tracer } from "./trace.js";
 import { allShort, pushShort, recentShort, redisAlive, type ShortEntry } from "../shortmem.js";
+import { billingAccess, blockedMessage, planOf } from "../billing.js";
 import { config } from "../config.js";
 import { Outbox, type ConversationRow, type ToolContext, type UserRow } from "./tools/types.js";
 
@@ -157,6 +158,24 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
           .catch(() => {});
       }
       await tracer.finish(notified ? "[limite diário: avisado]" : "[limite diário: silêncio]");
+      return { executionId: tracer.executionId, bubbles: [], outbox: new Outbox() };
+    }
+  }
+  // Assinatura: acabaram os dias grátis ou o pagamento está pendente. Avisa uma vez por dia com o link e não chama a IA.
+  if (opts.trigger === "message" && settings.billingEnabled) {
+    const access = await billingAccess(user, settings);
+    if (!access.allowed) {
+      await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
+      const tracer = await Tracer.start({ trigger: opts.trigger, userId: user.id, conversationId, input: pending.map((m) => m.content).join("\n") });
+      const step = await tracer.step({ agent: "cto", type: "info", name: "trava: assinatura", input: { situacao: access.state } });
+      await step.ok({ blocked: true });
+      const notified = await one(
+        `UPDATE users SET profile = profile || jsonb_build_object('billing_notice_at', now()) WHERE id = $1
+           AND COALESCE((profile->>'billing_notice_at')::timestamptz, 'epoch') < now() - interval '24 hours' RETURNING id`,
+        [user.id],
+      );
+      if (notified) await channel.sendText(conversation.remote_jid, blockedMessage(access, planOf(settings))).catch(() => {});
+      await tracer.finish(notified ? "[assinatura: avisado]" : "[assinatura: silêncio]");
       return { executionId: tracer.executionId, bubbles: [], outbox: new Outbox() };
     }
   }

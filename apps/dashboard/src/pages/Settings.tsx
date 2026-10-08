@@ -1,7 +1,79 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
-import { ErrorBox, Loading, PageHead } from "../components";
+import { api, brl } from "../api";
+import { CopyField, ErrorBox, Loading, PageHead } from "../components";
 import { useApi } from "../hooks";
+
+const BILL_STATE: Record<string, string> = { trial: "dias grátis", active: "em dia", blocked: "travado", exempt: "liberado" };
+
+/** Assinatura pelo Asaas: ligar, preço, dias grátis, endereço do webhook e a situação de cada pessoa. */
+function BillingCard({ form, setForm, save, saved }: { form: any; setForm: (f: any) => void; save: () => void; saved: boolean }) {
+  const { data, reload } = useApi<any>("/api/billing/admin");
+  const exempt = async (id: string, value: boolean) => {
+    await api(`/api/billing/people/${id}`, { method: "PATCH", json: { exempt: value } });
+    await reload();
+  };
+  return (
+    <div className="card card-pad">
+      <h3>Assinatura (Asaas)</h3>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Cobrança mensal dos clientes. Cada pessoa usa de graça pelos dias abaixo; depois, sem assinatura em dia o assistente avisa uma vez por dia e para de responder. Donos nunca são cobrados.
+      </p>
+      <div className="field">
+        <label className="row" style={{ gap: 8, cursor: "pointer" }}>
+          <input type="checkbox" checked={!!form.billingEnabled} onChange={(e) => setForm({ ...form, billingEnabled: e.target.checked })} />
+          Cobrar assinatura
+        </label>
+        <div className="help">
+          {data?.connected ? "Asaas conectado." : "Antes de ligar, cole a chave de API e o token do webhook em Integrações > Asaas."} Ao ligar, quem já é cliente ganha os dias grátis a partir de agora.
+        </div>
+      </div>
+      <div className="field"><label>Nome do plano</label><input className="input" value={form.billingPlanName ?? ""} onChange={(e) => setForm({ ...form, billingPlanName: e.target.value })} /></div>
+      <div className="field">
+        <label>Preço por mês (R$)</label>
+        <input className="input" type="number" inputMode="decimal" step={0.1} min={1} value={form.billingPrice} onChange={(e) => setForm({ ...form, billingPrice: e.target.value === "" ? "" : Number(e.target.value) })} />
+        <div className="help">Vale para novas assinaturas. Quem já assinou continua no valor em que entrou.</div>
+      </div>
+      <div className="field">
+        <label>Dias grátis</label>
+        <input className="input" type="number" inputMode="numeric" step={1} min={0} value={form.billingTrialDays} onChange={(e) => setForm({ ...form, billingTrialDays: e.target.value === "" ? "" : Number(e.target.value) })} />
+      </div>
+      {data?.webhookUrl && (
+        <div className="field">
+          <label>Webhook para cadastrar no Asaas</label>
+          <CopyField value={data.webhookUrl} />
+          <div className="help">Asaas &gt; Integrações &gt; Webhooks: eventos de Cobranças e Assinaturas, com o mesmo token que você colou em Integrações.</div>
+        </div>
+      )}
+      <div className="row">
+        <button className="btn btn-primary" onClick={save}>Salvar</button>
+        {saved && <span className="badge badge-ok">Salvo</span>}
+      </div>
+      {data && (
+        <>
+          <h3 style={{ marginTop: 20 }}>Situação</h3>
+          <p className="bill-counts">
+            <span><strong>{data.counts.active}</strong> em dia</span>
+            <span><strong>{data.counts.trial}</strong> nos dias grátis</span>
+            <span><strong>{data.counts.blocked}</strong> travados</span>
+            <span><strong>{data.counts.exempt}</strong> liberados</span>
+            <span><strong>{brl(data.mrr)}</strong> por mês</span>
+          </p>
+          <ul className="bill-people">
+            {data.people.map((p: any) => (
+              <li key={p.id}>
+                <span>{p.name}</span>
+                <small>{p.owner ? "dono" : BILL_STATE[p.state] ?? p.state}</small>
+                {!p.owner && (
+                  <button className="btn btn-sm" onClick={() => exempt(p.id, !p.exempt)}>{p.exempt ? "Voltar a cobrar" : "Liberar sem cobrança"}</button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function SettingsPage() {
   const { data, error } = useApi<any>("/api/settings");
@@ -33,9 +105,9 @@ export function SettingsPage() {
   );
 
   return (
-    <div className="page fit settings-page">
+    <div className="page settings-page">
       <PageHead title="Configurações" />
-      <div className="grid grid-2">
+      <div className="grid grid-3">
         <div className="card card-pad">
           <h3>Personalidade do agente</h3>
           <div className="field"><label>Nome do assistente</label><input className="input" value={form.assistantName} onChange={(e) => setForm({ ...form, assistantName: e.target.value })} /></div>
@@ -76,6 +148,7 @@ export function SettingsPage() {
             {saveErr && <span className="badge badge-err">{saveErr}</span>}
           </div>
         </div>
+        <BillingCard form={form} setForm={setForm} save={save} saved={saved} />
         <div className="card card-pad">
           <h3>Canal WhatsApp</h3>
           <p>

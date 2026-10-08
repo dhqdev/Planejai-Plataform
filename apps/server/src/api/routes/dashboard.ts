@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { requireAuth, requireSuper } from "../server.js";
 import { accountRoutes } from "./dashboard/accounts.js";
 import { agendaRoutes } from "./dashboard/agenda.js";
+import { billingAdminRoutes, billingRoutes } from "./dashboard/billing.js";
 import { clientRoutes } from "./dashboard/clients.js";
 import { executionRoutes } from "./dashboard/executions.js";
 import { financeRoutes } from "./dashboard/finance.js";
@@ -31,6 +32,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     agendaRoutes(base);
     memoryRoutes(base);
     teamRoutes(base);
+    billingRoutes(base);
 
     // ================= Só super admin =================
     await base.register(async (api) => {
@@ -43,6 +45,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       integrationRoutes(api);
       settingsRoutes(api);
       whatsappRoutes(api);
+      billingAdminRoutes(api);
     });
   });
 }

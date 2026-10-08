@@ -22,6 +22,15 @@ export interface AgentSettings {
   dailyCostLimitUsd: number;
   /** tamanho máximo de uma mensagem de texto lida pelo agente */
   maxMessageChars: number;
+  /** Assinatura pelo Asaas: desligada, ninguém é cobrado nem travado */
+  billingEnabled: boolean;
+  billingPlanName: string;
+  /** preço por mês, em reais */
+  billingPrice: number;
+  /** dias grátis antes da primeira cobrança */
+  billingTrialDays: number;
+  /** quando a cobrança foi ligada (os dias grátis de quem já estava contam daqui); preenchido sozinho */
+  billingStartedAt: string | null;
 }
 
 /** Faixas aceitas para cada trava (o painel não deixa salvar fora disso) */
@@ -32,6 +41,8 @@ export const GUARD_LIMITS: Record<string, [number, number]> = {
   dailyMessageLimit: [0, 100_000],
   dailyCostLimitUsd: [0, 1000],
   maxMessageChars: [200, 50_000],
+  billingPrice: [1, 100_000],
+  billingTrialDays: [0, 60],
 };
 
 const defaults = (): AgentSettings => ({
@@ -46,6 +57,11 @@ const defaults = (): AgentSettings => ({
   dailyMessageLimit: 300,
   dailyCostLimitUsd: 1,
   maxMessageChars: 4000,
+  billingEnabled: false,
+  billingPlanName: "Planejai",
+  billingPrice: 29.9,
+  billingTrialDays: 3,
+  billingStartedAt: null,
 });
 
 let cache: { at: number; value: AgentSettings } | null = null;
@@ -61,7 +77,14 @@ export async function getSettings(): Promise<AgentSettings> {
 
 export async function saveSettings(patch: Partial<AgentSettings>, opts: { unchecked?: boolean } = {}) {
   const allowed = Object.keys(defaults());
-  for (let [k, v] of Object.entries(patch)) {
+  // a data em que a cobrança foi ligada não vem do painel: é marcada na primeira vez que alguém liga
+  const { billingStartedAt: _ignored, ...rest } = patch;
+  if (rest.billingEnabled !== undefined) {
+    rest.billingEnabled = rest.billingEnabled === true || (rest.billingEnabled as unknown) === "true";
+    if (rest.billingEnabled && !(await getSettings()).billingStartedAt) (rest as Partial<AgentSettings>).billingStartedAt = new Date().toISOString();
+  }
+  if (rest.billingPlanName !== undefined) rest.billingPlanName = String(rest.billingPlanName).trim().slice(0, 40) || defaults().billingPlanName;
+  for (let [k, v] of Object.entries(rest)) {
     if (!allowed.includes(k)) continue;
     if (k in GUARD_LIMITS && !opts.unchecked) {
       const [min, max] = GUARD_LIMITS[k]!;

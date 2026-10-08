@@ -1,8 +1,10 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { channels } from "../../channels/index.js";
+import { handleAsaasEvent } from "../../billing.js";
 import { config } from "../../config.js";
 import { ingest } from "../../ingest.js";
+import { getCredentials } from "../../integrations/registry.js";
 import { handleTelegramUpdate, telegramSecretOk } from "../../telegram.js";
 
 /** Comparação em tempo constante; segredo vazio nunca confere. */
@@ -40,6 +42,19 @@ export async function registerWebhookRoutes(app: FastifyInstance) {
       }
     }
     return { ok: true, received: msgs.length, results };
+  });
+
+  // Asaas: avisos de pagamento da assinatura. O token é o que o dono colou em Integrações > Asaas e no webhook do Asaas.
+  app.post("/webhooks/asaas", async (req, reply) => {
+    const token = (await getCredentials("asaas"))?.webhook_token ?? "";
+    if (!sameSecret(req.headers["asaas-access-token"], token)) return reply.code(401).send({ error: "token inválido" });
+    try {
+      return { ok: true, ...(await handleAsaasEvent(req.body)) };
+    } catch (err) {
+      // 500 faz o Asaas tentar de novo mais tarde
+      req.log.error({ err }, "falha no evento do Asaas");
+      return reply.code(500).send({ error: "falha ao processar" });
+    }
   });
 
   // Telegram: o setWebhook (ao salvar o token em Integrações) manda o segredo no cabeçalho

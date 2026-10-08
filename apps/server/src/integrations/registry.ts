@@ -304,6 +304,41 @@ export const INTEGRATIONS: IntegrationDef[] = [
     },
   },
   {
+    id: "asaas",
+    name: "Asaas",
+    description: "Assinatura mensal dos clientes: Pix, cartão e boleto pela página de pagamento do Asaas.",
+    category: "Pagamentos",
+    icon: "payment",
+    docsUrl: "https://www.asaas.com/customerApiAccessToken/index",
+    fields: [
+      {
+        key: "api_key",
+        label: "Chave de API",
+        type: "password",
+        required: true,
+        placeholder: "$aact_prod_...",
+        help: "No Asaas: Minha conta > Integrações > Gerar chave de API. Chave que começa com $aact_prod_ é produção; a de homologação ($aact_hmlg_) usa o sandbox.",
+      },
+      {
+        key: "webhook_token",
+        label: "Token do webhook",
+        type: "password",
+        required: true,
+        placeholder: "uma senha longa inventada por você",
+        help: "No Asaas: Integrações > Webhooks > novo webhook para {PUBLIC_URL}/webhooks/asaas, eventos de Cobranças e Assinaturas, e cole este mesmo token em \"Token de autenticação\". Sem ele o Planejai não aceita os avisos de pagamento.",
+      },
+    ],
+    test: async (c) => {
+      const prod = String(c.api_key).startsWith("$aact_prod_");
+      const res = await fetch(`${prod ? "https://api.asaas.com/v3" : "https://api-sandbox.asaas.com/v3"}/customers?limit=1`, {
+        headers: { access_token: c.api_key!, "User-Agent": "planejai" },
+        signal: timed(),
+      });
+      await okJson(res, "Asaas");
+      return `Conectado (${prod ? "produção" : "sandbox"})`;
+    },
+  },
+  {
     id: "telegram",
     name: "Telegram",
     description: "Conversar com o assistente pelo Telegram. Cada pessoa conecta a conta dela em Minha conta > Conexões.",
