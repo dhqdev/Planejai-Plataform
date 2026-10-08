@@ -93,11 +93,14 @@ export function BillingPage() {
     <div className="page bill-page">
       <PageHead title="Assinatura" />
       <div className="bill">
-        <p className="bill-plan">{plan.name}</p>
-        <p className="bill-price">
-          {brl(plan.price)} <span>por mês</span>
-        </p>
-        <p className="bill-status">{status}</p>
+        <div className="bill-head">
+          <p className="bill-plan">{plan.name}</p>
+          <p className="bill-price">
+            {brl(plan.price)} <span>por mês</span>
+          </p>
+          <p className="bill-status">{status}</p>
+        </div>
+        <div className="bill-body">
 
         {plan.enabled && access?.state !== "exempt" && (
           <>
@@ -146,6 +149,7 @@ export function BillingPage() {
           </>
         )}
         {err && <ErrorBox error={err} />}
+        </div>
       </div>
     </div>
   );

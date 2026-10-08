@@ -523,7 +523,7 @@ function BillsCard({ user, readonly, onPaid }: { user: string; readonly: boolean
   };
   const bills = data ?? [];
   return (
-    <div className="card fin-side-card">
+    <div className="card fin-side-card fin-bills">
       <div className="fin-card-head">
         <span className="tone-ico" style={{ ["--c" as any]: "var(--violet)" }}><Icon name="repeat" size={15} /></span>
         <h3>Contas fixas</h3>
