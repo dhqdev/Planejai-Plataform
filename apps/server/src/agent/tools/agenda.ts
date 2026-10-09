@@ -2,6 +2,7 @@ import { googleApi } from "../../integrations/google.js";
 import { resolveTag } from "../../agenda-tags.js";
 import { cancelReminder, createReminder, listReminders, reminderOccurrences, rescheduleReminder } from "../../reminders.js";
 import { formatLocal, parseLocalDateTime } from "../../time.js";
+import { cancelAlarm, createAlarm, listAlarms } from "../../alarms.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 const hm = (d: Date, tz: string) => new Intl.DateTimeFormat("pt-BR", { timeZone: tz, hour: "2-digit", minute: "2-digit" }).format(d);
@@ -116,6 +117,51 @@ export const rescheduleReminderTool = defineTool<{ id: string; at: string }>({
     const at = parseLocalDateTime(args.at, ctx.timezone);
     const ok = await rescheduleReminder(args.id, at, ctx.user.id);
     return ok ? { ok, next_local: formatLocal(at, ctx.timezone) } : { ok, error: "Lembrete não encontrado ou já disparado" };
+  },
+});
+
+export const setAlarm = defineTool<{ label: string; in_minutes?: number; at?: string }>({
+  name: "set_alarm",
+  description: "Alarme que toca no celular como ligação (e liga, se ela escolheu). in_minutes ou at.",
+  parameters: obj(
+    {
+      label: { type: "string", description: "O que aparece na tela, curto (ex.: Tirar o bolo do forno)" },
+      in_minutes: { type: "number" },
+      at: { type: "string", description: "AAAA-MM-DDTHH:MM local" },
+    },
+    ["label"],
+  ),
+  async run(args, ctx) {
+    const at = args.in_minutes != null ? new Date(Date.now() + args.in_minutes * 60_000) : args.at ? parseLocalDateTime(args.at, ctx.timezone) : null;
+    if (!at) return { ok: false, error: "Informe in_minutes ou at" };
+    const r = await createAlarm({ userId: ctx.user.id, conversationId: ctx.conversation.id, label: args.label, at });
+    return {
+      ok: true,
+      id: r.id,
+      ring_local: formatLocal(r.ringAt, ctx.timezone),
+      // sem aparelho com notificação ligada, toca só no WhatsApp: vale avisar uma vez
+      ...(r.devices ? {} : { note: "Nenhum celular com alarme ligado: chega no WhatsApp. Para tocar como ligação, ative em Minha conta > Alarmes no painel." }),
+    };
+  },
+});
+
+export const alarmList = defineTool<Record<string, never>>({
+  name: "alarm_list",
+  description: "Alarmes agendados (id para cancelar).",
+  parameters: obj({}),
+  async run(_a, ctx) {
+    const rows = (await listAlarms(ctx.user.id)).filter((a) => a.status === "scheduled");
+    return rows.length ? rows.map((a) => ({ id: a.id, label: a.label, ring_local: formatLocal(new Date(a.ring_at), ctx.timezone) })) : { alarms: [] };
+  },
+});
+
+export const alarmCancel = defineTool<{ id: string }>({
+  name: "alarm_cancel",
+  description: "Cancela um alarme pelo id.",
+  parameters: obj({ id: { type: "string" } }, ["id"]),
+  async run(args, ctx) {
+    if (!/^[0-9a-f-]{36}$/i.test(args.id)) return { ok: false, error: "id inválido: use alarm_list" };
+    return { ok: await cancelAlarm(args.id, ctx.user.id) };
   },
 });
 
