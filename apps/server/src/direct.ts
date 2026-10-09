@@ -34,6 +34,26 @@ export interface DirectMessage {
   status: string;
   sent_at: string | null;
   error: string | null;
+  media_kind?: string | null;
+  media_name?: string | null;
+}
+
+/** Foto ou documento que vai junto com a mensagem (guardado na linha até sair). */
+export interface DirectAttachment {
+  kind: "image" | "document";
+  base64: string;
+  mimetype: string;
+  fileName?: string;
+}
+
+/** Até onde o texto vai como legenda da foto/arquivo; mais longo sai em balão separado antes. */
+const CAPTION_MAX = 1000;
+const COLS = "id, user_id, name, phone, jid, text, send_at, status, sent_at, error, media_kind, media_name";
+
+/** "com a foto" / "com o arquivo Proposta.pdf", para o resumo do "sim" e a Agenda. */
+export function attachmentLabel(a: { kind?: string | null; name?: string | null } | null | undefined) {
+  if (!a?.kind) return "";
+  return a.kind === "image" ? "com a foto" : `com o arquivo ${a.name || "anexo"}`;
 }
 
 const firstName = (u: { full_name?: string | null; name?: string | null }) => (u.full_name || u.name || "").split(" ")[0] || null;
@@ -53,6 +73,7 @@ export async function createDirect(opts: {
   message: string;
   sendAt?: Date | null;
   timezone: string;
+  attachment?: DirectAttachment | null;
 }) {
   const phone = normalizePhone(opts.phone);
   if (phone.length < 12 || phone.length > 13) return { ok: false, error: `Telefone inválido: ${opts.phone}. Precisa do DDD.` };
@@ -72,24 +93,37 @@ export async function createDirect(opts: {
   if ((counts?.today ?? 0) >= MAX_PER_DAY) return { ok: false, error: "Limite de mensagens avulsas por dia atingido. Amanhã dá de novo." };
   if (sendAt && (counts?.scheduled ?? 0) >= MAX_SCHEDULED) return { ok: false, error: `Já são ${MAX_SCHEDULED} mensagens agendadas. Cancele alguma antes (direct_cancel).` };
 
+  const att = opts.attachment;
   const row = await one<{ id: string }>(
-    `INSERT INTO direct_messages (user_id, name, phone, text, send_at) VALUES ($1, $2, $3, $4, COALESCE($5, now())) RETURNING id`,
-    [opts.user.id, opts.name?.trim().slice(0, 80) || null, phone, text, sendAt],
+    `INSERT INTO direct_messages (user_id, name, phone, text, send_at, media, media_kind, media_mimetype, media_name)
+     VALUES ($1, $2, $3, $4, COALESCE($5, now()), $6, $7, $8, $9) RETURNING id`,
+    [
+      opts.user.id,
+      opts.name?.trim().slice(0, 80) || null,
+      phone,
+      text,
+      sendAt,
+      att ? Buffer.from(att.base64, "base64") : null,
+      att?.kind ?? null,
+      att?.mimetype ?? null,
+      att ? (att.fileName ?? null)?.slice(0, 120) ?? null : null,
+    ],
   );
   const id = row!.id;
   const who = opts.name ? `${opts.name} (+${phone})` : `+${phone}`;
+  const withFile = att ? { attachment: attachmentLabel({ kind: att.kind, name: att.fileName }) } : {};
   if (sendAt) {
     const boss = await getBoss();
     await boss.send(QUEUES.outbound, { type: "direct", directId: id }, { startAfter: sendAt, retryLimit: 2, retryDelay: 60, singletonKey: `direct:${id}` });
-    return { ok: true, id, scheduled_for: formatLocal(sendAt, opts.timezone), to: who, message: text, tip: "Fica na Agenda do painel, onde dá para cancelar." };
+    return { ok: true, id, scheduled_for: formatLocal(sendAt, opts.timezone), to: who, message: text, ...withFile, tip: "Fica na Agenda do painel, onde dá para cancelar." };
   }
   const r = await sendDirect(id);
-  return r.ok ? { ok: true, id, sent_to: who, message: text } : r;
+  return r.ok ? { ok: true, id, sent_to: who, message: text, ...withFile } : r;
 }
 
 /** Envia (na hora ou quando o agendamento vence). Agendada avisa quem pediu que saiu. */
 export async function sendDirect(id: string, opts: { notify?: boolean } = {}) {
-  const d = await one<DirectMessage>(
+  const d = await one<DirectMessage & { media: Buffer | null; media_mimetype: string | null }>(
     "UPDATE direct_messages SET status = 'sending' WHERE id = $1 AND status = 'scheduled' RETURNING *",
     [id],
   );
@@ -99,25 +133,37 @@ export async function sendDirect(id: string, opts: { notify?: boolean } = {}) {
     if (exists === null) throw new Error(`O número +${d.phone} não tem WhatsApp.`);
     const channel = outboundChannel();
     const jid = exists ?? (await jidFor(d.phone, channel));
-    await channel.sendText(jid, d.text);
-    await query("UPDATE direct_messages SET status = 'sent', sent_at = now(), jid = $2, error = NULL WHERE id = $1", [id, jid]);
-    await logContactMessage(d.user_id, d.phone, d.name, "out", d.text);
+    if (d.media?.length) {
+      // texto curto vai de legenda (uma mensagem só, como a pessoa mandaria); longo sai antes, em balão próprio
+      const caption = d.text.length <= CAPTION_MAX ? d.text : undefined;
+      if (!caption) await channel.sendText(jid, d.text);
+      await channel.sendImage(jid, {
+        kind: d.media_kind === "image" ? "image" : "document",
+        base64: d.media.toString("base64"),
+        mimetype: d.media_mimetype ?? "application/octet-stream",
+        fileName: d.media_name ?? undefined,
+        caption,
+      });
+    } else await channel.sendText(jid, d.text);
+    // o arquivo só ficava aqui até sair
+    await query("UPDATE direct_messages SET status = 'sent', sent_at = now(), jid = $2, error = NULL, media = NULL WHERE id = $1", [id, jid]);
+    await logContactMessage(d.user_id, d.phone, d.name, "out", d.media_kind ? `${d.text}\n[${attachmentLabel({ kind: d.media_kind, name: d.media_name })}]` : d.text);
     if (opts.notify) await notifyUser(d.user_id, `Mandei para ${d.name ?? `+${d.phone}`} a mensagem que você agendou.`).catch(() => {});
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    await query("UPDATE direct_messages SET status = 'failed', error = $2 WHERE id = $1", [id, msg.slice(0, 300)]);
+    await query("UPDATE direct_messages SET status = 'failed', error = $2, media = NULL WHERE id = $1", [id, msg.slice(0, 300)]);
     if (opts.notify) await notifyUser(d.user_id, `Não consegui mandar a mensagem agendada para ${d.name ?? `+${d.phone}`}: ${msg}`).catch(() => {});
     return { ok: false, error: msg, no_whatsapp: /não tem WhatsApp/.test(msg) };
   }
 }
 
 export async function listDirect(userId: string) {
-  return many<DirectMessage>("SELECT * FROM direct_messages WHERE user_id = $1 AND status = 'scheduled' ORDER BY send_at LIMIT 30", [userId]);
+  return many<DirectMessage>(`SELECT ${COLS} FROM direct_messages WHERE user_id = $1 AND status = 'scheduled' ORDER BY send_at LIMIT 30`, [userId]);
 }
 
 export async function cancelDirect(userId: string, id: string) {
-  const r = await one("UPDATE direct_messages SET status = 'cancelled' WHERE id::text = $1 AND user_id = $2 AND status = 'scheduled' RETURNING id", [id, userId]);
+  const r = await one("UPDATE direct_messages SET status = 'cancelled', media = NULL WHERE id::text = $1 AND user_id = $2 AND status = 'scheduled' RETURNING id", [id, userId]);
   return r ? { ok: true } : { ok: false, error: "Não achei essa mensagem agendada (já saiu ou foi cancelada)." };
 }
 
@@ -149,7 +195,7 @@ export async function handleDirectReply(msg: InboundMessage): Promise<boolean> {
 
 /** Resumo para a pessoa, usado no resultado das ferramentas. */
 export function describeDirect(d: DirectMessage, tz: string) {
-  return { id: d.id, to: d.name ? `${d.name} (+${d.phone})` : `+${d.phone}`, when: formatLocal(new Date(d.send_at), tz), text: d.text.slice(0, 200) };
+  return { id: d.id, to: d.name ? `${d.name} (+${d.phone})` : `+${d.phone}`, when: formatLocal(new Date(d.send_at), tz), text: d.text.slice(0, 200), ...(d.media_kind ? { attachment: attachmentLabel({ kind: d.media_kind, name: d.media_name }) } : {}) };
 }
 
 // ---------- Conversas com contatos (tela Recados) ----------

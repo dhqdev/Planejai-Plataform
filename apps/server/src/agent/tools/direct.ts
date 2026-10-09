@@ -1,6 +1,7 @@
-import { cancelDirect, createDirect, describeDirect, listDirect } from "../../direct.js";
+import { cancelDirect, createDirect, describeDirect, directText, listDirect } from "../../direct.js";
 import { saveContact, searchContacts } from "../../phonebook.js";
 import { formatLocal, parseLocalDateTime } from "../../time.js";
+import { ATTACH_PARAMS, previewAttachment, resolveAttachment, type AttachArgs } from "./attach.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 /** at (horário local) ou in_minutes -> quando sai; null = agora. Usado por send_whatsapp e send_to_contact. */
@@ -17,16 +18,17 @@ export function parseSendAt(args: { at?: string; in_minutes?: number }, timezone
   return { sendAt };
 }
 
-export const sendWhatsapp = defineTool<{ phone: string; message: string; name?: string; at?: string; in_minutes?: number; confirmed_by_user?: boolean }>({
+export const sendWhatsapp = defineTool<{ phone: string; message: string; name?: string; at?: string; in_minutes?: number; confirmed_by_user?: boolean } & AttachArgs>({
   name: "send_whatsapp",
   description:
-    "Manda uma mensagem normal no WhatsApp de qualquer número (cliente, fornecedor, restaurante), agora ou agendada com at/in_minutes. " +
+    "Manda uma mensagem normal no WhatsApp de qualquer número (cliente, fornecedor, restaurante), agora ou agendada com at/in_minutes, com foto ou documento se pedir (attach/document_id). " +
     "Não convida para o Planejai nem cria contato. Só sai depois do sim. Se a pessoa responder, a resposta chega aqui.",
   parameters: obj(
     {
       phone: { type: "string", description: "WhatsApp com DDD" },
       message: { type: "string", description: "Texto final, do jeito que ela pediu" },
       name: { type: "string", description: "Nome de quem recebe" },
+      ...ATTACH_PARAMS,
       at: { type: "string", description: "Agendar: AAAA-MM-DDTHH:MM local" },
       in_minutes: { type: "number" },
       ...CONFIRM_PARAM,
@@ -37,11 +39,19 @@ export const sendWhatsapp = defineTool<{ phone: string; message: string; name?: 
     const when = parseSendAt(args, ctx.timezone);
     if ("error" in when) return { ok: false, error: when.error };
     const sendAt = when.sendAt;
-    const who = args.name ? `${args.name} (${args.phone})` : args.phone;
-    const preview = args.message.length > 120 ? `${args.message.slice(0, 119)}…` : args.message;
-    const gate = await requireConfirmation(args, `mandar para ${who}${sendAt ? ` em ${formatLocal(sendAt, ctx.timezone)}` : " agora"}: "${preview}"`, ctx);
-    if (gate) return gate;
-    return createDirect({ user: ctx.user as any, phone: args.phone, name: args.name, message: args.message, sendAt, timezone: ctx.timezone });
+    const file = await resolveAttachment(args, ctx);
+    if ("error" in file) return { ok: false, error: file.error };
+    if (!ctx.approvedAction) {
+      const who = args.name ? `${args.name} (${args.phone})` : args.phone;
+      const preview = args.message.length > 120 ? `${args.message.slice(0, 119)}…` : args.message;
+      const summary = `mandar para ${who}${sendAt ? ` em ${formatLocal(sendAt, ctx.timezone)}` : " agora"}: "${preview}"${file.label ? ` ${file.label}` : ""}`;
+      const gate = await requireConfirmation(args, summary, { ...ctx, toolCall: { name: ctx.toolCall?.name ?? "send_whatsapp", args: file.stored } });
+      if (gate) {
+        if (file.att) previewAttachment(ctx, file.att, directText(args.message, ctx.user as any));
+        return gate;
+      }
+    }
+    return createDirect({ user: ctx.user as any, phone: args.phone, name: args.name, message: args.message, sendAt, timezone: ctx.timezone, attachment: file.att });
   },
 });
 

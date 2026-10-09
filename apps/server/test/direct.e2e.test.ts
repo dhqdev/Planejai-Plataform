@@ -11,6 +11,7 @@ const CLIENT = "5511977776666";
 
 let server: http.Server;
 let seq = 0;
+let docId = "";
 const call = (name: string, args: unknown) => ({ id: `d${++seq}`, type: "function", function: { name, arguments: JSON.stringify(args) } });
 const completion = (content: string | null, tool_calls?: unknown[]) => ({
   model: "fake/model",
@@ -22,6 +23,9 @@ function fakeOpenRouter(body: any) {
   const last = body.messages.at(-1);
   const userText = String(body.messages.findLast((m: any) => m.role === "user")?.content ?? "");
   if (last.role === "tool") return completion(String(last.content).includes("confirm") ? "Posso mandar para o Rafael?" : "Pronto!");
+  if (userText.includes("manda o contrato")) {
+    return completion(null, [call("send_whatsapp", { phone: "11 95555-4444", name: "Bruna", message: "Oi Bruna, aqui é o David! Segue o contrato assinado.", document_id: docId, in_minutes: 120 })]);
+  }
   if (userText.includes("proposta")) {
     return completion(null, [call("send_whatsapp", { phone: "(11) 97777-6666", name: "Rafael", message: "Bom dia, Rafael! Aqui é o David, segue a proposta que combinamos." })]);
   }
@@ -100,6 +104,27 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     expect(chat).toMatchObject({ name: "Rafael", member: false, waiting_you: true });
     expect(chat.log.map((l) => l.from)).toEqual(["nos", "eles"]);
     expect(chat.log[1]!.text).toBe("Recebi, obrigado!");
+  });
+
+  it("documento de Documentos vai junto numa mensagem agendada e sai como arquivo com legenda", async () => {
+    const { saveDocument } = await import("../src/documents.js");
+    const pdf = Buffer.from("%PDF-1.4 contrato");
+    docId = (await saveDocument({ userId: david.id, name: "Contrato.pdf", mimetype: "application/pdf", data: pdf })).id;
+    await say("manda o contrato pra Bruna daqui 2h");
+    const p = await db.one("SELECT args, summary FROM pending_actions WHERE conversation_id = $1 AND tool = 'send_whatsapp' AND status = 'pending'", [conv]);
+    expect(p.summary).toMatch(/ com o arquivo Contrato\.pdf$/);
+    expect(p.args.attach_key).toBeUndefined();
+    await say("sim");
+    const d = await db.one("SELECT id, status, media_kind, media_name, media FROM direct_messages WHERE phone = '5511955554444'");
+    expect(d).toMatchObject({ status: "scheduled", media_kind: "document", media_name: "Contrato.pdf" });
+    const before = channels.playground.sent.length;
+    const { runOutboundJob } = await import("../src/api/routes/internal.js");
+    await runOutboundJob({ type: "direct", directId: d.id });
+    expect(channels.playground.sent.slice(before)[0]).toMatchObject({
+      type: "image",
+      image: { kind: "document", fileName: "Contrato.pdf", mimetype: "application/pdf", base64: pdf.toString("base64"), caption: "Oi Bruna, aqui é o David! Segue o contrato assinado." },
+    });
+    expect(await db.one("SELECT media FROM direct_messages WHERE id = $1", [d.id])).toEqual({ media: null });
   });
 
   it("agenda para depois, avisa quando sai e dá para cancelar", async () => {

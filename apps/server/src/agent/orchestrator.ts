@@ -28,6 +28,7 @@ import { Tracer } from "./trace.js";
 import { allShort, pushShort, recentShort, redisAlive, type ShortEntry } from "../shortmem.js";
 import { billingAccess, blockedMessage } from "../billing.js";
 import { config } from "../config.js";
+import { rememberInboundMedia } from "./tools/attach.js";
 import { Outbox, type ConversationRow, type ToolContext, type UserRow } from "./tools/types.js";
 
 /** Mensagens recentes que entram no contexto do CTO (o resto vira resumo): menos token por resposta. */
@@ -374,6 +375,8 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       // lembrete agendado não ganha "já vou ver": a pessoa não perguntou nada agora
       progress: proactive ? undefined : progress,
     };
+    // "manda essa foto pro João" pode vir na mensagem seguinte: a última mídia fica um tempo no Redis
+    await rememberInboundMedia(conversationId, ctx.inboundFiles);
     const tools = [...(await availableTools(CTO_TOOLS, user)), ...TEAM_TOOLS, ...team.map(delegationTool)];
     // "sim"/"não" da pessoa para a ação guardada: o servidor executa (ou descarta) antes do CTO responder
     const confirmNotes = await resolvePending(

@@ -1,10 +1,9 @@
-import { randomUUID } from "node:crypto";
-import { cacheGet, cacheSet } from "../../shortmem.js";
 import { createInvite, displayName, findContact, inviteStats, listContacts, notifyUser, relayText } from "../../social.js";
 import { SCOPE_LABEL, SHARE_SCOPES, setShare, type ShareScope } from "../../sharing.js";
 import { cancelWatch, createWatch, listWatches, updateWatch, type NotifyMode } from "../../watches.js";
-import { createDirect, logContactMessage } from "../../direct.js";
+import { createDirect, directText, logContactMessage } from "../../direct.js";
 import { formatLocal } from "../../time.js";
+import { ATTACH_PARAMS, previewAttachment, resolveAttachment, type AttachArgs } from "./attach.js";
 import { parseSendAt } from "./direct.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
@@ -64,18 +63,16 @@ export const listContactsTool = defineTool<Record<string, never>>({
   },
 });
 
-/** Foto guardada enquanto a pessoa não diz "sim" (o mesmo prazo da pendência). */
-const PHOTO_TTL_S = 30 * 60;
-
-export const sendToContact = defineTool<{ contact: string; message: string; attach_photo?: boolean; photo_key?: string; at?: string; in_minutes?: number; confirmed_by_user?: boolean }>({
+export const sendToContact = defineTool<{ contact: string; message: string; at?: string; in_minutes?: number; confirmed_by_user?: boolean } & AttachArgs>({
   name: "send_to_contact",
   description:
-    "Manda uma mensagem a um contato do Planejai em nome da pessoa, agora ou agendada com at/in_minutes (fica na Agenda); só sai depois do \"sim\". attach_photo=true encaminha a foto que ela mandou agora.",
+    "Manda uma mensagem a um contato do Planejai em nome da pessoa, agora ou agendada com at/in_minutes (fica na Agenda); só sai depois do \"sim\". " +
+    "Pode ir com foto ou documento (attach ou document_id), agora ou agendada.",
   parameters: obj(
     {
       contact: { type: "string", description: "Nome do contato" },
       message: { type: "string", description: "Curto e natural" },
-      attach_photo: { type: "boolean" },
+      ...ATTACH_PARAMS,
       at: { type: "string", description: "Agendar: AAAA-MM-DDTHH:MM local" },
       in_minutes: { type: "number" },
       ...CONFIRM_PARAM,
@@ -96,52 +93,32 @@ export const sendToContact = defineTool<{ contact: string; message: string; atta
     const to = found[0]!;
     const when = parseSendAt(args, ctx.timezone);
     if ("error" in when) return { error: when.error };
+    const file = await resolveAttachment(args, ctx);
+    if ("error" in file) return { error: file.error };
+    const preview = args.message.length > 80 ? `${args.message.slice(0, 79)}…` : args.message;
+    const extra = file.label ? ` ${file.label}` : "";
+    if (!ctx.approvedAction) {
+      const summary = when.sendAt
+        ? `Mandar para ${to.name} em ${formatLocal(when.sendAt, ctx.timezone)}: "${preview}"${extra}`
+        : `Mandar para ${to.name}: "${preview}"${extra}`;
+      const gate = await requireConfirmation(args, summary, { ...ctx, toolCall: { name: ctx.toolCall?.name ?? "send_to_contact", args: file.stored } });
+      if (gate) {
+        if (file.att) previewAttachment(ctx, file.att, when.sendAt ? directText(args.message, ctx.user as any) : args.message);
+        return gate;
+      }
+    }
     if (when.sendAt) {
       // agendada: mesma fila das mensagens avulsas, então aparece na Agenda e no list_reminders e cancela por lá
-      if (args.attach_photo) return { error: "Foto não dá para agendar; mande agora ou agende só o texto." };
-      const preview = args.message.length > 80 ? `${args.message.slice(0, 79)}…` : args.message;
-      const gate = await requireConfirmation(args, `Mandar para ${to.name} em ${formatLocal(when.sendAt, ctx.timezone)}: "${preview}"`, ctx);
-      if (gate) return gate;
-      return createDirect({ user: ctx.user as any, phone: to.phone, name: to.name, message: args.message, sendAt: when.sendAt, timezone: ctx.timezone });
-    }
-    const keyPrefix = `pending-photo:${ctx.conversation.id}:`;
-    if (!ctx.approvedAction) {
-      // a foto só existe na memória desta rodada: guarda no Redis para ela ainda estar aqui no "sim"
-      const { photo_key: _ignored, ...clean } = args;
-      let stored: Record<string, unknown> = clean;
-      if (args.attach_photo) {
-        const photo = ctx.inboundImages?.at(-1);
-        if (!photo) return { error: "Não há foto nesta mensagem para encaminhar." };
-        const key = keyPrefix + randomUUID();
-        if (!(await cacheSet(key, photo, PHOTO_TTL_S, 12_000_000))) return { error: "Não consegui guardar a foto agora. Peça para ela mandar a foto de novo daqui a pouco." };
-        stored = { ...clean, photo_key: key };
-      }
-      const preview = args.message.length > 80 ? `${args.message.slice(0, 79)}…` : args.message;
-      const gate = await requireConfirmation(args, `Mandar para ${to.name}: "${preview}"${args.attach_photo ? " com a foto" : ""}`, {
-        ...ctx,
-        toolCall: { name: ctx.toolCall?.name ?? "send_to_contact", args: stored },
-      });
-      if (gate) return gate;
-    }
-    let photo: { base64: string; mimetype: string } | undefined;
-    let photoExpired = false;
-    if (args.attach_photo) {
-      const key = typeof args.photo_key === "string" && args.photo_key.startsWith(keyPrefix) ? args.photo_key : null;
-      photo = (key ? await cacheGet<{ base64: string; mimetype: string }>(key) : null) ?? ctx.inboundImages?.at(-1);
-      photoExpired = !photo;
+      return createDirect({ user: ctx.user as any, phone: to.phone, name: to.name, message: args.message, sendAt: when.sendAt, timezone: ctx.timezone, attachment: file.att });
     }
     const sender = displayName(ctx.user as any);
-    await notifyUser(to.id, relayText(sender, args.message), photo, { from: sender });
+    await notifyUser(to.id, relayText(sender, args.message), file.att ?? undefined, { from: sender });
     // a conversa aparece na tela Recados dos dois lados
-    const text = photo ? `${args.message}\n[com foto]` : args.message;
+    const text = file.label ? `${args.message}
+[${file.label}]` : args.message;
     await logContactMessage(ctx.user.id, to.phone, to.name, "out", text);
     await logContactMessage(to.id, (ctx.user as any).phone, sender, "in", text);
-    return {
-      ok: true,
-      sent_to: to.name,
-      with_photo: Boolean(photo),
-      ...(photoExpired ? { note: "A foto venceu antes do sim; mandei só o texto. Peça para ela mandar a foto de novo se quiser encaminhar." } : {}),
-    };
+    return { ok: true, sent_to: to.name, ...(file.label ? { attachment: file.label } : {}) };
   },
 });
 

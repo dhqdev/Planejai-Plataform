@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { config } from "../../../config.js";
 import { many, one } from "../../../db/pool.js";
-import { cancelDirect } from "../../../direct.js";
+import { attachmentLabel, cancelDirect } from "../../../direct.js";
 import { googleApi } from "../../../integrations/google.js";
 import { asPerson } from "../../../integrations/person.js";
 import { isConnected } from "../../../integrations/registry.js";
@@ -113,7 +113,7 @@ export function agendaRoutes(base: FastifyInstance) {
     // mensagens avulsas agendadas (send_whatsapp): aparecem na hora em que saem, só na própria agenda
     if (mine) {
       const msgs = await many(
-        `SELECT id, name, phone, text, send_at, status FROM direct_messages
+        `SELECT id, name, phone, text, send_at, status, media_kind, media_name FROM direct_messages
           WHERE user_id = $1 AND status IN ('scheduled', 'sending', 'sent', 'failed') AND send_at >= $2 AND send_at < $3
             AND (status = 'scheduled' OR created_at < send_at - interval '1 minute')
           ORDER BY send_at LIMIT 200`,
@@ -121,7 +121,7 @@ export function agendaRoutes(base: FastifyInstance) {
       );
       for (const m of msgs) {
         const who = m.name || `+${m.phone}`;
-        events.push({ id: `m:${m.id}`, kind: "message", directId: m.id, title: `Mensagem para ${who}`, start: new Date(m.send_at).toISOString(), person: who, intent: m.text, status: m.status });
+        events.push({ id: `m:${m.id}`, kind: "message", directId: m.id, title: `Mensagem para ${who}`, start: new Date(m.send_at).toISOString(), person: who, intent: m.media_kind ? `${m.text} (📎 ${attachmentLabel({ kind: m.media_kind, name: m.media_name })})` : m.text, status: m.status });
       }
     }
     return { events, readonly: !mine, tags: await listTags(uid) };

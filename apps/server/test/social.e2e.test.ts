@@ -62,6 +62,7 @@ function fakeOpenRouter(body: any) {
     // como em produção: o CTO manda só título e roteiro, sem seções
     if (userText.includes("resumo em pdf do pai rico")) return completion(null, [call("make_pdf", { title: "Pai Rico, Pai Pobre", subtitle: "Resumo do livro", brief: "Resumo completo do livro, lições principais" })]);
     if (userText.includes("amanhã às 7h manda pro Giovani")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "Bom dia, Gio!", in_minutes: 600 })]);
+    if (userText.includes("manda essa foto pro Giovani amanhã")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "Olha que lindo o pôr do sol!", attach: true, in_minutes: 600 })]);
     if (userText.includes("manda esse look")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "Olha esse look, o que acha?", attach_photo: true })]);
     return completion("ok");
   }
@@ -160,12 +161,14 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
   it("'manda esse look pro Giovani' pergunta antes e, no sim, encaminha a foto com a mensagem", async () => {
     const look = { base64: Buffer.from("foto-do-look").toString("base64"), mimetype: "image/jpeg" };
     const before = channels.playground.sent.length;
-    await say("manda esse look pro Giovani", look);
+    const asked = await say("manda esse look pro Giovani", look);
     // nada sai antes do "sim": a pendência guarda a chave da foto (a foto em si fica no Redis)
     expect(channels.playground.sent.slice(before).some((s) => s.type === "image")).toBe(false);
+    // ...mas ela vê a foto com o texto, do jeito que vai sair, junto da pergunta
+    expect(asked.sent.find((s) => s.type === "image")).toMatchObject({ image: { kind: "image", base64: look.base64, caption: "Olha esse look, o que acha?" } });
     const p = await db.one("SELECT args, summary FROM pending_actions WHERE conversation_id = $1 AND tool = 'send_to_contact' AND status = 'pending'", [davidConv]);
     expect(p.summary).toBe('Mandar para Giovani Silva: "Olha esse look, o que acha?" com a foto');
-    expect(p.args.photo_key).toMatch(new RegExp(`^pending-photo:${davidConv}:`));
+    expect(p.args.attach_key).toMatch(new RegExp(`^pending-attach:${davidConv}:`));
     await say("sim");
     const sent = channels.playground.sent.slice(-3);
     // o recado chega com a dica de como responder: a conversa é de ida e volta
@@ -209,6 +212,30 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     const listed: any = await listRemindersTool.run({}, { user: david, timezone: "America/Sao_Paulo" } as any);
     expect(listed.scheduled_messages[0].to).toContain("Giovani Silva");
     await db.query("UPDATE direct_messages SET status = 'cancelled' WHERE user_id = $1", [david.id]);
+  });
+
+  it("foto mandada antes vai junto numa mensagem agendada: mostra no sim, guarda até a hora e sai com a legenda", async () => {
+    const sunset = { base64: Buffer.from("foto-do-por-do-sol").toString("base64"), mimetype: "image/jpeg" };
+    await say("", sunset);
+    const asked = await say("manda essa foto pro Giovani amanhã cedo");
+    const p = await db.one("SELECT args, summary FROM pending_actions WHERE conversation_id = $1 AND tool = 'send_to_contact' AND status = 'pending'", [davidConv]);
+    expect(p.summary).toMatch(/^Mandar para Giovani Silva em .+: "Olha que lindo o pôr do sol!" com a foto$/);
+    expect(asked.sent.find((s) => s.type === "image")?.image).toMatchObject({ base64: sunset.base64, caption: "Oi! Aqui é o assistente virtual de David. Olha que lindo o pôr do sol!" });
+    expect(asked.sent.filter((s) => s.type === "text").map((s) => s.text).join("\n")).toContain("com a foto");
+    await say("sim");
+    const d = await db.one("SELECT id, status, media_kind, media FROM direct_messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1", [david.id]);
+    expect(d).toMatchObject({ status: "scheduled", media_kind: "image" });
+    expect(d.media.toString("base64")).toBe(sunset.base64);
+    const { describeDirect, listDirect } = await import("../src/direct.js");
+    expect(describeDirect((await listDirect(david.id))[0]!, "America/Sao_Paulo")).toMatchObject({ attachment: "com a foto" });
+
+    const before = channels.playground.sent.length;
+    const { runOutboundJob } = await import("../src/api/routes/internal.js");
+    await runOutboundJob({ type: "direct", directId: d.id });
+    const out = channels.playground.sent.slice(before);
+    // uma mensagem só: a foto com o texto de legenda
+    expect(out[0]).toMatchObject({ type: "image", image: { kind: "image", base64: sunset.base64, caption: "Oi! Aqui é o assistente virtual de David. Olha que lindo o pôr do sol!" } });
+    expect(await db.one("SELECT status, media FROM direct_messages WHERE id = $1", [d.id])).toEqual({ status: "sent", media: null });
   });
 
   it.skipIf(!process.env.CHROME_PATH)("pdf longo cortado no teto de saída: tenta de novo com folga e manda o PDF, nunca o texto da chamada", async () => {

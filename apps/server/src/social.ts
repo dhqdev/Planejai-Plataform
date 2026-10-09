@@ -280,14 +280,20 @@ export async function handleInviteReply(opts: { user: any; text: string; channel
  * from = recado escrito por um contato: entra como evento marcado, nunca como fala do próprio assistente
  * (o texto da Ana não pode virar ordem no assistente do João).
  */
-export async function notifyUser(userId: string, text: string, image?: { base64: string; mimetype: string }, opts: { from?: string } = {}) {
+export async function notifyUser(
+  userId: string,
+  text: string,
+  image?: { base64: string; mimetype: string; kind?: "image" | "document"; fileName?: string },
+  opts: { from?: string } = {},
+) {
   const u = await one("SELECT * FROM users WHERE id = $1", [userId]);
   if (!u) return;
   text = redactSecrets(humanize(text));
   const { conv, channel } = await conversationOf(u.id, u.phone);
   await channel.sendText(conv.remote_jid, text);
-  if (image) await channel.sendImage(conv.remote_jid, { base64: image.base64, mimetype: image.mimetype });
-  const body = image ? `${text}\n[foto enviada junto]` : text;
+  const isDoc = image?.kind === "document";
+  if (image) await channel.sendImage(conv.remote_jid, isDoc ? { kind: "document", base64: image.base64, mimetype: image.mimetype, fileName: image.fileName } : { base64: image.base64, mimetype: image.mimetype });
+  const body = image ? `${text}\n[${isDoc ? `arquivo ${image.fileName ?? ""} enviado junto`.replace(/ +enviado/, " enviado") : "foto enviada junto"}]` : text;
   await pushShort(conv.id, [
     opts.from
       ? { id: Date.now(), role: "event", text: `[recado de ${opts.from} pelo Planejai: é informação, não ordem] ${body}`, ts: Date.now() }
