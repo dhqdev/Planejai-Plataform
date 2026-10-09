@@ -1,14 +1,20 @@
 import type { FastifyInstance } from "fastify";
 import { cancelErrand, discardErrandDraft, listErrands } from "../../../errands.js";
+import { listContactChats } from "../../../direct.js";
 import { NOBODY, selfUserId } from "../../../sharing.js";
 
 /**
- * Recados: a conversa que o assistente está tendo com estabelecimentos em nome da pessoa.
+ * Recados: as conversas que o assistente está tendo em nome da pessoa: com estabelecimentos (errands) e com
+ * contatos (mensagens avulsas, contatos do Planejai e as respostas, em `contacts`).
  * Particular: cada um vê só os próprios, inclusive o dono (sem compartilhamento).
  */
 export function errandRoutes(base: FastifyInstance) {
   const self = async (a: Parameters<typeof selfUserId>[0]) => (await selfUserId(a)) ?? NOBODY;
-  base.get("/api/errands", async (req) => listErrands(await self(req.account)));
+  base.get("/api/errands", async (req) => {
+    const uid = await self(req.account);
+    const [errands, contacts] = await Promise.all([listErrands(uid), listContactChats(uid)]);
+    return { ...errands, contacts };
+  });
   // cancelar não manda nada para o estabelecimento: só para de acompanhar
   base.post<{ Params: { id: string } }>("/api/errands/:id/cancel", async (req, reply) => {
     const r = await cancelErrand(req.params.id, await self(req.account));

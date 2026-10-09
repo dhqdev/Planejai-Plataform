@@ -58,3 +58,21 @@
   .errand-bubble { max-width: 86%; }
   .errand-row { padding: 12px; }
 }
+
+/* lugares e pessoas na mesma lista: filtro, busca, seções e avatar */
+.errand-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 6px 8px; }
+.errand-tools .seg button { padding: 5px 11px; font-size: 13px; }
+.errand-search { flex: 1 1 140px; min-width: 0; height: 32px; padding: 0 10px; font-size: 13px; }
+.errand-section { padding: 10px 12px 4px; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+/* avatar posicionado, não flex: segue a regra do Safari lá em cima */
+.errand-row { position: relative; padding-left: 56px; }
+.errand-row > .errand-avatar { position: absolute; left: 12px; top: 10px; }
+.errand-row-body { display: block; min-width: 0; max-width: 100%; }
+.errand-avatar { flex-shrink: 0; display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--border); font-size: 12.5px; font-weight: 600; color: var(--text); }
+.errand-avatar.place { border-radius: 10px; color: var(--muted); }
+.errand-row.active .errand-avatar { background: var(--panel); }
+.errand-who { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.errand-who .errand-avatar { width: 40px; height: 40px; font-size: 14px; }
+.errand-state.done { color: var(--muted); }
+.errand-bubble-cancel { align-self: flex-start; margin-top: 4px; padding: 0; border: 0; background: none; font: inherit; font-size: 12px; color: var(--muted); text-decoration: underline; cursor: pointer; }
+.errand-bubble-cancel:hover { color: var(--text); }

@@ -101,6 +101,7 @@ export async function sendDirect(id: string, opts: { notify?: boolean } = {}) {
     const jid = exists ?? (await jidFor(d.phone, channel));
     await channel.sendText(jid, d.text);
     await query("UPDATE direct_messages SET status = 'sent', sent_at = now(), jid = $2, error = NULL WHERE id = $1", [id, jid]);
+    await logContactMessage(d.user_id, d.phone, d.name, "out", d.text);
     if (opts.notify) await notifyUser(d.user_id, `Mandei para ${d.name ?? `+${d.phone}`} a mensagem que você agendou.`).catch(() => {});
     return { ok: true };
   } catch (err) {
@@ -141,6 +142,7 @@ export async function handleDirectReply(msg: InboundMessage): Promise<boolean> {
   const who = d.name || msg.pushName || `+${d.phone}`;
   const body =
     msg.kind === "text" ? msg.text : msg.text?.trim() ? `${msg.text}\n[mandou ${msg.kind === "image" ? "uma foto" : "um arquivo"} também]` : `[mandou ${msg.kind === "audio" ? "um áudio" : msg.kind === "image" ? "uma foto" : "um arquivo"}]`;
+  await logContactMessage(d.user_id, d.phone, d.name || msg.pushName || null, "in", String(body ?? ""));
   await notifyUser(d.user_id, `*${who}* respondeu:\n\n${String(body ?? "").slice(0, 2000)}`, undefined, { from: who });
   return true;
 }
@@ -148,4 +150,77 @@ export async function handleDirectReply(msg: InboundMessage): Promise<boolean> {
 /** Resumo para a pessoa, usado no resultado das ferramentas. */
 export function describeDirect(d: DirectMessage, tz: string) {
   return { id: d.id, to: d.name ? `${d.name} (+${d.phone})` : `+${d.phone}`, when: formatLocal(new Date(d.send_at), tz), text: d.text.slice(0, 200) };
+}
+
+// ---------- Conversas com contatos (tela Recados) ----------
+
+/** Quanto tempo a conversa com um contato fica guardada para a tela Recados (a limpeza de hora em hora apaga o resto). */
+export const CONTACT_LOG_DAYS = 30;
+
+/** Guarda uma mensagem da conversa da pessoa com um contato. Nunca derruba o envio. */
+export async function logContactMessage(userId: string, phone: string, name: string | null | undefined, dir: "out" | "in", text: string) {
+  const t = redactSecrets(text).trim().slice(0, 3000);
+  if (!t) return;
+  await query("INSERT INTO contact_messages (user_id, phone, name, dir, text) VALUES ($1, $2, $3, $4, $5)", [userId, phone, name?.trim().slice(0, 80) || null, dir, t]).catch(() => {});
+}
+
+type ContactLine = { from: "nos" | "eles"; text: string; at: string };
+
+/**
+ * Todo mundo com quem o assistente está conversando em nome da pessoa (fora os recados com estabelecimentos):
+ * mensagens avulsas, contatos do Planejai, respostas e as agendadas que ainda vão sair. Uma conversa por número.
+ */
+export async function listContactChats(userId: string) {
+  const [rows, scheduled] = await Promise.all([
+    many<{ phone: string; name: string | null; dir: "out" | "in"; text: string; created_at: string }>(
+      `SELECT phone, name, dir, text, created_at FROM contact_messages
+        WHERE user_id = $1 AND created_at > now() - make_interval(days => $2) ORDER BY created_at LIMIT 1000`,
+      [userId, CONTACT_LOG_DAYS],
+    ),
+    many<DirectMessage>("SELECT * FROM direct_messages WHERE user_id = $1 AND status = 'scheduled' ORDER BY send_at LIMIT 30", [userId]),
+  ]);
+  const chats = new Map<string, { phone: string; name: string | null; log: ContactLine[]; scheduled: { id: string; text: string; send_at: string }[]; updated_at: string }>();
+  const chat = (phone: string, name: string | null, at: string) => {
+    const c = chats.get(phone) ?? { phone, name: null, log: [], scheduled: [], updated_at: at };
+    if (name) c.name = name;
+    if (at > c.updated_at) c.updated_at = at;
+    chats.set(phone, c);
+    return c;
+  };
+  for (const r of rows) {
+    const at = new Date(r.created_at).toISOString();
+    chat(r.phone, r.name, at).log.push({ from: r.dir === "out" ? "nos" : "eles", text: r.text, at });
+  }
+  // a ordem da lista é pela última coisa que aconteceu (o pedido da agendada), nunca por um horário no futuro
+  for (const d of scheduled) chat(d.phone, d.name, new Date((d as DirectMessage & { created_at: string }).created_at).toISOString()).scheduled.push({ id: d.id, text: d.text, send_at: new Date(d.send_at).toISOString() });
+  if (!chats.size) return [];
+
+  // nome: o da agenda de contatos da pessoa ou o cadastro de quem usa o Planejai, quando a mensagem não trouxe
+  const phones = [...chats.keys()];
+  const all = phones.flatMap((p) => phoneVariants(p));
+  const [book, members] = await Promise.all([
+    many<{ phone: string; name: string }>("SELECT phone, name FROM phonebook WHERE user_id = $1 AND phone = ANY($2)", [userId, all]),
+    many<{ phone: string; name: string }>("SELECT phone, COALESCE(full_name, name) AS name FROM users WHERE phone = ANY($1) AND status = 'active'", [all]),
+  ]);
+  const find = (list: { phone: string; name: string }[], phone: string) => {
+    const v = phoneVariants(phone);
+    return list.find((x) => v.includes(x.phone));
+  };
+  return [...chats.values()]
+    .map((c) => {
+      const member = find(members, c.phone);
+      const last = c.log.at(-1) ?? null;
+      return {
+        phone: c.phone,
+        name: c.name || find(book, c.phone)?.name || member?.name || null,
+        member: Boolean(member),
+        // a última palavra foi deles: a pessoa ainda não respondeu pelo assistente
+        waiting_you: last?.from === "eles",
+        updated_at: c.updated_at,
+        last: last ? { ...last, text: last.text.slice(0, 140) } : null,
+        log: c.log.slice(-60),
+        scheduled: c.scheduled,
+      };
+    })
+    .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
 }

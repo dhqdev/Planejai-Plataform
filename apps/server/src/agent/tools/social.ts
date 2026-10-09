@@ -3,7 +3,7 @@ import { cacheGet, cacheSet } from "../../shortmem.js";
 import { createInvite, displayName, findContact, inviteStats, listContacts, notifyUser, relayText } from "../../social.js";
 import { SCOPE_LABEL, SHARE_SCOPES, setShare, type ShareScope } from "../../sharing.js";
 import { cancelWatch, createWatch, listWatches, updateWatch, type NotifyMode } from "../../watches.js";
-import { createDirect } from "../../direct.js";
+import { createDirect, logContactMessage } from "../../direct.js";
 import { formatLocal } from "../../time.js";
 import { parseSendAt } from "./direct.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
@@ -132,6 +132,10 @@ export const sendToContact = defineTool<{ contact: string; message: string; atta
     }
     const sender = displayName(ctx.user as any);
     await notifyUser(to.id, relayText(sender, args.message), photo, { from: sender });
+    // a conversa aparece na tela Recados dos dois lados
+    const text = photo ? `${args.message}\n[com foto]` : args.message;
+    await logContactMessage(ctx.user.id, to.phone, to.name, "out", text);
+    await logContactMessage(to.id, (ctx.user as any).phone, sender, "in", text);
     return {
       ok: true,
       sent_to: to.name,

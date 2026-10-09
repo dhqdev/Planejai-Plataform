@@ -93,6 +93,13 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     expect(r.reason).toBe("resposta de mensagem avulsa");
     expect(await db.one("SELECT id FROM users WHERE phone = $1", [CLIENT])).toBeUndefined();
     expect(sentTexts().at(-1)).toMatch(/\*Rafael\* respondeu:\s+Recebi, obrigado!/);
+
+    // a conversa aparece na tela Recados, em Pessoas, com a resposta dele por último
+    const { listContactChats } = await import("../src/direct.js");
+    const chat = (await listContactChats(david.id)).find((c) => c.phone === CLIENT)!;
+    expect(chat).toMatchObject({ name: "Rafael", member: false, waiting_you: true });
+    expect(chat.log.map((l) => l.from)).toEqual(["nos", "eles"]);
+    expect(chat.log[1]!.text).toBe("Recebi, obrigado!");
   });
 
   it("agenda para depois, avisa quando sai e dá para cancelar", async () => {
