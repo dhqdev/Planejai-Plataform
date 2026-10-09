@@ -1,3 +1,4 @@
+import { chargeUsage } from "../credits.js";
 import { one, query } from "../db/pool.js";
 
 /**
@@ -97,6 +98,8 @@ export class Tracer {
                ON CONFLICT (user_id, day) DO UPDATE SET tokens_in = usage_daily.tokens_in + $2, tokens_out = usage_daily.tokens_out + $3, cost_usd = usage_daily.cost_usd + $4`,
               [userId, usage.tokensIn ?? 0, usage.tokensOut ?? 0, usage.costUsd ?? 0],
             ).catch(() => {});
+            // grãos: o custo real deste passo sai da carteira da pessoa (cobrança desligada não faz nada)
+            if (usage.costUsd) void chargeUsage(userId, usage.costUsd).catch(() => {});
           }
         }
       },

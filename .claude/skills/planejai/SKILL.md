@@ -195,7 +195,7 @@ Leia só o do assunto que você vai mexer:
 | `modelos.md` | qual modelo/subagente do Claude usar por tarefa e como escolher os modelos dos agentes do app (OpenRouter) |
 | `agentes.md` | time (nomes e papéis), confirmação de ação sensível, travas anti-travamento, memória curta, ritmo, reunião noturna, recados, navegador, filas |
 | `painel.md` | permissões, telas particulares, abas, menu, visual, PWA, agenda e finanças no painel |
-| `financas.md` | gastos automáticos, limites, gráficos, imagens, assinatura do Asaas, regras financeiras, contas fixas |
+| `financas.md` | gastos automáticos, limites, gráficos, imagens, grãos, planos e pacotes do Asaas, indicação, contas fixas |
 | `integracoes.md` | WhatsApp (Baileys), Telegram, API interna, eventos e n8n, automações, notificações, documentos, código de login |
 | `deploy.md` | rodar e testar local, CI, imagem, stacks, versões, migrações |
 

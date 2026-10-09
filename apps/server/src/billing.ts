@@ -1,19 +1,24 @@
 import { config } from "./config.js";
+import { GRAIN_TEXT, creditGrains, ensureWallet, grains, grainsExempt, grainsLink, packById, planById, plansOf, tellPerson } from "./credits.js";
 import { emitEvent } from "./events.js";
-import { QUEUES, getBoss } from "./queue/boss.js";
 import { many, one, query } from "./db/pool.js";
 import { isOwner } from "./ingest.js";
 import { getCredentials } from "./integrations/registry.js";
 import { notify } from "./notifications.js";
-import { getSettings, type AgentSettings } from "./settings.js";
+import { type AgentSettings, type BillingPlan, getSettings } from "./settings.js";
 
 /**
- * Assinatura mensal pelo Asaas. O dono liga em Configurações > Assinatura e cola a chave em Integrações > Asaas.
- * Cada pessoa tem alguns dias grátis (billingTrialDays) e depois precisa de uma assinatura em dia para o assistente responder.
+ * Cobrança por grãos pelo Asaas (o dono liga em Configurações > Cobrança e cola a chave em Integrações > Asaas).
+ * - Cada pessoa começa com os grãos de boas-vindas; o assistente responde enquanto houver grão (credits.ts).
+ * - Plano mensal: cada pagamento confirmado recarrega os grãos do plano. Cartão fica salvo no Asaas e renova sozinho;
+ *   Pix ou boleto geram a cobrança todo mês.
+ * - Acabou antes do mês virar: compra um pacote avulso (não vence) ou sobe de plano (paga a diferença e ganha a diferença de grãos na hora).
+ *   Descer de plano vale a partir da próxima mensalidade.
+ * - Indicação: cada amigo convidado que paga um plano dá billingReferralStep% de desconto na mensalidade de quem convidou,
+ *   até billingReferralMax%. O desconto acompanha: amigo que para de pagar tira a parte dele.
  *
- * Dados de pagamento nunca passam por aqui: a cobrança é criada com forma de pagamento em aberto e a pessoa paga
- * na página do próprio Asaas (Pix, cartão ou boleto). O CPF/CNPJ vai para o Asaas e não fica guardado no nosso banco.
- * O Asaas avisa o que aconteceu pelo webhook (/webhooks/asaas), que é quem muda o status aqui.
+ * Dados de cartão nunca passam por aqui: a pessoa paga na página do Asaas. O CPF/CNPJ vai para o Asaas e não fica no nosso banco.
+ * O Asaas avisa pelo webhook (/webhooks/asaas), que é quem credita os grãos.
  */
 
 export type SubStatus = "trial" | "active" | "overdue" | "canceled";
@@ -30,11 +35,14 @@ export interface SubscriptionRow {
   invoice_url: string | null;
   last_billing_type?: string | null;
   reminded_on?: string | null;
+  plan_id: string | null;
+  next_plan_id: string | null;
+  base_value: number | null;
+  discount_percent: number;
+  pay_method: string | null;
+  card_brand: string | null;
+  card_last4: string | null;
 }
-
-/** Depois do vencimento o Asaas ainda leva um tempo para avisar (Pix e boleto compensam no dia): folga antes de travar. */
-const GRACE_DAYS = 2;
-const DAY = 86_400_000;
 
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 const onlyDigits = (s: unknown) => String(s ?? "").replace(/\D/g, "");
@@ -90,120 +98,214 @@ async function asaas(method: string, path: string, body?: unknown) {
   return json;
 }
 
-export interface Plan {
-  enabled: boolean;
-  name: string;
-  price: number;
-  trialDays: number;
-}
-
-export function planOf(s: AgentSettings): Plan {
-  return { enabled: Boolean(s.billingEnabled), name: s.billingPlanName, price: Number(s.billingPrice), trialDays: Number(s.billingTrialDays) };
-}
+const SUB_COLS = "*, to_char(next_due_date, 'YYYY-MM-DD') AS next_due_date, to_char(paid_until, 'YYYY-MM-DD') AS paid_until";
 
 export async function getSubscription(userId: string) {
   // datas como texto AAAA-MM-DD: são dias de calendário, sem fuso
-  return one<SubscriptionRow>("SELECT *, to_char(next_due_date, 'YYYY-MM-DD') AS next_due_date, to_char(paid_until, 'YYYY-MM-DD') AS paid_until FROM subscriptions WHERE user_id = $1", [userId]);
+  return one<SubscriptionRow>(`SELECT ${SUB_COLS} FROM subscriptions WHERE user_id = $1`, [userId]);
 }
 
-/** Fim dos dias grátis: contam de quando a pessoa entrou ou de quando a cobrança foi ligada, o que for mais recente. */
-export function trialEnd(user: { created_at: string | Date; terms_accepted_at?: string | Date | null }, s: AgentSettings) {
-  const joined = new Date(user.terms_accepted_at ?? user.created_at).getTime();
-  const started = s.billingStartedAt ? new Date(s.billingStartedAt).getTime() : 0;
-  return new Date(Math.max(joined, started) + Number(s.billingTrialDays) * DAY);
-}
+/** Tem plano em andamento (assinou e não cancelou)? */
+export const hasPlan = (sub: SubscriptionRow | null | undefined): sub is SubscriptionRow =>
+  Boolean(sub?.asaas_subscription_id && sub.status !== "canceled");
 
 export type Access =
-  | { allowed: true; state: "off" | "exempt" | "trial" | "active" | "paid_until"; until?: Date }
-  | { allowed: false; state: "trial_ended" | "overdue"; invoiceUrl?: string | null };
+  | { allowed: true; state: "off" | "exempt" | "grains"; balance?: number }
+  | { allowed: false; state: "empty"; balance: 0 };
 
-/** A pessoa pode usar o assistente agora? Regra única, usada pelo assistente e pela tela de assinatura. */
+/** A pessoa pode usar o assistente agora? Regra única, usada pelo assistente e pela tela de grãos. */
 export async function billingAccess(user: any, s?: AgentSettings): Promise<Access> {
   s ??= await getSettings();
   if (!s.billingEnabled) return { allowed: true, state: "off" };
-  if (isOwner(user.phone) || user.billing_exempt) return { allowed: true, state: "exempt" };
-  const sub = await getSubscription(user.id);
-  const now = Date.now();
-  const paidUntil = sub?.paid_until ? new Date(sub.paid_until).getTime() + (GRACE_DAYS + 1) * DAY : 0;
-  if (sub?.status === "active") return { allowed: true, state: "active", until: sub.next_due_date ? new Date(sub.next_due_date) : undefined };
-  // cancelou ou atrasou, mas o mês que já pagou vale até o fim
-  if (paidUntil > now) return { allowed: true, state: "paid_until", until: new Date(sub!.paid_until!) };
-  if (sub?.status === "overdue") return { allowed: false, state: "overdue", invoiceUrl: sub.invoice_url };
-  const end = trialEnd(user, s);
-  // já assinou e a primeira cobrança ainda não venceu (ou venceu agora há pouco e o aviso de pagamento está a caminho)
-  if (sub?.status === "trial" && sub.next_due_date && new Date(sub.next_due_date).getTime() + (GRACE_DAYS + 1) * DAY > now) return { allowed: true, state: "trial", until: new Date(sub.next_due_date) };
-  if (end.getTime() > now) return { allowed: true, state: "trial", until: end };
-  return { allowed: false, state: sub?.status === "trial" ? "overdue" : "trial_ended", invoiceUrl: sub?.invoice_url };
+  if (grainsExempt(user, s)) return { allowed: true, state: "exempt" };
+  const w = await ensureWallet(user.id, s);
+  if (w.total > 0) return { allowed: true, state: "grains", balance: w.total };
+  return { allowed: false, state: "empty", balance: 0 };
 }
 
 export function billingLink() {
-  return `${config.PUBLIC_URL.replace(/\/$/, "")}/assinatura`;
+  return grainsLink();
 }
 
-/** Texto para a pessoa quando o assistente está travado por falta de assinatura. */
-export function blockedMessage(a: Extract<Access, { allowed: false }>, plan: Plan) {
-  if (a.state === "overdue")
-    return `Sua assinatura do ${plan.name} está com o pagamento pendente, então pausei por aqui 🙏 É só acertar e eu volto na hora: ${a.invoiceUrl ?? billingLink()}`;
-  return `Seus ${plan.trialDays} dias grátis acabaram 🙏 Para eu continuar te ajudando, é só assinar o ${plan.name} (Pix, cartão ou boleto): ${billingLink()}`;
+/** Texto para a pessoa quando o assistente está parado por falta de grãos. */
+export function blockedMessage(_a?: unknown) {
+  return GRAIN_TEXT.empty(grainsLink());
 }
 
-/** Cria o cliente e a assinatura mensal no Asaas; a primeira cobrança vence quando os dias grátis acabam. */
-export async function subscribe(user: any, input: { name: string; cpfCnpj: string; email?: string | null }) {
-  const s = await getSettings();
-  const plan = planOf(s);
-  if (!plan.enabled) throw new Error("A assinatura ainda não está ligada.");
-  const name = String(input.name ?? "").trim().slice(0, 100);
-  if (name.split(/\s+/).length < 2) throw new Error("Informe o nome completo.");
-  if (!validCpfCnpj(input.cpfCnpj)) throw new Error("CPF ou CNPJ inválido.");
+/** Preço com o desconto de indicação, em centavos certos. */
+export const withDiscount = (price: number, percent: number) => Math.round(price * (100 - percent)) / 100;
+
+/** Quantos amigos convidados pela pessoa estão com plano pago em dia. */
+export async function payingFriends(userId: string) {
+  const r = await one<{ n: number }>(
+    `SELECT count(*)::int AS n FROM users u JOIN subscriptions s ON s.user_id = u.id
+      WHERE u.invited_by = $1 AND u.id <> $1 AND u.status = 'active' AND s.status = 'active'`,
+    [userId],
+  );
+  return r?.n ?? 0;
+}
+
+/** Desconto por indicação da pessoa agora (%). */
+export async function referralDiscount(userId: string, s?: AgentSettings) {
+  s ??= await getSettings();
+  const step = Number(s.billingReferralStep ?? 0);
+  if (!(step > 0)) return { friends: 0, percent: 0, step: 0, max: 0 };
+  const friends = await payingFriends(userId);
+  const max = Number(s.billingReferralMax ?? 0);
+  return { friends, percent: Math.min(max, friends * step), step, max };
+}
+
+/** Cliente no Asaas: cria uma vez (com nome e CPF/CNPJ) e guarda só o id. */
+async function ensureCustomer(user: any, input?: { name?: string; cpfCnpj?: string; email?: string | null }) {
   const existing = await getSubscription(user.id);
-  if (existing?.asaas_subscription_id && existing.status !== "canceled") throw new Error("Você já tem uma assinatura.");
+  if (existing?.asaas_customer_id) return existing.asaas_customer_id;
+  const name = String(input?.name ?? "").trim().slice(0, 100);
+  if (name.split(/\s+/).length < 2) throw new Error("Informe o nome completo.");
+  if (!validCpfCnpj(String(input?.cpfCnpj ?? ""))) throw new Error("CPF ou CNPJ inválido.");
+  const customer = await asaas("POST", "/customers", {
+    name,
+    cpfCnpj: onlyDigits(input?.cpfCnpj),
+    email: input?.email?.trim() || undefined,
+    mobilePhone: String(user.phone).replace(/^55/, ""),
+    externalReference: user.id,
+    // os avisos de cobrança saem por nós (o assistente já fala com a pessoa)
+    notificationDisabled: true,
+  });
+  // ainda sem plano: a linha guarda só o cliente (status canceled = nenhum plano em andamento)
+  await query(
+    `INSERT INTO subscriptions (user_id, asaas_customer_id, status, value) VALUES ($1, $2, 'canceled', 0)
+     ON CONFLICT (user_id) DO UPDATE SET asaas_customer_id = $2, updated_at = now()`,
+    [user.id, String(customer.id)],
+  );
+  return String(customer.id);
+}
 
-  let customerId = existing?.asaas_customer_id;
-  if (!customerId) {
-    const customer = await asaas("POST", "/customers", {
-      name,
-      cpfCnpj: onlyDigits(input.cpfCnpj),
-      email: input.email?.trim() || undefined,
-      mobilePhone: String(user.phone).replace(/^55/, ""),
-      externalReference: user.id,
-      // os lembretes de cobrança saem por nós (o assistente já fala com a pessoa)
-      notificationDisabled: true,
-    });
-    customerId = String(customer.id);
-  }
-  // quem ainda está nos dias grátis só é cobrado quando eles acabam; quem já passou paga hoje
-  const end = trialEnd(user, s);
-  const due = end.getTime() > Date.now() ? end : new Date();
+export type PayMethod = "card" | "pix";
+
+/** Assina um plano. A primeira cobrança é hoje; os grãos do plano entram quando o Asaas confirmar o pagamento. */
+export async function subscribe(user: any, input: { planId: string; method?: PayMethod; name?: string; cpfCnpj?: string; email?: string | null }) {
+  const s = await getSettings();
+  if (!s.billingEnabled) throw new Error("A cobrança ainda não está ligada.");
+  const plan = planById(s, input.planId);
+  if (!plan) throw new Error("Plano não encontrado.");
+  const existing = await getSubscription(user.id);
+  if (hasPlan(existing)) throw new Error("Você já tem um plano. Use a troca de plano.");
+  const customerId = await ensureCustomer(user, input);
+  const method: PayMethod = input.method === "pix" ? "pix" : "card";
+  const { percent } = await referralDiscount(user.id, s);
+  const value = withDiscount(plan.price, percent);
   const created = await asaas("POST", "/subscriptions", {
     customer: customerId,
-    billingType: "UNDEFINED",
-    value: plan.price,
-    nextDueDate: isoDay(due),
+    // cartão: a pessoa paga a primeira na página do Asaas e as próximas saem sozinhas no mesmo cartão
+    billingType: method === "card" ? "CREDIT_CARD" : "UNDEFINED",
+    value,
+    nextDueDate: isoDay(new Date()),
     cycle: "MONTHLY",
-    description: plan.name,
+    description: `Planejai ${plan.name} (${grains(plan.grains)} por mês)`,
     externalReference: user.id,
   });
   const first = (await asaas("GET", `/subscriptions/${created.id}/payments`).catch(() => null))?.data?.[0];
   const row = await one<SubscriptionRow>(
-    `INSERT INTO subscriptions (user_id, asaas_customer_id, asaas_subscription_id, status, value, next_due_date, invoice_url)
-     VALUES ($1, $2, $3, 'trial', $4, $5, $6)
-     ON CONFLICT (user_id) DO UPDATE SET asaas_customer_id = $2, asaas_subscription_id = $3, status = 'trial', value = $4, next_due_date = $5, invoice_url = $6, updated_at = now()
-     RETURNING *`,
-    [user.id, customerId, String(created.id), plan.price, isoDay(due), first?.invoiceUrl ?? null],
+    `UPDATE subscriptions SET asaas_subscription_id = $2, status = 'trial', value = $3, base_value = $4, discount_percent = $5, plan_id = $6,
+            next_plan_id = NULL, pay_method = $7, next_due_date = $8, invoice_url = $9, paid_until = NULL, updated_at = now()
+      WHERE user_id = $1 RETURNING ${SUB_COLS}`,
+    [user.id, String(created.id), value, plan.price, percent, plan.id, method, isoDay(new Date()), first?.invoiceUrl ?? null],
   );
-  await notify({ userId: null, kind: "assinatura", title: `${user.full_name ?? user.name ?? "+" + user.phone} assinou o ${plan.name}`, link: "/settings" });
+  await notify({ userId: null, kind: "assinatura", title: `${user.full_name ?? user.name ?? "+" + user.phone} assinou o plano ${plan.name}`, link: "/settings" });
   return row!;
 }
 
-/** Cancela no Asaas. O mês que já foi pago continua valendo até o fim. */
+/** Cancela no Asaas. Os grãos que já estão na carteira continuam valendo até acabar. */
 export async function cancelSubscription(userId: string) {
   const sub = await getSubscription(userId);
-  if (!sub?.asaas_subscription_id || sub.status === "canceled") throw new Error("Não há assinatura para cancelar.");
+  if (!hasPlan(sub)) throw new Error("Não há plano para cancelar.");
   await asaas("DELETE", `/subscriptions/${sub.asaas_subscription_id}`).catch((e: Error) => {
     // já não existe do lado do Asaas: segue e marca como cancelada aqui
     if (!/404|não encontrad|not found/i.test(e.message)) throw e;
   });
-  await query("UPDATE subscriptions SET status = 'canceled', invoice_url = NULL, updated_at = now() WHERE user_id = $1", [userId]);
+  await query("UPDATE subscriptions SET status = 'canceled', invoice_url = NULL, next_plan_id = NULL, updated_at = now() WHERE user_id = $1", [userId]);
+  await syncInviterDiscount(userId).catch(() => {});
+}
+
+/** Muda o valor da assinatura no Asaas (e da cobrança que já está em aberto). */
+async function setSubscriptionValue(sub: SubscriptionRow, value: number, description?: string) {
+  await asaas("POST", `/subscriptions/${sub.asaas_subscription_id}`, { value, updatePendingPayments: true, ...(description ? { description } : {}) });
+}
+
+/**
+ * Troca de plano.
+ * - Subir: paga hoje a diferença do mês (com o desconto de indicação) e, quando cair, ganha a diferença de grãos na hora;
+ *   a mensalidade passa a ser a do plano novo.
+ * - Descer: vale a partir da próxima mensalidade (os grãos deste mês ficam).
+ * - Ainda sem nenhum pagamento: só troca o plano da primeira cobrança.
+ */
+export async function changePlan(user: any, planId: string): Promise<{ kind: "upgrade" | "downgrade" | "switched"; invoiceUrl?: string | null; plan: BillingPlan }> {
+  const s = await getSettings();
+  const sub = await getSubscription(user.id);
+  if (!hasPlan(sub)) throw new Error("Você ainda não tem plano. Escolha um para assinar.");
+  const now = planById(s, sub.plan_id);
+  const next = planById(s, planId);
+  if (!next) throw new Error("Plano não encontrado.");
+  if (now?.id === next.id && !sub.next_plan_id) throw new Error("Você já está nesse plano.");
+  const percent = Number(sub.discount_percent ?? 0);
+  const desc = `Planejai ${next.name} (${grains(next.grains)} por mês)`;
+  if (!sub.last_payment_at || !now) {
+    await setSubscriptionValue(sub, withDiscount(next.price, percent), desc);
+    await query("UPDATE subscriptions SET plan_id = $2, base_value = $3, value = $4, next_plan_id = NULL, updated_at = now() WHERE user_id = $1", [user.id, next.id, next.price, withDiscount(next.price, percent)]);
+    return { kind: "switched", plan: next };
+  }
+  if (next.id === now.id) {
+    // desistiu de descer: volta o valor do plano atual
+    await setSubscriptionValue(sub, withDiscount(now.price, percent));
+    await query("UPDATE subscriptions SET next_plan_id = NULL, value = $2, updated_at = now() WHERE user_id = $1", [user.id, withDiscount(now.price, percent)]);
+    return { kind: "switched", plan: now };
+  }
+  if (next.price < now.price) {
+    await setSubscriptionValue(sub, withDiscount(next.price, percent), desc);
+    await query("UPDATE subscriptions SET next_plan_id = $2, value = $3, updated_at = now() WHERE user_id = $1", [user.id, next.id, withDiscount(next.price, percent)]);
+    return { kind: "downgrade", plan: next };
+  }
+  const value = Math.max(1, withDiscount(next.price - now.price, percent));
+  const extra = Math.max(0, next.grains - now.grains);
+  const purchase = await createCharge(user, sub.asaas_customer_id, {
+    kind: "upgrade",
+    itemId: next.id,
+    grains: extra,
+    value,
+    description: `Planejai: troca do ${now.name} para o ${next.name} (+${grains(extra)})`,
+  });
+  return { kind: "upgrade", invoiceUrl: purchase.invoice_url, plan: next };
+}
+
+/** Cobrança avulsa no Asaas (pacote ou diferença de plano). Pix, cartão ou boleto na página do Asaas. */
+async function createCharge(user: any, customerId: string, item: { kind: "pack" | "upgrade"; itemId: string; grains: number; value: number; description: string }) {
+  // a mesma compra pedida duas vezes seguidas reaproveita a cobrança em aberto
+  const open = await one(
+    "SELECT * FROM grain_purchases WHERE user_id = $1 AND kind = $2 AND item_id = $3 AND status = 'pending' AND created_at > now() - interval '1 day' AND invoice_url IS NOT NULL",
+    [user.id, item.kind, item.itemId],
+  );
+  if (open) return open;
+  const row = await one("INSERT INTO grain_purchases (user_id, kind, item_id, grains, value) VALUES ($1, $2, $3, $4, $5) RETURNING *", [user.id, item.kind, item.itemId, item.grains, item.value]);
+  const tomorrow = new Date(Date.now() + 86_400_000);
+  const payment = await asaas("POST", "/payments", {
+    customer: customerId,
+    billingType: "UNDEFINED",
+    value: item.value,
+    dueDate: isoDay(tomorrow),
+    description: item.description,
+    externalReference: `grains:${row.id}`,
+  });
+  return one("UPDATE grain_purchases SET asaas_payment_id = $2, invoice_url = $3 WHERE id = $1 RETURNING *", [row.id, String(payment.id), payment.invoiceUrl ?? null]);
+}
+
+/** Compra um pacote avulso de grãos. Sem cadastro no Asaas ainda, precisa de nome e CPF/CNPJ. */
+export async function buyPack(user: any, packId: string, input?: { name?: string; cpfCnpj?: string; email?: string | null }) {
+  const s = await getSettings();
+  if (!s.billingEnabled) throw new Error("A cobrança ainda não está ligada.");
+  const pack = packById(s, packId);
+  if (!pack) throw new Error("Pacote não encontrado.");
+  const customerId = await ensureCustomer(user, input);
+  return createCharge(user, customerId, { kind: "pack", itemId: pack.id, grains: pack.grains, value: pack.price, description: `Planejai: pacote de ${grains(pack.grains)}` });
 }
 
 const addMonth = (isoDate: string) => {
@@ -215,30 +317,19 @@ const addMonth = (isoDate: string) => {
 const brl = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n).replace(/\u00a0/g, " ");
 const ddmm = (iso?: string | null) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "");
 
-/**
- * Mensagem para a pessoa no WhatsApp. O webhook roda na API e quem segura o WhatsApp é o worker: vai pela fila de envios.
- * Também fica no sininho do painel dela: se o número cair, o aviso de cobrança não some junto.
- */
-async function tell(userId: string, text: string) {
-  await notify({ userId, kind: "assinatura", title: text.split(/(?<=[.!?])\s/)[0]!, body: text, link: "/assinatura" });
-  await (await getBoss()).send(QUEUES.outbound, { type: "send", userId, text }, { retryLimit: 2, retryDelay: 20 });
-}
-
 /** Mensagens que cada evento do Asaas manda para a pessoa (sem IA: texto fixo, zero token). */
 export const BILLING_TEXT = {
-  firstPayment: (plan: string, value: number, next: string) =>
-    `Pagamento de ${brl(value)} confirmado, obrigado por assinar o ${plan}! Tá tudo liberado. A próxima mensalidade vence dia ${ddmm(next)}.`,
-  renewed: (value: number, next: string) => `Recebi o pagamento de ${brl(value)} da sua assinatura, obrigado! A próxima vence dia ${ddmm(next)}.`,
-  unblocked: (value: number) => `Pagamento de ${brl(value)} confirmado e voltei a funcionar por aqui. Pode me mandar o que precisar!`,
-  overdue: (value: number, link: string) => `A mensalidade de ${brl(value)} venceu e ainda não apareceu aqui. Dá para pagar por Pix, cartão ou boleto: ${link}`,
+  firstPayment: (plan: string, amount: number, next: string) =>
+    `Pagamento confirmado, obrigado por assinar o ${plan}! Já coloquei ${grains(amount)} na sua conta. A próxima mensalidade vence dia ${ddmm(next)}.`,
+  renewed: (amount: number, next: string) => `Recebi a mensalidade, obrigado! Seus grãos do plano foram recarregados: ${grains(amount)}. A próxima vence dia ${ddmm(next)}.`,
+  pack: (amount: number, total: number) => `Pagamento confirmado! Entraram ${grains(amount)} e agora você tem ${grains(total)}. Pode mandar o que precisar.`,
+  upgrade: (plan: string, amount: number) => `Pronto, agora você está no ${plan}! Já entraram ${grains(amount)} a mais neste mês.`,
+  overdue: (value: number, link: string) => `A mensalidade de ${brl(value)} venceu e ainda não apareceu aqui, então os grãos do plano não foram recarregados. Dá para pagar por Pix, cartão ou boleto: ${link}`,
   dueSoon: (value: number, days: number, due: string, link: string) =>
     `${days === 0 ? "Hoje vence" : days === 1 ? "Amanhã vence" : `Dia ${ddmm(due)} vence`} a sua mensalidade de ${brl(value)}. Se quiser já deixar pago: ${link}`,
-  canceled: (until: string | null) =>
-    until ? `Sua assinatura foi cancelada. O que já foi pago vale até dia ${ddmm(until)}, e dá para voltar quando quiser.` : "Sua assinatura foi cancelada. Dá para voltar quando quiser.",
-  trialEnding: (plan: string, value: number, link: string) =>
-    `Amanhã acabam seus dias grátis. Para eu continuar te ajudando, é só assinar o ${plan} por ${brl(value)} por mês (Pix, cartão ou boleto): ${link}`,
-  referral: (name: string, percent: number) =>
-    `${name} assinou pelo seu convite, então você ganhou ${percent}% de desconto na próxima mensalidade. Obrigado por indicar!`,
+  canceled: () => "Seu plano foi cancelado. Os grãos que já estão na sua conta continuam valendo até acabar, e dá para voltar quando quiser.",
+  referral: (name: string, percent: number, friends: number) =>
+    `${name} assinou pelo seu convite! Agora são ${friends} ${friends === 1 ? "amigo" : "amigos"} pagando, e sua mensalidade tem ${percent}% de desconto. Obrigado por indicar!`,
 };
 
 /** Evento já tratado? O Asaas reenvia quando não recebe 200; cada evento só vira mensagem uma vez. Sem id nenhum, não dá para saber. */
@@ -249,23 +340,62 @@ function eventKey(body: any) {
 }
 
 /**
- * Evento do Asaas. Só mexe em assinatura que criamos (casa pelo id da assinatura).
- * Pagamento confirmado libera até o próximo vencimento; vencido trava; assinatura apagada vira cancelada.
- * Cada mudança avisa a pessoa no WhatsApp e no sininho do painel (o Asaas não manda nada: o cliente é criado com notificationDisabled)
- * e vira evento para o n8n (payment.confirmed, payment.overdue, subscription.canceled).
+ * Evento do Asaas. Mexe só no que criamos: assinatura de plano (pelo id da assinatura) ou compra de grãos
+ * (externalReference grains:<id>). Pagamento confirmado credita os grãos; vencido avisa; assinatura apagada vira cancelada.
+ * Cada mudança avisa a pessoa no WhatsApp e no sininho do painel e vira evento para o n8n.
  */
-export async function handleAsaasEvent(body: any): Promise<{ handled: boolean; status?: SubStatus; duplicate?: boolean }> {
+export async function handleAsaasEvent(body: any): Promise<{ handled: boolean; status?: string; duplicate?: boolean }> {
   const event = String(body?.event ?? "");
-  const subId = body?.payment?.subscription ?? body?.subscription?.id;
-  if (!subId) return { handled: false };
-  const sub = await one<SubscriptionRow>("SELECT *, to_char(next_due_date, 'YYYY-MM-DD') AS next_due_date, to_char(paid_until, 'YYYY-MM-DD') AS paid_until FROM subscriptions WHERE asaas_subscription_id = $1", [String(subId)]);
-  if (!sub) return { handled: false };
+  const p = body?.payment ?? {};
+  const ref = String(p.externalReference ?? "");
+  const subId = p.subscription ?? body?.subscription?.id;
+  const purchase = !subId && ref.startsWith("grains:") ? await one("SELECT * FROM grain_purchases WHERE id::text = $1", [ref.slice(7)]) : null;
+  const sub = subId ? await one<SubscriptionRow>(`SELECT ${SUB_COLS} FROM subscriptions WHERE asaas_subscription_id = $1`, [String(subId)]) : null;
+  if (!sub && !purchase) return { handled: false };
   const key = eventKey(body);
-  if (key && (await one("SELECT 1 FROM asaas_events WHERE id = $1", [key]))) return { handled: true, duplicate: true, status: sub.status };
-  const r = await applyAsaasEvent(event, body, sub);
+  if (key && (await one("SELECT 1 FROM asaas_events WHERE id = $1", [key]))) return { handled: true, duplicate: true, status: sub?.status ?? purchase?.status };
+  const r = purchase ? await applyPurchaseEvent(event, p, purchase) : await applyAsaasEvent(event, body, sub!);
   // marca só depois de dar certo: se falhar, o 500 faz o Asaas mandar de novo
   if (key) await query("INSERT INTO asaas_events (id, event) VALUES ($1, $2) ON CONFLICT DO NOTHING", [key, event]);
   return r;
+}
+
+const PAID = new Set(["PAYMENT_CONFIRMED", "PAYMENT_RECEIVED", "PAYMENT_RECEIVED_IN_CASH"]);
+
+/** Compra avulsa: pagou entra (uma vez); apagada ou vencida só fecha a compra. */
+async function applyPurchaseEvent(event: string, p: any, purchase: any) {
+  if (PAID.has(event)) {
+    const paid = await one("UPDATE grain_purchases SET status = 'paid', paid_at = now() WHERE id = $1 AND status <> 'paid' RETURNING *", [purchase.id]);
+    if (!paid) return { handled: true, status: "paid" };
+    const s = await getSettings();
+    if (paid.kind === "upgrade") {
+      const sub = await getSubscription(paid.user_id);
+      const plan = planById(s, paid.item_id);
+      if (sub && plan) {
+        const percent = Number(sub.discount_percent ?? 0);
+        if (hasPlan(sub)) await setSubscriptionValue(sub, withDiscount(plan.price, percent), `Planejai ${plan.name} (${grains(plan.grains)} por mês)`).catch((err) => console.error("[troca de plano]", err));
+        await query("UPDATE subscriptions SET plan_id = $2, base_value = $3, value = $4, next_plan_id = NULL, updated_at = now() WHERE user_id = $1", [paid.user_id, plan.id, plan.price, withDiscount(plan.price, percent)]);
+      }
+      await creditGrains(paid.user_id, { amount: paid.grains, bucket: "plan", reason: "troca", ref: paid.id, note: plan?.name });
+      await tellPerson(paid.user_id, BILLING_TEXT.upgrade(plan?.name ?? "plano novo", paid.grains));
+    } else {
+      const w = await creditGrains(paid.user_id, { amount: paid.grains, bucket: "extra", reason: "pacote", ref: paid.id, note: grains(paid.grains) });
+      if (w) await tellPerson(paid.user_id, BILLING_TEXT.pack(paid.grains, w.total));
+    }
+    await notify({ userId: null, kind: "assinatura", title: `Compra de grãos: ${brl(Number(paid.value))}`, body: `${paid.kind === "upgrade" ? "Troca de plano" : "Pacote"} de ${grains(paid.grains)}.`, link: "/settings" });
+    void emitEvent("payment.confirmed", { user_id: paid.user_id, value: Number(paid.value), billing_type: p.billingType ?? null, kind: paid.kind, grains: paid.grains, payment_id: p.id ?? null });
+    return { handled: true, status: "paid" };
+  }
+  if (event === "PAYMENT_OVERDUE" || event === "PAYMENT_DELETED") {
+    await query("UPDATE grain_purchases SET status = 'canceled' WHERE id = $1 AND status = 'pending'", [purchase.id]);
+    return { handled: true, status: "canceled" };
+  }
+  if (event === "PAYMENT_REFUNDED" || event === "PAYMENT_CHARGEBACK_REQUESTED") {
+    await query("UPDATE grain_purchases SET status = 'refunded' WHERE id = $1", [purchase.id]);
+    await notify({ userId: null, kind: "assinatura", title: event === "PAYMENT_REFUNDED" ? "Compra de grãos estornada" : "Contestação no cartão", body: `${brl(Number(purchase.value))} (${grains(purchase.grains)}). Os grãos já usados não voltam; ajuste em Configurações se precisar.`, link: "/settings" });
+    return { handled: true, status: "refunded" };
+  }
+  return { handled: true, status: purchase.status };
 }
 
 async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): Promise<{ handled: boolean; status?: SubStatus }> {
@@ -279,41 +409,52 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
     );
     return { handled: true, status };
   };
+  if (PAID.has(event)) {
+    const due = String(p.dueDate ?? isoDay(new Date()));
+    const next = addMonth(due);
+    const first = !sub.last_payment_at;
+    const wasBlocked = sub.status === "overdue";
+    const s = await getSettings();
+    // descer de plano vale a partir desta mensalidade
+    const planId = sub.next_plan_id ?? sub.plan_id;
+    const plan = planById(s, planId);
+    const card = p.creditCard ?? {};
+    const r = await set("active", {
+      paid_until: next,
+      next_due_date: next,
+      last_payment_at: new Date().toISOString(),
+      invoice_url: null,
+      last_billing_type: p.billingType ?? null,
+      plan_id: planId,
+      next_plan_id: null,
+      ...(plan ? { base_value: plan.price } : {}),
+      ...(card.creditCardNumber ? { card_brand: String(card.creditCardBrand ?? "").slice(0, 20) || null, card_last4: String(card.creditCardNumber).slice(-4) } : {}),
+    });
+    if (wasBlocked) await query("UPDATE users SET profile = profile - 'billing_notice_at' WHERE id = $1", [sub.user_id]);
+    // cartão manda CONFIRMED e depois RECEIVED do mesmo pagamento: o crédito tem ref do pagamento e entra uma vez só
+    const credited = plan ? await creditGrains(sub.user_id, { amount: plan.grains, bucket: "plan", reason: "plano", ref: String(p.id ?? `${sub.asaas_subscription_id}:${due}`), note: plan.name, set: true }) : null;
+    if (!credited) return r;
+    await tellPerson(sub.user_id, first ? BILLING_TEXT.firstPayment(plan!.name, plan!.grains, next) : BILLING_TEXT.renewed(plan!.grains, next));
+    void emitEvent("payment.confirmed", { user_id: sub.user_id, value, billing_type: p.billingType ?? null, first, next_due_date: next, payment_id: p.id ?? null, plan: plan!.id });
+    // amigo que passou a pagar: quem convidou ganha mais desconto
+    if (first) await syncInviterDiscount(sub.user_id, true).catch((err) => console.error("[indicação]", err));
+    return r;
+  }
   switch (event) {
-    case "PAYMENT_CONFIRMED":
-    case "PAYMENT_RECEIVED":
-    case "PAYMENT_RECEIVED_IN_CASH": {
-      const due = String(p.dueDate ?? isoDay(new Date()));
-      const next = addMonth(due);
-      // cartão manda CONFIRMED e depois RECEIVED do mesmo pagamento: só o primeiro avisa
-      const already = sub.status === "active" && sub.paid_until === next;
-      const first = !sub.last_payment_at;
-      const wasBlocked = sub.status === "overdue";
-      const r = await set("active", { paid_until: next, next_due_date: next, last_payment_at: new Date().toISOString(), invoice_url: null, last_billing_type: p.billingType ?? null });
-      if (wasBlocked) await query("UPDATE users SET profile = profile - 'billing_notice_at' WHERE id = $1", [sub.user_id]);
-      if (already) return r;
-      const plan = planOf(await getSettings());
-      await tell(sub.user_id, wasBlocked ? BILLING_TEXT.unblocked(value) : first ? BILLING_TEXT.firstPayment(plan.name, value, next) : BILLING_TEXT.renewed(value, next));
-      void emitEvent("payment.confirmed", { user_id: sub.user_id, value, billing_type: p.billingType ?? null, first, next_due_date: next, payment_id: p.id ?? null });
-      if (first) await creditReferral(sub.user_id).catch((err) => console.error("[indicação]", err));
-      return r;
-    }
     case "PAYMENT_CREATED":
     case "PAYMENT_UPDATED":
     case "PAYMENT_RESTORED":
-      // a próxima cobrança do mês: guarda o link para a pessoa pagar e aplica desconto de indicação que esteja esperando
+      // a próxima cobrança do mês: guarda o link para a pessoa pagar
       if (p.status === "PENDING" || p.status === "OVERDUE") {
         await query("UPDATE subscriptions SET invoice_url = $2, next_due_date = COALESCE($3, next_due_date), updated_at = now() WHERE user_id = $1", [sub.user_id, p.invoiceUrl ?? null, p.dueDate ?? null]);
-        if (event === "PAYMENT_CREATED" && p.status === "PENDING" && p.id) await applyReferralCredits(sub.user_id, p).catch((err) => console.error("[indicação]", err));
       }
       return { handled: true, status: sub.status };
     case "PAYMENT_OVERDUE": {
       const link = p.invoiceUrl ?? sub.invoice_url ?? billingLink();
       const r = await set("overdue", { invoice_url: link });
-      // já avisou com o link: a trava do assistente não repete hoje
-      await query("UPDATE users SET profile = profile || jsonb_build_object('billing_notice_at', now()) WHERE id = $1", [sub.user_id]);
-      await tell(sub.user_id, BILLING_TEXT.overdue(value, link));
+      await tellPerson(sub.user_id, BILLING_TEXT.overdue(value, link));
       void emitEvent("payment.overdue", { user_id: sub.user_id, value, invoice_url: link, due_date: p.dueDate ?? null });
+      await syncInviterDiscount(sub.user_id).catch(() => {});
       return r;
     }
     case "PAYMENT_DELETED":
@@ -322,23 +463,24 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
       await notify({ userId: null, kind: "assinatura", title: "Cobrança apagada no Asaas", body: `${brl(value)}${p.dueDate ? `, vencimento ${ddmm(p.dueDate)}` : ""}.`, link: "/settings" });
       return { handled: true, status: sub.status };
     case "PAYMENT_REFUND_REQUESTED":
-      // o estorno de verdade chega depois como PAYMENT_REFUNDED (aí trava); por enquanto só avisa o dono
-      await notify({ userId: null, kind: "assinatura", title: "Pedido de estorno", body: `${brl(value)}. Se o estorno sair, a pessoa fica travada até pagar de novo.`, link: "/settings" });
+      await notify({ userId: null, kind: "assinatura", title: "Pedido de estorno", body: `${brl(value)}. Se o estorno sair, o plano fica pendente até pagar de novo.`, link: "/settings" });
       return { handled: true, status: sub.status };
     case "PAYMENT_REFUNDED":
     case "PAYMENT_CHARGEBACK_REQUESTED": {
       const r = await set("overdue", { paid_until: null });
-      await notify({ userId: null, kind: "assinatura", title: event === "PAYMENT_REFUNDED" ? "Pagamento estornado" : "Contestação no cartão", body: `${brl(value)}. A pessoa fica travada até pagar de novo.`, link: "/settings" });
+      await notify({ userId: null, kind: "assinatura", title: event === "PAYMENT_REFUNDED" ? "Mensalidade estornada" : "Contestação no cartão", body: `${brl(value)}. O plano fica pendente até pagar de novo.`, link: "/settings" });
+      await syncInviterDiscount(sub.user_id).catch(() => {});
       return r;
     }
     case "SUBSCRIPTION_DELETED":
     case "SUBSCRIPTION_INACTIVATED": {
       const wasCanceled = sub.status === "canceled";
-      const r = await set("canceled", { invoice_url: null });
+      const r = await set("canceled", { invoice_url: null, next_plan_id: null });
       // cancelou pelo painel: a tela já disse; aqui só avisa quando veio de fora (pelo Asaas)
       if (!wasCanceled) {
-        await tell(sub.user_id, BILLING_TEXT.canceled(sub.paid_until));
+        await tellPerson(sub.user_id, BILLING_TEXT.canceled());
         void emitEvent("subscription.canceled", { user_id: sub.user_id, paid_until: sub.paid_until });
+        await syncInviterDiscount(sub.user_id).catch(() => {});
       }
       return r;
     }
@@ -347,115 +489,114 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
   }
 }
 
-/** Primeiro pagamento de quem foi convidado: quem convidou ganha desconto na próxima mensalidade (uma vez por convidado). */
-export async function creditReferral(userId: string) {
-  const s = await getSettings();
-  const percent = Number(s.billingReferralPercent ?? 0);
-  if (!(percent > 0)) return null;
-  const u = await one<{ invited_by: string | null; name: string }>("SELECT invited_by, COALESCE(full_name, name, '+' || phone) AS name FROM users WHERE id = $1", [userId]);
-  if (!u?.invited_by || u.invited_by === userId) return null;
-  const inviter = await one("SELECT id, phone, billing_exempt FROM users WHERE id = $1 AND status = 'active'", [u.invited_by]);
-  // quem não paga (dono, liberados) não tem mensalidade para descontar
-  if (!inviter || isOwner(inviter.phone) || inviter.billing_exempt) return null;
-  const credit = await one(
-    "INSERT INTO referral_credits (user_id, from_user_id, percent) VALUES ($1, $2, $3) ON CONFLICT (from_user_id) DO NOTHING RETURNING *",
-    [inviter.id, userId, percent],
-  );
-  if (!credit) return null;
-  await tell(inviter.id, BILLING_TEXT.referral(u.name.split(" ")[0]!, percent));
-  void emitEvent("referral.credited", { user_id: inviter.id, from_user_id: userId, percent });
-  // já tem cobrança em aberto: aplica agora; senão entra na próxima que o Asaas criar (PAYMENT_CREATED)
-  const sub = await getSubscription(inviter.id);
-  if (sub?.asaas_subscription_id && sub.status !== "canceled") {
-    const pending = (await asaas("GET", `/payments?subscription=${sub.asaas_subscription_id}&status=PENDING&limit=5`).catch(() => null))?.data ?? [];
-    const next = pending.sort((a: any, b: any) => String(a.dueDate).localeCompare(String(b.dueDate)))[0];
-    if (next) await applyReferralCredits(inviter.id, next);
-  }
-  return credit;
+/**
+ * Recalcula o desconto de indicação de alguém e aplica na assinatura dele no Asaas (inclusive na cobrança em aberto).
+ * `fromFriendId` = um convidado mudou de situação: recalcula para quem convidou.
+ */
+export async function syncInviterDiscount(fromFriendId: string, celebrate = false) {
+  const u = await one<{ invited_by: string | null; name: string }>("SELECT invited_by, COALESCE(full_name, name, '+' || phone) AS name FROM users WHERE id = $1", [fromFriendId]);
+  if (!u?.invited_by || u.invited_by === fromFriendId) return null;
+  const r = await syncDiscount(u.invited_by);
+  if (celebrate && r && r.percent > r.before) await tellPerson(u.invited_by, BILLING_TEXT.referral(u.name.split(" ")[0]!, r.percent, r.friends));
+  if (r && r.percent !== r.before) void emitEvent("referral.credited", { user_id: u.invited_by, from_user_id: fromFriendId, percent: r.percent, friends: r.friends });
+  return r;
 }
 
-/** Põe UM crédito de indicação como desconto numa cobrança em aberto (um por mensalidade; o resto fica para as próximas). */
-export async function applyReferralCredits(userId: string, payment: { id: string; value: number; dueDate: string; billingType?: string }) {
-  if (await one("SELECT 1 FROM referral_credits WHERE applied_payment_id = $1", [payment.id])) return null;
-  const credit = await one("SELECT * FROM referral_credits WHERE user_id = $1 AND applied_payment_id IS NULL ORDER BY created_at LIMIT 1", [userId]);
-  if (!credit) return null;
-  await asaas("POST", `/payments/${payment.id}`, {
-    billingType: payment.billingType ?? "UNDEFINED",
-    value: payment.value,
-    dueDate: payment.dueDate,
-    discount: { value: Number(credit.percent), dueDateLimitDays: 0, type: "PERCENTAGE" },
-  });
-  await query("UPDATE referral_credits SET applied_payment_id = $2, applied_at = now() WHERE id = $1", [credit.id, payment.id]);
-  return credit;
+export async function syncDiscount(userId: string) {
+  const s = await getSettings();
+  const sub = await getSubscription(userId);
+  const { friends, percent } = await referralDiscount(userId, s);
+  const before = Number(sub?.discount_percent ?? 0);
+  if (!hasPlan(sub)) return { friends, percent, before };
+  const owner = await one("SELECT phone, billing_exempt FROM users WHERE id = $1", [userId]);
+  if (!owner || isOwner(owner.phone) || owner.billing_exempt) return { friends, percent, before };
+  const plan = planById(s, sub.next_plan_id ?? sub.plan_id);
+  const base = plan?.price ?? Number(sub.base_value ?? sub.value);
+  const value = withDiscount(base, percent);
+  if (percent !== before || Math.abs(value - Number(sub.value)) >= 0.01) {
+    await setSubscriptionValue(sub, value);
+    await query("UPDATE subscriptions SET discount_percent = $2, value = $3, updated_at = now() WHERE user_id = $1", [userId, percent, value]);
+  }
+  return { friends, percent, before };
 }
 
 /**
- * Rodada diária (worker, de manhã): lembra o vencimento de quem paga por Pix/boleto (N dias antes e no dia)
- * e avisa um dia antes de acabarem os dias grátis de quem ainda não assinou. Cartão renova sozinho: não lembra.
+ * Rodada diária (de manhã): lembra o vencimento de quem paga plano por Pix/boleto (N dias antes e no dia)
+ * e confere o desconto de indicação de quem tem plano. Cartão renova sozinho: não lembra.
  */
 export async function billingReminders(log?: { info: (...a: any[]) => void; error: (...a: any[]) => void }) {
   const s = await getSettings();
-  if (!s.billingEnabled) return { due: 0, trial: 0 };
-  const plan = planOf(s);
+  if (!s.billingEnabled) return { due: 0, discounts: 0 };
   const before = Number(s.billingReminderDays ?? 3);
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: s.timezone || config.DEFAULT_TIMEZONE }).format(new Date());
   let due = 0;
   const subs = await many<SubscriptionRow & { days: number }>(
     `SELECT s.*, to_char(s.next_due_date, 'YYYY-MM-DD') AS next_due_date, (s.next_due_date - $1::date) AS days
        FROM subscriptions s JOIN users u ON u.id = s.user_id
-      WHERE s.status IN ('trial', 'active') AND s.next_due_date IS NOT NULL AND u.status = 'active' AND NOT u.billing_exempt
-        AND COALESCE(s.last_billing_type, '') <> 'CREDIT_CARD' AND s.reminded_on IS DISTINCT FROM $1::date
+      WHERE s.status IN ('trial', 'active') AND s.asaas_subscription_id IS NOT NULL AND s.next_due_date IS NOT NULL AND u.status = 'active' AND NOT u.billing_exempt
+        AND COALESCE(s.last_billing_type, '') <> 'CREDIT_CARD' AND COALESCE(s.pay_method, '') <> 'card' AND s.reminded_on IS DISTINCT FROM $1::date
         AND (s.next_due_date - $1::date) IN ($2::int, 0)`,
     [today, before],
   );
   for (const sub of subs) {
     try {
-      await tell(sub.user_id, BILLING_TEXT.dueSoon(Number(sub.value), Number(sub.days), sub.next_due_date!, sub.invoice_url ?? billingLink()));
+      await tellPerson(sub.user_id, BILLING_TEXT.dueSoon(Number(sub.value), Number(sub.days), sub.next_due_date!, sub.invoice_url ?? billingLink()));
       await query("UPDATE subscriptions SET reminded_on = $2 WHERE user_id = $1", [sub.user_id, today]);
       due++;
     } catch (err) {
       log?.error({ err, userId: sub.user_id }, "lembrete de mensalidade falhou");
     }
   }
-  // dias grátis acabando amanhã e sem assinatura
-  let trial = 0;
-  const people = await many(
-    `SELECT u.* FROM users u LEFT JOIN subscriptions s ON s.user_id = u.id
-      WHERE u.status = 'active' AND NOT u.billing_exempt AND (s.user_id IS NULL OR s.status = 'canceled')
-        AND NOT (u.profile ? 'trial_notice_at') LIMIT 500`,
+  // desconto de indicação: amigo que parou de pagar sem o webhook avisar (ou regra mudada pelo dono)
+  let discounts = 0;
+  const withFriends = await many<{ user_id: string }>(
+    `SELECT DISTINCT s.user_id FROM subscriptions s JOIN users f ON f.invited_by = s.user_id
+      WHERE s.asaas_subscription_id IS NOT NULL AND s.status <> 'canceled' LIMIT 500`,
   );
-  for (const u of people) {
-    if (isOwner(u.phone)) continue;
-    const left = trialEnd(u, s).getTime() - Date.now();
-    if (left <= 0 || left > DAY) continue;
+  for (const { user_id } of withFriends) {
     try {
-      await tell(u.id, BILLING_TEXT.trialEnding(plan.name, plan.price, billingLink()));
-      await query("UPDATE users SET profile = profile || jsonb_build_object('trial_notice_at', now()) WHERE id = $1", [u.id]);
-      trial++;
+      const r = await syncDiscount(user_id);
+      if (r.percent !== r.before) discounts++;
     } catch (err) {
-      log?.error({ err, userId: u.id }, "aviso de fim dos dias grátis falhou");
+      log?.error({ err, userId: user_id }, "desconto de indicação falhou");
     }
   }
-  if (due || trial) log?.info({ due, trial }, "lembretes de assinatura enviados");
-  return { due, trial };
+  if (due || discounts) log?.info({ due, discounts }, "rodada de cobrança");
+  return { due, discounts };
 }
 
-/** Resumo para o dono: quantos em cada situação e quem são. */
+/** Resumo para o dono: quem tem plano, quem está só nos grãos de boas-vindas ou avulsos, quem zerou. */
 export async function billingOverview() {
   const s = await getSettings();
   const rows = await many(
-    `SELECT u.id, COALESCE(u.full_name, u.name, '+' || u.phone) AS name, u.phone, u.billing_exempt, u.created_at, u.terms_accepted_at,
-            s.status, s.value, s.next_due_date, s.paid_until, s.last_payment_at
-       FROM users u LEFT JOIN subscriptions s ON s.user_id = u.id WHERE u.status = 'active' ORDER BY u.created_at DESC LIMIT 500`,
+    `SELECT u.id, COALESCE(u.full_name, u.name, '+' || u.phone) AS name, u.phone, u.billing_exempt,
+            s.status, s.value, s.plan_id, s.asaas_subscription_id, s.discount_percent,
+            COALESCE(w.plan_grains, 0) + COALESCE(w.extra_grains, 0) AS balance, w.user_id IS NOT NULL AS has_wallet
+       FROM users u LEFT JOIN subscriptions s ON s.user_id = u.id LEFT JOIN wallets w ON w.user_id = u.id
+      WHERE u.status = 'active' ORDER BY u.created_at DESC LIMIT 500`,
   );
-  const people = [];
-  const counts: Record<string, number> = { trial: 0, active: 0, blocked: 0, exempt: 0 };
-  for (const r of rows) {
-    const a = await billingAccess(r, { ...s, billingEnabled: true });
-    const state = !a.allowed ? "blocked" : a.state === "exempt" ? "exempt" : a.state === "trial" ? "trial" : "active";
+  const counts: Record<string, number> = { plan: 0, free: 0, empty: 0, exempt: 0 };
+  const people = rows.map((r) => {
+    const owner = isOwner(r.phone);
+    const plan = r.asaas_subscription_id && r.status !== "canceled" ? planById(s, r.plan_id) : null;
+    const balance = r.has_wallet ? Number(r.balance) : Number(s.billingWelcomeGrains ?? 0);
+    const state = owner || r.billing_exempt ? "exempt" : plan && r.status === "active" ? "plan" : balance > 0 ? "free" : "empty";
     counts[state] = (counts[state] ?? 0) + 1;
-    people.push({ id: r.id, name: r.name, state, detail: a.allowed ? a.state : a.state, until: a.allowed && a.until ? a.until.toISOString() : null, exempt: Boolean(r.billing_exempt), owner: isOwner(r.phone) });
-  }
-  const mrr = rows.filter((r) => r.status === "active").reduce((acc, r) => acc + Number(r.value ?? 0), 0);
-  return { counts, mrr, people };
+    return { id: r.id, name: r.name, state, plan: plan?.name ?? null, status: r.status ?? null, balance, discount: Number(r.discount_percent ?? 0), exempt: Boolean(r.billing_exempt), owner };
+  });
+  const mrr = rows.filter((r) => r.status === "active" && r.asaas_subscription_id).reduce((acc, r) => acc + Number(r.value ?? 0), 0);
+  const packs = await one<{ v: number }>("SELECT COALESCE(SUM(value), 0)::float AS v FROM grain_purchases WHERE status = 'paid' AND paid_at > date_trunc('month', now())");
+  return { counts, mrr, packsMonth: packs?.v ?? 0, people };
+}
+
+/** Vitrine pública (landing e tela de grãos): planos, pacotes e as regras em números. */
+export function pricingOf(s: AgentSettings) {
+  return {
+    enabled: Boolean(s.billingEnabled),
+    plans: plansOf(s),
+    packs: s.billingPacks ?? [],
+    welcome: Number(s.billingWelcomeGrains ?? 0),
+    grainsPerUsd: Number(s.billingGrainsPerUsd ?? 1000),
+    referral: { step: Number(s.billingReferralStep ?? 0), max: Number(s.billingReferralMax ?? 0) },
+  };
 }

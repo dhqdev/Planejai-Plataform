@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-/** Assinatura pelo Asaas: dias grátis, trava do assistente, assinatura criada no Asaas e avisos de pagamento pelo webhook. */
+/** Grãos (créditos) e planos pelo Asaas: carteira, desconto do uso, trava, pacotes, planos, troca, indicação e webhook. */
 describe("assinatura: regras sem banco", () => {
   it("valida CPF e CNPJ pelos dígitos verificadores", async () => {
     const { validCpfCnpj } = await import("../src/billing.js");
@@ -18,44 +18,76 @@ describe("assinatura: regras sem banco", () => {
     expect(asaasBase("$aact_prod_abc")).toBe("https://api.asaas.com/v3");
     expect(asaasBase("$aact_hmlg_abc")).toBe("https://api-sandbox.asaas.com/v3");
   });
+
+  it("vitrine do painel: planos e pacotes validados, grão do plano sempre mais barato que o avulso no padrão", async () => {
+    const { cleanPlans, cleanPacks, DEFAULT_PLANS, DEFAULT_PACKS } = await import("../src/settings.js");
+    expect(() => cleanPlans([])).toThrow(/pelo menos um plano/);
+    expect(() => cleanPlans([{ name: "X", price: 0.5, grains: 10 }])).toThrow(/entre R\$ 1/);
+    expect(() => cleanPlans([{ name: "A", price: 10, grains: 10 }, { name: "a", price: 20, grains: 20 }])).toThrow(/mesmo nome/);
+    expect(cleanPlans([{ name: "Família Plus", price: "29.999", grains: "3000.4" }])).toEqual([{ id: "familia-plus", name: "Família Plus", price: 30, grains: 3000, blurb: "", highlight: false }]);
+    expect(cleanPacks([{ grains: 900, price: 15 }, { grains: 100, price: 2 }]).map((p) => p.id)).toEqual(["p100", "p900"]);
+    const worstPlan = Math.max(...DEFAULT_PLANS.map((p) => p.price / p.grains));
+    const bestPack = Math.min(...DEFAULT_PACKS.map((p) => p.price / p.grains));
+    expect(worstPlan).toBeLessThan(bestPack);
+  });
+
+  it("grãos: custo real em dólar vira grão arredondado para cima; desconto de indicação em centavos certos", async () => {
+    const { grainsForCost, grains } = await import("../src/credits.js");
+    const { withDiscount } = await import("../src/billing.js");
+    const s = { billingGrainsPerUsd: 1000 } as any;
+    expect(grainsForCost(0, s)).toBe(0);
+    expect(grainsForCost(0.0001, s)).toBe(1);
+    expect(grainsForCost(0.05, s)).toBe(50);
+    expect(grainsForCost(0.0501, s)).toBe(51);
+    expect(grains(1)).toBe("1 grão");
+    expect(grains(4000)).toBe("4.000 grãos");
+    expect(withDiscount(19.9, 5)).toBe(18.9);
+    expect(withDiscount(19.9, 10)).toBe(17.91);
+    expect(withDiscount(39.9, 0)).toBe(39.9);
+  });
 });
 
 const enabled = Boolean(process.env.TEST_DATABASE_URL);
 
-describe.skipIf(!enabled)("assinatura pelo Asaas (e2e)", () => {
+describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
   let db: typeof import("../src/db/pool.js");
   let billing: typeof import("../src/billing.js");
+  let credits: typeof import("../src/credits.js");
   let settings: typeof import("../src/settings.js");
   let user: any;
   let convId: string;
+  let app: any;
   const realFetch = globalThis.fetch;
   const asaasCalls: { method: string; path: string; body: any }[] = [];
   const TOKEN = "token-do-webhook-bem-comprido";
+  let payN = 0;
   const reloadUser = async () => (user = await db.one("SELECT * FROM users WHERE id = $1", [user.id]));
-  /** os dias grátis contam de quando a cobrança foi ligada: volta essa data no tempo */
-  const startedDaysAgo = async (days: number) => {
-    await db.query("INSERT INTO settings (key, value) VALUES ('billingStartedAt', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [JSON.stringify(new Date(Date.now() - days * 86_400_000).toISOString())]);
-    await settings.saveSettings({});
-  };
+  const wallet = async (id = user.id) => db.one("SELECT plan_grains, extra_grains FROM wallets WHERE user_id = $1", [id]);
+  const outbox = async () => (await db.many("SELECT data FROM pgboss.job WHERE name = 'outbound.send' ORDER BY created_on")).map((r) => r.data);
+  const hook = (body: unknown, token = TOKEN) => app.inject({ method: "POST", url: "/webhooks/asaas", headers: { "asaas-access-token": token }, payload: body as any });
 
   beforeAll(async () => {
     globalThis.fetch = (async (url: any, init?: any) => {
       const u = String(url);
       if (!u.includes("asaas.com")) return realFetch(url, init);
       const path = u.replace(/^https:\/\/[^/]+\/v3/, "");
-      asaasCalls.push({ method: init?.method ?? "GET", path, body: init?.body ? JSON.parse(init.body) : null });
+      const method = init?.method ?? "GET";
+      asaasCalls.push({ method, path, body: init?.body ? JSON.parse(init.body) : null });
       const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
       if (path === "/customers") return json({ id: "cus_1" });
       if (path === "/subscriptions") return json({ id: "sub_1" });
       if (path === "/subscriptions/sub_1/payments") return json({ data: [{ id: "pay_1", invoiceUrl: "https://sandbox.asaas.com/i/pay_1" }] });
-      if (path.startsWith("/payments?subscription=sub_ana")) return json({ data: [{ id: "pay_ana_2", value: 19.9, dueDate: "2026-12-01", billingType: "UNDEFINED" }] });
-      if (path.startsWith("/payments/")) return json({ id: path.split("/")[2] });
-      return json({ deleted: true });
+      if (path === "/payments" && method === "POST") {
+        payN++;
+        return json({ id: `pay_av_${payN}`, invoiceUrl: `https://sandbox.asaas.com/i/pay_av_${payN}` });
+      }
+      return json({ ok: true });
     }) as typeof fetch;
     db = await import("../src/db/pool.js");
     await db.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
     await (await import("../src/db/migrate.js")).migrate(() => {});
     billing = await import("../src/billing.js");
+    credits = await import("../src/credits.js");
     settings = await import("../src/settings.js");
     const { saveCredentials } = await import("../src/integrations/registry.js");
     await saveCredentials("asaas", { api_key: "$aact_hmlg_teste", webhook_token: TOKEN });
@@ -64,33 +96,61 @@ describe.skipIf(!enabled)("assinatura pelo Asaas (e2e)", () => {
     await db.query("UPDATE users SET status = 'active', full_name = 'Carla Dias' WHERE id = $1", [user.id]);
     await reloadUser();
     convId = (await upsertConversation(user.id, "playground", "jid-carla")).id;
+    app = await (await import("../src/api/server.js")).buildServer();
   });
 
   afterAll(async () => {
     globalThis.fetch = realFetch;
+    await app?.close();
     await (await import("../src/shortmem.js")).closeShort();
     await (await import("../src/queue/boss.js")).stopBoss();
     await db?.pool.end();
   });
 
-  it("desligada não cobra ninguém; ligada, quem já era cliente ganha os dias grátis a partir de agora", async () => {
+  it("desligada ninguém gasta grão; ligada, cada pessoa ganha as boas-vindas uma vez só", async () => {
     expect(await billing.billingAccess(user)).toEqual({ allowed: true, state: "off" });
-    // a pessoa entrou há um mês: se os dias contassem da entrada, travaria no instante em que o dono liga
-    await db.query("UPDATE users SET created_at = now() - interval '30 days', terms_accepted_at = now() - interval '30 days' WHERE id = $1", [user.id]);
-    await reloadUser();
-    const s = await settings.saveSettings({ billingEnabled: true, billingPrice: 19.9, billingPlanName: "Planejai Pro" } as any);
-    expect(s).toMatchObject({ billingEnabled: true, billingPrice: 19.9, billingTrialDays: 3 });
+    expect(await credits.chargeUsage(user.id, 0.5)).toBeNull();
+    const s = await settings.saveSettings({ billingEnabled: true });
     expect(s.billingStartedAt).toBeTruthy();
-    const a = await billing.billingAccess(user);
-    expect(a).toMatchObject({ allowed: true, state: "trial" });
-    // o painel não consegue reescrever a data em que a cobrança começou
-    expect((await settings.saveSettings({ billingStartedAt: "2000-01-01T00:00:00Z" } as any)).billingStartedAt).toBe(s.billingStartedAt);
+    expect(await billing.billingAccess(user)).toEqual({ allowed: true, state: "grains", balance: 300 });
+    expect(await credits.ensureWallet(user.id)).toEqual({ plan: 0, extra: 300, total: 300 });
+    // apagar a carteira não dá as boas-vindas de novo
+    await db.query("DELETE FROM wallets WHERE user_id = $1", [user.id]);
+    expect((await credits.ensureWallet(user.id)).total).toBe(0);
+    await credits.creditGrains(user.id, { amount: 300, bucket: "extra", reason: "ajuste", ref: "volta-teste" });
+    // a vitrine pública vai para a landing mesmo sem login
+    const cfg = (await app.inject({ method: "GET", url: "/api/auth/config" })).json();
+    expect(cfg.pricing).toMatchObject({ enabled: true, welcome: 300, plans: [{ id: "leve" }, { id: "dia-a-dia", highlight: true }, { id: "completo" }], referral: { step: 5, max: 30 } });
   });
 
-  it("acabaram os dias grátis: o assistente avisa uma vez com o link e não chama a IA", async () => {
-    await startedDaysAgo(5);
-    expect(await billing.billingAccess(user)).toMatchObject({ allowed: false, state: "trial_ended" });
+  it("o uso desconta pelo custo real, soma no extrato do dia, avisa quando está acabando e quando zera", async () => {
+    await db.query("DELETE FROM pgboss.job WHERE name = 'outbound.send'");
+    expect(await credits.chargeUsage(user.id, 0.05)).toEqual({ charged: 50, left: 250 });
+    // o passo do Tracer com custo também desconta (sem travar a resposta)
+    const { Tracer } = await import("../src/agent/trace.js");
+    const tracer = await Tracer.start({ trigger: "message", userId: user.id, conversationId: convId, input: "teste" });
+    const step = await tracer.step({ agent: "cto", type: "llm", name: "teste" });
+    await step.ok({}, { model: "x", tokensIn: 10, tokensOut: 10, costUsd: 0.1 });
+    await tracer.finish("ok");
+    await expect.poll(async () => Number((await wallet()).extra_grains)).toBe(150);
+    expect(await db.many("SELECT delta, reason FROM grain_ledger WHERE user_id = $1 AND reason = 'uso'", [user.id])).toEqual([{ delta: -150, reason: "uso" }]);
+    expect(await outbox()).toEqual([]);
+    // cruzou a linha (100 sem plano): um aviso só
+    await credits.chargeUsage(user.id, 0.06);
+    await credits.chargeUsage(user.id, 0.01);
+    let sent = await outbox();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].text).toMatch(/grãos estão acabando: sobraram 90 grãos[\s\S]*\/plano$/);
+    // zerou: nunca fica negativo, avisa na hora
+    expect(await credits.chargeUsage(user.id, 5)).toEqual({ charged: 5000, left: 0 });
+    expect(await wallet()).toEqual({ plan_grains: 0, extra_grains: 0 });
+    sent = await outbox();
+    expect(sent).toHaveLength(2);
+    expect(sent[1].text).toMatch(/grãos acabaram[\s\S]*\/plano$/);
+    expect(await billing.billingAccess(user)).toEqual({ allowed: false, state: "empty", balance: 0 });
+  });
 
+  it("carteira zerada: o assistente não chama a IA e avisa no máximo uma vez por dia", async () => {
     const channels = await import("../src/channels/index.js");
     const { processConversation } = await import("../src/agent/orchestrator.js");
     const say = async (text: string, id: string) => {
@@ -99,123 +159,143 @@ describe.skipIf(!enabled)("assinatura pelo Asaas (e2e)", () => {
       const r = await processConversation(convId, { trigger: "message", channel });
       return { channel, r };
     };
+    // o aviso de zerado acabou de sair pelo desconto: a primeira mensagem já fica em silêncio
     const first = await say("oi, anota um gasto de 10 reais", "b1");
-    expect(first.channel.sent).toHaveLength(1);
-    expect(first.channel.sent[0]!.text).toMatch(/3 dias grátis acabaram[\s\S]*Planejai Pro[\s\S]*\/assinatura$/);
-    const steps = await db.many("SELECT type, name FROM execution_steps WHERE execution_id = $1", [first.r.executionId]);
-    expect(steps).toEqual([{ type: "info", name: "trava: assinatura" }]);
-    // segunda mensagem no mesmo dia: silêncio, sem repetir o aviso
-    expect((await say("oi?", "b2")).channel.sent).toEqual([]);
+    expect(first.channel.sent).toEqual([]);
+    expect(await db.many("SELECT type, name FROM execution_steps WHERE execution_id = $1", [first.r.executionId])).toEqual([{ type: "info", name: "trava: grãos" }]);
+    // no dia seguinte avisa de novo com o link
+    await db.query("UPDATE users SET profile = profile - 'billing_notice_at' WHERE id = $1", [user.id]);
+    const next = await say("oi?", "b2");
+    expect(next.channel.sent).toHaveLength(1);
+    expect(next.channel.sent[0]!.text).toMatch(/grãos acabaram[\s\S]*\/plano$/);
+    expect((await say("alô", "b3")).channel.sent).toEqual([]);
   });
 
-  it("assinar cria cliente e assinatura mensal no Asaas, sem guardar o CPF, e libera de novo", async () => {
-    await expect(billing.subscribe(user, { name: "Carla", cpfCnpj: "529.982.247-25" })).rejects.toThrow(/nome completo/);
-    await expect(billing.subscribe(user, { name: "Carla Dias", cpfCnpj: "123.456.789-00" })).rejects.toThrow(/CPF ou CNPJ inválido/);
+  it("pacote avulso: cobrança no Asaas com referência própria, entra uma vez só quando paga e destrava", async () => {
+    await expect(billing.buyPack(user, "p500", { name: "Carla", cpfCnpj: "529.982.247-25" })).rejects.toThrow(/nome completo/);
+    await expect(billing.buyPack(user, "p500", { name: "Carla Dias", cpfCnpj: "123.456.789-00" })).rejects.toThrow(/CPF ou CNPJ inválido/);
+    await expect(billing.buyPack(user, "nao-existe")).rejects.toThrow(/Pacote não encontrado/);
     expect(asaasCalls).toEqual([]);
-
-    const sub = await billing.subscribe(user, { name: "Carla Dias", cpfCnpj: "529.982.247-25", email: "carla@x.com" });
-    const today = new Date().toISOString().slice(0, 10);
-    expect(asaasCalls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /customers", "POST /subscriptions", "GET /subscriptions/sub_1/payments"]);
+    const p = await billing.buyPack(user, "p500", { name: "Carla Dias", cpfCnpj: "529.982.247-25", email: "carla@x.com" });
+    expect(asaasCalls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /customers", "POST /payments"]);
     expect(asaasCalls[0]!.body).toMatchObject({ name: "Carla Dias", cpfCnpj: "52998224725", mobilePhone: "19944440000", externalReference: user.id });
-    // forma de pagamento em aberto: Pix, cartão ou boleto na página do Asaas; já passou dos dias grátis, então vence hoje
-    expect(asaasCalls[1]!.body).toMatchObject({ customer: "cus_1", billingType: "UNDEFINED", cycle: "MONTHLY", value: 19.9, nextDueDate: today, description: "Planejai Pro" });
-    expect(sub).toMatchObject({ status: "trial", asaas_subscription_id: "sub_1", invoice_url: "https://sandbox.asaas.com/i/pay_1" });
-    expect(JSON.stringify(await db.one("SELECT * FROM subscriptions"))).not.toContain("52998224725");
-    // cobrança criada e ainda dentro da folga do vencimento: volta a responder enquanto o pagamento compensa
-    expect(await billing.billingAccess(user)).toMatchObject({ allowed: true, state: "trial" });
-    await expect(billing.subscribe(user, { name: "Carla Dias", cpfCnpj: "529.982.247-25" })).rejects.toThrow(/já tem uma assinatura/);
+    expect(asaasCalls[1]!.body).toMatchObject({ customer: "cus_1", billingType: "UNDEFINED", value: 9.9, externalReference: `grains:${p.id}` });
+    // o CPF vai para o Asaas e não fica aqui
+    expect(JSON.stringify(await db.many("SELECT * FROM subscriptions"))).not.toContain("52998224725");
+    // pedir de novo reaproveita a cobrança em aberto
+    expect((await billing.buyPack(user, "p500")).id).toBe(p.id);
+    expect(asaasCalls).toHaveLength(2);
+
+    expect((await hook({ id: "e1", event: "PAYMENT_CONFIRMED", payment: { id: "pay_av_1", externalReference: `grains:${p.id}` } }, "errado")).statusCode).toBe(401);
+    expect((await hook({ id: "e1", event: "PAYMENT_CONFIRMED", payment: { id: "pay_av_1", externalReference: `grains:${p.id}`, billingType: "PIX" } })).json()).toEqual({ ok: true, handled: true, status: "paid" });
+    // cartão manda RECEIVED do mesmo pagamento depois, com outro id de evento: não credita de novo
+    await hook({ id: "e2", event: "PAYMENT_RECEIVED", payment: { id: "pay_av_1", externalReference: `grains:${p.id}` } });
+    expect(await wallet()).toEqual({ plan_grains: 0, extra_grains: 500 });
+    expect((await outbox()).at(-1).text).toMatch(/Entraram 500 grãos e agora você tem 500 grãos/);
+    expect(await billing.billingAccess(user)).toMatchObject({ allowed: true, state: "grains", balance: 500 });
+    // referência que não é nossa: aceita e ignora
+    expect((await hook({ event: "PAYMENT_RECEIVED", payment: { id: "x", externalReference: "outra-coisa" } })).json()).toEqual({ ok: true, handled: false });
   });
 
-  it("webhook do Asaas: só com o token; pagou libera um mês, venceu ou estornou trava, apagou cancela", async () => {
-    const { buildServer } = await import("../src/api/server.js");
-    const app = await buildServer();
-    const send = (body: unknown, token = TOKEN) => app.inject({ method: "POST", url: "/webhooks/asaas", headers: { "asaas-access-token": token }, payload: body as any });
-    const status = async () => (await db.one("SELECT status, to_char(paid_until, 'YYYY-MM-DD') AS paid_until, invoice_url FROM subscriptions"));
-
-    expect((await send({ event: "PAYMENT_RECEIVED", payment: { subscription: "sub_1", dueDate: "2026-10-10" } }, "errado")).statusCode).toBe(401);
-    expect((await send({ event: "PAYMENT_RECEIVED", payment: { subscription: "sub_1", dueDate: "2026-10-10" } }, "")).statusCode).toBe(401);
-    expect((await status()).status).toBe("trial");
-    // evento de assinatura que não é nossa: aceito e ignorado
-    expect((await send({ event: "PAYMENT_RECEIVED", payment: { subscription: "sub_de_outro_sistema" } })).json()).toEqual({ ok: true, handled: false });
+  it("plano no cartão: recarrega os grãos a cada mês pago (sem acumular) e guarda só o final do cartão", async () => {
+    asaasCalls.length = 0;
+    await expect(billing.subscribe(user, { planId: "nao-existe" })).rejects.toThrow(/Plano não encontrado/);
+    const sub = await billing.subscribe(user, { planId: "dia-a-dia", method: "card" });
+    expect(asaasCalls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /subscriptions", "GET /subscriptions/sub_1/payments"]);
+    expect(asaasCalls[0]!.body).toMatchObject({ customer: "cus_1", billingType: "CREDIT_CARD", cycle: "MONTHLY", value: 39.9, description: "Planejai Dia a dia (4.000 grãos por mês)" });
+    expect(sub).toMatchObject({ status: "trial", plan_id: "dia-a-dia", pay_method: "card", invoice_url: "https://sandbox.asaas.com/i/pay_1" });
+    await expect(billing.subscribe(user, { planId: "leve" })).rejects.toThrow(/já tem um plano/);
 
     const due = new Date().toISOString().slice(0, 10);
-    const next = new Date(`${due}T12:00:00Z`);
-    next.setUTCMonth(next.getUTCMonth() + 1);
-    expect((await send({ event: "PAYMENT_RECEIVED", payment: { subscription: "sub_1", dueDate: due } })).json()).toEqual({ ok: true, handled: true, status: "active" });
-    expect(await status()).toEqual({ status: "active", paid_until: next.toISOString().slice(0, 10), invoice_url: null });
-    expect(await billing.billingAccess(user)).toMatchObject({ allowed: true, state: "active" });
-
-    // cobrança do mês seguinte criada: guarda o link; venceu: fica pendente, mas o mês pago ainda vale
-    await send({ event: "PAYMENT_CREATED", payment: { subscription: "sub_1", status: "PENDING", invoiceUrl: "https://sandbox.asaas.com/i/pay_2", dueDate: next.toISOString().slice(0, 10) } });
-    expect((await status()).invoice_url).toBe("https://sandbox.asaas.com/i/pay_2");
-    await send({ event: "PAYMENT_OVERDUE", payment: { subscription: "sub_1", invoiceUrl: "https://sandbox.asaas.com/i/pay_2" } });
-    expect((await status()).status).toBe("overdue");
-    expect(await billing.billingAccess(user)).toMatchObject({ allowed: true, state: "paid_until" });
-    // estorno: o mês deixa de valer e trava com o link da cobrança
-    await send({ event: "PAYMENT_REFUNDED", payment: { subscription: "sub_1" } });
-    const blocked = await billing.billingAccess(user);
-    expect(blocked).toMatchObject({ allowed: false, state: "overdue", invoiceUrl: "https://sandbox.asaas.com/i/pay_2" });
-    expect(billing.blockedMessage(blocked as any, billing.planOf(await settings.getSettings()))).toContain("https://sandbox.asaas.com/i/pay_2");
-
-    // liberado pelo dono: não importa a assinatura
-    await db.query("UPDATE users SET billing_exempt = true WHERE id = $1", [user.id]);
-    expect(await billing.billingAccess(await reloadUser())).toEqual({ allowed: true, state: "exempt" });
-    await db.query("UPDATE users SET billing_exempt = false WHERE id = $1", [user.id]);
-    await reloadUser();
-
-    await billing.cancelSubscription(user.id);
-    expect(asaasCalls.at(-1)).toMatchObject({ method: "DELETE", path: "/subscriptions/sub_1" });
-    expect((await status()).status).toBe("canceled");
-    await app.close();
+    const card = { creditCardNumber: "4242", creditCardBrand: "VISA" };
+    expect((await hook({ id: "s1", event: "PAYMENT_CONFIRMED", payment: { id: "pay_1", subscription: "sub_1", value: 39.9, dueDate: due, billingType: "CREDIT_CARD", creditCard: card } })).json()).toEqual({ ok: true, handled: true, status: "active" });
+    await hook({ id: "s2", event: "PAYMENT_RECEIVED", payment: { id: "pay_1", subscription: "sub_1", value: 39.9, dueDate: due, billingType: "CREDIT_CARD" } });
+    expect(await wallet()).toEqual({ plan_grains: 4000, extra_grains: 500 });
+    expect(await db.one("SELECT status, card_brand, card_last4 FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ status: "active", card_brand: "VISA", card_last4: "4242" });
+    expect((await outbox()).at(-1).text).toMatch(/obrigado por assinar o Dia a dia! Já coloquei 4.000 grãos/);
+    // o uso sai primeiro do plano
+    await credits.chargeUsage(user.id, 1);
+    expect(await wallet()).toEqual({ plan_grains: 3000, extra_grains: 500 });
+    // mês seguinte: o plano volta para 4.000 (o que sobrou não acumula); os extras ficam
+    await hook({ id: "s3", event: "PAYMENT_CONFIRMED", payment: { id: "pay_2", subscription: "sub_1", value: 39.9, dueDate: due, billingType: "CREDIT_CARD" } });
+    expect(await wallet()).toEqual({ plan_grains: 4000, extra_grains: 500 });
+    expect((await outbox()).at(-1).text).toMatch(/Recebi a mensalidade[\s\S]*4.000 grãos/);
   });
 
-  it("regras financeiras: avisa no WhatsApp, ignora evento repetido, dá desconto a quem indicou e lembra o vencimento", async () => {
-    const outbox = async () => (await db.many("SELECT data FROM pgboss.job WHERE name = 'outbound.send' ORDER BY created_on")).map((r) => r.data);
+  it("subir de plano paga a diferença e ganha os grãos na hora; descer vale da próxima mensalidade", async () => {
+    asaasCalls.length = 0;
+    const up = await billing.changePlan(user, "completo");
+    expect(up.kind).toBe("upgrade");
+    const charge = asaasCalls.find((c) => c.path === "/payments");
+    expect(charge?.body).toMatchObject({ value: 40, description: expect.stringContaining("+6.000 grãos") });
+    const purchase = await db.one("SELECT id FROM grain_purchases WHERE kind = 'upgrade'");
+    await hook({ id: "u1", event: "PAYMENT_CONFIRMED", payment: { id: "pay_av_2", externalReference: `grains:${purchase.id}` } });
+    expect(await wallet()).toEqual({ plan_grains: 10000, extra_grains: 500 });
+    expect(await db.one("SELECT plan_id, value::float AS value FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ plan_id: "completo", value: 79.9 });
+    expect(asaasCalls.at(-1)).toMatchObject({ method: "POST", path: "/subscriptions/sub_1", body: { value: 79.9, updatePendingPayments: true } });
+
+    const down = await billing.changePlan(user, "leve");
+    expect(down.kind).toBe("downgrade");
+    expect(await db.one("SELECT plan_id, next_plan_id, value::float AS value FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ plan_id: "completo", next_plan_id: "leve", value: 19.9 });
+    // os grãos deste mês ficam; na próxima mensalidade entra o plano leve
+    expect((await wallet()).plan_grains).toBe(10000);
+    await hook({ id: "s4", event: "PAYMENT_CONFIRMED", payment: { id: "pay_3", subscription: "sub_1", value: 19.9, billingType: "CREDIT_CARD" } });
+    expect(await wallet()).toEqual({ plan_grains: 1500, extra_grains: 500 });
+    expect(await db.one("SELECT plan_id, next_plan_id FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ plan_id: "leve", next_plan_id: null });
+  });
+
+  it("indicação: cada amigo pagando dá mais desconto na mensalidade de quem convidou, até o teto", async () => {
     await db.query("DELETE FROM pgboss.job WHERE name = 'outbound.send'");
-    // Ana já assina (cartão) e convidou o Beto, que paga a primeira mensalidade
+    asaasCalls.length = 0;
     const { upsertUser } = await import("../src/ingest.js");
     const ana = await upsertUser("5519955550000", "Ana");
     const beto = await upsertUser("5519966660000", "Beto");
-    await db.query("UPDATE users SET status = 'active', full_name = name WHERE id = ANY($1)", [[ana.id, beto.id]]);
-    await db.query("UPDATE users SET invited_by = $1 WHERE id = $2", [ana.id, beto.id]);
-    await db.query("INSERT INTO subscriptions (user_id, asaas_customer_id, asaas_subscription_id, status, value, next_due_date, last_payment_at) VALUES ($1, 'cus_a', 'sub_ana', 'active', 19.9, '2026-12-01', now()), ($2, 'cus_b', 'sub_beto', 'trial', 19.9, CURRENT_DATE, NULL)", [ana.id, beto.id]);
-    const today = new Date().toISOString().slice(0, 10);
-
-    const evt = { id: "evt_1", event: "PAYMENT_CONFIRMED", payment: { id: "pay_b1", subscription: "sub_beto", value: 19.9, dueDate: today, billingType: "PIX", status: "CONFIRMED" } };
+    const caio = await upsertUser("5519977770000", "Caio");
+    await db.query("UPDATE users SET status = 'active', full_name = name WHERE id = ANY($1)", [[ana.id, beto.id, caio.id]]);
+    await db.query("UPDATE users SET invited_by = $1 WHERE id = ANY($2)", [ana.id, [beto.id, caio.id]]);
+    await db.query(
+      `INSERT INTO subscriptions (user_id, asaas_customer_id, asaas_subscription_id, status, value, plan_id, next_due_date, last_payment_at) VALUES
+        ($1, 'cus_a', 'sub_ana', 'active', 19.9, 'leve', '2026-12-01', now()), ($2, 'cus_b', 'sub_beto', 'trial', 19.9, 'leve', CURRENT_DATE, NULL),
+        ($3, 'cus_c', 'sub_caio', 'trial', 19.9, 'leve', CURRENT_DATE, NULL)`,
+      [ana.id, beto.id, caio.id],
+    );
+    const evt = { id: "r1", event: "PAYMENT_CONFIRMED", payment: { id: "pay_b1", subscription: "sub_beto", value: 19.9, billingType: "PIX" } };
     expect(await billing.handleAsaasEvent(evt)).toMatchObject({ handled: true, status: "active" });
-    // o Asaas reenviou o mesmo evento: nada muda e ninguém recebe duas vezes
     expect(await billing.handleAsaasEvent(evt)).toMatchObject({ duplicate: true });
-    // cartão/Pix manda RECEIVED do mesmo pagamento depois: não repete a mensagem
-    await billing.handleAsaasEvent({ id: "evt_2", event: "PAYMENT_RECEIVED", payment: { ...evt.payment, status: "RECEIVED" } });
-    const sent = await outbox();
-    expect(sent.filter((m: any) => m.userId === beto.id)).toHaveLength(1);
-    expect(sent.find((m: any) => m.userId === beto.id).text).toMatch(/Pagamento de R\$ 19,90 confirmado, obrigado por assinar o Planejai Pro/);
-    // indicação: Ana ganha 10% na próxima cobrança em aberto, uma vez só
-    expect(sent.find((m: any) => m.userId === ana.id).text).toMatch(/Beto assinou pelo seu convite[\s\S]*10% de desconto/);
-    const discount = asaasCalls.find((c) => c.method === "POST" && c.path === "/payments/pay_ana_2");
-    expect(discount?.body).toMatchObject({ value: 19.9, dueDate: "2026-12-01", discount: { value: 10, type: "PERCENTAGE", dueDateLimitDays: 0 } });
-    expect(await db.one("SELECT applied_payment_id FROM referral_credits WHERE from_user_id = $1", [beto.id])).toEqual({ applied_payment_id: "pay_ana_2" });
-    expect(await billing.creditReferral(beto.id)).toBeNull();
+    expect(asaasCalls.find((c) => c.path === "/subscriptions/sub_ana")?.body).toMatchObject({ value: 18.9, updatePendingPayments: true });
+    expect((await outbox()).find((m: any) => m.userId === ana.id).text).toMatch(/Beto assinou pelo seu convite! Agora são 1 amigo[\s\S]*5% de desconto/);
 
-    // venceu: avisa com o link na hora
-    await billing.handleAsaasEvent({ id: "evt_3", event: "PAYMENT_OVERDUE", payment: { id: "pay_b2", subscription: "sub_beto", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_b2" } });
-    expect((await outbox()).at(-1)).toMatchObject({ userId: beto.id, text: expect.stringContaining("https://sandbox.asaas.com/i/pay_b2") });
-    // o mesmo aviso fica no sininho do painel, caso o WhatsApp esteja fora
-    expect(await db.one("SELECT body FROM notifications WHERE user_id = $1 AND kind = 'assinatura' ORDER BY created_at DESC LIMIT 1", [beto.id])).toMatchObject({
-      body: expect.stringContaining("pay_b2"),
-    });
-    // pedido de estorno só avisa o dono; cobrança apagada tira o link que não serve mais
-    expect(await billing.handleAsaasEvent({ id: "evt_rr", event: "PAYMENT_REFUND_REQUESTED", payment: { id: "pay_b2", subscription: "sub_beto", value: 19.9 } })).toMatchObject({ handled: true, status: "overdue" });
-    expect(await billing.handleAsaasEvent({ id: "evt_del", event: "PAYMENT_DELETED", payment: { id: "pay_b2", subscription: "sub_beto", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_b2" } })).toMatchObject({ handled: true });
-    expect(await db.one("SELECT invoice_url FROM subscriptions WHERE user_id = $1", [beto.id])).toEqual({ invoice_url: null });
+    await billing.handleAsaasEvent({ id: "r2", event: "PAYMENT_CONFIRMED", payment: { id: "pay_c1", subscription: "sub_caio", value: 19.9 } });
+    expect(await db.one("SELECT discount_percent, value::float AS value FROM subscriptions WHERE user_id = $1", [ana.id])).toEqual({ discount_percent: 10, value: 17.91 });
+    // teto: com passo de 50% o desconto para em 30%
+    await settings.saveSettings({ billingReferralStep: 50 });
+    expect(await billing.referralDiscount(ana.id)).toMatchObject({ friends: 2, percent: 30 });
+    await settings.saveSettings({ billingReferralStep: 5 });
+    // amigo atrasou: o desconto volta um passo
+    await billing.handleAsaasEvent({ id: "r3", event: "PAYMENT_OVERDUE", payment: { id: "pay_b2", subscription: "sub_beto", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_b2" } });
+    expect(await db.one("SELECT discount_percent, value::float AS value FROM subscriptions WHERE user_id = $1", [ana.id])).toEqual({ discount_percent: 5, value: 18.9 });
+    expect((await outbox()).find((m: any) => m.userId === beto.id && /pay_b2/.test(m.text))).toBeTruthy();
 
-    // lembrete de vencimento: quem paga por Pix ouve 3 dias antes; cartão não
+    // lembrete de vencimento: Pix ouve antes; cartão não
     await db.query("DELETE FROM pgboss.job WHERE name = 'outbound.send'");
     await db.query("UPDATE subscriptions SET status = 'active', next_due_date = (now() AT TIME ZONE 'America/Sao_Paulo')::date + 3, last_billing_type = 'PIX', reminded_on = NULL WHERE user_id = $1", [beto.id]);
-    await db.query("UPDATE subscriptions SET next_due_date = (now() AT TIME ZONE 'America/Sao_Paulo')::date + 3, last_billing_type = 'CREDIT_CARD' WHERE user_id = $1", [ana.id]);
+    await db.query("UPDATE subscriptions SET next_due_date = (now() AT TIME ZONE 'America/Sao_Paulo')::date + 3, last_billing_type = 'CREDIT_CARD' WHERE user_id = ANY($1)", [[ana.id, caio.id]]);
     expect((await billing.billingReminders()).due).toBe(1);
     expect((await outbox())[0]).toMatchObject({ userId: beto.id, text: expect.stringMatching(/vence a sua mensalidade de R\$ 19,90/) });
-    // mesmo dia: não repete
     expect((await billing.billingReminders()).due).toBe(0);
+  });
+
+  it("cancelar mantém os grãos que sobraram; liberado pelo dono não gasta nada", async () => {
+    await billing.cancelSubscription(user.id);
+    expect(asaasCalls.at(-1)).toMatchObject({ method: "DELETE", path: "/subscriptions/sub_1" });
+    expect(await wallet()).toEqual({ plan_grains: 1500, extra_grains: 500 });
+    await db.query("UPDATE users SET billing_exempt = true WHERE id = $1", [user.id]);
+    expect(await billing.billingAccess(await reloadUser())).toEqual({ allowed: true, state: "exempt" });
+    expect(await credits.chargeUsage(user.id, 1)).toBeNull();
+    const o = await billing.billingOverview();
+    expect(o.counts).toMatchObject({ exempt: 1 });
+    expect(o.mrr).toBeGreaterThan(0);
+    // avulsos do mês: pacote + diferença da troca de plano
+    expect(o.packsMonth).toBe(49.9);
   });
 });

@@ -12,6 +12,7 @@ import { hit, peek } from "../ratelimit.js";
 import { one, pool, query } from "../db/pool.js";
 import { phoneVariants } from "../ingest.js";
 import { cleanInviteCode } from "../social.js";
+import { pricingOf } from "../billing.js";
 import { getSettings } from "../settings.js";
 import { registerDashboardRoutes } from "./routes/dashboard.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
@@ -265,13 +266,13 @@ export async function buildServer() {
     return { ok: true, pending: true, message: "Cadastro recebido! Assim que o administrador aprovar você já pode entrar." };
   });
 
-  // público (tela de entrar e landing): modo de cadastro e, com cobrança ligada, o plano para a seção de preço
+  // público (tela de entrar e landing): modo de cadastro e a vitrine de planos e grãos
   app.get("/api/auth/config", async () => {
     const s = await getSettings();
-    const plan = s.billingEnabled ? { name: s.billingPlanName, price: Number(s.billingPrice), trialDays: Number(s.billingTrialDays) } : null;
+    // planos e pacotes de grãos: a landing mostra a vitrine mesmo com a cobrança desligada
     // quem responde pelos dados, para a página /privacidade (LGPD)
     const legal = { name: s.legalName, document: s.legalDocument, email: s.privacyEmail, city: s.legalCity };
-    return { signupMode: s.signupMode, version: VERSION, plan, legal };
+    return { signupMode: s.signupMode, version: VERSION, pricing: pricingOf(s), legal };
   });
 
   app.post("/api/auth/logout", async (_req, reply) => {
