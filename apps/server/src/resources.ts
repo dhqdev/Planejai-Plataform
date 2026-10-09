@@ -431,6 +431,7 @@ const TABLE_LABEL: Record<string, string> = {
   integrations: "Integrações",
   invites: "Convites",
   storage_daily: "Histórico de tamanho",
+  storage_trash: "Arquivos a apagar do bucket",
 };
 
 /** Tabelas ligadas à pessoa por outra tabela (não têm user_id próprio). */

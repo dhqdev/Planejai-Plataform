@@ -41,6 +41,28 @@ pg_restore --clean --if-exists --no-owner -d planejai /backups/planejai-AAAAMMDD
 # 3. volte app e worker para 1 réplica
 ```
 
+## Arquivos fora do banco (Cloudflare R2)
+
+Sem configuração, documentos e mídias (gravações, prints) ficam no Postgres. Com um bucket S3 compatível (R2, S3, B2) eles vão para lá e o banco guarda só nome, tamanho e a chave.
+
+1. No Cloudflare: R2 > Create bucket (ex.: `planejai-arquivos`, privado). Depois R2 > Manage API tokens > Create token com **Object Read & Write** só nesse bucket.
+2. Na stack (app e worker), preencha:
+
+```
+STORAGE_S3_ENDPOINT: https://<conta>.r2.cloudflarestorage.com
+STORAGE_S3_BUCKET: planejai-arquivos
+STORAGE_S3_REGION: auto
+STORAGE_S3_ACCESS_KEY_ID: ...
+STORAGE_S3_SECRET_ACCESS_KEY: ...
+```
+
+3. Atualize a stack. Arquivo novo já vai pro bucket (`documents/<pessoa>/<id>` e `media/<id>`). Os antigos saem do banco aos poucos: a limpeza de hora em hora leva até 50 por rodada (log `limpeza de dados antigos`, campo `movedToStorage`).
+
+- Apagar documento, a pessoa (LGPD) ou mídia vencida apaga o objeto também; o que falhar fica em `storage_trash` e sai na rodada seguinte.
+- O `pg_dump` do backup **não** tem os arquivos que estão no bucket: ative a cópia/versão do próprio bucket se quiser backup deles.
+- Não desligue o storage depois de ligado: arquivo que já está no bucket só é lido de lá.
+- O tamanho por cliente na tela Servidor continua vindo da coluna `size` de cada linha.
+
 ## Voltar uma versão
 
 A imagem só é publicada depois que os testes passam (workflow `CI`). Cada build gera duas tags: `latest` e `sha-XXXXXXX` (o commit).

@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { Account } from "../../../accounts.js";
 import { many, one, query } from "../../../db/pool.js";
 import { NOBODY, selfUserId } from "../../../sharing.js";
+import { readBlob } from "../../../storage.js";
 import { isUuid } from "./shared.js";
 
 /** Arquivo é de quem vê; o super admin também vê o do playground e o do sistema (sem pessoa). */
@@ -28,10 +29,10 @@ export function memoryRoutes(base: FastifyInstance) {
   // ---------- Arquivos gerados (gravações do navegador, prints) ----------
   base.get<{ Params: { id: string } }>("/api/media/:id", async (req, reply) => {
     if (!isUuid(req.params.id)) return reply.code(404).send({ error: "não encontrado" });
-    const f = await one("SELECT f.mimetype, f.file_name, f.data, f.user_id, u.phone FROM media_files f LEFT JOIN users u ON u.id = f.user_id WHERE f.id = $1", [req.params.id]);
+    const f = await one("SELECT f.mimetype, f.file_name, f.data, f.storage_key, f.user_id, u.phone FROM media_files f LEFT JOIN users u ON u.id = f.user_id WHERE f.id = $1", [req.params.id]);
     if (!f || !(await canSeeMedia(req.account, f))) return reply.code(404).send({ error: "não encontrado" });
     reply.header("Content-Type", f.mimetype).header("Content-Disposition", `inline; filename="${f.file_name ?? "arquivo"}"`).header("Cache-Control", "private, max-age=3600");
-    return reply.send(f.data);
+    return reply.send(await readBlob(f));
   });
 
   // gravações e prints são particulares: cada um vê os seus (o dono também vê o playground e o que é do sistema)

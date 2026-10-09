@@ -3,6 +3,7 @@ import type { Channel } from "./channels/types.js";
 import { pool, one, query, many } from "./db/pool.js";
 import { isOwner, phoneVariants } from "./ingest.js";
 import { clearShort } from "./shortmem.js";
+import { purgeStorageTrash } from "./storage.js";
 
 /**
  * LGPD: "apague tudo meu". Remove a pessoa e tudo que é dela (gastos, limites, lembretes, memórias,
@@ -30,6 +31,8 @@ export async function eraseUserData(userId: string): Promise<{ ok: boolean }> {
     client.release();
   }
   for (const c of convs) await clearShort(c.id);
+  // documentos e mídias no bucket (o gatilho anotou em storage_trash); o que falhar sai na limpeza de hora em hora
+  await purgeStorageTrash(1000).catch(() => {});
   return { ok: true };
 }
 

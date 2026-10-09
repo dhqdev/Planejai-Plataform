@@ -1,7 +1,9 @@
 import { chatCompletion } from "../../llm/openrouter.js";
 import { resolveModel } from "../../llm/router.js";
 import { getCredentials } from "../../integrations/registry.js";
-import { one } from "../../db/pool.js";
+import { randomUUID } from "node:crypto";
+import { query } from "../../db/pool.js";
+import { deleteObject, mediaKey, putObject, storageEnabled } from "../../storage.js";
 import { checkedUrl, safeFetch } from "../../net.js";
 import { BrowserSession, type Snapshot } from "../browser.js";
 import { defineTool, obj, type ToolContext } from "./types.js";
@@ -225,11 +227,20 @@ export function isMapsUrl(raw: string) {
 }
 
 async function saveMediaFile(ctx: ToolContext, kind: string, mimetype: string, data: Buffer, fileName: string) {
-  const row = await one<{ id: string }>(
-    `INSERT INTO media_files (execution_id, user_id, kind, mimetype, file_name, size, data) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-    [ctx.tracer.executionId, ctx.user.id, kind, mimetype, fileName, data.length, data],
-  );
-  return row!.id;
+  // com storage ligado o arquivo vai pro bucket e a linha guarda só a chave
+  const id = randomUUID();
+  const key = storageEnabled() ? mediaKey(id) : null;
+  if (key) await putObject(key, data, mimetype);
+  try {
+    await query(
+      `INSERT INTO media_files (id, execution_id, user_id, kind, mimetype, file_name, size, data, storage_key) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [id, ctx.tracer.executionId, ctx.user.id, kind, mimetype, fileName, data.length, key ? null : data, key],
+    );
+  } catch (err) {
+    if (key) await deleteObject(key).catch(() => {});
+    throw err;
+  }
+  return id;
 }
 
 function snapshotText(s: Snapshot) {

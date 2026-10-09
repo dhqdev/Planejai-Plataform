@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { many, one, query } from "./db/pool.js";
+import { deleteObject, docKey, purgeStorageTrash, putObject, readBlob, storageEnabled } from "./storage.js";
 
-/** Documentos guardados pela pessoa (PDF, imagem, planilha): ficam no banco da stack, só dela. */
+/** Documentos guardados pela pessoa (PDF, imagem, planilha), só dela: no bucket se STORAGE_S3_* estiver ligado, senão no banco. */
 export const DOC_MAX_BYTES = 15 * 1024 * 1024;
 export const DOC_QUOTA_BYTES = 200 * 1024 * 1024;
 
@@ -30,10 +32,20 @@ export async function saveDocument(input: { userId: string; name: string; mimety
   const used = await one<{ n: string }>("SELECT COALESCE(sum(size), 0) AS n FROM documents WHERE user_id = $1", [input.userId]);
   if (Number(used?.n ?? 0) + input.data.length > DOC_QUOTA_BYTES) throw new Error("Espaço de documentos cheio (200 MB). Apague algum para guardar outro.");
   const folder = input.folder?.trim().slice(0, 60) || null;
-  return (await one<DocumentRow>(
-    `INSERT INTO documents (user_id, name, mimetype, size, data, folder, notes, source) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING ${COLS}`,
-    [input.userId, cleanName(input.name, input.mimetype), input.mimetype || "application/octet-stream", input.data.length, input.data, folder, input.notes?.slice(0, 500) ?? null, input.source ?? "painel"],
-  ))!;
+  const mimetype = input.mimetype || "application/octet-stream";
+  const id = randomUUID();
+  // com storage: arquivo no bucket primeiro, a linha só guarda a chave
+  const key = storageEnabled() ? docKey(input.userId, id) : null;
+  if (key) await putObject(key, input.data, mimetype);
+  try {
+    return (await one<DocumentRow>(
+      `INSERT INTO documents (id, user_id, name, mimetype, size, data, storage_key, folder, notes, source) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING ${COLS}`,
+      [id, input.userId, cleanName(input.name, mimetype), mimetype, input.data.length, key ? null : input.data, key, folder, input.notes?.slice(0, 500) ?? null, input.source ?? "painel"],
+    ))!;
+  } catch (err) {
+    if (key) await deleteObject(key).catch(() => {});
+    throw err;
+  }
 }
 
 /** userId null = todos (só o super admin). */
@@ -57,12 +69,26 @@ export async function listDocuments(userId: string | null, opts: { q?: string; f
 
 export async function getDocument(id: string, userId: string | null) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
-  return one<DocumentRow & { data: Buffer; user_id: string }>(`SELECT ${COLS}, data, user_id FROM documents WHERE id = $1 AND ($2::uuid IS NULL OR user_id = $2)`, [id, userId]);
+  const row = await one<DocumentRow & { data: Buffer | null; storage_key: string | null; user_id: string }>(
+    `SELECT ${COLS}, data, storage_key, user_id FROM documents WHERE id = $1 AND ($2::uuid IS NULL OR user_id = $2)`,
+    [id, userId],
+  );
+  if (!row) return null;
+  const { storage_key: _k, ...rest } = row;
+  return { ...rest, data: await readBlob(row) };
+}
+
+/** Só os dados do documento, sem baixar o arquivo. */
+export async function documentInfo(id: string, userId: string | null) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  return one<DocumentRow>(`SELECT ${COLS} FROM documents WHERE id = $1 AND ($2::uuid IS NULL OR user_id = $2)`, [id, userId]);
 }
 
 export async function deleteDocument(id: string, userId: string | null) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return false;
   const r = await query("DELETE FROM documents WHERE id = $1 AND ($2::uuid IS NULL OR user_id = $2)", [id, userId]);
+  // o gatilho anotou o objeto em storage_trash: tira do bucket agora (o que falhar sai na limpeza de hora em hora)
+  if (r.rowCount) await purgeStorageTrash().catch(() => {});
   return (r.rowCount ?? 0) > 0;
 }
 

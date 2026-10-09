@@ -69,7 +69,7 @@ apps/server/src/
                            lembretes, De olho, reunião noturna, recados, contas fixas, assinatura Asaas
   social.ts  onboarding.ts  tabs.ts  privacy.ts
                            convites/contatos, perguntas de boas-vindas, abas do cliente, LGPD (eraseUserData)
-  documents.ts  notifications.ts  events.ts  telegram.ts  logincode.ts
+  documents.ts  storage.ts  notifications.ts  events.ts  telegram.ts  logincode.ts
                            documentos, sininho, eventos para o n8n, Telegram, código de login
   charts.ts  images.ts     gráficos e imagens simples (HTML -> PNG, sem LLM)
   resources.ts             tela Servidor/Armazenamento

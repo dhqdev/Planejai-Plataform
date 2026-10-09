@@ -2,6 +2,7 @@ import { summarizeConversation } from "./agent/orchestrator.js";
 import { config } from "./config.js";
 import { many, query } from "./db/pool.js";
 import { getSettings } from "./settings.js";
+import { moveBlobsToStorage, purgeStorageTrash } from "./storage.js";
 import { redisAlive } from "./shortmem.js";
 
 /**
@@ -9,7 +10,8 @@ import { redisAlive } from "./shortmem.js";
  * - mensagens com mais de MESSAGE_RETENTION_HOURS viram resumo da conversa e são apagadas
  *   (a memória curta no Redis expira sozinha no mesmo prazo; gastos, memórias e lembretes ficam);
  * - o texto dos logs de execução sai depois de LOG_CONTENT_HOURS (fica só custo/tempo/modelo);
- * - logs de execução e gravações antigas saem depois de EXECUTION_RETENTION_DAYS.
+ * - logs de execução e gravações antigas saem depois de EXECUTION_RETENTION_DAYS;
+ * - com storage S3 ligado: apaga do bucket o que saiu do banco e leva até 50 arquivos do bytea para o bucket.
  */
 export async function purgeOld(log?: { info: (...a: any[]) => void; error: (...a: any[]) => void }) {
   const hours = config.MESSAGE_RETENTION_HOURS;
@@ -55,9 +57,13 @@ export async function purgeOld(log?: { info: (...a: any[]) => void; error: (...a
   await expireErrands().catch((err) => log?.error({ err }, "falha ao vencer recados"));
   const execs = await query("DELETE FROM executions WHERE started_at < now() - make_interval(days => $1)", [config.EXECUTION_RETENTION_DAYS]);
   const files = await query("DELETE FROM media_files WHERE created_at < now() - make_interval(days => $1)", [config.EXECUTION_RETENTION_DAYS]);
+  // objetos do bucket cujas linhas saíram (agora, em cascata com as execuções, ou quando a pessoa foi apagada)
+  const trashed = await purgeStorageTrash(1000).catch((err) => (log?.error({ err }, "falha ao apagar arquivos do storage"), 0));
+  // storage ligado: leva aos poucos o que ainda está no banco (bytea) para o bucket
+  const movedToStorage = await moveBlobsToStorage(50).catch((err) => (log?.error({ err }, "falha ao mover arquivos para o storage"), 0));
   // lembrete que já passou ou foi cancelado não serve mais para nada
   const rems = await query("DELETE FROM reminders WHERE status IN ('done', 'cancelled') OR (status = 'failed' AND created_at < now() - interval '7 days')");
-  const out = { messages: msgs.rowCount ?? 0, logSteps: scrubbed.rowCount ?? 0, executions: execs.rowCount ?? 0, files: files.rowCount ?? 0, reminders: rems.rowCount ?? 0 };
+  const out = { messages: msgs.rowCount ?? 0, logSteps: scrubbed.rowCount ?? 0, executions: execs.rowCount ?? 0, files: files.rowCount ?? 0, reminders: rems.rowCount ?? 0, trashed, movedToStorage };
   log?.info(out, "limpeza de dados antigos");
   return out;
 }

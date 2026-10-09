@@ -57,6 +57,12 @@ const schema = z.object({
   /** Google Places (lugares perto, com telefone) pela stack; sem ela a busca de lugares usa o OpenStreetMap */
   GOOGLE_MAPS_API_KEY: z.string().default(""),
   N8N_EVENTS_URL: z.string().default(""),
+  // Arquivos (documentos e mídias) num bucket S3 compatível (Cloudflare R2, S3, B2); vazio = ficam no Postgres
+  STORAGE_S3_ENDPOINT: z.string().default(""),
+  STORAGE_S3_BUCKET: z.string().default(""),
+  STORAGE_S3_REGION: z.string().default("auto"),
+  STORAGE_S3_ACCESS_KEY_ID: z.string().default(""),
+  STORAGE_S3_SECRET_ACCESS_KEY: z.string().default(""),
   // automações que cada cliente pode ter ativas no n8n (criadas pelo assistente)
   // Login em navegador novo pede um código no WhatsApp da pessoa (desligue com LOGIN_CODE=false)
   LOGIN_CODE: z

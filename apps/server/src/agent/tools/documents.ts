@@ -1,5 +1,5 @@
 import { config } from "../../config.js";
-import { deleteDocument, getDocument, listDocuments, saveDocument } from "../../documents.js";
+import { deleteDocument, documentInfo, getDocument, listDocuments, saveDocument } from "../../documents.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 /** Pasta de documentos da pessoa: guardar o que ela mandou, achar e devolver quando pedir. */
@@ -58,7 +58,7 @@ export const documentDelete = defineTool<{ id: string; confirmed_by_user?: boole
   description: "Apaga um documento guardado. Pede o \"sim\" da pessoa (o sistema confirma sozinho).",
   parameters: obj({ id: { type: "string" }, ...CONFIRM_PARAM }, ["id"]),
   async run(args, ctx) {
-    const d = await getDocument(args.id, ctx.user.id);
+    const d = await documentInfo(args.id, ctx.user.id);
     if (!d) return { error: "Documento não encontrado" };
     const blocked = await requireConfirmation(args, `apagar o documento ${d.name}`, ctx);
     if (blocked) return blocked;

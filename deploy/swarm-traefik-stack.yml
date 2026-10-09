@@ -34,6 +34,12 @@ x-env: &env
   TAVILY_API_KEY: ""
   # Lugares perto com telefone (Google Places API New). Sem ela usa o OpenStreetMap, grátis.
   GOOGLE_MAPS_API_KEY: ""
+  # Arquivos (documentos e mídias) num bucket S3/R2 em vez do Postgres. Vazio = ficam no banco (docs/operacao.md)
+  STORAGE_S3_ENDPOINT: ""
+  STORAGE_S3_BUCKET: ""
+  STORAGE_S3_REGION: "auto"
+  STORAGE_S3_ACCESS_KEY_ID: ""
+  STORAGE_S3_SECRET_ACCESS_KEY: ""
   # Automações que cada cliente pode ter (criadas pelo assistente no n8n)
   AUTOMATIONS_PER_USER: "5"
   # --- Login no painel: navegador novo recebe código de 6 dígitos no WhatsApp (OWNER_PHONES para o dono) ---
