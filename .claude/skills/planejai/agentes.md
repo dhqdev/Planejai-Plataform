@@ -48,7 +48,7 @@ Cada item tem teste; rode `npm test` depois de mexer em `orchestrator.ts`, `runn
 ## Ritmo das respostas (estilo Instinct)
 - `agent/progress.ts`: mantém o "digitando..." ligado e manda avisos curtos. A frase que o CTO escreve junto de um `ask_*` sai na hora ("deixa eu ver aqui 🔎"); se ele não escrever nada, um aviso de reserva sai após 7s e outro aos 45s (máx. 3 por execução, sem LLM).
 - Resposta junto de `react_to_message`/`save_memory` é entregue sem outra rodada do modelo (pergunta simples = 1 chamada). Não quebre isso ao mexer no runner.
-- A primeira coisa de toda execução é a reação temática instantânea (`agent/reaction.ts`, regex, sem IA): cinema 🍿, gasto 💸, viagem ✈️... O CTO não reage de novo; só troca por ✅ quando conclui uma tarefa. Tema novo = linha nova em THEMES (a ordem importa).
+- A primeira coisa de toda execução é a reação temática instantânea (`agent/reaction.ts`, regex, sem IA): cinema 🍿, gasto 💸, viagem ✈️... O CTO não reage de novo; só troca por ✅ quando conclui uma tarefa. Tema novo = linha nova em THEMES (a ordem importa). Áudio é a exceção: a reação espera a transcrição (`preprocessMedia`) e sai pelo tema do que foi falado; o 🎧 só aparece se a transcrição vier vazia.
 - "valeu", "ok", "kkk" ou só emoji (isAckOnly em `agent/reaction.ts`): a reação responde e o CTO nem é chamado. "ok"/"sim" contam como pergunta respondida se a última fala do assistente terminou com "?".
 - Todo texto que sai (balões, avisos, notifyUser) passa por `humanize()` (`agent/humanize.ts`): sem "-", "•" ou travessão, para soar como gente. Não reintroduza listas com marcador no prompt.
 

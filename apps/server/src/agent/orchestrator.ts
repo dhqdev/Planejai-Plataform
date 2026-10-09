@@ -254,11 +254,16 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     if (lastInbound) channel.markRead(conversation.remote_jid, lastInbound.external_id).catch(() => {});
     // Primeira coisa que a pessoa vê: uma reação com o emoji do tema, na hora e sem IA
     let autoReaction: string | null = null;
-    if (lastInbound && !proactive) {
+    const react = (emoji: string) => {
+      autoReaction = emoji;
+      channel.react(conversation.remote_jid, lastInbound.external_id, emoji).catch(() => {});
+      outbox.reactions.push({ messageId: lastInbound.external_id, emoji });
+    };
+    // áudio: o tema só aparece depois da transcrição, então a reação espera por ela (logo abaixo)
+    const reactAfterAudio = Boolean(lastInbound && !proactive && lastInbound.meta?.kind === "audio");
+    if (lastInbound && !proactive && !reactAfterAudio) {
       const said = pending.filter((m) => m.role === "user").map((m) => m.content ?? "").join(" ");
-      autoReaction = pickReaction(said, lastInbound.meta?.kind);
-      channel.react(conversation.remote_jid, lastInbound.external_id, autoReaction).catch(() => {});
-      outbox.reactions.push({ messageId: lastInbound.external_id, emoji: autoReaction });
+      react(pickReaction(said, lastInbound.meta?.kind));
     }
 
     // Ação sensível esperando o "sim" da pessoa: esta mensagem é a resposta (nunca vira "só reação")
@@ -280,6 +285,10 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
 
     if (!proactive) progress.start();
     await preprocessMedia(pending, channel, tracer, conversation.remote_jid);
+    if (reactAfterAudio) {
+      const said = pending.filter((m) => m.role === "user").map((m) => `${m.content ?? ""} ${m.meta?.transcript ?? ""}`).join(" ");
+      react(pickReaction(said, said.trim() ? "text" : "audio"));
+    }
 
     // Contexto: memória curta no Redis (já interpretada); sem Redis, as mensagens das últimas horas no Postgres
     const pendingIds = new Set(pending.map((p) => p.id));
