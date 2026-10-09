@@ -1,6 +1,6 @@
 import { chatCompletion } from "../llm/openrouter.js";
 import { resolveModel } from "../llm/router.js";
-import type { ChatMessage, ToolSpec } from "../llm/types.js";
+import type { ChatMessage, ChatResult, ToolCall, ToolSpec } from "../llm/types.js";
 import { asPerson } from "../integrations/person.js";
 import { isConnected } from "../integrations/registry.js";
 import { isOwner } from "../ingest.js";
@@ -43,6 +43,49 @@ export async function availableTools(tools: Tool[], user?: { id: string; phone: 
   };
   // integração pessoal conta como conectada só se for a conta desta pessoa
   return user ? asPerson(personOf(user), pick) : pick();
+}
+
+/** Teto de saída quando a resposta veio cortada: uma segunda tentativa com folga (ex.: conteúdo de um PDF longo). */
+export const LONG_OUTPUT_TOKENS = 8000;
+
+const TEXT_CALL = /<tool_call>\s*([\s\S]*?)\s*(?:<\/tool_call>|$)/g;
+
+/**
+ * Alguns modelos (DeepSeek, Qwen) às vezes escrevem a chamada como texto em vez de usar tool_calls:
+ * `<tool_call>{"name":"make_pdf","arguments":{...}}</tool_call>`. Vira chamada de verdade se o JSON estiver
+ * inteiro e a ferramenta existir. `broken` = havia uma chamada em texto que não deu para ler (cortada).
+ */
+export function textToolCalls(content: string | null, known: Set<string>): { calls: ToolCall[]; rest: string; broken: boolean } {
+  const text = content ?? "";
+  if (!text.includes("<tool_call>")) return { calls: [], rest: text, broken: false };
+  const calls: ToolCall[] = [];
+  let broken = false;
+  for (const m of text.matchAll(TEXT_CALL)) {
+    try {
+      const j = JSON.parse(m[1]!);
+      const name = j?.name ?? j?.function?.name;
+      const args = j?.arguments ?? j?.parameters ?? j?.function?.arguments ?? {};
+      if (typeof name !== "string" || !known.has(name)) throw new Error("ferramenta desconhecida");
+      calls.push({ id: `txt${calls.length}_${Date.now().toString(36)}`, type: "function", function: { name, arguments: typeof args === "string" ? args : JSON.stringify(args) } });
+    } catch {
+      broken = true;
+    }
+  }
+  return { calls, rest: text.replace(TEXT_CALL, "").trim(), broken };
+}
+
+/** A resposta foi cortada no meio de uma chamada (JSON de argumentos inválido ou chamada em texto pela metade)? */
+function cutMidCall(res: ChatResult, known: Set<string>) {
+  if (res.finishReason !== "length") return false;
+  const bad = (res.message.tool_calls ?? []).some((c) => {
+    try {
+      JSON.parse(c.function.arguments || "{}");
+      return false;
+    } catch {
+      return true;
+    }
+  });
+  return bad || textToolCalls(res.message.content, known).broken || (!res.message.tool_calls?.length && !(res.message.content ?? "").trim());
 }
 
 export function toSpecs(tools: Tool[]): ToolSpec[] {
@@ -111,6 +154,23 @@ export async function runToolLoop(opts: {
       await llmStep.fail(guard?.expired ? guard.signal.reason : err);
       if (guard?.expired) return { text: "", steps: step, messages, timedOut: true };
       throw err;
+    }
+    // cortada no meio de uma chamada (conteúdo longo, como o texto de um PDF): tenta uma vez com folga de saída
+    if (cutMidCall(res, byName.size ? new Set(byName.keys()) : new Set()) && (choice.maxTokens ?? 0) < LONG_OUTPUT_TOKENS) {
+      try {
+        const again = await chatCompletion(choice, { messages, tools: last ? undefined : specs, signal: guard?.signal, maxTokens: LONG_OUTPUT_TOKENS });
+        res = { ...again, tokensIn: res.tokensIn + again.tokensIn, tokensOut: res.tokensOut + again.tokensOut, costUsd: res.costUsd + again.costUsd };
+      } catch (err) {
+        await llmStep.fail(guard?.expired ? guard.signal.reason : err);
+        if (guard?.expired) return { text: "", steps: step, messages, timedOut: true };
+        throw err;
+      }
+    }
+    // chamada escrita como texto vira chamada de verdade; o texto cru nunca chega à pessoa
+    if (!res.message.tool_calls?.length) {
+      const t = textToolCalls(res.message.content, new Set(byName.keys()));
+      if (t.calls.length && !last) res = { ...res, message: { content: t.rest || null, tool_calls: t.calls } };
+      else if (t.calls.length || t.broken) res = { ...res, message: { content: t.rest } };
     }
     // resposta cortada pelo maxTokens fica marcada no log (dá para medir se o teto está apertado)
     await llmStep.ok(res.finishReason === "length" ? { ...res.message, finish_reason: "length" } : res.message, { model: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costUsd: res.costUsd });

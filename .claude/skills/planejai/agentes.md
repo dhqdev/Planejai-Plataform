@@ -28,6 +28,7 @@ Cada item tem teste; rode `npm test` depois de mexer em `orchestrator.ts`, `runn
 - **Ninguém fica "rodando" para sempre**: `closeOrphanRuns` (job de limpeza) fecha execução que passou do prazo + 10 min, morta com o processo.
 - **Sem mentira de "fiz"**: `unbackedClaim` (`agent/claims.ts`) compara a resposta com as ferramentas que deram certo (`ctx.room.done`); se disser que fez sem ter feito, uma rodada de correção e, se não resolver, resposta honesta (`unit.test.ts`).
 - **Pedido velho não volta**: o CTO ignora pedido antigo já atendido no histórico; especialistas recebem a mídia já descrita, nunca crua.
+- **Saída cortada e chamada em texto**: resposta que bate no `maxTokens` no meio de uma chamada (argumentos JSON inválidos, `<tool_call>` pela metade ou vazia) é refeita uma vez com `LONG_OUTPUT_TOKENS` (8000), como o conteúdo de um PDF longo. Chamada escrita como texto (`<tool_call>{...}</tool_call>`, comum no DeepSeek) vira tool call de verdade por `textToolCalls` (`runner.ts`); o que não dá para ler some do texto e nunca chega à pessoa (`unit.test.ts`, `social.e2e.test.ts`).
 - **Erro passageiro do LLM** só repete a rodada se nenhuma ferramenta com efeito rodou (`sideEffectsDone`), para não lançar nada duas vezes.
 
 ## Confirmação de ação sensível

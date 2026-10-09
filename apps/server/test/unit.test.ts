@@ -249,6 +249,22 @@ describe("imagens simples (make_image)", () => {
   });
 });
 
+describe("chamada escrita como texto", () => {
+  it("vira tool call de verdade e o texto cru some", async () => {
+    const { textToolCalls } = await import("../src/agent/runner.js");
+    const known = new Set(["make_pdf"]);
+    const ok = textToolCalls('Já faço!<tool_call>{"name":"make_pdf","arguments":{"title":"Pai Rico","sections":[{"heading":"Lição 1","text":"a"}]}}</tool_call>', known);
+    expect(ok.calls).toHaveLength(1);
+    expect(ok.calls[0]!.function.name).toBe("make_pdf");
+    expect(JSON.parse(ok.calls[0]!.function.arguments).title).toBe("Pai Rico");
+    expect(ok.rest).toBe("Já faço!");
+    const cut = textToolCalls('<tool_call>{"name":"make_pdf","arguments":{"title":"Pai Rico","sections":[{"heading":"Quem', known);
+    expect(cut).toMatchObject({ calls: [], rest: "", broken: true });
+    expect(textToolCalls('<tool_call>{"name":"apagar_tudo","arguments":{}}</tool_call>', known)).toMatchObject({ calls: [], broken: true });
+    expect(textToolCalls("oi, tudo bem?", known)).toEqual({ calls: [], rest: "oi, tudo bem?", broken: false });
+  });
+});
+
 describe("PDF de várias páginas (make_pdf)", () => {
   it("monta capa, sumário e seções escapando HTML", async () => {
     const { buildPdfHtml, pdfFileName } = await import("../src/pdf.js");
@@ -262,6 +278,7 @@ describe("PDF de várias páginas (make_pdf)", () => {
     expect(html).toContain("<th>A</th>");
     expect(html).toContain('class="hl"');
     expect(buildPdfHtml({ title: "Curto", sections: [{ title: "Só", text: "x" }] })).not.toContain("Sumário");
+    expect(buildPdfHtml({ title: "H", sections: [{ heading: "Com heading", text: "x" } as never] })).toContain("Com heading");
     expect(pdfFileName('Relatório: "maio"/2026')).toBe("Relatório maio 2026.pdf");
   });
 });

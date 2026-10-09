@@ -45,6 +45,11 @@ function fakeOpenRouter(body: any) {
     if (userText.includes("tira o Giovani")) return completion(null, [call("share_screen", { contact: "giovani", screen: "finance", allow: false })]);
     if (userText.includes("mande para o Giovani: oi")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "oi" })]);
     if (userText.includes("Lembrete: mandar pro Giovani")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "Bom dia!" })]);
+    if (userText.includes("faz um pdf do livro")) {
+      // primeira tentativa cortada no teto de saída, com a chamada escrita como texto; com folga sai a chamada inteira
+      if ((body.max_tokens ?? 0) < 8000) return { ...completion('<tool_call>{"name":"make_pdf","arguments":{"title":"Pai Rico","sections":[{"heading":"Quem'), choices: [{ message: { role: "assistant", content: '<tool_call>{"name":"make_pdf","arguments":{"title":"Pai Rico","sections":[{"heading":"Quem' }, finish_reason: "length" }] };
+      return completion('<tool_call>{"name":"make_pdf","arguments":{"title":"Pai Rico","sections":[{"heading":"Quem foi Kiyosaki","text":"Um resumo."}]}}</tool_call>');
+    }
     if (userText.includes("amanhã às 7h manda pro Giovani")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "Bom dia, Gio!", in_minutes: 600 })]);
     if (userText.includes("manda esse look")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "Olha esse look, o que acha?", attach_photo: true })]);
     return completion("ok");
@@ -182,6 +187,13 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     const listed: any = await listRemindersTool.run({}, { user: david, timezone: "America/Sao_Paulo" } as any);
     expect(listed.scheduled_messages[0].to).toContain("Giovani Silva");
     await db.query("UPDATE direct_messages SET status = 'cancelled' WHERE user_id = $1", [david.id]);
+  });
+
+  it.skipIf(!process.env.CHROME_PATH)("pdf longo cortado no teto de saída: tenta de novo com folga e manda o PDF, nunca o texto da chamada", async () => {
+    const ch = await say("faz um pdf do livro pai rico");
+    const sent = ch.sent;
+    expect(sent.some((s) => s.text?.includes("tool_call"))).toBe(false);
+    expect(sent.find((s) => s.type === "image")).toMatchObject({ image: { kind: "document", mimetype: "application/pdf", fileName: "Pai Rico.pdf" } });
   });
 
   it("lembrete que pede para mandar algo a um contato só cria a pendência", async () => {

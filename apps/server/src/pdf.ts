@@ -82,6 +82,8 @@ export function pdfFooter(title: string) {
 export function buildPdfHtml(spec: PdfSpec, today = new Date()) {
   const L = PDF_LIMITS;
   const secs = (spec.sections ?? [])
+    // modelo às vezes chama o título da seção de heading
+    .map((s) => (s && !s.title && (s as { heading?: string }).heading ? { ...s, title: (s as { heading?: string }).heading! } : s))
     .filter((s) => s && s.title)
     .slice(0, L.sections)
     .map((s) => {

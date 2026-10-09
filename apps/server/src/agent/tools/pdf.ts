@@ -31,6 +31,7 @@ export const makePdf = defineTool<PdfSpec>({
     ["title", "sections"],
   ),
   async run(args, ctx) {
+    for (const s of args.sections ?? []) if (s && !s.title && (s as { heading?: string }).heading) s.title = (s as { heading?: string }).heading!;
     if (!args.sections?.some((s) => s?.title && (s.text || s.items?.length || s.table?.rows?.length || s.highlight)))
       return { ok: false, error: "Mande sections com o conteúdo (text, items ou table)." };
     const data = await renderPdf(args);
