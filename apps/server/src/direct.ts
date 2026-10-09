@@ -162,6 +162,12 @@ export async function listDirect(userId: string) {
   return many<DirectMessage>(`SELECT ${COLS} FROM direct_messages WHERE user_id = $1 AND status = 'scheduled' ORDER BY send_at LIMIT 30`, [userId]);
 }
 
+/** Tira da Agenda uma mensagem que já saiu ou falhou (não apaga: a resposta do contato segue voltando). */
+export async function hideDirect(userId: string, id: string) {
+  const r = await one("UPDATE direct_messages SET hidden = true WHERE id::text = $1 AND user_id = $2 AND status IN ('sent', 'failed') RETURNING id", [id, userId]);
+  return r ? { ok: true } : { ok: false, error: "Não achei essa mensagem." };
+}
+
 export async function cancelDirect(userId: string, id: string) {
   const r = await one("UPDATE direct_messages SET status = 'cancelled', media = NULL WHERE id::text = $1 AND user_id = $2 AND status = 'scheduled' RETURNING id", [id, userId]);
   return r ? { ok: true } : { ok: false, error: "Não achei essa mensagem agendada (já saiu ou foi cancelada)." };

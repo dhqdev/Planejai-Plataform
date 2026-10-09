@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { config } from "../../../config.js";
 import { many, one } from "../../../db/pool.js";
-import { attachmentLabel, cancelDirect } from "../../../direct.js";
+import { attachmentLabel, cancelDirect, hideDirect } from "../../../direct.js";
 import { googleApi } from "../../../integrations/google.js";
 import { asPerson } from "../../../integrations/person.js";
 import { isConnected } from "../../../integrations/registry.js";
@@ -116,7 +116,7 @@ export function agendaRoutes(base: FastifyInstance) {
     if (mine) {
       const msgs = await many(
         `SELECT id, name, phone, text, send_at, status, media_kind, media_name FROM direct_messages
-          WHERE user_id = $1 AND status IN ('scheduled', 'sending', 'sent', 'failed') AND send_at >= $2 AND send_at < $3
+          WHERE user_id = $1 AND status IN ('scheduled', 'sending', 'sent', 'failed') AND NOT hidden AND send_at >= $2 AND send_at < $3
             AND (status = 'scheduled' OR created_at < send_at - interval '1 minute')
           ORDER BY send_at LIMIT 200`,
         [uid, from, to],
@@ -131,7 +131,9 @@ export function agendaRoutes(base: FastifyInstance) {
 
   // cancelar uma mensagem avulsa agendada pela agenda (não manda nada)
   base.delete<{ Params: { id: string } }>("/api/direct/:id", async (req, reply) => {
-    const r = await cancelDirect(await self(req.account), req.params.id);
+    const me = await self(req.account);
+    // agendada: cancela (não sai); já enviada ou falhou: só some da agenda
+    const r = (await cancelDirect(me, req.params.id)).ok ? { ok: true } : await hideDirect(me, req.params.id);
     return r.ok ? r : reply.code(404).send({ error: r.error });
   });
 

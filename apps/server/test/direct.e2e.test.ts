@@ -169,6 +169,10 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     expect(sentTexts()).toContain("Oi, aqui é o David, confirmo a mesa para 4 amanhã.");
     expect(sentTexts().at(-1)).toMatch(/Mandei para Restaurante/);
     expect(((await sendDirect(r.id)) as any).ok).toBe(false); // não manda duas vezes
+    // já saiu: excluir só tira da agenda, o status continua 'sent' (a resposta do contato segue voltando)
+    const { hideDirect } = await import("../src/direct.js");
+    expect(await hideDirect(david.id, r.id)).toEqual({ ok: true });
+    expect(await db.one("SELECT status, hidden FROM direct_messages WHERE id = $1", [r.id])).toEqual({ status: "sent", hidden: true });
 
     const r2: any = await createDirect({ user: u, phone: "11 96666-5555", message: "Oi, aqui é o David", sendAt: at, timezone: TZ });
     expect(await cancelDirect(david.id, r2.id)).toEqual({ ok: true });

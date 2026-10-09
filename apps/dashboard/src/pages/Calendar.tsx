@@ -744,12 +744,17 @@ function TagPicker({ tags, tag, color, onChange }: { tags: Tag[]; tag: string; c
 
 const MSG_STATUS: Record<string, string> = { scheduled: "Mensagem agendada", sending: "Enviando", sent: "Mensagem enviada", failed: "Mensagem não enviada" };
 
-/** Mensagem avulsa agendada: para quem, o texto e cancelar enquanto não saiu. */
+/** Mensagem avulsa: para quem, o texto; cancelar enquanto não saiu, excluir da agenda depois que saiu. */
 function MessageDetail({ ev, onClose, onChanged }: { ev: Ev; onClose: () => void; onChanged: () => void }) {
   const s = new Date(ev.start);
   const [busy, setBusy] = useState(false);
+  const scheduled = ev.status === "scheduled";
   const cancel = async () => {
-    const ok = await confirmDialog({ title: "Cancelar esta mensagem?", body: `Ela não será enviada para ${ev.person ?? "a pessoa"}.`, confirmLabel: "Cancelar mensagem", cancelLabel: "Manter", danger: true });
+    const ok = await confirmDialog(
+      scheduled
+        ? { title: "Cancelar esta mensagem?", body: `Ela não será enviada para ${ev.person ?? "a pessoa"}.`, confirmLabel: "Cancelar mensagem", cancelLabel: "Manter", danger: true }
+        : { title: "Excluir da agenda?", body: "A mensagem já saiu; ela só some da agenda. A conversa continua em Recados.", confirmLabel: "Excluir", cancelLabel: "Manter", danger: true },
+    );
     if (!ok) return;
     setBusy(true);
     try {
@@ -757,7 +762,7 @@ function MessageDetail({ ev, onClose, onChanged }: { ev: Ev; onClose: () => void
       onChanged();
     } catch (e) {
       setBusy(false);
-      void alertDialog("Não deu para cancelar", (e as Error).message);
+      void alertDialog(scheduled ? "Não deu para cancelar" : "Não deu para excluir", (e as Error).message);
     }
   };
   return (
@@ -765,7 +770,11 @@ function MessageDetail({ ev, onClose, onChanged }: { ev: Ev; onClose: () => void
       title={MSG_STATUS[ev.status ?? ""] ?? "Mensagem agendada"}
       icon={<Icon name="send" />}
       onClose={onClose}
-      footer={ev.status === "scheduled" ? <button className="btn btn-danger" disabled={busy} onClick={cancel}><Icon name="trash" size={16} /> Cancelar envio</button> : undefined}
+      footer={
+        ev.status === "sending" ? undefined : (
+          <button className="btn btn-danger" disabled={busy} onClick={cancel}><Icon name="trash" size={16} /> {scheduled ? "Cancelar envio" : "Excluir"}</button>
+        )
+      }
     >
       <dl className="kv">
         <dt>Para</dt>
