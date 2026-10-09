@@ -1,0 +1,44 @@
+/* Componentes do React Bits (reactbits.dev), MIT + Commons Clause: aviso em ./LICENSE.md. Classes rb-*.
+   Tudo anima só transform e opacity; com movimento reduzido, nada se move. */
+
+/* ---------- RotatingText ---------- */
+.rb-rot { position: relative; display: inline-flex; overflow: hidden; vertical-align: bottom; padding-bottom: .12em; margin-bottom: -.12em; white-space: nowrap; }
+.rb-rot-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.rb-rot-word { display: inline-flex; }
+.rb-rot-word.out { position: absolute; left: 0; top: 0; }
+.rb-rot-char { display: inline-block; }
+.rb-rot-word.in .rb-rot-char { animation: rb-rot-in .62s cubic-bezier(.34, 1.4, .64, 1) var(--rb-d, 0s) both; }
+.rb-rot-word.out .rb-rot-char { animation: rb-rot-out .38s cubic-bezier(.55, 0, .7, .2) var(--rb-d, 0s) both; }
+@keyframes rb-rot-in { from { transform: translateY(105%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes rb-rot-out { from { transform: none; opacity: 1; } to { transform: translateY(-120%); opacity: 0; } }
+
+/* ---------- LogoLoop ---------- */
+.rb-loop { position: relative; overflow: hidden; --rb-loop-gap: 32px; }
+.rb-loop-track { display: flex; width: max-content; will-change: transform; user-select: none; }
+.rb-loop-list { display: flex; align-items: center; margin: 0; padding: 0; list-style: none; }
+.rb-loop-item { flex: 0 0 auto; margin-right: var(--rb-loop-gap); line-height: 1; }
+.rb-loop--fade::before, .rb-loop--fade::after { content: ""; position: absolute; top: 0; bottom: 0; z-index: 1; width: clamp(24px, 8%, 120px); pointer-events: none; }
+.rb-loop--fade::before { left: 0; background: linear-gradient(to right, var(--rb-loop-fade, #fff), transparent); }
+.rb-loop--fade::after { right: 0; background: linear-gradient(to left, var(--rb-loop-fade, #fff), transparent); }
+
+/* ---------- ClickSpark ---------- */
+.rb-spark { position: relative; display: inline-flex; }
+.rb-spark-canvas { position: absolute; inset: -32px; width: calc(100% + 64px); height: calc(100% + 64px); pointer-events: none; z-index: 2; }
+
+/* ---------- GlareHover (reflexo andando com transform, não background-position) ---------- */
+.rb-glare { position: relative; overflow: hidden; isolation: isolate; }
+.rb-glare::before {
+  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; width: var(--gh-size, 250%); height: var(--gh-size, 250%); left: 50%; top: 50%;
+  background: linear-gradient(var(--gh-angle, -45deg), transparent 40%, var(--gh-rgba, rgba(255, 255, 255, .5)) 50%, transparent 60%);
+  transform: translate(-100%, -100%); transition: transform var(--gh-duration, 650ms) ease;
+}
+.rb-glare:hover::before, .rb-glare:focus-within::before { transform: translate(-50%, -50%) translate(25%, 25%); }
+.rb-glare--once::before { transition: none; }
+.rb-glare--once:hover::before { transition: transform var(--gh-duration, 650ms) ease; }
+@media (hover: none) { .rb-glare::before { display: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .rb-rot-char { animation: none !important; }
+  .rb-rot-word.out { display: none; }
+  .rb-glare::before { display: none; }
+}
