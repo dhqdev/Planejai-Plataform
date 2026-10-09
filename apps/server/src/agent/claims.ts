@@ -18,12 +18,12 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; tools: string[] }[] 
   {
     what: "apagar ou cancelar",
     says: /\b(apaguei|removi|exclu[ií]|deletei|cancelei)\b/i,
-    tools: ["delete_transaction", "cancel_reminder", "document_delete", "forget_memory", "watch_cancel", "watch_update", "automation_manage", "set_budget", "bill_delete", "bill_save"],
+    tools: ["delete_transaction", "cancel_reminder", "document_delete", "forget_memory", "watch_cancel", "watch_update", "direct_cancel", "automation_manage", "set_budget", "bill_delete", "bill_save"],
   },
   {
     what: "agendar lembrete ou evento",
     says: /\b(agendei|marquei|lembrete (criado|marcado|agendado)|vou te lembrar|te lembro)\b/i,
-    tools: ["schedule_reminder", "calendar_create_event", "reschedule_reminder", "watch_create", "watch_update", "automation_save", "bill_save", "errand_start", "errand_done"],
+    tools: ["schedule_reminder", "calendar_create_event", "reschedule_reminder", "watch_create", "watch_update", "automation_save", "bill_save", "errand_start", "errand_done", "send_whatsapp"],
   },
   {
     what: "guardar documento ou nota",
@@ -33,7 +33,7 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; tools: string[] }[] 
   {
     what: "enviar mensagem",
     says: /\b(mandei|enviei|encaminhei)\b/i,
-    tools: ["send_to_contact", "make_audio", "gmail_send", "slack_send_message", "errand_start", "errand_continue", "invite_person", "contact_owner"],
+    tools: ["send_to_contact", "send_whatsapp", "make_audio", "gmail_send", "slack_send_message", "errand_start", "errand_continue", "invite_person", "contact_owner"],
   },
   {
     what: "avisar o responsável",

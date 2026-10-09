@@ -9,7 +9,8 @@ export const invitePerson = defineTool<{ name: string; phone: string; message_af
   name: "invite_person",
   description:
     "Convida alguém para o Planejai pelo WhatsApp; quem aceita vira contato (quem já usa recebe só o pedido de contato). " +
-    "Só sai depois do \"sim\" da pessoa. Recado para o convidado vai em message_after_accept e é entregue no aceite.",
+    "Só sai depois do \"sim\" da pessoa. Recado para o convidado vai em message_after_accept e é entregue no aceite. " +
+    "Só quando ela quer chamar a pessoa para o Planejai; mensagem comum é send_whatsapp.",
   parameters: obj(
     {
       name: { type: "string" },
@@ -83,7 +84,7 @@ export const sendToContact = defineTool<{ contact: string; message: string; atta
       return {
         error: `${args.contact} não é contato no Planejai.`,
         contacts: all.map((c) => c.name),
-        hint: "Peça o número e use invite_person com o recado em message_after_accept (se a pessoa já usa o Planejai, vira contato sem convite novo).",
+        hint: "Para só mandar a mensagem, peça o número e use send_whatsapp (sem convite). invite_person só se ela quiser chamar a pessoa para o Planejai.",
       };
     }
     if (found.length > 1) return { error: "Mais de um contato com esse nome", options: found.map((c) => c.name) };

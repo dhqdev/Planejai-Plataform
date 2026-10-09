@@ -44,6 +44,9 @@ export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; re
   // resposta de um estabelecimento com quem o assistente está falando por alguém (recado): não vira cliente
   const { handleErrandInbound } = await import("./errands.js");
   if (await handleErrandInbound(msg)) return { queued: false, reason: "recado" };
+  // resposta a uma mensagem avulsa (send_whatsapp): volta para quem mandou, sem cadastro
+  const { handleDirectReply } = await import("./direct.js");
+  if (await handleDirectReply(msg)) return { queued: false, reason: "resposta de mensagem avulsa" };
   const user = await upsertUser(msg.phone, msg.pushName);
   const conv = await upsertConversation(user.id, msg.channel, msg.remoteJid);
 

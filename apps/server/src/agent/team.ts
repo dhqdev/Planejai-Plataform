@@ -10,6 +10,7 @@ import * as documents from "./tools/documents.js";
 import * as n8n from "./tools/n8n.js";
 import * as prod from "./tools/productivity.js";
 import * as errands from "./tools/errands.js";
+import * as direct from "./tools/direct.js";
 import * as support from "./tools/support.js";
 import * as places from "./tools/places.js";
 import * as research from "./tools/research.js";
@@ -239,6 +240,9 @@ export const CTO_TOOLS: Tool[] = [
   agenda.scheduleReminder,
   agenda.calendarCreateEvent,
   social.sendToContact,
+  direct.sendWhatsapp,
+  direct.directList,
+  direct.directCancel,
   social.listContactsTool,
   social.invitePerson,
   social.shareScreen,

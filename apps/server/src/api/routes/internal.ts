@@ -40,7 +40,9 @@ async function findUser(q: { phone?: string; user_id?: string; email?: string })
 const bad = (reply: FastifyReply, error: string, code = 400) => reply.code(code).send({ ok: false, error });
 
 export interface OutboundJob {
-  type: "send" | "agent";
+  type: "send" | "agent" | "direct";
+  /** mensagem avulsa agendada (direct.ts) */
+  directId?: string;
   userId?: string | null;
   phone?: string | null;
   channel?: "whatsapp" | "telegram" | "auto";
@@ -236,6 +238,11 @@ export async function runOutboundJob(job: OutboundJob) {
   const { conversationOf, jidFor, outboundChannel } = await import("../../social.js");
   const { channels } = await import("../../channels/index.js");
   const { pushShort } = await import("../../shortmem.js");
+  if (job.type === "direct") {
+    const { sendDirect } = await import("../../direct.js");
+    await sendDirect(job.directId!, { notify: true });
+    return;
+  }
   if (job.type === "agent") {
     const u = await one("SELECT * FROM users WHERE id = $1", [job.userId]);
     if (!u) return;
