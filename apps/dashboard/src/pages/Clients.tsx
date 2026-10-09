@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ago, api, brl, phoneFmt, usd } from "../api";
-import { AgentTag, CopyField, Empty, ErrorBox, Loading, Modal, PageHead, Status, confirmDialog } from "../components";
+import { AgentTag, CopyField, Empty, ErrorBox, Loading, Modal, PageHead, Status, alertDialog, confirmDialog } from "../components";
 import { AgentFace, CORE_FACES } from "../faces";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
@@ -168,6 +168,36 @@ function ClientDetail({ client, onClose }: { client: any; onClose: () => void })
         <span className="spacer" />
         {status !== "active" && <button className="btn btn-sm btn-primary" onClick={() => patch({ status: "active" })}>Liberar</button>}
         {status !== "blocked" && <button className="btn btn-sm btn-danger" onClick={() => patch({ status: "blocked" })}>Bloquear</button>}
+        <button
+          className="btn btn-sm"
+          title="O assistente esquece a conversa com esta pessoa e começa do zero; a conta e os dados ficam"
+          onClick={async () => {
+            let deep = false;
+            const ok = await confirmDialog({
+              title: "Zerar o contexto?",
+              body: (
+                <>
+                  <p style={{ margin: "0 0 10px" }}>
+                    O assistente esquece a conversa com {client.full_name || client.name || "esta pessoa"}: memória curta (Redis), resumo, o que esperava o "sim" e
+                    arquivos recentes. Cadastro, gastos, lembretes, documentos e contatos ficam.
+                  </p>
+                  <label className="row" style={{ gap: 8, fontSize: 14 }}>
+                    <input type="checkbox" onChange={(e) => (deep = e.target.checked)} />
+                    Apagar também o que ele aprendeu (memórias e jeito de falar)
+                  </label>
+                </>
+              ),
+              confirmLabel: "Zerar",
+              danger: true,
+            });
+            if (!ok) return;
+            const r = await api(`/api/clients/${client.id}/reset-context`, { method: "POST", json: { memories: deep } });
+            void memories.reload();
+            await alertDialog("Contexto zerado", `A próxima conversa começa do zero${r.memories ? `, sem as ${r.memories} memórias` : ""}.`);
+          }}
+        >
+          Zerar contexto
+        </button>
         <button
           className="btn btn-sm btn-danger"
           title="Pedido de exclusão (LGPD): apaga a pessoa e tudo dela"

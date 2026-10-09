@@ -2,7 +2,7 @@ import { deleteUserAutomations } from "./agent/tools/automations.js";
 import type { Channel } from "./channels/types.js";
 import { pool, one, query, many } from "./db/pool.js";
 import { isOwner, phoneVariants } from "./ingest.js";
-import { clearShort } from "./shortmem.js";
+import { clearConversationCache, clearShort } from "./shortmem.js";
 import { purgeStorageTrash } from "./storage.js";
 
 /**
@@ -34,6 +34,36 @@ export async function eraseUserData(userId: string): Promise<{ ok: boolean }> {
   // documentos e mídias no bucket (o gatilho anotou em storage_trash); o que falhar sai na limpeza de hora em hora
   await purgeStorageTrash(1000).catch(() => {});
   return { ok: true };
+}
+
+/**
+ * "Zerar contexto" (aba Clientes): o assistente esquece a conversa com a pessoa e começa do zero, sem apagar a conta.
+ * Sai: memória curta no Redis, mensagens já respondidas e o resumo da conversa, o que esperava o "sim" e o cache da conversa.
+ * Com memories=true sai também o que ele aprendeu dela (memórias, jeito de falar e notas por agente).
+ * Ficam: cadastro, gastos, lembretes, agenda, documentos, contatos e mensagens ainda não respondidas.
+ */
+export async function resetContext(userId: string, opts: { memories?: boolean } = {}) {
+  const user = await one("SELECT id FROM users WHERE id = $1", [userId]);
+  if (!user) return { ok: false as const };
+  const convs = await many<{ id: string }>("SELECT id FROM conversations WHERE user_id = $1", [userId]);
+  const ids = convs.map((c) => c.id);
+  const msgs = await query("DELETE FROM messages WHERE conversation_id = ANY($1) AND processed = true", [ids]);
+  await query("UPDATE conversations SET summary = NULL WHERE id = ANY($1)", [ids]);
+  await query("UPDATE pending_actions SET status = 'expired', resolved_at = now() WHERE conversation_id = ANY($1) AND status = 'pending'", [ids]);
+  let cache = 0;
+  for (const id of ids) {
+    await clearShort(id);
+    cache += await clearConversationCache(id);
+  }
+  let memories = 0;
+  if (opts.memories) {
+    memories = (await query("DELETE FROM memories WHERE user_id = $1", [userId])).rowCount ?? 0;
+    await query("UPDATE users SET style_notes = NULL WHERE id = $1", [userId]);
+    // a nota que a própria pessoa escreveu para um agente (user_note) é dela, não aprendizado: fica
+    await query("UPDATE agent_notes SET note = NULL WHERE user_id = $1", [userId]);
+    await query("DELETE FROM agent_notes WHERE user_id = $1 AND note IS NULL AND user_note IS NULL", [userId]);
+  }
+  return { ok: true as const, conversations: ids.length, messages: msgs.rowCount ?? 0, cache, memories };
 }
 
 const ASK = /^(por favor[, ]+)?(apag(ue|ar|a)|exclu(a|ir)|delet(e|ar))\s+(todos\s+)?(os\s+)?meus\s+dados\b/;

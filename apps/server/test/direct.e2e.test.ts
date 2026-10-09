@@ -178,4 +178,27 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     // o próprio número não
     expect(((await createDirect({ user: u, phone: david.phone, message: "oi", timezone: TZ })) as any).ok).toBe(false);
   });
+  it("zerar contexto: esquece a conversa e, se pedir, o que aprendeu; a conta e os dados ficam", async () => {
+    const { pushShort, recentShort, cacheSet, cacheGet } = await import("../src/shortmem.js");
+    const { resetContext } = await import("../src/privacy.js");
+    await pushShort(conv, [{ id: 1, role: "user", text: "lembra que eu gosto de cavalo", ts: Date.now() }]);
+    await cacheSet(`recent-media:${conv}`, { base64: "eA==", mimetype: "image/png" }, 600);
+    await db.query("UPDATE conversations SET summary = 'conversa antiga' WHERE id = $1", [conv]);
+    await db.query("INSERT INTO memories (user_id, content) VALUES ($1, 'Gosta de cavalo')", [david.id]);
+    await db.query("UPDATE users SET style_notes = 'curto' WHERE id = $1", [david.id]);
+    await db.query("INSERT INTO agent_notes (user_id, agent, note, user_note) VALUES ($1, 'pesquisador', 'aprendido', 'minha nota'), ($1, 'financas', 'aprendido', NULL)", [david.id]);
+
+    expect(await resetContext(david.id)).toMatchObject({ ok: true, conversations: 1, memories: 0 });
+    expect((await recentShort(conv, 10)) ?? []).toEqual([]);
+    expect(await cacheGet(`recent-media:${conv}`)).toBeNull();
+    expect(await db.one("SELECT summary FROM conversations WHERE id = $1", [conv])).toEqual({ summary: null });
+    expect(await db.one("SELECT COUNT(*)::int AS n FROM memories WHERE user_id = $1", [david.id])).toEqual({ n: 1 });
+
+    expect(await resetContext(david.id, { memories: true })).toMatchObject({ ok: true, memories: 1 });
+    expect(await db.one("SELECT style_notes FROM users WHERE id = $1", [david.id])).toEqual({ style_notes: null });
+    // a nota que a própria pessoa escreveu fica
+    expect(await db.many("SELECT agent, note, user_note FROM agent_notes WHERE user_id = $1", [david.id])).toEqual([{ agent: "pesquisador", note: null, user_note: "minha nota" }]);
+    // dados dela ficam
+    expect((await db.one("SELECT COUNT(*)::int AS n FROM direct_messages WHERE user_id = $1", [david.id])).n).toBeGreaterThan(0);
+  });
 });

@@ -203,6 +203,24 @@ export async function clearShort(conversationId: string) {
   await r.del(key(conversationId)).catch(() => {});
 }
 
+/** Apaga do cache tudo que é desta conversa (mídia recente, arquivo esperando o "sim"...). Devolve quantas chaves saíram. */
+export async function clearConversationCache(conversationId: string) {
+  const r = cacheRedis();
+  if (!r || !/^[0-9a-f-]{36}$/i.test(conversationId)) return 0;
+  let n = 0;
+  try {
+    let cursor = "0";
+    do {
+      const [next, keys] = await r.scan(cursor, "MATCH", `${CACHE_PREFIX}*${conversationId}*`, "COUNT", 500);
+      cursor = next;
+      if (keys.length) n += await r.del(...keys);
+    } while (cursor !== "0");
+  } catch {
+    // cache é descartável: o que sobrar vence sozinho
+  }
+  return n;
+}
+
 export async function redisInfo(): Promise<{ enabled: boolean; ok: boolean; keys?: number; memory?: string }> {
   const r = redis();
   if (!r) return { enabled: shortMemoryEnabled(), ok: false };

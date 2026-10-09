@@ -5,7 +5,7 @@ import { many, one, query } from "../../../db/pool.js";
 import { emitEvent } from "../../../events.js";
 import { phoneVariants } from "../../../ingest.js";
 import { withOutfits } from "../../../mascot.js";
-import { eraseUserData } from "../../../privacy.js";
+import { eraseUserData, resetContext } from "../../../privacy.js";
 import { getSettings } from "../../../settings.js";
 import { inviteLink } from "../../../social.js";
 import { getTabs, saveTabs } from "../../../tabs.js";
@@ -64,6 +64,14 @@ export function clientRoutes(api: FastifyInstance) {
       [req.params.id, ["active", "pending", "blocked"].includes(req.body.status ?? "") ? req.body.status : null, req.body.full_name ?? null, req.body.email ?? null],
     ),
   );
+
+  // Zerar contexto: o assistente esquece a conversa (e, se pedir, o que aprendeu); a conta e os dados ficam
+  api.post<{ Params: { id: string }; Body: { memories?: boolean } }>("/api/clients/:id/reset-context", async (req, reply) => {
+    if (!isUuid(req.params.id)) return reply.code(404).send({ error: "não encontrado" });
+    const r = await resetContext(req.params.id, { memories: req.body?.memories === true });
+    if (!r.ok) return reply.code(404).send({ error: "não encontrado" });
+    return r;
+  });
 
   // LGPD: apaga a pessoa e tudo dela (pedido de exclusão que chegou por outro meio)
   api.delete<{ Params: { id: string } }>("/api/clients/:id", async (req, reply) => {
