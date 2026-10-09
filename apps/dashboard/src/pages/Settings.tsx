@@ -117,6 +117,82 @@ function BillingSection({ form, setForm }: { form: any; setForm: (f: any) => voi
   );
 }
 
+/**
+ * Compras pelo assistente: ligar, os três jeitos de pagar, taxa e limites. Valores em centavos no servidor, em reais aqui.
+ * Tudo desligado por padrão; o Pix direto não mexe em dinheiro e é o jeito de começar.
+ */
+function PurchasesSection({ form, setForm }: { form: any; setForm: (f: any) => void }) {
+  const { data } = useApi<any>("/api/compras/admin");
+  const sw = (key: string, title: string, desc: ReactNode) => (
+    <label className="set-switch">
+      <input type="checkbox" checked={!!form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.checked })} />
+      <span>
+        <strong>{title}</strong>
+        <small>{desc}</small>
+      </span>
+    </label>
+  );
+  const money = (key: string, label: string, help: string) => (
+    <div className="field">
+      <label>{label}</label>
+      <input
+        className="input"
+        type="number"
+        inputMode="decimal"
+        step={0.01}
+        min={0}
+        value={form[key] === "" || form[key] == null ? "" : Number(form[key]) / 100}
+        onChange={(e) => setForm({ ...form, [key]: e.target.value === "" ? "" : Math.round(Number(e.target.value) * 100) })}
+      />
+      <div className="help">{help}</div>
+    </div>
+  );
+  const on = !!form.purchasesEnabled;
+  const asaasTxt = data?.asaas === "produção" ? "Asaas conectado (produção)." : data?.asaas === "sandbox" ? "Asaas em sandbox: nenhum dinheiro de verdade se move." : "Asaas não conectado: só o Pix direto funciona.";
+  return (
+    <Section id="compras" icon="shop" title="Compras pelo assistente" desc="O agente Compras entra na conta da pessoa na loja, monta o carrinho e chega no Pix do checkout. Nada é pago sem o sim dela, e o valor sai do próprio código Pix, nunca do modelo.">
+      {sw("purchasesEnabled", "Ligar compras", <>A tela Compras aparece para todo mundo e o agente entra no time. {asaasTxt} Veja como funciona em <a href="/compras">Compras</a>.</>)}
+      {on && (
+        <>
+          <h4 className="set-sub">Jeitos de pagar</h4>
+          {sw("purchasePix", "Pix direto", "O agente manda o Pix da loja e a pessoa paga do banco dela. O dinheiro nunca passa por você. Sem taxa.")}
+          {sw("purchaseCard", "Cartão por compra", "Cobra no cartão da pessoa pelo Asaas e paga o Pix da loja da sua conta. O cartão cai em cerca de 30 dias: precisa de saldo no Asaas ou antecipação. Falhou depois de cobrar, estorna sozinho.")}
+          {sw("purchaseWallet", "Saldo para compras", "A pessoa carrega por Pix e o assistente gasta dele. É dinheiro de cliente guardado na sua conta: fale com um contador ou advogado antes de ligar.")}
+          {sw("purchaseCardNeedsPlan", "Cartão só para quem já pagou um plano", "Menos risco de contestação com gente nova.")}
+          <h4 className="set-sub">Taxa e limites</h4>
+          <div className="set-fields">
+            <div className="field">
+              <label>Taxa de serviço (%)</label>
+              <input className="input" type="number" inputMode="decimal" step={0.5} min={0} max={30} value={form.purchaseFeePercent ?? ""} onChange={(e) => setForm({ ...form, purchaseFeePercent: e.target.value === "" ? "" : Number(e.target.value) })} />
+              <div className="help">No cartão e no saldo. Precisa cobrir a taxa do cartão no Asaas (e a antecipação, se usar).</div>
+            </div>
+            {money("purchaseFeeMinCents", "Taxa mínima (R$)", "Por compra no cartão ou no saldo.")}
+            {money("purchaseMaxCents", "Limite por compra (R$)", "Valor da loja, com frete.")}
+            {money("purchaseMonthMaxCents", "Limite por pessoa em 30 dias (R$)", "Somando todas as compras que não falharam.")}
+            {money("purchaseWalletMaxCents", "Saldo máximo por pessoa (R$)", "Recarga que passaria disso é recusada.")}
+          </div>
+          {(form.purchaseCard || form.purchaseWallet) && (
+            <div className="field">
+              <label>Validação de saque no Asaas</label>
+              <CopyField value={`${location.origin}/webhooks/asaas/saque`} />
+              <div className="help">Asaas &gt; Integrações &gt; Mecanismos de segurança &gt; Validação de saque via webhook, com o mesmo token do webhook de cobranças. Assim só sai da sua conta o Pix de uma compra aprovada, com o valor exato. Ligue só se essa chave do Asaas for usada apenas pelo Planejai.</div>
+            </div>
+          )}
+          {data && (
+            <p className="bill-counts">
+              <span><strong>{data.month?.paid ?? 0}</strong> compras pagas no mês</span>
+              <span><strong>{brl((data.month?.through_asaas ?? 0) / 100)}</strong> pelo Asaas</span>
+              <span><strong>{brl((data.month?.fees ?? 0) / 100)}</strong> de taxas</span>
+              <span><strong>{brl((data.wallets?.balance ?? 0) / 100)}</strong> em saldo de clientes</span>
+              {data.month?.failed > 0 && <span><strong>{data.month.failed}</strong> não concluídas</span>}
+            </p>
+          )}
+        </>
+      )}
+    </Section>
+  );
+}
+
 /** Uma área das configurações: título e explicação curtos, campos embaixo. */
 function Section({ id, icon, title, desc, children }: { id: string; icon: string; title: string; desc: string; children: ReactNode }) {
   return (
@@ -137,6 +213,7 @@ const SECTIONS = [
   { id: "assistente", icon: "sparkle", label: "Assistente" },
   { id: "travas", icon: "shield", label: "Travas de segurança" },
   { id: "graos", icon: "card", label: "Grãos e planos" },
+  { id: "compras", icon: "shop", label: "Compras" },
   { id: "dados", icon: "file", label: "Dados e LGPD" },
   { id: "canal", icon: "phone", label: "WhatsApp e acesso" },
 ];
@@ -247,6 +324,8 @@ export function SettingsPage() {
           </Section>
 
           <BillingSection form={form} setForm={setForm} />
+
+          <PurchasesSection form={form} setForm={setForm} />
 
           <Section id="dados" icon="file" title="Dados e LGPD" desc="Quem é o responsável pelos dados. Aparece em Termos e privacidade (/privacidade): a LGPD pede que o cliente saiba quem trata os dados dele e por onde falar.">
             <div className="set-fields">

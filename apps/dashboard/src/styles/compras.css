@@ -1,0 +1,161 @@
+/* Como funcionam as compras (prefixo cf-): fluxo animado por forma de pagamento. Base preto e branco; o roxo marca só o dinheiro andando, o passo atual e o nó que recebe. Vira coluna quando o cartão fica estreito (celular). */
+.cf { display: grid; gap: 0; }
+.cf-tabs { margin-bottom: 12px; }
+.cf-tabs button { display: inline-flex; align-items: center; gap: 6px; }
+
+.cf-card { padding: 16px; container-type: inline-size; }
+
+/* posições: --pa sai do nó de origem, --pb chega no destino (centro da coluna/linha) */
+.cf-stage {
+  position: relative;
+  --pa: calc((var(--a) + 0.5) / var(--n) * 100%);
+  --pb: calc((var(--b) + 0.5) / var(--n) * 100%);
+}
+.cf-nodes { list-style: none; margin: 0; padding: 40px 0 0; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
+.cf-node { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; min-width: 0; }
+.cf-node-ico {
+  position: relative; z-index: 1; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--panel); border: 1px solid var(--border-2); color: var(--muted);
+  transition: color 0.25s, border-color 0.25s, background 0.25s;
+}
+.cf-node-label { font-size: 12.5px; color: var(--muted); line-height: 1.25; overflow-wrap: anywhere; transition: color 0.25s; }
+.cf-node.is-from .cf-node-ico { color: var(--text); border-color: var(--ink); }
+.cf-node.is-to .cf-node-ico { color: var(--violet); border-color: var(--violet); background: var(--violet-soft); animation: cf-ping 1.2s ease-out 1s 1 both; }
+.cf-node.is-from .cf-node-label, .cf-node.is-to .cf-node-label { color: var(--text); font-weight: 600; }
+
+.cf-line, .cf-seg { position: absolute; height: 2px; top: 63px; border-radius: 2px; }
+.cf-line { left: calc(50% / var(--n)); right: calc(50% / var(--n)); background: var(--border); }
+.cf-seg {
+  left: calc((var(--lo) + 0.5) / var(--n) * 100%); width: calc((var(--hi) - var(--lo)) / var(--n) * 100%);
+  background: color-mix(in srgb, var(--violet) 55%, transparent); animation: cf-fade 0.4s ease-out both;
+}
+
+/* o que viaja: balão (mensagem) ou moeda (dinheiro), numa faixa acima dos nós */
+.cf-trip {
+  position: absolute; z-index: 2; top: 18px; left: var(--pb); transform: translate(-50%, -50%);
+  display: inline-flex; align-items: center; gap: 6px; max-width: min(46%, 220px); padding: 4px 10px 4px 6px;
+  font-size: 12px; font-weight: 600; line-height: 1.2; white-space: nowrap; box-shadow: var(--shadow-lg);
+  animation: cf-x 1.4s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+.cf-chip { overflow: hidden; text-overflow: ellipsis; }
+.cf-msg { background: var(--panel); color: var(--text); border: 1px solid var(--border-2); border-radius: 12px 12px 12px 4px; padding-left: 8px; }
+.cf-msg .ico { color: var(--muted); flex-shrink: 0; }
+.cf-money { background: var(--violet); color: var(--on-brand); border-radius: 999px; }
+.cf-coin {
+  flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 9px; font-weight: 700;
+  background: color-mix(in srgb, var(--on-brand) 22%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-brand) 45%, transparent);
+}
+
+.cf-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.cf-caption { flex: 1 1 260px; margin: 0; min-height: 3.6em; display: grid; gap: 3px; }
+.cf-count { font-size: 11.5px; font-weight: 600; color: var(--violet); letter-spacing: 0.02em; }
+.cf-caption-text { font-size: 14px; line-height: 1.45; animation: cf-rise 0.35s ease-out both; }
+.cf-controls { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.cf-dots { display: flex; align-items: center; gap: 4px; margin-right: 6px; }
+.cf-dots span { width: 6px; height: 6px; border-radius: 999px; background: var(--border-2); transition: width 0.25s, background 0.25s; }
+.cf-dots span.done { background: var(--muted); }
+.cf-dots span.on { width: 16px; background: var(--violet); }
+
+/* quadro do dono / do cliente e o resumo das regras */
+.cf-box { margin-top: 12px; padding: 14px 16px; border-radius: var(--radius); background: var(--panel-2); border: 1px solid var(--border); }
+.cf-box h4 { margin: 0 0 10px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+.cf-box h4 .ico { color: var(--violet); }
+.cf-box ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+.cf-box li { display: flex; gap: 10px; font-size: 13.5px; line-height: 1.45; }
+.cf-box li > .ico { flex-shrink: 0; margin-top: 2px; color: var(--muted); }
+.cf-box code { font-family: var(--mono); font-size: 12px; padding: 1px 5px; border-radius: 6px; background: var(--panel); border: 1px solid var(--border); overflow-wrap: anywhere; }
+.cf-link { display: inline-flex; align-items: center; gap: 4px; margin-top: 12px; font-size: 13.5px; font-weight: 600; color: var(--text); text-decoration: none; }
+.cf-link:hover { text-decoration: underline; }
+
+/* estreito (celular): os nós viram coluna, a faixa do que viaja fica à direita */
+@container (max-width: 520px) {
+  .cf-nodes { padding: 0; grid-template-columns: 1fr; grid-template-rows: repeat(var(--n), 60px); }
+  .cf-node { flex-direction: row; justify-content: flex-start; gap: 12px; text-align: left; padding-left: 4px; }
+  .cf-node-ico { width: 44px; height: 44px; }
+  .cf-node-label { font-size: 13.5px; max-width: 46%; }
+  .cf-line, .cf-seg { width: 2px; height: auto; left: 25px; }
+  .cf-line { top: calc(50% / var(--n)); bottom: calc(50% / var(--n)); right: auto; }
+  .cf-seg { top: calc((var(--lo) + 0.5) / var(--n) * 100%); height: calc((var(--hi) - var(--lo)) / var(--n) * 100%); }
+  .cf-trip { left: auto; right: 0; top: var(--pb); transform: translateY(-50%); max-width: 48%; animation-name: cf-y; }
+  .cf-chip { white-space: normal; }
+}
+
+@keyframes cf-x { 0% { left: var(--pa); opacity: 0; } 18% { opacity: 1; } 100% { left: var(--pb); opacity: 1; } }
+@keyframes cf-y { 0% { top: var(--pa); opacity: 0; } 18% { opacity: 1; } 100% { top: var(--pb); opacity: 1; } }
+@keyframes cf-fade { from { opacity: 0; } }
+@keyframes cf-rise { from { opacity: 0; transform: translateY(4px); } }
+@keyframes cf-ping {
+  from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--violet) 40%, transparent); }
+  to { box-shadow: 0 0 0 12px color-mix(in srgb, var(--violet) 0%, transparent); }
+}
+
+/* sem viagem: o balão já aparece no destino e nada pulsa */
+@media (prefers-reduced-motion: reduce) {
+  .cf-trip, .cf-seg, .cf-caption-text, .cf-node.is-to .cf-node-ico { animation: none; }
+  .cf-node-ico, .cf-node-label, .cf-dots span { transition: none; }
+}
+
+/* Tela Compras (prefixo cp-): o que falta, a explicação, lojas, dados, cartão, saldo e histórico. */
+.cp-page { display: grid; gap: 20px; }
+.cp-page h2 { font-size: 17px; margin: 0; letter-spacing: -0.01em; }
+.cp-note { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.cp-small { font-size: 13px; line-height: 1.5; margin: 6px 0 0; }
+.cp-h { display: flex; align-items: center; gap: 8px; font-size: 15px; margin: 0 0 4px; }
+.cp-ready-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cp-steps { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.cp-steps li { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.cp-steps li.done { color: var(--muted); }
+.cp-steps a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.cp-check { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border-2); display: grid; place-items: center; flex: none; }
+.cp-steps li.done .cp-check { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.cp-how { display: grid; gap: 12px; }
+.cp-how-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.cp-wide { grid-column: 1 / -1; }
+.cp-stores { list-style: none; margin: 12px 0 0; padding: 0; display: grid; }
+.cp-stores li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.cp-stores li:first-child { border-top: 0; }
+.cp-stores li > span:first-child { display: grid; }
+.cp-stores small, .cp-list small { color: var(--muted); font-size: 12.5px; }
+.cp-row-actions { display: flex; gap: 6px; }
+.cp-accept { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+.cp-agree { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer; }
+.cp-agree input { margin-top: 3px; accent-color: var(--violet); }
+.cp-ok { display: inline-flex; align-items: center; gap: 6px; color: var(--ok); font-size: 13px; margin: 12px 0 0; }
+.cp-err { color: var(--err); font-size: 13px; }
+.cp-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 14px; margin-top: 14px; }
+.cp-form .field { margin: 0; }
+.cp-span2 { grid-column: span 2; }
+.cp-span-all { grid-column: 1 / -1; }
+.cp-form-foot { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 6px; }
+.cp-form.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); text-align: left; }
+.cp-card-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; font-size: 14px; }
+.cp-balance { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; margin: 8px 0 0; font-variant-numeric: tabular-nums; }
+.cp-topup { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.cp-topup .input { max-width: 120px; }
+.cp-prefix { color: var(--muted); font-size: 14px; }
+.cp-ledger, .cp-list { list-style: none; margin: 12px 0 0; padding: 0; }
+.cp-ledger li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 13px; border-top: 1px solid var(--border); }
+.cp-ledger .pos { color: var(--ok); font-variant-numeric: tabular-nums; }
+.cp-ledger .neg { font-variant-numeric: tabular-nums; }
+.cp-list li { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--border); }
+.cp-list li:first-child { border-top: 0; }
+.cp-list-main { display: grid; gap: 2px; min-width: 0; }
+.cp-list-main a { color: var(--text); }
+.cp-list-side { display: flex; align-items: center; gap: 10px; flex: none; font-variant-numeric: tabular-nums; }
+.cp-live { display: grid; place-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-top: 12px; }
+.cp-live img { display: block; width: 100%; max-width: 360px; height: auto; cursor: pointer; }
+.cp-live-wait { padding: 120px 16px; color: var(--muted); font-size: 14px; }
+.cp-type { display: flex; gap: 8px; margin-top: 12px; }
+.cp-type .input { flex: 1; }
+.cp-keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.welcome-shop { max-width: 560px; margin: 0 auto; }
+.welcome-shop .cp-agree { justify-content: center; margin: 8px 0 4px; }
+
+@media (max-width: 760px) {
+  .cp-grid { grid-template-columns: 1fr; }
+  .cp-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cp-list li { flex-direction: column; gap: 8px; }
+  .cp-list-side { flex-wrap: wrap; }
+  .cp-how-head .tabs { width: 100%; }
+}

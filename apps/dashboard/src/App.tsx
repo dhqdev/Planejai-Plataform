@@ -23,6 +23,7 @@ const load = {
   billing: () => import("./pages/Billing"),
   calendar: () => import("./pages/Calendar"),
   clients: () => import("./pages/Clients"),
+  compras: () => import("./pages/Compras"),
   dashboard: () => import("./pages/Dashboard"),
   documents: () => import("./pages/Documents"),
   errands: () => import("./pages/Errands"),
@@ -64,6 +65,8 @@ function PageUnavailable() {
 const AgentsPage = page(() => load.agents().then((m) => m.AgentsPage));
 const BillingPage = page(() => load.billing().then((m) => m.BillingPage));
 const ClientsPage = page(() => load.clients().then((m) => m.ClientsPage));
+const ComprasPage = page(() => load.compras().then((m) => m.ComprasPage));
+const PurchaseTermsPage = page(() => import("./pages/PurchaseTerms").then((m) => m.PurchaseTermsPage));
 const DashboardPage = page(() => load.dashboard().then((m) => m.DashboardPage));
 const ExecutionDetailPage = page(() => load.executions().then((m) => m.ExecutionDetailPage));
 const ExecutionsPage = page(() => load.executions().then((m) => m.ExecutionsPage));
@@ -110,6 +113,7 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/settings": load.settings,
   "/profile": load.profile,
   "/plano": load.billing,
+  "/compras": load.compras,
   "/time": load.team,
 };
 function preload(to: string) {
@@ -170,6 +174,7 @@ const SUPER_NAV: NavItem[] = [
   { to: "/whatsapp", label: "Conexões", icon: "plug" },
   { to: "/servidor", label: "Servidor", icon: "cpu" },
   { to: "/settings", label: "Configurações", icon: "settings", short: "Ajustes" },
+  { to: "/compras", label: "Compras", icon: "shop" },
   { section: "Conta" },
   { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
   { to: "/profile", label: "Minha conta", icon: "user" },
@@ -186,7 +191,7 @@ interface AppTabs {
  * Cliente começa só com o essencial (Início, Agenda, Finanças e De olho). Módulos e abas sob medida
  * aparecem quando a reunião noturna do time libera para a pessoa.
  */
-function adminNav(tabs: AppTabs | null, billing = false): NavItem[] {
+function adminNav(tabs: AppTabs | null, billing = false, shopping = false): NavItem[] {
   const extra: NavItem[] = [
     ...(tabs?.modules ?? []).map((m) => tabs!.catalog[m]).filter(Boolean).map((m) => ({ to: m!.to, label: m!.label, icon: m!.icon })),
     ...(tabs?.custom ?? []).map((t) => ({ to: `/aba/${t.slug}`, label: t.title, icon: t.icon })),
@@ -194,6 +199,8 @@ function adminNav(tabs: AppTabs | null, billing = false): NavItem[] {
   return [
     { section: "Meu dia" },
     ...MY_DAY,
+    // compras pelo assistente: só quando o dono ligou
+    ...(shopping ? [{ to: "/compras", label: "Compras", icon: "shop" }] : []),
     ...(extra.length ? [{ section: "Feito para você" }, ...extra] : []),
     { section: "Conta" },
     { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
@@ -261,7 +268,8 @@ export function App() {
   const tabs = useApi<AppTabs>(me ? `/api/me/tabs?for=${me.id}` : null);
   const isSuper = me?.role === "superadmin";
   const billing = useApi<{ pricing: { enabled: boolean } }>(me && !isSuper ? "/api/billing" : null);
-  const NAV = !me ? NO_NAV : isSuper ? SUPER_NAV : adminNav(tabs.data ?? null, billing.data?.pricing?.enabled);
+  const shop = useApi<{ purchases?: { enabled: boolean } }>(me && !isSuper ? "/api/auth/config" : null);
+  const NAV = !me ? NO_NAV : isSuper ? SUPER_NAV : adminNav(tabs.data ?? null, billing.data?.pricing?.enabled, shop.data?.purchases?.enabled);
   const links = NAV.filter((i): i is NavLinkItem => "to" in i);
   // com o app parado, baixa em segundo plano o código das telas do menu desta pessoa (e só delas)
   const routes = links.map((l) => l.to).join(" ");
@@ -318,6 +326,7 @@ export function App() {
 
   // termos e privacidade abrem sem login (link do cadastro e do convite no WhatsApp)
   if (loc.pathname === "/privacidade") return <PrivacyPage />;
+  if (loc.pathname === "/termos-de-compra") return <Suspense fallback={<BlockLoader />}><PurchaseTermsPage /></Suspense>;
   if (me === undefined) return <BlockLoader />;
   if (!me && loc.pathname === "/") return <Suspense fallback={<BlockLoader />}><Landing /></Suspense>;
   if (!me) return <AuthPage onLogin={setMe} />;
@@ -412,6 +421,7 @@ export function App() {
           ))}
           <Route path="/watches" element={<WatchesPage />} />
           <Route path="/recados" element={<ErrandsPage />} />
+          <Route path="/compras" element={<ComprasPage isSuper={isSuper} />} />
           <Route path="/finance" element={<FinancePage />} />
           <Route path="/agenda" element={<CalendarPage isSuper={isSuper} />} />
           <Route path="/reminders" element={<Navigate to="/agenda" replace />} />
