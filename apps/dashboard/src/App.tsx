@@ -24,6 +24,7 @@ const load = {
   clients: () => import("./pages/Clients"),
   dashboard: () => import("./pages/Dashboard"),
   documents: () => import("./pages/Documents"),
+  errands: () => import("./pages/Errands"),
   executions: () => import("./pages/Executions"),
   finance: () => import("./pages/Finance"),
   integrations: () => import("./pages/Integrations"),
@@ -82,6 +83,7 @@ const CustomTabPage = page(() => load.dashboard().then((m) => m.CustomTabPage));
 const NotificationsPage = page(() => load.notifications().then((m) => m.NotificationsPage));
 const AlarmPage = page(() => load.alarm().then((m) => m.AlarmPage));
 const DocumentsPage = page(() => load.documents().then((m) => m.DocumentsPage));
+const ErrandsPage = page(() => load.errands().then((m) => m.ErrandsPage));
 const WhatsAppPage = page(() => load.whatsapp().then((m) => m.WhatsAppPage));
 
 /** Qual pedaço cada rota do menu abre: para baixar antes do toque (e deixar pronto para abrir sem internet). */
@@ -101,6 +103,7 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/finance": load.finance,
   "/agenda": load.calendar,
   "/watches": load.watches,
+  "/recados": load.errands,
   "/documentos": load.documents,
   "/memories": load.memories,
   "/settings": load.settings,
@@ -148,6 +151,7 @@ const MY_DAY: NavItem[] = [
   { to: "/agenda", label: "Agenda", icon: "calendar" },
   { to: "/finance", label: "Finanças", icon: "wallet" },
   { to: "/watches", label: "Acompanhamentos", icon: "eye", short: "De olho" },
+  { to: "/recados", label: "Recados", icon: "send" },
   { to: "/documentos", label: "Documentos", icon: "file" },
 ];
 
@@ -387,6 +391,7 @@ export function App() {
             <Route key={t.slug} path={`/aba/${t.slug}`} element={<CustomTabPage me={me} tab={t} />} />
           ))}
           <Route path="/watches" element={<WatchesPage />} />
+          <Route path="/recados" element={<ErrandsPage />} />
           <Route path="/finance" element={<FinancePage />} />
           <Route path="/agenda" element={<CalendarPage isSuper={isSuper} />} />
           <Route path="/reminders" element={<Navigate to="/agenda" replace />} />

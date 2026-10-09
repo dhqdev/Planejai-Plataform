@@ -5,6 +5,7 @@ import { agendaRoutes } from "./dashboard/agenda.js";
 import { alarmActionRoutes, alarmRoutes } from "./dashboard/alarms.js";
 import { billingAdminRoutes, billingRoutes } from "./dashboard/billing.js";
 import { clientRoutes } from "./dashboard/clients.js";
+import { errandRoutes } from "./dashboard/errands.js";
 import { executionRoutes } from "./dashboard/executions.js";
 import { financeRoutes } from "./dashboard/finance.js";
 import { integrationCallbackRoutes, integrationRoutes } from "./dashboard/integrations.js";
@@ -33,6 +34,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     financeRoutes(base);
     inviteRoutes(base);
     agendaRoutes(base);
+    errandRoutes(base);
     alarmRoutes(base);
     memoryRoutes(base);
     teamRoutes(base);

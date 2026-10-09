@@ -1,0 +1,38 @@
+/* ---------- Recados (conversa do assistente com estabelecimentos) ---------- */
+.errand-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+.errand-list { display: flex; flex-direction: column; gap: 2px; padding: 6px; min-width: 0; }
+.errand-row { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-radius: 12px; background: transparent; color: inherit; font: inherit; cursor: pointer; min-width: 0; }
+.errand-row:hover { background: var(--panel-2); }
+.errand-row.active { background: var(--panel-2); box-shadow: inset 2px 0 0 var(--ink); }
+.errand-row-top { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; min-width: 0; }
+.errand-row-top strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.errand-row-goal { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.errand-row-last { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.errand-state { flex-shrink: 0; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.errand-state.you { color: var(--text); font-weight: 600; }
+.errand-state.them::before, .errand-state.you::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; background: currentColor; vertical-align: 1px; }
+
+.errand-detail { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px 18px; }
+.errand-back { align-self: flex-start; }
+.errand-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
+.errand-head h3 { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+.errand-head p { margin: 2px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.errand-head .btn { flex-shrink: 0; }
+.errand-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); }
+.errand-chat { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 14px; background: var(--panel-2); min-height: 120px; }
+.errand-bubble { position: relative; display: flex; flex-direction: column; gap: 2px; max-width: min(82%, 520px); padding: 8px 11px 6px; border-radius: 14px; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; white-space: pre-wrap; }
+.errand-bubble.theirs { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.errand-bubble.ours { align-self: flex-end; background: var(--ink); color: var(--on-ink); border-bottom-right-radius: 4px; }
+.errand-bubble.next { background: transparent; color: var(--text); border: 1.5px dashed var(--border); }
+.errand-bubble-tag { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.errand-bubble-time { align-self: flex-end; font-size: 11px; opacity: .65; }
+.errand-decided { align-self: center; max-width: 90%; text-align: center; font-size: 12px; color: var(--muted); padding: 3px 10px; border-radius: 99px; background: var(--panel); border: 1px solid var(--border); overflow-wrap: anywhere; }
+.errand-note { margin: 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+.errand-note strong { color: var(--text); }
+
+@media (min-width: 1024px) and (min-height: 680px) {
+  .errands-page.fit .errand-grid { flex: 1 1 auto; min-height: 0; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); }
+  .errands-page.fit .errand-list, .errands-page.fit .errand-detail { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+  .errands-page.fit .errand-chat { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  .errands-page.fit .errand-chat > * { flex-shrink: 0; }
+}
