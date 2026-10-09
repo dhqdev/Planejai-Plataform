@@ -1,3 +1,4 @@
+import { describeDirect, listDirect } from "../../direct.js";
 import { googleApi } from "../../integrations/google.js";
 import { resolveTag } from "../../agenda-tags.js";
 import { cancelReminder, createReminder, listReminders, reminderOccurrences, rescheduleReminder } from "../../reminders.js";
@@ -83,8 +84,10 @@ export const listRemindersTool = defineTool<Record<string, never>>({
   parameters: obj({}),
   async run(_a, ctx) {
     const rows = (await listReminders(ctx.user.id)).filter((r) => r.status === "scheduled");
-    if (!rows.length) return { reminders: [], note: "Nenhum lembrete agendado." };
-    return rows.map((r) => ({
+    // mensagens agendadas para outra pessoa também são "o que vai acontecer": aparecem junto (cancelar com direct_cancel)
+    const messages = (await listDirect(ctx.user.id)).map((d) => describeDirect(d, ctx.timezone));
+    if (!rows.length && !messages.length) return { reminders: [], note: "Nenhum lembrete agendado." };
+    const reminders = rows.map((r) => ({
       id: r.id,
       intent: r.intent,
       ...(r.title ? { title: r.title } : {}),
@@ -94,6 +97,7 @@ export const listRemindersTool = defineTool<Record<string, never>>({
       cron: r.cron,
       next_local: r.due_at ? formatLocal(new Date(r.due_at), ctx.timezone) : null,
     }));
+    return messages.length ? { reminders, scheduled_messages: messages } : reminders;
   },
 });
 

@@ -2,6 +2,20 @@ import { cancelDirect, createDirect, describeDirect, listDirect } from "../../di
 import { formatLocal, parseLocalDateTime } from "../../time.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
+/** at (horário local) ou in_minutes -> quando sai; null = agora. Usado por send_whatsapp e send_to_contact. */
+export function parseSendAt(args: { at?: string; in_minutes?: number }, timezone: string): { sendAt: Date | null } | { error: string } {
+  if (args.in_minutes != null && args.in_minutes > 0) return { sendAt: new Date(Date.now() + args.in_minutes * 60_000) };
+  if (!args.at) return { sendAt: null };
+  let sendAt: Date;
+  try {
+    sendAt = parseLocalDateTime(args.at, timezone);
+  } catch {
+    return { error: `Data inválida: ${args.at}` };
+  }
+  if (sendAt.getTime() < Date.now() - 60_000) return { error: `O horário ${formatLocal(sendAt, timezone)} já passou` };
+  return { sendAt };
+}
+
 export const sendWhatsapp = defineTool<{ phone: string; message: string; name?: string; at?: string; in_minutes?: number; confirmed_by_user?: boolean }>({
   name: "send_whatsapp",
   description:
@@ -19,16 +33,9 @@ export const sendWhatsapp = defineTool<{ phone: string; message: string; name?: 
     ["phone", "message"],
   ),
   async run(args, ctx) {
-    let sendAt: Date | null = null;
-    if (args.in_minutes != null && args.in_minutes > 0) sendAt = new Date(Date.now() + args.in_minutes * 60_000);
-    else if (args.at) {
-      try {
-        sendAt = parseLocalDateTime(args.at, ctx.timezone);
-      } catch {
-        return { ok: false, error: `Data inválida: ${args.at}` };
-      }
-      if (sendAt.getTime() < Date.now() - 60_000) return { ok: false, error: `O horário ${formatLocal(sendAt, ctx.timezone)} já passou` };
-    }
+    const when = parseSendAt(args, ctx.timezone);
+    if ("error" in when) return { ok: false, error: when.error };
+    const sendAt = when.sendAt;
     const who = args.name ? `${args.name} (${args.phone})` : args.phone;
     const preview = args.message.length > 120 ? `${args.message.slice(0, 119)}…` : args.message;
     const gate = await requireConfirmation(args, `mandar para ${who}${sendAt ? ` em ${formatLocal(sendAt, ctx.timezone)}` : " agora"}: "${preview}"`, ctx);

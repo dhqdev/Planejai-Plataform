@@ -38,7 +38,13 @@ export function meRoutes(base: FastifyInstance) {
       [uid, tz],
     );
     const nextReminders = await many(
-      `SELECT id, intent, due_at, cron FROM reminders WHERE status = 'scheduled' AND user_id = $1 ORDER BY due_at ASC NULLS LAST LIMIT 5`,
+      // mensagens agendadas para alguém entram junto, como "Mensagem para Fulano: texto"
+      `SELECT * FROM (
+         SELECT id::text, intent, due_at, cron FROM reminders WHERE status = 'scheduled' AND user_id = $1
+         UNION ALL
+         SELECT 'm:' || id, 'Mensagem para ' || COALESCE(name, '+' || phone) || ': ' || left(text, 120), send_at, NULL FROM direct_messages
+          WHERE status = 'scheduled' AND user_id = $1
+       ) x ORDER BY due_at ASC NULLS LAST LIMIT 5`,
       [uid],
     );
     const recent = await many(

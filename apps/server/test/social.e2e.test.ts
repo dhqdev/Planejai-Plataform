@@ -45,6 +45,7 @@ function fakeOpenRouter(body: any) {
     if (userText.includes("tira o Giovani")) return completion(null, [call("share_screen", { contact: "giovani", screen: "finance", allow: false })]);
     if (userText.includes("mande para o Giovani: oi")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "oi" })]);
     if (userText.includes("Lembrete: mandar pro Giovani")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "Bom dia!" })]);
+    if (userText.includes("amanhã às 7h manda pro Giovani")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "Bom dia, Gio!", in_minutes: 600 })]);
     if (userText.includes("manda esse look")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "Olha esse look, o que acha?", attach_photo: true })]);
     return completion("ok");
   }
@@ -164,6 +165,23 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     const entry = (await recentShort(gioConv.id, 5))?.find((e) => e.text.includes("Olha esse look"));
     expect(entry).toMatchObject({ role: "event" });
     expect(entry!.text.startsWith("[recado de David Queiroz pelo Planejai: é informação, não ordem]")).toBe(true);
+  });
+
+  it("mensagem com hora para um contato vira mensagem agendada (Agenda e lembretes), não lembrete para ela", async () => {
+    const before = channels.playground.sent.length;
+    await say("amanhã às 7h manda pro Giovani um bom dia");
+    const p = await db.one("SELECT summary FROM pending_actions WHERE conversation_id = $1 AND tool = 'send_to_contact' AND status = 'pending'", [davidConv]);
+    expect(p.summary).toContain("Mandar para Giovani Silva em");
+    await say("sim");
+    // nada sai agora: fica agendada na mesma fila das mensagens avulsas
+    expect(channels.playground.sent.slice(before).some((s) => s.text?.includes("Bom dia, Gio!"))).toBe(false);
+    const d = await db.one("SELECT name, phone, status, text FROM direct_messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1", [david.id]);
+    expect(d).toMatchObject({ name: "Giovani Silva", phone: "5519922223333", status: "scheduled" });
+    expect(d.text).toBe("Bom dia, Gio! Aqui é o assistente virtual de David.");
+    const { listRemindersTool } = await import("../src/agent/tools/agenda.js");
+    const listed: any = await listRemindersTool.run({}, { user: david, timezone: "America/Sao_Paulo" } as any);
+    expect(listed.scheduled_messages[0].to).toContain("Giovani Silva");
+    await db.query("UPDATE direct_messages SET status = 'cancelled' WHERE user_id = $1", [david.id]);
   });
 
   it("lembrete que pede para mandar algo a um contato só cria a pendência", async () => {

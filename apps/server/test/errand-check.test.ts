@@ -23,6 +23,10 @@ describe("recados: primeira mensagem humanizada", () => {
     // já se apresentou: só acerta o período do dia
     expect(introduce("Boa tarde! Sou o assistente virtual da Ana, vocês fazem tosa?", "Ana", TZ, at("09:00"))).toBe("Bom dia! Sou o assistente virtual da Ana, vocês fazem tosa?");
     // "Oieee" não é cortado no meio
+    // nome de quem recebe fica no cumprimento
+    expect(introduce("Bom dia, Gio! Chego às 9h.", "David")).toBe("Bom dia, Gio! Aqui é o assistente virtual de David. Chego às 9h.");
+    expect(introduce("Bom dia, Gio!", "David")).toBe("Bom dia, Gio! Aqui é o assistente virtual de David.");
+    expect(introduce("Olá, Maria. Vocês abrem sábado?", "Ana", TZ, at("09:00"))).toBe("Oi, Maria, bom dia! Tudo bem? Aqui é o assistente virtual de Ana. Vocês abrem sábado?");
     expect(introduce("Oieee", "Ana", TZ, at("09:00"))).toMatch(/Aqui é o assistente virtual de Ana\. Oieee$/);
   });
 });

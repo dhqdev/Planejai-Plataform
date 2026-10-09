@@ -77,16 +77,21 @@ const GREETING = new RegExp(`^\\s*((oi|olá|ola|e aí|e ai)${END})?[!,.]*\\s*((b
  */
 export function introduce(text: string, personName: string | null, timezone?: string, now = new Date()) {
   const t = text.trim();
+  const who = personName ? `o assistente virtual de ${personName}` : "um assistente virtual";
+  // "Bom dia, Gio! ..." : o nome de quem recebe fica no cumprimento, não sobra solto depois da apresentação
+  const named = t.match(/^([Oo]i|[Oo]l[áa]|[Bb]om dia|[Bb]oa tarde|[Bb]oa noite),?\s+(\p{Lu}\p{L}+(?:\s\p{Lu}\p{L}+)?)\s*[!.,]+\s*/u);
+  const to = named?.[2] ?? null;
+  const cap = (r: string) => `${r.charAt(0).toUpperCase()}${r.slice(1)}`;
   if (!timezone) {
     if (/assistente/i.test(t)) return t;
+    if (named) return `${cap(named[1]!)}, ${to}! Aqui é ${who}. ${cap(t.slice(named[0].length))}`.trim();
     const rest = t.replace(/^(oi|olá|ola|bom dia|boa tarde|boa noite)[!,.]?\s*/i, "");
-    return `Oi! Aqui é ${personName ? `assistente virtual de ${personName}` : "um assistente virtual"}. ${rest.charAt(0).toUpperCase()}${rest.slice(1)}`;
+    return `Oi! Aqui é ${who}. ${cap(rest)}`.trim();
   }
   const hello = greetingFor(now, timezone);
   if (/assistente/i.test(t)) return t.replace(/\b(bom dia|boa tarde|boa noite)\b/i, (m) => (m[0] === "B" ? hello.charAt(0).toUpperCase() + hello.slice(1) : hello));
-  const who = personName ? `o assistente virtual de ${personName}` : "um assistente virtual";
-  const rest = t.replace(GREETING, "");
-  return `Oi, ${hello}! Tudo bem? Aqui é ${who}. ${rest.charAt(0).toUpperCase()}${rest.slice(1)}`.trim();
+  const rest = named ? t.slice(named[0].length).replace(GREETING, "") : t.replace(GREETING, "");
+  return `Oi${to ? `, ${to}` : ""}, ${hello}! Tudo bem? Aqui é ${who}. ${cap(rest)}`.trim();
 }
 
 export async function openErrands(userId: string): Promise<Errand[]> {

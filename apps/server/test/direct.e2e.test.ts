@@ -99,7 +99,7 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     const { createDirect, sendDirect, listDirect, cancelDirect, directText } = await import("../src/direct.js");
     const u = { id: david.id, phone: david.phone, name: "David" };
     // sem o nome de quem manda, o servidor apresenta
-    expect(directText("segue o cardápio do evento", u)).toMatch(/^Oi! Aqui é assistente virtual de David\. Segue o cardápio/);
+    expect(directText("segue o cardápio do evento", u)).toMatch(/^Oi! Aqui é o assistente virtual de David\. Segue o cardápio/);
 
     const at = new Date(Date.now() + 15 * 3600_000);
     const r: any = await createDirect({ user: u, phone: "11 96666-5555", name: "Restaurante", message: "Oi, aqui é o David, confirmo a mesa para 4 amanhã.", sendAt: at, timezone: TZ });

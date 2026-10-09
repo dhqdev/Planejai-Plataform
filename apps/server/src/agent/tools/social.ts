@@ -3,6 +3,9 @@ import { cacheGet, cacheSet } from "../../shortmem.js";
 import { createInvite, displayName, findContact, inviteStats, listContacts, notifyUser, relayText } from "../../social.js";
 import { SCOPE_LABEL, SHARE_SCOPES, setShare, type ShareScope } from "../../sharing.js";
 import { cancelWatch, createWatch, listWatches, updateWatch, type NotifyMode } from "../../watches.js";
+import { createDirect } from "../../direct.js";
+import { formatLocal } from "../../time.js";
+import { parseSendAt } from "./direct.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 export const invitePerson = defineTool<{ name: string; phone: string; message_after_accept?: string; confirmed_by_user?: boolean }>({
@@ -64,15 +67,17 @@ export const listContactsTool = defineTool<Record<string, never>>({
 /** Foto guardada enquanto a pessoa não diz "sim" (o mesmo prazo da pendência). */
 const PHOTO_TTL_S = 30 * 60;
 
-export const sendToContact = defineTool<{ contact: string; message: string; attach_photo?: boolean; photo_key?: string; confirmed_by_user?: boolean }>({
+export const sendToContact = defineTool<{ contact: string; message: string; attach_photo?: boolean; photo_key?: string; at?: string; in_minutes?: number; confirmed_by_user?: boolean }>({
   name: "send_to_contact",
   description:
-    "Manda uma mensagem a um contato do Planejai em nome da pessoa; só sai depois do \"sim\". attach_photo=true encaminha a foto que ela mandou agora.",
+    "Manda uma mensagem a um contato do Planejai em nome da pessoa, agora ou agendada com at/in_minutes (fica na Agenda); só sai depois do \"sim\". attach_photo=true encaminha a foto que ela mandou agora.",
   parameters: obj(
     {
       contact: { type: "string", description: "Nome do contato" },
       message: { type: "string", description: "Curto e natural" },
       attach_photo: { type: "boolean" },
+      at: { type: "string", description: "Agendar: AAAA-MM-DDTHH:MM local" },
+      in_minutes: { type: "number" },
       ...CONFIRM_PARAM,
     },
     ["contact", "message"],
@@ -89,6 +94,16 @@ export const sendToContact = defineTool<{ contact: string; message: string; atta
     }
     if (found.length > 1) return { error: "Mais de um contato com esse nome", options: found.map((c) => c.name) };
     const to = found[0]!;
+    const when = parseSendAt(args, ctx.timezone);
+    if ("error" in when) return { error: when.error };
+    if (when.sendAt) {
+      // agendada: mesma fila das mensagens avulsas, então aparece na Agenda e no list_reminders e cancela por lá
+      if (args.attach_photo) return { error: "Foto não dá para agendar; mande agora ou agende só o texto." };
+      const preview = args.message.length > 80 ? `${args.message.slice(0, 79)}…` : args.message;
+      const gate = await requireConfirmation(args, `Mandar para ${to.name} em ${formatLocal(when.sendAt, ctx.timezone)}: "${preview}"`, ctx);
+      if (gate) return gate;
+      return createDirect({ user: ctx.user as any, phone: to.phone, name: to.name, message: args.message, sendAt: when.sendAt, timezone: ctx.timezone });
+    }
     const keyPrefix = `pending-photo:${ctx.conversation.id}:`;
     if (!ctx.approvedAction) {
       // a foto só existe na memória desta rodada: guarda no Redis para ela ainda estar aqui no "sim"
