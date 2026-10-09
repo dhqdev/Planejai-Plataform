@@ -400,6 +400,13 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     await hook({ id: "n2", event: "PAYMENT_OVERDUE", payment: { id: "pay_sub_2b", subscription: "sub_2", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_sub_2b" } });
     expect((await outbox()).filter((m: any) => /venceu/.test(m.text))).toHaveLength(1);
     expect(await db.one("SELECT status, invoice_url FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ status: "overdue", invoice_url: "https://sandbox.asaas.com/i/pay_sub_2b" });
+    // cartão recusado: avisa com o link para pagar de outro jeito, sem mudar a situação
+    await hook({ id: "n2r", event: "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED", payment: { id: "pay_sub_2b", subscription: "sub_2", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_sub_2b" } });
+    await hook({ id: "n2s", event: "PAYMENT_REPROVED_BY_RISK_ANALYSIS", payment: { id: "pay_sub_2b", subscription: "sub_2", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_sub_2b" } });
+    const refused = (await outbox()).filter((m: any) => /cartão não passou/.test(m.text));
+    expect(refused).toHaveLength(2);
+    expect(refused[0].text).toMatch(/Pix ou boleto aqui: https:\/\/sandbox.asaas.com\/i\/pay_sub_2b$/);
+    expect(await db.one("SELECT status FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ status: "overdue" });
     // nunca pagou: pode assinar de novo; a assinatura velha sai do Asaas (e o Asaas pode demorar um instante para gerar a cobrança)
     asaasCalls.length = 0;
     paymentsEmptyOnce = true;

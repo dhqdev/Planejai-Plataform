@@ -355,6 +355,7 @@ export const BILLING_TEXT = {
   overdue: (value: number, link: string) => `A mensalidade de ${brl(value)} venceu e ainda não apareceu aqui, então os grãos do plano não foram recarregados. Dá para pagar por Pix, cartão ou boleto: ${link}`,
   dueSoon: (value: number, days: number, due: string, link: string) =>
     `${days === 0 ? "Hoje vence" : days === 1 ? "Amanhã vence" : `Dia ${ddmm(due)} vence`} a sua mensalidade de ${brl(value)}. Se quiser já deixar pago: ${link}`,
+  cardRefused: (link: string) => `O cartão não passou no pagamento do Planejai. Dá para tentar outro cartão ou pagar por Pix ou boleto aqui: ${link}`,
   canceled: () => "Seu plano foi cancelado. Os grãos que já estão na sua conta continuam valendo até acabar, e dá para voltar quando quiser.",
   referral: (name: string, percent: number, friends: number) =>
     `${name} assinou pelo seu convite! Agora são ${friends} ${friends === 1 ? "amigo" : "amigos"} pagando, e sua mensalidade tem ${percent}% de desconto. Obrigado por indicar!`,
@@ -389,6 +390,8 @@ export async function handleAsaasEvent(body: any): Promise<{ handled: boolean; s
 }
 
 const PAID = new Set(["PAYMENT_CONFIRMED", "PAYMENT_RECEIVED", "PAYMENT_RECEIVED_IN_CASH"]);
+/** O cartão foi recusado (pela operadora ou pela análise de risco do Asaas): a cobrança segue aberta para pagar de outro jeito. */
+const CARD_REFUSED = new Set(["PAYMENT_CREDIT_CARD_CAPTURE_REFUSED", "PAYMENT_REPROVED_BY_RISK_ANALYSIS"]);
 
 /** Compra avulsa: pagou entra (uma vez); apagada ou vencida só fecha a compra. */
 async function applyPurchaseEvent(event: string, p: any, purchase: any) {
@@ -413,6 +416,10 @@ async function applyPurchaseEvent(event: string, p: any, purchase: any) {
     await notify({ userId: null, kind: "assinatura", title: `Compra de grãos: ${brl(Number(paid.value))}`, body: `${paid.kind === "upgrade" ? "Troca de plano" : "Pacote"} de ${grains(paid.grains)}.`, link: "/settings" });
     void emitEvent("payment.confirmed", { user_id: paid.user_id, value: Number(paid.value), billing_type: p.billingType ?? null, kind: paid.kind, grains: paid.grains, payment_id: p.id ?? null });
     return { handled: true, status: "paid" };
+  }
+  if (CARD_REFUSED.has(event)) {
+    await tellPerson(purchase.user_id, BILLING_TEXT.cardRefused(p.invoiceUrl ?? purchase.invoice_url ?? billingLink()));
+    return { handled: true, status: purchase.status };
   }
   if (event === "PAYMENT_OVERDUE" || event === "PAYMENT_DELETED") {
     await query("UPDATE grain_purchases SET status = 'canceled' WHERE id = $1 AND status = 'pending'", [purchase.id]);
@@ -481,6 +488,12 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
     // amigo que passou a pagar: quem convidou ganha mais desconto
     if (first) await syncInviterDiscount(sub.user_id, true).catch((err) => console.error("[indicação]", err));
     return r;
+  }
+  if (CARD_REFUSED.has(event)) {
+    const link = p.invoiceUrl ?? sub.invoice_url ?? billingLink();
+    if (p.invoiceUrl) await query("UPDATE subscriptions SET invoice_url = $2, updated_at = now() WHERE user_id = $1", [sub.user_id, p.invoiceUrl]);
+    await tellPerson(sub.user_id, BILLING_TEXT.cardRefused(link));
+    return { handled: true, status: sub.status };
   }
   switch (event) {
     case "PAYMENT_CREATED":
