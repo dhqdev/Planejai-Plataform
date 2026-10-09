@@ -348,6 +348,11 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
                   setView("day");
                 }
               }}
+              onDay={(d) => {
+                setSelected(d);
+                setCursor(d);
+                setView("day");
+              }}
               onCreate={(d) => create(withTime(d))}
               onOpen={setOpen}
               onMove={(ev, d) => { const s = new Date(ev.start); d.setHours(s.getHours(), s.getMinutes()); void move(ev, d); }}
@@ -542,20 +547,48 @@ function MonthView(p: {
   byDay: Map<string, Ev[]>;
   compact: boolean;
   onSelect: (d: Date) => void;
+  onDay: (d: Date) => void;
   onCreate: (d: Date) => void;
   onOpen: (e: Ev) => void;
   onMove: (e: Ev, d: Date) => void;
 }) {
   const days = monthGrid(p.cursor);
   const today = new Date();
-  const max = p.compact ? 2 : 3;
+  // quantos eventos com texto cabem no dia, medido na tela: o dia nunca rola por dentro.
+  // Se não cabem todos (ou o dia é estreito demais para ler), vira pontinho colorido e o toque abre o dia.
+  const grid = useRef<HTMLDivElement>(null);
+  const [room, setRoom] = useState({ rows: p.compact ? 2 : 3, w: 999, dots: 6 });
+  useEffect(() => {
+    const el = grid.current;
+    if (!el) return;
+    const measure = () => {
+      const cell = el.querySelector<HTMLElement>(".cal-cell");
+      const num = cell?.querySelector<HTMLElement>(".cal-num");
+      if (!cell || !num) return;
+      const cs = getComputedStyle(cell);
+      const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      const inner = cell.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const chip = p.compact ? 18.3 : 21.6;
+      const free = cell.clientHeight - pad - num.offsetHeight - 4;
+      const rows = Math.max(0, Math.min(6, Math.floor((free + 3) / (chip + 3))));
+      const dots = Math.max(1, Math.floor((inner + 3) / 10) * Math.max(1, Math.floor((free + 3) / 10)));
+      setRoom((r) => (r.rows === rows && r.w === Math.round(inner) && r.dots === dots ? r : { rows, w: Math.round(inner), dots }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [p.compact]);
+  // estreito: some a hora; mais estreito ainda: só pontinho
+  const readable = room.w >= 70;
+  const showTime = !p.compact && room.w >= 110;
   const drag = useDrag((ev, t) => {
     const [y, m, d] = t.dataset.drop!.split("-").map(Number) as [number, number, number];
     p.onMove(ev, new Date(y, m - 1, d));
   });
   const weeks = Array.from({ length: 6 }, (_, i) => days.slice(i * 7, i * 7 + 7));
   return (
-    <div className={`card cal-month ${p.compact ? "compact" : ""}`}>
+    <div ref={grid} className={`card cal-month ${p.compact ? "compact" : ""} ${readable ? "" : "tight"}`}>
       {!p.compact && <div className="cal-wd wk" />}
       {[1, 2, 3, 4, 5, 6, 0].map((w) => <div key={w} className="cal-wd">{p.compact ? WEEKDAYS[w]!.charAt(0).toUpperCase() : `${WEEKDAYS[w]}.`}</div>)}
       {weeks.map((week) => [
@@ -567,8 +600,21 @@ function MonthView(p: {
           return (
             <div key={key(d)} className={cls} data-drop={key(d)} onClick={() => p.onSelect(d)} onDoubleClick={() => p.onCreate(d)}>
               <span className="cal-num">{d.getDate() === 1 && !p.compact ? `1 de ${MONTHS[d.getMonth()]!.slice(0, 3)}` : d.getDate()}</span>
+              {evs.length > 0 && (!readable || evs.length > room.rows) ? (
+                <button
+                  className="cal-dots-btn"
+                  aria-label={`${evs.length} ${evs.length === 1 ? "evento" : "eventos"}: ${evs.map((e) => e.title).join(", ")}`}
+                  title={evs.map((e) => (e.allDay ? e.title : `${hhmm(new Date(e.start))} ${e.title}`)).join("\n")}
+                  onClick={(c) => { c.stopPropagation(); haptic(5); p.onDay(d); }}
+                >
+                  {evs.slice(0, evs.length > room.dots ? room.dots - 1 : room.dots).map((e) => (
+                    <i key={e.id} className={`cal-dot ${e.kind} ${e.recurring ? "rec" : ""}`} style={evStyle(e)} />
+                  ))}
+                  {evs.length > room.dots && <span className="cal-more">+{evs.length - room.dots + 1}</span>}
+                </button>
+              ) : (
               <div className="cal-chips">
-                {evs.slice(0, max).map((e) => (
+                {evs.map((e) => (
                   <button
                     key={e.id}
                     className={`cal-chip ${e.kind} ${e.recurring ? "rec" : ""}`}
@@ -577,11 +623,11 @@ function MonthView(p: {
                     onClick={(c) => { c.stopPropagation(); p.onOpen(e); }}
                     title={e.title}
                   >
-                    {!e.allDay && !p.compact && <b>{hhmm(new Date(e.start))}</b>} {e.title}
+                    {!e.allDay && showTime && <b>{hhmm(new Date(e.start))}</b>} {e.title}
                   </button>
                 ))}
-                {evs.length > max && <span className="cal-more">+{evs.length - max}</span>}
               </div>
+              )}
             </div>
           );
         }),

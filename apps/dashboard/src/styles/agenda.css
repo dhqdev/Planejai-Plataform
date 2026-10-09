@@ -17,6 +17,15 @@
 .cal-chip.dragging, .cal-block.dragging { opacity: .35; }
 .cal-more { font-size: 12px; color: var(--muted); padding-left: 6px; }
 .cal-ghost { position: fixed; left: 0; top: 0; z-index: 90; pointer-events: none; box-shadow: var(--shadow-lg); opacity: .95; }
+/* dia apertado: sem texto, um pontinho por evento (na cor da agenda); tocar abre o dia */
+.cal-dots-btn { display: flex; flex-wrap: wrap; align-content: flex-start; justify-content: center; align-items: center; gap: 5px; min-height: 0; overflow: hidden; flex: 1 1 auto; width: 100%; padding: 2px 0; border: none; background: none; cursor: pointer; color: inherit; border-radius: 6px; }
+.cal-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--ev, var(--cal-reminder)); }
+.cal-dot.rec { background: var(--ev, var(--brand-4)); }
+.cal-dot.google { background: var(--cal-google); }
+.cal-dot.message { background: var(--cal-message); }
+.cal-dot.holiday { background: var(--cal-holiday); }
+.cal-dots-btn .cal-more { padding: 0; line-height: 1; font-weight: 600; }
+.cal-chips { overflow: hidden; }
 .cal-dots { display: flex; gap: 3px; justify-content: center; height: 6px; }
 .cal-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--brand-2); }
 .cal-dots i.google { background: var(--muted); }

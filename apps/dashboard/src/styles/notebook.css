@@ -36,7 +36,10 @@
   .fin-page.fit .fin-col { min-height: 0; gap: 14px; }
   .fin-page.fit .fin-overview > .fin-col:last-child { grid-column: auto; display: flex; flex-direction: column; }
   .fin-page.fit .fin-col-donut { display: flex; flex-direction: column; min-height: 0; }
-  .fin-page.fit .fin-col > .card { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+  /* Visão geral: card nunca rola por dentro; se o conteúdo não cabe na altura, a página cresce e rola inteira */
+  .fin-page.fit:has(> .fin-overview) { height: auto; min-height: 100%; }
+  .fin-page.fit .fin-overview { flex: 1 0 auto; }
+  .fin-page.fit .fin-col > .card { min-height: auto; overflow: visible; }
   .fin-page.fit .fin-insight { flex: 0 1 auto; padding: 16px 18px; }
   .fin-page.fit .fin-insight-text { font-size: 15px; margin: 8px 0 12px; }
   .fin-page.fit .fin-trend { flex: 1 1 0; min-height: 180px; padding: 14px 16px; display: flex; flex-direction: column; }
