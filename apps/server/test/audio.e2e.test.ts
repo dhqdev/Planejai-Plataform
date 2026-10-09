@@ -57,10 +57,13 @@ describe.skipIf(!enabled || !hasFfmpeg)("voz (e2e)", () => {
           }
           const body = JSON.parse(b);
           const last = body.messages.at(-1);
-          const msg =
-            last.role === "tool"
+          const long = body.messages.some((m: any) => m.role === "user" && String(m.content).includes("história longa"));
+          const writer = String(body.messages[0]?.content).includes("mensagem de voz");
+          const msg = writer
+            ? { role: "assistant", content: "Era uma vez uma tartaruga muito paciente. Ela chegou primeiro." }
+            : last.role === "tool"
               ? { role: "assistant", content: `[[media:${JSON.parse(last.content).media_id}]]` }
-              : { role: "assistant", content: null, tool_calls: [{ id: `a${++n}`, type: "function", function: { name: "make_audio", arguments: JSON.stringify({ text: "*Era uma vez* um dragão que gostava de dormir. Fim. 🐉" }) } }] };
+              : { role: "assistant", content: null, tool_calls: [{ id: `a${++n}`, type: "function", function: { name: "make_audio", arguments: JSON.stringify(long ? { brief: "história da tartaruga e da lebre, 2 minutos" } : { text: "*Era uma vez* um dragão que gostava de dormir. Fim. 🐉" }) } }] };
           res.writeHead(200, { "content-type": "application/json" });
           res.end(JSON.stringify({ model: "fake/model", choices: [{ message: msg, finish_reason: msg.tool_calls ? "tool_calls" : "stop" }], usage: { prompt_tokens: 10, completion_tokens: 5, cost: 0.000001 } }));
         });
@@ -104,5 +107,18 @@ describe.skipIf(!enabled || !hasFfmpeg)("voz (e2e)", () => {
     expect(Number(step.cost_usd)).toBeCloseTo(48 * 0.62e-6, 6); // numeric(12,6)
     const sendStep = await db.one("SELECT status FROM execution_steps WHERE execution_id = $1 AND name = 'enviar_audio'", [r.executionId]);
     expect(sendStep.status).toBe("success");
+  });
+
+  it("história longa: o CTO manda só o brief e o redator escreve o texto falado", async () => {
+    const { upsertUser, upsertConversation } = await import("../src/ingest.js");
+    const user = await upsertUser("5519922222223", "Rui");
+    await db.query("UPDATE users SET status = 'active' WHERE id = $1", [user.id]);
+    const convId = (await upsertConversation(user.id, "playground", "teste-voz-2")).id;
+    await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'me conta uma história longa em áudio', 'v2')", [convId]);
+    const { PlaygroundChannel } = await import("../src/channels/index.js");
+    const channel = new PlaygroundChannel();
+    await (await import("../src/agent/orchestrator.js")).processConversation(convId, { trigger: "playground", channel });
+    expect(speechCalls.at(-1)?.input).toBe("Era uma vez uma tartaruga muito paciente. Ela chegou primeiro.");
+    expect(channel.sent.filter((s) => s.type === "image")).toHaveLength(1);
   });
 });

@@ -1,16 +1,31 @@
 import { synthesize, TTS_MAX_CHARS } from "../tts.js";
+import { writeLong } from "../writer.js";
 import { defineTool, obj } from "./types.js";
 
-export const makeAudio = defineTool<{ text: string }>({
+const SPOKEN = `Você escreve o texto de uma mensagem de voz em português do Brasil, a partir do pedido. Responda só o texto que vai ser falado:
+corrido, natural, como alguém contando, sem lista, título, link, emoji ou marcação, até ${Math.floor(TTS_MAX_CHARS * 0.9)} caracteres. Não invente dados.`;
+
+export const makeAudio = defineTool<{ text?: string; brief?: string }>({
   name: "make_audio",
   description:
-    "Transforma o texto que VOCÊ escreve em mensagem de voz (pt-BR, voz barata). Texto corrido como se fosse falado, " +
-    `sem lista, link nem emoji, até ${TTS_MAX_CHARS} caracteres. Devolve media_id para [[media:ID]].`,
-  parameters: obj({ text: { type: "string", description: "O que vai ser falado, já pronto" } }, ["text"]),
+    "Mensagem de voz (pt-BR, voz barata). Texto curto e pronto: mande text. Conteúdo longo (história, resumo, explicação): mande só brief " +
+    `(o que falar, tom, duração e dados da conversa) e a ferramenta escreve. Até ${TTS_MAX_CHARS} caracteres. Devolve media_id para [[media:ID]].`,
+  parameters: obj(
+    {
+      text: { type: "string", description: "O que vai ser falado, já pronto (curto)" },
+      brief: { type: "string", description: "Em vez de text, para conteúdo longo: o que falar, tom, duração, dados" },
+    },
+    [],
+  ),
   async run(args, ctx) {
-    const text = String(args.text ?? "").trim();
-    if (!text) return { ok: false, error: "Mande o texto que vai ser falado." };
-    if (text.length > TTS_MAX_CHARS) return { ok: false, error: `Texto longo demais para áudio (${text.length} caracteres). Resuma para até ${TTS_MAX_CHARS}.` };
+    let text = String(args.text ?? "").trim();
+    if (!text && args.brief?.trim()) text = await writeLong(ctx, { name: "texto do áudio", system: SPOKEN, ask: args.brief.trim() });
+    if (!text) return { ok: false, error: "Mande text (o que vai ser falado) ou brief (o que o áudio deve dizer)." };
+    if (text.length > TTS_MAX_CHARS) {
+      // texto longo demais: corta na última frase que cabe em vez de devolver erro (o modelo repetia a chamada)
+      const cut = text.slice(0, TTS_MAX_CHARS);
+      text = cut.slice(0, Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? ")) + 1) || cut;
+    }
     const s = await synthesize(text);
     const id = ctx.outbox.addMedia({ kind: "audio", base64: s.base64, mimetype: s.mimetype, ptt: s.ptt, seconds: s.seconds, spoken: text });
     return {

@@ -1,7 +1,6 @@
 import { saveDocument } from "../../documents.js";
-import { chatCompletion } from "../../llm/openrouter.js";
-import { resolveModel } from "../../llm/router.js";
 import { PDF_LIMITS, type PdfSpec, normalizePdfSpec, pdfFileName, renderPdf } from "../../pdf.js";
+import { parseJsonObject, writeLong } from "../writer.js";
 import { type ToolContext, defineTool, obj } from "./types.js";
 
 type PdfArgs = PdfSpec & { brief?: string };
@@ -12,29 +11,11 @@ const WRITER = `Você escreve o conteúdo de um PDF A4 em português do Brasil, 
 {"subtitle":"...","sections":[{"title":"...","text":"parágrafos separados por linha em branco, **negrito** quando ajuda","items":["..."],"highlight":"dica ou resumo"}]}
 Texto de verdade, completo e organizado (uma seção por assunto, 4 a 10 seções), sem inventar números ou citações. items, table ({"columns":[],"rows":[[]]}) e highlight só quando ajudam.`;
 
-/**
- * Escreve as seções numa chamada própria, com saída longa. O CTO tem teto de 1200 tokens: um documento inteiro
- * não cabe na chamada da ferramenta e o modelo acabava mandando só título e subtítulo, em loop.
- */
+/** Escreve as seções numa chamada própria (writeLong): o agente manda só título e brief. */
 async function writeSections(args: PdfArgs, ctx: ToolContext): Promise<PdfSpec> {
   const ask = [`Título: ${args.title}`, args.subtitle && `Subtítulo: ${args.subtitle}`, args.brief && `Pedido: ${args.brief}`].filter(Boolean).join("\n");
-  const step = await ctx.tracer.step({ agent: "pdf", type: "llm", name: "texto do PDF", parentId: ctx.parentStepId, input: { ask } });
-  try {
-    const r = await chatCompletion(await resolveModel("pdf_writer"), {
-      responseFormat: { type: "json_object" },
-      messages: [
-        { role: "system", content: WRITER },
-        { role: "user", content: ask.slice(0, 4000) },
-      ],
-    });
-    const raw = String(r.message.content ?? "").replace(/^```(json)?|```$/g, "").trim();
-    const spec = normalizePdfSpec({ ...JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)), title: args.title });
-    await step.ok({ sections: spec.sections.length }, { model: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut, costUsd: r.costUsd });
-    return { ...spec, subtitle: args.subtitle || spec.subtitle, author: args.author };
-  } catch (err) {
-    await step.fail(err);
-    throw err;
-  }
+  const spec = normalizePdfSpec({ ...(parseJsonObject(await writeLong(ctx, { name: "texto do PDF", system: WRITER, ask, json: true })) as object), title: args.title });
+  return { ...spec, subtitle: args.subtitle || spec.subtitle, author: args.author };
 }
 
 export const makePdf = defineTool<PdfArgs>({

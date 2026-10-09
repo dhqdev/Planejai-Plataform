@@ -74,19 +74,16 @@ export function textToolCalls(content: string | null, known: Set<string>): { cal
   return { calls, rest: text.replace(TEXT_CALL, "").trim(), broken };
 }
 
-/** A resposta foi cortada no meio de uma chamada (JSON de argumentos inválido ou chamada em texto pela metade)? */
-function cutMidCall(res: ChatResult, known: Set<string>) {
-  if (res.finishReason !== "length") return false;
-  const bad = (res.message.tool_calls ?? []).some((c) => {
-    try {
-      JSON.parse(c.function.arguments || "{}");
-      return false;
-    } catch {
-      return true;
-    }
-  });
-  return bad || textToolCalls(res.message.content, known).broken || (!res.message.tool_calls?.length && !(res.message.content ?? "").trim());
+/**
+ * A resposta bateu no teto de saída? Vale para todo agente: chamada pela metade, argumentos que o provedor
+ * "salvou" curtos demais (só o título do PDF) ou texto para a pessoa cortado no meio da frase.
+ */
+function cutShort(res: ChatResult) {
+  return res.finishReason === "length";
 }
+
+/** Chave de uma chamada para reconhecer a mesma ferramenta com os mesmos argumentos. */
+const callKey = (c: ToolCall) => `${c.function.name}:${c.function.arguments ?? ""}`;
 
 export function toSpecs(tools: Tool[]): ToolSpec[] {
   return tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
@@ -122,12 +119,15 @@ export async function runToolLoop(opts: {
 
   const guard = ctx.guard;
   let warned = false;
+  // chamadas que deram erro: repetir igual não muda o resultado (o CTO chegou a chamar make_pdf 10 vezes iguais)
+  const failed = new Map<string, string>();
+  let repeated = false;
 
   for (let step = 1; step <= maxSteps; step++) {
     if (guard?.expired) return { text: "", steps: step - 1, messages, timedOut: true };
     // perto do prazo (ou do limite de ações): sem ferramentas, responde com o que já tem
     const wrapUp = Boolean(guard?.wrapUp);
-    const last = step === maxSteps || wrapUp;
+    const last = step === maxSteps || wrapUp || repeated;
     if (wrapUp && !warned) {
       warned = true;
       messages.push({
@@ -155,8 +155,8 @@ export async function runToolLoop(opts: {
       if (guard?.expired) return { text: "", steps: step, messages, timedOut: true };
       throw err;
     }
-    // cortada no meio de uma chamada (conteúdo longo, como o texto de um PDF): tenta uma vez com folga de saída
-    if (cutMidCall(res, byName.size ? new Set(byName.keys()) : new Set()) && (choice.maxTokens ?? 0) < LONG_OUTPUT_TOKENS) {
+    // cortada no teto de saída (conteúdo longo, resposta comprida): tenta uma vez com folga
+    if (cutShort(res) && (choice.maxTokens ?? 0) < LONG_OUTPUT_TOKENS) {
       try {
         const again = await chatCompletion(choice, { messages, tools: last ? undefined : specs, signal: guard?.signal, maxTokens: LONG_OUTPUT_TOKENS });
         res = { ...again, tokensIn: res.tokensIn + again.tokensIn, tokensOut: res.tokensOut + again.tokensOut, costUsd: res.costUsd + again.costUsd };
@@ -205,6 +205,16 @@ export async function runToolLoop(opts: {
           args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
         } catch {
           return { id: call.id, content: JSON.stringify({ error: "Argumentos JSON inválidos" }) };
+        }
+        const before = failed.get(callKey(call));
+        if (before) {
+          repeated = true;
+          return {
+            id: call.id,
+            content: JSON.stringify({
+              error: `Essa mesma chamada já deu erro: ${before.slice(0, 300)}. Repetir igual não resolve. Responda à pessoa agora com o que tem, dizendo o que faltou.`,
+            }),
+          };
         }
         const isDelegate = call.function.name.startsWith("ask_") || call.function.name.startsWith("consult_");
         const toolStep = await ctx.tracer.step({
@@ -259,7 +269,11 @@ export async function runToolLoop(opts: {
         }
       }),
     );
-    for (const r of results) messages.push({ role: "tool", tool_call_id: r.id, content: r.content.slice(0, 12_000) });
+    for (const [i, r] of results.entries()) {
+      messages.push({ role: "tool", tool_call_id: r.id, content: r.content.slice(0, 12_000) });
+      // pedido de confirmação não é erro: a mesma chamada com o sim tem que passar
+      if (failedResult(r.content) && !r.content.includes('"needs_confirmation"')) failed.set(callKey(calls[i]!), r.content);
+    }
     if (guard?.expired) return { text: "", steps: step, messages, timedOut: true };
     if (quickOnly && results.every((r) => !failedResult(r.content))) {
       messages.push({ role: "assistant", content: said });

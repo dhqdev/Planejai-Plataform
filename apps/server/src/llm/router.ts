@@ -119,9 +119,9 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     fallbacks: ["google/gemini-3.8-flash-lite-tts"],
   },
   {
-    task: "pdf_writer",
-    label: "Texto do PDF (make_pdf)",
-    why: "Escreve o conteúdo do PDF a partir do pedido. O CTO só manda título e roteiro (o teto de saída dele não cabe um documento); aqui a saída é longa, por isso o teto alto.",
+    task: "writer",
+    label: "Redator (PDF, áudio, Notion)",
+    why: "Escreve o texto longo das ferramentas (PDF, mensagem de voz, página do Notion) a partir do pedido. Os agentes só mandam o que querem: o teto de saída deles não cabe um documento. Aqui a saída é longa, por isso o teto alto.",
     model: "deepseek/deepseek-v4.1-flash",
     fallbacks: ["google/gemini-3.8-flash"],
     temperature: 0.5,

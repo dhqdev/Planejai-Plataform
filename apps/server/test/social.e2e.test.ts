@@ -44,6 +44,8 @@ function fakeOpenRouter(body: any) {
     const userText = String(body.messages.findLast((m: any) => m.role === "user")?.content ?? "");
     if (last.role === "system" && String(last.content).includes("Responda à pessoa agora")) return completion(userText.includes("sempre vazio") ? "" : "Aqui está o que achei!");
     if (userText.includes("resposta vazia") || userText.includes("sempre vazio")) return completion("");
+    // modelo teimoso: repete a mesma chamada que falhou enquanto tiver ferramentas
+    if (userText.includes("áudio do nada")) return body.tools?.length ? completion(null, [call("make_audio", {})]) : completion("Não consegui montar o áudio, faltou o texto.");
     if (last.role === "tool") return completion("Feito!");
     if (userText.includes("convida o Giovani")) return completion(null, [call("invite_person", { name: "Giovani Silva", phone: "(19) 92222-3333", confirmed_by_user: true })]);
     if (userText.includes("libera minhas finanças")) return completion(null, [call("share_screen", { contact: "giovani", screen: "finance", allow: true })]);
@@ -207,6 +209,13 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     const ch = await say("me manda um resumo em pdf do pai rico");
     expect(writerAsks.at(-1)).toContain("Resumo completo do livro");
     expect(ch.sent.find((s) => s.type === "image")).toMatchObject({ image: { kind: "document", fileName: "Pai Rico, Pai Pobre.pdf" } });
+  });
+
+  it("mesma chamada que já falhou não roda de novo: o agente responde em vez de entrar em loop", async () => {
+    const ch = await say("me manda um áudio do nada");
+    expect(ch.sent.some((s) => s.text?.includes("faltou o texto"))).toBe(true);
+    const runs = await db.one("SELECT count(*)::int AS n FROM execution_steps WHERE name = 'make_audio'");
+    expect(runs.n).toBe(1);
   });
 
   it("lembrete que pede para mandar algo a um contato só cria a pendência", async () => {

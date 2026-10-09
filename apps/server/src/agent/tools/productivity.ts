@@ -1,4 +1,5 @@
 import { GH_HEADERS, getCredentials } from "../../integrations/registry.js";
+import { writeLong } from "../writer.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 async function notion(path: string, body?: unknown, method = "POST") {
@@ -52,15 +53,29 @@ export function notionId(v: string) {
   return m ? m[0] : v;
 }
 
-export const notionCreatePage = defineTool<{ parent_page_id?: string; title: string; content?: string }>({
+export const notionCreatePage = defineTool<{ parent_page_id?: string; title: string; content?: string; brief?: string }>({
   name: "notion_create_page",
-  description: "Cria uma página no Notion dentro de uma página pai (sem parent_page_id usa a página padrão configurada; use notion_search para achar outra).",
+  description:
+    "Cria uma página no Notion dentro de uma página pai (sem parent_page_id usa a página padrão configurada; use notion_search para achar outra). " +
+    "Conteúdo curto: content. Conteúdo longo (plano, roteiro, resumo): mande só brief e a ferramenta escreve.",
   integration: "notion",
-  parameters: obj({ parent_page_id: { type: "string" }, title: { type: "string" }, content: { type: "string" } }, ["title"]),
-  async run(args) {
+  parameters: obj(
+    { parent_page_id: { type: "string" }, title: { type: "string" }, content: { type: "string" }, brief: { type: "string", description: "Em vez de content, para texto longo: o que a página deve ter" } },
+    ["title"],
+  ),
+  async run(args, ctx) {
     const parent = args.parent_page_id ?? (await getCredentials("notion"))?.default_parent_page_id;
     if (!parent) return { error: "Diga em qual página criar (ou configure a página padrão na integração do Notion)." };
-    const children = (args.content ?? "")
+    const content =
+      args.content?.trim() ||
+      (args.brief?.trim()
+        ? await writeLong(ctx, {
+            name: "texto da página",
+            system: "Você escreve o conteúdo de uma página do Notion em português do Brasil, a partir do pedido. Responda só o texto, um parágrafo ou item por linha, sem markdown pesado. Não invente dados.",
+            ask: `Título: ${args.title}\nPedido: ${args.brief.trim()}`,
+          })
+        : "");
+    const children = content
       .split(/\n+/)
       .filter(Boolean)
       .slice(0, 90)
