@@ -1,0 +1,27 @@
+/* ---------- Toques de cor ---------- */
+.tone-ico { width: 24px; height: 24px; border-radius: 8px; display: inline-grid; place-items: center; background: var(--panel-2); color: var(--text); flex-shrink: 0; }
+.stat .label .tone-ico { width: 22px; height: 22px; border-radius: 7px; }
+.btn-brand { background: var(--grad-strong); background-origin: border-box; color: var(--on-ink); border-color: transparent; font-weight: 650; }
+@media (hover: hover) and (pointer: fine) { .btn-brand:hover { opacity: .92; border-color: transparent; } }
+
+/* ---------- Versão nova ---------- */
+.update-pill {
+  position: fixed; z-index: 120; left: 50%; transform: translateX(-50%); top: calc(12px + env(safe-area-inset-top));
+  display: flex; align-items: center; gap: 12px; padding: 7px 7px 7px 16px; border-radius: 99px;
+  background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow-lg); font-size: 13px; font-weight: 550; white-space: nowrap;
+  animation: pill-in .35s cubic-bezier(.3, 1.4, .5, 1) both;
+}
+.update-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--grad); flex-shrink: 0; }
+.update-pill .btn { border-radius: 99px; padding: 6px 14px; }
+@keyframes pill-in { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* ---------- Puxar para atualizar ---------- */
+.main { position: relative; }
+.ptr {
+  position: fixed; z-index: 60; left: 50%; top: calc(56px + env(safe-area-inset-top)); width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--panel); border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(0, 0, 0, .1); pointer-events: none;
+}
+.ptr.settle { transition: transform .25s ease, opacity .25s ease; }
+.ptr.busy svg { animation: ptr-spin .8s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
+

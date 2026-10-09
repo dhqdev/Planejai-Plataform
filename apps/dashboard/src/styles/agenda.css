@@ -1,0 +1,59 @@
+/* ---------- Agenda (calendário) ---------- */
+.cal-nav { display: flex; align-items: center; gap: 6px; }
+.cal-person { width: 190px; }
+.cal-wd { padding: 10px 8px 6px; font-size: 12px; color: var(--muted); text-align: center; border-bottom: 1px solid var(--border); }
+.cal-cell { min-height: 118px; padding: 6px 5px; border-left: 1px solid var(--border); border-top: 1px solid var(--border); cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-width: 0; transition: background .12s; }
+@media (hover: hover) and (pointer: fine) { .cal-cell:hover { background: var(--panel-2); } }
+.cal-cell.out .cal-num { color: var(--muted); opacity: .55; }
+.cal-num { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 550; align-self: center; flex-shrink: 0; }
+.cal-cell.today .cal-num { box-shadow: inset 0 0 0 2px var(--brand-2); color: var(--brand-2); font-weight: 700; }
+.cal-cell.sel .cal-num { background: var(--ink); color: var(--on-ink); box-shadow: none; }
+.cal-cell.drop-hover, .cal-col.drop-hover { background: var(--accent-soft); }
+.cal-chips { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cal-chip { display: block; width: 100%; text-align: left; border: none; border-radius: 6px; padding: 3px 6px; font-size: 12px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; background: color-mix(in srgb, var(--brand-2) 14%, var(--panel)); color: var(--text); box-shadow: inset 3px 0 0 var(--brand-2); touch-action: none; }
+.cal-chip b { font-weight: 600; opacity: .8; }
+.cal-chip.rec { background: color-mix(in srgb, var(--brand-4) 10%, var(--panel)); color: var(--text); box-shadow: inset 3px 0 0 var(--brand-4); touch-action: auto; }
+.cal-chip.google { background: var(--panel-2); color: var(--text); box-shadow: inset 2px 0 0 var(--text); touch-action: auto; }
+.cal-chip.dragging, .cal-block.dragging { opacity: .35; }
+.cal-more { font-size: 12px; color: var(--muted); padding-left: 6px; }
+.cal-ghost { position: fixed; left: 0; top: 0; z-index: 90; pointer-events: none; box-shadow: var(--shadow-lg); opacity: .95; }
+.cal-dots { display: flex; gap: 3px; justify-content: center; height: 6px; }
+.cal-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--brand-2); }
+.cal-dots i.google { background: var(--muted); }
+.cal-day { padding: 14px; position: sticky; top: 16px; }
+.cal-day-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.cal-empty { padding: 14px; margin: 0; font-size: 13px; }
+.cal-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 6px; border: none; background: none; border-radius: 10px; text-align: left; cursor: pointer; color: inherit; min-width: 0; }
+@media (hover: hover) and (pointer: fine) { .cal-row:hover { background: var(--panel-2); } }
+.cal-row-time { width: 58px; white-space: nowrap; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.cal-bar { width: 3px; align-self: stretch; border-radius: 3px; background: var(--ink); flex-shrink: 0; }
+.cal-bar.google { background: var(--muted); }
+.cal-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cal-row-text small { font-size: 12px; }
+.cal-week { overflow: hidden; }
+.cal-week-head, .cal-week-body { display: grid; grid-template-columns: 52px repeat(var(--cols), 1fr); }
+.cal-week-head { border-bottom: 1px solid var(--border); }
+.cal-week-day { padding: 8px 4px; text-align: center; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cal-week-day small { font-size: 12px; color: var(--muted); }
+.cal-week-day strong { font-size: 20px; font-weight: 600; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto; }
+.cal-week-day.today strong { background: var(--grad); color: var(--on-ink); }
+.cal-week-body { max-height: 66dvh; overflow-y: auto; position: relative; overscroll-behavior: contain; }
+.cal-hours div { position: relative; }
+.cal-hours span { position: absolute; top: -8px; right: 6px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cal-col { position: relative; border-left: 1px solid var(--border); cursor: cell; }
+.cal-slot { border-bottom: 1px solid var(--border); }
+.cal-slot:nth-child(odd) { border-bottom-color: color-mix(in srgb, var(--border) 60%, transparent); }
+.cal-now { position: absolute; left: -1px; right: 0; height: 2px; background: var(--err); z-index: 2; pointer-events: none; }
+.cal-now::before { content: ""; position: absolute; left: -4px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--err); }
+.cal-block { position: absolute; left: 3px; right: 3px; border: none; border-radius: 8px; padding: 4px 6px; font-size: 12px; line-height: 1.25; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; word-break: break-word; text-align: left; overflow: hidden; cursor: pointer; background: color-mix(in srgb, var(--brand-2) 16%, var(--panel)); color: var(--text); box-shadow: inset 3px 0 0 var(--brand-2); z-index: 1; touch-action: none; }
+.cal-block.rec { background: color-mix(in srgb, var(--brand-4) 10%, var(--panel)); color: var(--text); box-shadow: inset 3px 0 0 var(--brand-4); touch-action: auto; }
+.cal-block.google { background: var(--panel-2); color: var(--text); box-shadow: inset 3px 0 0 var(--text); touch-action: auto; }
+.cal-list { display: flex; flex-direction: column; gap: 12px; }
+.cal-list-day { display: flex; gap: 12px; align-items: flex-start; }
+.cal-list-date { width: 48px; text-align: center; padding-top: 8px; flex-shrink: 0; }
+.cal-list-date strong { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; margin: 0 auto; font-size: 18px; }
+.cal-list-date small { color: var(--muted); font-size: 12px; }
+.cal-list-date.today strong { background: var(--grad); color: var(--on-ink); }
+.cal-list .card { padding: 4px; }
+.cal-detail-title { font-size: 18px; font-weight: 600; margin: 0 0 14px; overflow-wrap: anywhere; }
+

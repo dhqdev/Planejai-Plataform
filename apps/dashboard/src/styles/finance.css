@@ -1,0 +1,13 @@
+/* Finanças */
+.donut-wrap { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.legend { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 180px; }
+.legend .item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.legend .sw { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.legend .item strong { margin-left: auto; font-variant-numeric: tabular-nums; }
+.progress { height: 5px; background: var(--panel-2); border-radius: 99px; overflow: hidden; }
+.progress > div { height: 100%; background: var(--text); border-radius: 99px; }
+.amount-out { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.amount-in { color: var(--ok); font-weight: 600; font-variant-numeric: tabular-nums; }
+.line-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.line-item:last-child { border-bottom: none; }
+

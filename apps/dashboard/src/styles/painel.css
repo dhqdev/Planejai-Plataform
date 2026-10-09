@@ -1,0 +1,30 @@
+/* ---------- Painel editável ---------- */
+.board { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
+.widget { position: relative; min-width: 0; transition: transform 0.18s ease, opacity 0.18s; }
+.widget.s { grid-column: span 3; } .widget.m { grid-column: span 4; } .widget.l { grid-column: span 6; } .widget.xl { grid-column: span 12; }
+.widget > .card { height: 100%; }
+.board.editing .widget > .card { outline: 1px dashed var(--border-2); outline-offset: 3px; animation: wiggle 0.5s ease-in-out infinite alternate; }
+.board.editing .widget:nth-child(2n) > .card { animation-delay: -0.25s; }
+@keyframes wiggle { from { transform: rotate(-0.25deg); } to { transform: rotate(0.25deg); } }
+.widget.dragging { opacity: 0.35; }
+.widget-tools { position: absolute; top: -10px; right: -6px; display: none; gap: 4px; z-index: 3; }
+.board.editing .widget-tools { display: flex; }
+.widget-tools button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border-2); background: var(--panel); display: grid; place-items: center; cursor: pointer; color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.widget-tools .grip { cursor: grab; touch-action: none; }
+.widget-tools .remove { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
+.widget-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.widget-head h3 { margin: 0; }
+.drag-ghost { position: fixed; pointer-events: none; z-index: 80; opacity: 0.92; box-shadow: var(--shadow-lg); border-radius: var(--radius); transform: rotate(1.5deg); }
+.catalog { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.catalog button { display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); cursor: pointer; }
+@media (hover: hover) and (pointer: fine) { .catalog button:hover { border-color: var(--text); } }
+.catalog small { display: block; color: var(--muted); font-size: 12px; }
+
+/* Botões de canto do painel */
+.corner { position: fixed; z-index: 30; display: flex; flex-direction: column; gap: 8px; }
+.corner.tr { top: 18px; right: 22px; }
+.corner.br { bottom: 22px; right: 22px; }
+.fab { width: 46px; height: 46px; border-radius: 16px; display: grid; place-items: center; border: 1px solid var(--border); background: var(--panel); cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.08); color: var(--text); }
+.fab.ink { background: var(--grad); color: var(--on-ink); border-color: transparent; box-shadow: var(--shadow-lg); }
+@media (hover: hover) and (pointer: fine) { .fab:hover { transform: translateY(-1px); } }
+

@@ -1,0 +1,50 @@
+/* ---------- Números do topo: uma faixa só com divisórias, em vez de vários cartões iguais ---------- */
+.fit-stats { gap: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); overflow: hidden; }
+.fit-stats .widget > .card { border: none; border-radius: 0; box-shadow: none; background: transparent; }
+.fit-stats .widget + .widget > .card { box-shadow: -1px 0 0 var(--border); }
+.board.editing.fit-stats { overflow: visible; }
+
+/* ---------- Assinatura: uma coluna estreita, só texto e um botão ---------- */
+.bill { max-width: 420px; }
+.bill-plan { margin: 0; color: var(--muted); font-size: 14px; }
+.bill-price { margin: 2px 0 0; font-size: clamp(34px, 9vw, 44px); font-weight: 650; letter-spacing: -0.035em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.bill-price span { font-size: 15px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
+.bill-status { margin: 14px 0 22px; font-size: 15px; }
+.bill-form { margin-top: 4px; }
+.bill-cta { width: 100%; justify-content: center; min-height: 46px; font-size: 15px; }
+.bill-facts { list-style: none; padding: 18px 0 0; margin: 22px 0 0; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; display: grid; gap: 6px; }
+.bill-cancel { margin-top: 18px; padding-left: 0; padding-right: 0; }
+.bill .error-box { margin-top: 14px; }
+
+/* Assinatura no admin: situação de cada pessoa */
+.bill-counts { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+.bill-counts strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.bill-people { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; border-top: 1px solid var(--border); }
+.bill-people li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.bill-people li > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bill-people small { color: var(--muted); white-space: nowrap; }
+
+/* ---------- Telas irmãs em abas (Execuções | Filas, Clientes | Convites...) ---------- */
+.subtabs-bar { max-width: 1320px; margin: 0 auto; padding: 24px 36px 0; }
+.subtabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--panel-2); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.subtabs button { border: none; background: none; color: var(--muted); font: inherit; font-weight: 600; font-size: 13.5px; padding: 7px 16px; border-radius: 9px; cursor: pointer; white-space: nowrap; transition: background-color .15s, color .15s; }
+.subtabs button.active { background: var(--ink); color: var(--on-ink); }
+@media (hover: hover) and (pointer: fine) { .subtabs button:not(.active):hover { color: var(--text); } }
+.subtabs button:active { transform: scale(0.97); }
+.subtabs-bar + .route-fade > .page, .subtabs-bar + .route-fade > .page-wide { padding-top: 18px; }
+@media (max-width: 1180px) and (min-width: 768px) { .subtabs-bar { padding: 20px 26px 0; } }
+@media (max-width: 767px) {
+  .subtabs-bar { padding: 12px 16px 0; }
+  .subtabs { display: flex; }
+  .subtabs button { flex: 1; min-height: 40px; }
+  .subtabs-bar + .route-fade > .page, .subtabs-bar + .route-fade > .page-wide { padding-top: 12px; }
+}
+
+/* ---------- Compartilhar (Minha conta) ---------- */
+.share-list { display: flex; flex-direction: column; margin: 4px 0 8px; }
+.share-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.share-row:first-child { border-top: none; }
+.share-row > span { flex: 1; min-width: 0; font-weight: 550; }
+.share-toggles { display: flex; gap: 6px; flex-shrink: 0; }
+.subtabs-bar:has(+ .route-fade > .page-wide) { padding-left: 28px; padding-right: 28px; }
+

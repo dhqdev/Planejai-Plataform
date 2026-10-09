@@ -1,0 +1,131 @@
+/* ---------- Toque, app nativo ---------- */
+a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, label { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.nav, .brand, .tabbar, .btn, .tab, .sheet-item, .badge, .fab, .icon-btn { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.btn:active:not(:disabled), .icon-btn:active, .sheet-item:active, .card.clickable:active, .nav a:active, .fab:active { transform: scale(0.97); }
+.tab:active .tab-ico { transform: scale(0.86); }
+.pressed { transform: scale(0.97); opacity: 0.85; }
+/* no toque não existe hover: linhas e itens escurecem enquanto o dedo está em cima */
+.list-item:active, .line-item.clickable:active, a.line-item:active, .step:active, .table tr.clickable:active td, .fin-tx:active, .cal-row:active, .notif-item:active,
+.fin-legend button:active, .cal-check:active, .cal-mini-grid button:active:not(.sel), .cal-cell:active:not(:has(.cal-chip:active)) { background: var(--panel-2); }
+.budget-row:active, .costs-row:active, .tabs button:active, .link-btn:active, .cal-title-btn:active, .doc-name:active { opacity: .6; }
+.fin-tabs button:active, .fin-people button:active, .cal-pills button:active, button.chip:active, .fin-cat:active, .team-card:active, .catalog button:active, .cal-create:active, .cal-chip:active, .cal-block:active { transform: scale(0.97); }
+
+.sheet-nav { display: flex; flex-direction: column; gap: 2px; }
+.sheet-nav .nav-section { margin-top: 8px; }
+.sheet-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 10px 12px; border: none; border-radius: 12px; background: none; text-align: left; font-weight: 500; cursor: pointer; }
+.sheet-item .ico-box { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: var(--panel-2); }
+.sheet-item .chev { margin-left: auto; color: var(--muted); }
+@media (hover: hover) and (pointer: fine) { .sheet-item:hover { background: var(--panel-2); } }
+.sheet-item.active { background: var(--panel-2); font-weight: 600; }
+.install-card { display: flex; align-items: center; gap: 12px; padding: 12px; margin-bottom: 12px; border-radius: 14px; background: var(--panel-2); }
+.route-fade { animation: route-in 0.14s ease-out both; }
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes pop-out { from { opacity: 1; } to { opacity: 0; transform: translateY(8px) scale(0.985); } }
+@keyframes route-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+
+/* ---------- Ajustes do redesenho ---------- */
+.ico { flex-shrink: 0; display: block; }
+.btn .ico { display: inline-block; vertical-align: -3px; }
+.stat-ico { position: absolute; top: 14px; right: 14px; color: var(--muted); }
+.auth-hero .brand { color: var(--on-ink); padding: 0; font-size: 20px; }
+.auth-logo { display: none; margin-bottom: 14px; }
+.line-item.clickable { cursor: pointer; }
+@media (hover: hover) and (pointer: fine) {
+  .line-item.clickable:hover { background: var(--panel-2); }
+  a.line-item:hover { background: var(--panel-2); }
+}
+.page:has(.corner), .page-wide:has(.corner) { padding-bottom: 110px; }
+.node-badge .ico { color: #fff; }
+
+/* ---------- iPad (e telas médias): menu vira trilho de ícones ---------- */
+@media (max-width: 1180px) and (min-width: 768px) {
+  :root { --rail: 76px; }
+  .sidebar { padding: 18px 10px; align-items: center; }
+  .brand { padding: 2px 0 20px; justify-content: center; }
+  .brand > div:not(.brand-logo), .nav-section, .nav a .label, .nav .count, .sidebar-foot .me > div:not(.avatar), .sidebar-foot .row .btn .label { display: none; }
+  .nav a { justify-content: center; width: 50px; height: 46px; padding: 0; border-radius: 14px; position: relative; }
+  .nav a[data-count]::after { content: attr(data-count); position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; border-radius: 99px; background: var(--ink); color: var(--on-ink); font-size: 10px; display: grid; place-items: center; padding: 0 4px; }
+  .sidebar-foot { align-items: center; }
+  .sidebar-foot .row { flex-direction: column; }
+  .page { padding: 26px 26px 56px; }
+  .widget.s { grid-column: span 6; } .widget.m { grid-column: span 6; } .widget.l { grid-column: span 12; }
+  .exec-layout { grid-template-columns: 300px 1fr; }
+  .split { grid-template-columns: 260px 1fr; }
+  .corner.tr { top: 16px; right: 16px; }
+  .modal { width: min(600px, 100%); }
+}
+
+/* ---------- Celular ---------- */
+@media (max-width: 767px) {
+  .auth { grid-template-columns: 1fr; }
+  .auth-hero { display: none; }
+  .auth-logo { display: block; }
+  .hide-phone { display: none; }
+  .layout { flex-direction: column; }
+  .sidebar { display: none; }
+  .topbar {
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+    padding: calc(8px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
+    background: color-mix(in srgb, var(--bg) 88%, transparent); -webkit-backdrop-filter: saturate(1.4) blur(14px); backdrop-filter: saturate(1.4) blur(14px);
+    border-bottom: 1px solid var(--border); z-index: 30; user-select: none; -webkit-user-select: none;
+  }
+  .topbar-title { font-size: 17px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .main { padding-bottom: calc(84px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; }
+  .tabbar {
+    display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; pointer-events: none;
+    padding: 0 max(10px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    user-select: none; -webkit-user-select: none;
+  }
+  /* barra flutuante em cápsula; as abas rolam para os lados e "Mais" fica fixo na ponta */
+  .tabbar-pill {
+    pointer-events: auto; display: flex; align-items: center; gap: 4px; padding: 5px; border-radius: 26px;
+    background: color-mix(in srgb, var(--panel) 92%, transparent); -webkit-backdrop-filter: saturate(1.5) blur(18px); backdrop-filter: saturate(1.5) blur(18px);
+    border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0, 0, 0, .14);
+  }
+  .tabbar-scroll { flex: 1; min-width: 0; display: flex; gap: 2px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch; mask-image: linear-gradient(90deg, #000 92%, transparent); -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent); }
+  .tabbar-scroll::-webkit-scrollbar { display: none; }
+  .tab {
+    flex: 0 0 auto; min-width: 66px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 52px; padding: 0 10px;
+    border: none; background: none; border-radius: 20px; color: var(--muted); font-size: 12px; font-weight: 550; cursor: pointer; scroll-snap-align: center; white-space: nowrap;
+    transition: background .18s, color .18s;
+  }
+  .tab-ico { line-height: 1; transition: transform 0.18s cubic-bezier(.3,1.6,.5,1); }
+  .tab.active { color: var(--text); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--border); font-weight: 650; }
+  .tab.active .tab-ico { color: var(--text); transform: translateY(-1px); }
+  .tab-more { flex: 0 0 auto; }
+
+  .page { padding: 18px 16px 28px; }
+  .page-head h1 { font-size: 22px; }
+  .page-head .row { flex-wrap: wrap; }
+  .exec-layout, .split, .io { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat .value { font-size: 20px; }
+  .board { gap: 10px; }
+  .widget.s { grid-column: span 6; } .widget.m, .widget.l, .widget.xl { grid-column: span 12; }
+  .team-map { aspect-ratio: 3 / 4; min-height: 440px; }
+  .corner.tr { display: none; }
+  .corner.br { bottom: calc(76px + env(safe-area-inset-bottom)); right: 16px; }
+
+  /* modais viram bottom sheet */
+  .modal-bg { place-items: end stretch; padding: 0; }
+  .modal, .modal.wide {
+    width: 100%; max-height: 92dvh; border-radius: 22px 22px 0 0; border-bottom: none;
+    padding-bottom: env(safe-area-inset-bottom); animation: none; will-change: transform;
+  }
+  /* quem move a folha é a mola do Modal (components.tsx): acompanha o dedo e pode ser pega no meio do caminho */
+  .modal-scrim, .modal-bg.closing .modal-scrim, .modal-bg.closing .modal { animation: none; }
+  /* puxou para cima além do limite: não abre fresta embaixo */
+  .modal::after { content: ""; position: absolute; left: -1px; right: -1px; top: 100%; height: 50vh; background: var(--panel); }
+  .sheet-handle { display: block; }
+  .modal-head { border-bottom: none; padding-top: 8px; padding-bottom: 4px; }
+  .modal-body .kv { font-size: 15px; gap: 10px 16px; }
+  .confirm .modal-head { padding-bottom: 14px; }
+  .modal-foot { position: sticky; bottom: 0; background: var(--panel); }
+  .modal-foot .btn { flex: 1; min-height: 44px; }
+}
+
+

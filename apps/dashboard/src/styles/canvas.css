@@ -1,0 +1,59 @@
+/* ---------- Integrações ---------- */
+.connector { display: flex; gap: 14px; align-items: center; padding: 14px 16px; }
+.connector + .connector { border-top: 1px solid var(--border); }
+.connector .logo { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--panel-2); font-weight: 650; flex-shrink: 0; }
+.connector .name { font-weight: 600; }
+.connector .desc { color: var(--muted); font-size: 13px; }
+
+/* ---------- Canvas (execuções e mapa do time) ---------- */
+.canvas {
+  position: relative; border-radius: var(--radius); border: 1px solid var(--border); overflow: auto;
+  background-color: var(--panel);
+  background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+.canvas svg.edges { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.canvas .edge { fill: none; stroke: var(--border-2); stroke-width: 1.6; }
+.canvas .edge.peer { stroke: var(--text); opacity: 0.7; }
+.canvas .edge-label { fill: var(--muted); font-size: 12px; font-weight: 600; }
+.canvas .edge.active { stroke: var(--text); stroke-dasharray: 5 5; animation: flow 0.9s linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -10; } }
+.node {
+  position: absolute; width: 190px; background: var(--panel); border: 1px solid var(--border-2); border-radius: 14px; padding: 10px 12px;
+  cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.node.selected { border-color: var(--text); box-shadow: 0 0 0 3px var(--accent-soft); }
+@media (hover: hover) and (pointer: fine) { .node:hover { border-color: var(--text); box-shadow: 0 0 0 3px var(--accent-soft); } }
+.node .node-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.node .node-icon { width: 30px; height: 30px; border-radius: 9px; background: var(--panel-2); display: grid; place-items: center; }
+.node .node-sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.node.ok { border-color: var(--ok); } .node.err { border-color: var(--err); }
+.node .node-badge { position: absolute; top: -8px; right: -8px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; color: #fff; }
+
+/* Mapa do time (centro do painel) */
+.team-map { position: relative; width: 100%; aspect-ratio: 16 / 9; min-height: 340px; max-height: 620px; }
+/* o resto do mapa (quadro que arrasta, agentes, recados) fica em teammap.css */
+
+/* Execução: passos + dados */
+.exec-layout { display: grid; grid-template-columns: 360px 1fr; gap: 14px; align-items: start; }
+.steps { max-height: calc(100dvh - 220px); overflow: auto; }
+.step { display: flex; gap: 8px; align-items: flex-start; padding: 9px 12px; cursor: pointer; border-left: 2px solid transparent; }
+@media (hover: hover) and (pointer: fine) { .step:hover { background: var(--panel-2); } }
+.step.selected { background: var(--panel-2); border-left-color: var(--text); }
+.step .step-name { font-weight: 500; }
+.step .step-meta { font-size: 12px; color: var(--muted); }
+.json { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; background: var(--panel-2); border-radius: var(--radius-sm); padding: 12px; max-height: 60dvh; overflow: auto; margin: 0; }
+.io { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.split { display: grid; grid-template-columns: 320px 1fr; gap: 14px; }
+.list-item { padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; }
+@media (hover: hover) and (pointer: fine) { .list-item:hover { background: var(--panel-2); } }
+.list-item.active { background: var(--panel-2); }
+
+.bars { display: flex; align-items: flex-end; gap: 4px; height: 120px; }
+.bars .bar { flex: 1; background: var(--text); border-radius: 4px 4px 0 0; min-height: 2px; position: relative; opacity: 0.85; }
+.fin-page .bars .bar { background: var(--border-2); opacity: 1; }
+.fin-page .bars .bar.spent { background: var(--ink); }
+.bars .bar.err { background: var(--err); }
+.bars-labels { display: flex; gap: 4px; font-size: 10px; color: var(--muted); }
+.bars-labels span { flex: 1; text-align: center; }
+

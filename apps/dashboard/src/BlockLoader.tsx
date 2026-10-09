@@ -1,4 +1,4 @@
-/** Abertura do app: 16 blocos em onda, grandes e sozinhos no centro da tela. CSS puro em styles.css. */
+/** Abertura do app: 16 blocos em onda, grandes e sozinhos no centro da tela. CSS puro em styles/carregando-toque.css. */
 export function BlockLoader() {
   return (
     <div className="pj-loader-wrap" role="status" aria-label="Carregando">

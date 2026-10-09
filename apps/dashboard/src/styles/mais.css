@@ -1,0 +1,64 @@
+/* ---------- Menu "Mais" e ajustes em quadrados ---------- */
+.more-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); gap: 10px; min-width: 0; }
+.more-tile { aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 10px; border-radius: 20px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); text-decoration: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 550; text-align: center; line-height: 1.2; transition: transform .12s, background .12s; min-width: 0; hyphens: auto; -webkit-hyphens: auto; overflow-wrap: anywhere; }
+@media (hover: hover) and (pointer: fine) { .more-tile:hover { border-color: var(--border-2); } }
+.more-tile:active { transform: scale(0.95); }
+.more-tile.active { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
+.more-tile small { font-size: 12px; margin-top: -6px; }
+.more-me { padding: 4px 2px 14px; }
+.phone-only { display: none !important; }
+.dash-actions { display: flex; gap: 8px; }
+
+@media (max-width: 1180px) and (min-width: 768px) {
+  .cal-month-wrap { grid-template-columns: 1fr; }
+  .cal-day { position: static; }
+  .fin-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 767px) {
+  .phone-only { display: inline-flex !important; }
+  .corner.br { display: none; }
+  .page:has(.corner), .page-wide:has(.corner) { padding-bottom: 28px; }
+  .dash-actions { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; }
+  .dash-actions .btn { justify-content: center; min-height: 44px; border-radius: 14px; }
+  .page-head .dash-actions { margin-top: 4px; }
+
+  .cal-day { position: static; padding: 12px; }
+  .cal-week-body { max-height: calc(100dvh - 300px); }
+  .cal-week-head, .cal-week-body { grid-template-columns: 40px repeat(var(--cols), 1fr); }
+
+  .fin-top { gap: 8px; }
+  .fin-month { flex: 1; justify-content: space-between; }
+  .fin-month strong { font-size: 19px; min-width: 0; white-space: nowrap; }
+  .fin-mini strong { font-size: 14px; }
+  .fin-person { width: 100%; order: 5; }
+  .fin-top .btn-primary { width: 40px; padding: 0; justify-content: center; }
+  .fin-hero { padding: 18px; }
+  .fin-cats { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .fin-cat { padding: 12px; }
+  .fin-cat-value { font-size: 17px; }
+  .fin-cat-value.long { font-size: 14px; }
+  .fin-grid { grid-template-columns: 1fr; }
+  .fin-list { padding: 2px 2px 6px; }
+
+  .more-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .more-tile { border-radius: 18px; font-size: 12.5px; }
+  /* o fundo ocupa só a área visível (o Modal mede o visualViewport): com teclado ou roleta do select
+     abertos a folha fica logo acima deles e volta para o pé da tela quando fecham */
+  .modal-bg { top: var(--vvtop, 0px); bottom: auto; height: var(--vvh, 100dvh); }
+  .modal, .modal.wide { max-height: min(92dvh, calc(var(--vvh, 100dvh) - 12px)); }
+  .modal.more-sheet { min-height: min(70dvh, calc(var(--vvh, 100dvh) - 12px)); }
+  /* teclado aberto: sobra pouca altura, então a moldura encolhe e o espaço vai para os campos */
+  .kb-open .sheet-handle { display: none; }
+  .kb-open .modal { border-radius: 16px 16px 0 0; padding-bottom: 0; }
+  .kb-open .modal-head { padding-top: 10px; padding-bottom: 6px; }
+  .kb-open .modal-foot { padding-top: 8px; padding-bottom: 8px; }
+  .modal-body .select { text-overflow: ellipsis; }
+}
+
+/* App instalado ou tela de toque: segurar o dedo não seleciona texto nem abre o menu do sistema.
+   O que é para copiar tem botão de copiar (CopyField); só campos de digitar continuam selecionáveis. */
+@media (display-mode: standalone), (pointer: coarse) {
+  body { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  input, textarea, [contenteditable], .selectable { user-select: text; -webkit-user-select: text; }
+}
+

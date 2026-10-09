@@ -117,7 +117,7 @@ apps/dashboard/src/        React + Vite; App.tsx monta menu (SUPER_NAV / ADMIN_N
   components.tsx           Modal (bottom sheet no celular), ICONS, AGENT_LABEL
   hooks.ts  api.ts         useApi com cache em memória, FIT_QUERY; cliente HTTP
   faces.tsx  mochi/        carinhas dos agentes; mascote Mochi (Mochi.tsx, Wardrobe.tsx, Parade.tsx)
-  touch.ts  update.ts  notify.ts  a11y.ts  motion.css  styles.css
+  touch.ts  update.ts  notify.ts  a11y.ts  motion.css  styles.css (só @import de styles/*.css)
 apps/dashboard/public/     manifest.webmanifest, sw.js (cache só de /assets e /icons; nunca /api) e icons/
 deploy/                    portainer-stack.yml, swarm-traefik-stack.yml (autoplanejai.tekvosoft.com), n8n-stack.yml
 docs/operacao.md           segredos, backup/restore, rollback, saúde

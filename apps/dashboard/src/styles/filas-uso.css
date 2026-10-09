@@ -1,0 +1,44 @@
+/* ---------- Filas ---------- */
+.queue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.queue-card { padding: 16px; }
+.queue-card h3 { margin: 0 0 2px; font-size: 14px; }
+.queue-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
+.queue-nums div { display: flex; flex-direction: column; }
+.queue-nums strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.queue-nums small { color: var(--muted); font-size: 12px; }
+
+
+/* ---------- Uso por cliente ---------- */
+.costs-card { margin-bottom: 14px; }
+.costs-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.costs-total { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; font-size: 26px; letter-spacing: -0.03em; font-weight: 600; margin: 2px 0; }
+.costs-bars { display: flex; align-items: stretch; gap: 2px; height: 72px; margin: 12px 0 4px; }
+.costs-bars span { flex: 1; display: flex; align-items: flex-end; cursor: pointer; padding-top: 4px; }
+.costs-bars i { width: 100%; border-radius: 4px 4px 0 0; background: var(--border-2); min-height: 0; }
+.costs-bars span.on i { background: var(--grad); }
+@media (hover: hover) and (pointer: fine) { .costs-bars span:hover i { background: var(--grad); } }
+.costs-axis { display: flex; justify-content: space-between; font-size: 12px; font-variant-numeric: tabular-nums; }
+.costs-row { display: grid; grid-template-columns: minmax(0, 160px) minmax(24px, 1fr) minmax(76px, auto) minmax(170px, auto); align-items: center; gap: 10px; width: 100%; background: none; border: none; padding: 7px 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border); }
+.costs-row:last-of-type { border-bottom: none; }
+.costs-name { font-size: 13px; }
+.costs-track { height: 8px; background: var(--panel-2); border-radius: 99px; overflow: hidden; }
+.costs-track i { display: block; height: 100%; border-radius: 99px; background: var(--grad); }
+.costs-val { font-variant-numeric: tabular-nums; font-size: 13px; text-align: right; white-space: nowrap; }
+.costs-sub { font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+@media (max-width: 767px) { .costs-row { grid-template-columns: minmax(0, 110px) minmax(24px, 1fr) minmax(70px, auto); } }
+.usage-nums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0 16px; }
+.usage-nums div { background: var(--panel-2); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; min-width: 0; }
+.usage-nums small { color: var(--muted); font-size: 12px; }
+.usage-nums strong { font-size: 18px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.usage-bars { display: flex; align-items: flex-end; gap: 4px; height: 64px; margin: 6px 0 4px; }
+.usage-bars i { flex: 1; border-radius: 4px 4px 0 0; background: var(--border-2); min-height: 2px; }
+.usage-bars i:last-child { background: var(--grad); }
+.toggle-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.toggle-row:last-child { border-bottom: none; }
+@media (max-width: 640px) {
+  .usage-nums { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .team-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .team-card .face-tile { width: 64px; height: 64px; }
+  .team-card .face-tile .agent-face { width: 100%; height: 100%; }
+}
+

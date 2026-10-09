@@ -11,7 +11,7 @@ Leia antes do primeiro commit da sessão. O dono quer push direto no `main`, sem
 ## Enquanto trabalha
 - Commits pequenos, um assunto por commit, mensagem em português. Arquivo da skill atualizado no mesmo commit da mudança de comportamento.
 - Não acumule horas de trabalho sem commit: commite local cedo (dá para refazer o rebase) e publique quando os testes passarem.
-- Arquivos quentes (muitas sessões tocam): `agent/team.ts`, `agent/prompts.ts`, `llm/router.ts`, `App.tsx`, `styles.css`, `api/routes/dashboard.ts`, `components.tsx`, os `.md` desta skill e `package-lock.json`. Mexa só nas linhas do seu assunto, sem reformatar o arquivo inteiro nem reordenar imports alheios.
+- Arquivos quentes (muitas sessões tocam): `agent/team.ts`, `agent/prompts.ts`, `llm/router.ts`, `App.tsx`, `styles/*.css`, `api/routes/dashboard.ts`, `components.tsx`, os `.md` desta skill e `package-lock.json`. Mexa só nas linhas do seu assunto, sem reformatar o arquivo inteiro nem reordenar imports alheios.
 - Migração nova: pegue o número na hora do commit (`ls apps/server/src/db/migrations | tail -3`). Se depois do rebase outro arquivo já usa o mesmo número, renomeie a SUA para o próximo livre (`git mv`). Nunca renomeie nem edite uma que já está no `origin/main`.
 - Dependência nova: só se precisar mesmo; JS puro (Dockerfile não tem toolchain nativa).
 

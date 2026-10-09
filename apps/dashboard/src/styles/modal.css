@@ -1,0 +1,24 @@
+/* ---------- Modal / sheet (arrastável) ---------- */
+/* o fundo escuro é um elemento à parte: no celular a opacidade dele acompanha o arrasto da folha */
+.modal-bg { position: fixed; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; z-index: 50; padding: 16px; }
+.modal-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.32); animation: fade-in 0.18s ease both; }
+.modal-bg.closing .modal-scrim { animation: fade-out 0.16s ease both; }
+.modal { position: relative; min-width: 0; width: min(540px, 100%); max-height: 88dvh; display: flex; flex-direction: column; box-shadow: var(--shadow-lg); outline: none; animation: pop-in 0.2s cubic-bezier(.2,.9,.25,1) both; }
+.modal.wide { width: min(760px, 100%); }
+.modal.confirm { width: min(420px, 100%); }
+.modal-bg.closing .modal { animation: pop-out 0.16s cubic-bezier(.2,.9,.25,1) both; }
+.modal-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
+.modal-head:active { cursor: grabbing; }
+.modal-head strong { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal-head .ico, .modal-head .icon-btn { flex-shrink: 0; }
+/* min-height 0: sem isso a folha não encolhe o miolo e o conteúdo some embaixo do rodapé (Safari) */
+.modal-body { padding: 16px; overflow: auto; overscroll-behavior: contain; flex: 1 1 auto; min-height: 0; scroll-padding: 16px; }
+.modal-head, .modal-foot, .sheet-handle { flex-shrink: 0; }
+.modal-body:empty { display: none; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+.confirm .modal-head { border-bottom: none; padding-bottom: 4px; }
+.confirm .modal-body { padding-top: 4px; }
+.confirm .modal-foot { border-top: none; }
+.confirm-text { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+.sheet-handle { display: none; width: 38px; height: 5px; border-radius: 99px; background: var(--border-2); margin: 8px auto 0; }
+

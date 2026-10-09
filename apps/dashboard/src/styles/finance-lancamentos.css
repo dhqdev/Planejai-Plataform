@@ -1,0 +1,51 @@
+/* ---------- Finanças ---------- */
+.fin-top { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.fin-month { display: flex; align-items: center; gap: 8px; }
+.fin-month strong { font-size: 22px; font-weight: 650; min-width: 150px; text-align: center; letter-spacing: -0.02em; }
+.fin-person { width: 190px; }
+.fin-hero { padding: 22px; margin-bottom: 18px; position: relative; overflow: hidden; }
+
+.fin-total { font-size: clamp(26px, 8.5vw, 38px); overflow-wrap: anywhere; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.1; margin: 4px 0; }
+.fin-diff { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+.fin-diff.up { color: var(--err); } .fin-diff.down { color: var(--ok); }
+.fin-stack { display: flex; height: 10px; border-radius: 99px; overflow: hidden; gap: 2px; margin: 16px 0 14px; background: var(--panel-2); }
+.fin-stack span { min-width: 4px; }
+.fin-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.fin-mini div { display: flex; flex-direction: column; gap: 2px; }
+.fin-mini small { font-size: 12px; }
+.fin-mini strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+.fin-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 0 10px; }
+.fin-section-head h3 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fin-section-head .btn { min-width: 0; max-width: 60%; }
+.fin-section-head .btn span { overflow: hidden; text-overflow: ellipsis; }
+.fin-section-head h3 { margin: 0; }
+.fin-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-bottom: 20px; }
+.fin-cat { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "ico name" "value value" "bar bar" "meta meta"; gap: 6px 10px; align-items: center; padding: 14px; text-align: left; cursor: pointer; color: inherit; font: inherit; transition: opacity .15s, box-shadow .15s; }
+.fin-cat.active { box-shadow: inset 0 0 0 1.5px var(--text); }
+.fin-cat.dim { opacity: .45; }
+.fin-cat-ico { grid-area: ico; width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: color-mix(in srgb, var(--c) 15%, var(--panel)); color: var(--c); }
+.fin-cat-name { grid-area: name; font-weight: 550; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fin-cat-value { grid-area: value; min-width: 0; overflow-wrap: anywhere; font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.fin-cat-value.long { font-size: 16px; }
+.fin-cat-bar { grid-area: bar; height: 4px; border-radius: 99px; background: var(--panel-2); overflow: hidden; }
+.fin-cat-bar i { display: block; height: 100%; background: var(--c, var(--text)); border-radius: 99px; }
+.fin-cat small { grid-area: meta; font-size: 12px; }
+.fin-grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; align-items: start; }
+.fin-list { padding: 4px 6px 8px; }
+.fin-day { display: flex; justify-content: space-between; padding: 12px 8px 6px; font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+.fin-tx { display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 8px; border: none; background: none; border-radius: 12px; text-align: left; cursor: pointer; color: inherit; font: inherit; min-width: 0; }
+@media (hover: hover) and (pointer: fine) { .fin-tx:hover { background: var(--panel-2); } }
+.fin-tx-ico { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; background: var(--panel-2); flex-shrink: 0; }
+.fin-tx-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.fin-tx-text small { font-size: 12px; }
+/* a linha já limita a largura: o teto de 380px do .ellipsis cortaria texto com espaço sobrando */
+.fin-tx-text .ellipsis, .cal-row-text .ellipsis { max-width: none; }
+.fin-tx strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fin-months { display: flex; gap: 8px; height: 140px; align-items: stretch; }
+.fin-months button { flex: 1; display: flex; flex-direction: column; gap: 6px; align-items: center; border: none; background: none; cursor: pointer; color: var(--muted); padding: 0; font: inherit; }
+.fin-months button.active { color: var(--text); font-weight: 600; }
+.fin-month-bar { flex: 1; width: 100%; max-width: 34px; display: flex; align-items: flex-end; border-radius: 8px; background: var(--panel-2); overflow: hidden; }
+.fin-month-bar i { display: block; width: 100%; background: var(--border-2); border-radius: 8px; min-height: 3px; }
+.fin-months button.active .fin-month-bar i { background: var(--ink); }
+.fin-months small { font-size: 12px; text-transform: capitalize; }
+

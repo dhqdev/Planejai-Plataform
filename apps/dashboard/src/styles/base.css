@@ -1,0 +1,105 @@
+/* Planejai: preto e branco. A paleta do Mochi aparece só em pontos escolhidos (marca, bolinhas de novidade, hoje na agenda, o CTO no mapa do time, perguntas de boas-vindas); as cores que informam (status, agendas, categorias) continuam. Celular, iPad e desktop. */
+:root {
+  --bg: #fafafa;
+  --panel: #ffffff;
+  --panel-2: #f4f4f5;
+  --border: #e8e8e8;
+  --border-2: #d9d9d9;
+  --text: #111111;
+  --muted: #6b6b6b;
+  --ink: #111111;
+  --on-ink: #ffffff;
+  --accent: #111111;
+  --accent-soft: #efefef;
+  --ok: #2a7047;
+  --ok-soft: #e8f2ec;
+  --err: #c0392b;
+  --err-soft: #f8e9e7;
+  --warn: #8a5a10;
+  --warn-soft: #f6efe1;
+  --info: #3b5bb5;
+  --info-soft: #e9edf7;
+  --canvas-dot: #dedede;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.14);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --rail: 248px;
+  /* agendas: tons que seguram texto branco (4.5:1) */
+  --cal-reminder: #e03150;
+  --cal-google: #2a6fdb;
+  --cal-holiday: #0c8040;
+  --brand-1: #ff7a1a;
+  --brand-2: #ff4458;
+  --brand-3: #e23382;
+  --brand-4: #8b2be2;
+  /* cores do Mochi (ícone do app): roxo elétrico, magenta do anel e o fundo noite */
+  --violet: #6510e0;
+  --magenta: #c42bea;
+  --midnight: #210552;
+  --violet-soft: #f1eafe;
+  --on-brand: #ffffff;
+  /* destaque do dia a dia é tinta (preto no claro, branco no escuro); o roxo fica para os pontos da paleta */
+  --grad: var(--ink);
+  --grad-strong: var(--ink);
+  --grad-soft: var(--panel-2);
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #111111;
+  --panel: #191919;
+  --panel-2: #212121;
+  --border: #2a2a2a;
+  --border-2: #3a3a3a;
+  --text: #f1f1ee;
+  --muted: #9a9a94;
+  --ink: #f1f1ee;
+  --on-ink: #111111;
+  --accent: #f1f1ee;
+  --accent-soft: #262626;
+  --ok: #6cc28f;
+  --ok-soft: #17261d;
+  --err: #ef7a6c;
+  --err-soft: #2d1a18;
+  --warn: #e0b060;
+  --warn-soft: #2a2316;
+  --info: #8ea6f0;
+  --info-soft: #1b2133;
+  --canvas-dot: #2c2c2c;
+  --shadow: none;
+  --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.5);
+  --violet: #8c4bff;
+  --magenta: #e05cff;
+  --violet-soft: #241838;
+  --on-brand: #ffffff;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+/* Sem barra de rolagem em lugar nenhum: rola com dedo, roda do mouse ou teclado, como num app */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+a { color: inherit; text-decoration: none; }
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2, h3 { letter-spacing: -0.02em; }
+.ico { flex-shrink: 0; display: block; }
+
+/* ---------- Foco pelo teclado (campos têm anel próprio) ---------- */
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+/* itens dentro de áreas que rolam ou cortam: anel por dentro */
+.nav a:focus-visible, .tab:focus-visible, .sheet-item:focus-visible, .list-item:focus-visible, .line-item:focus-visible, .fin-tx:focus-visible, .cal-row:focus-visible, .cal-chip:focus-visible, .cal-block:focus-visible, .notif-item:focus-visible, .costs-row:focus-visible, .budget-row:focus-visible, .tabs button:focus-visible, .fin-legend button:focus-visible { outline-offset: -2px; }
+.cal-check:has(input:focus-visible) .box { outline: 2px solid var(--text); outline-offset: 2px; }
+.page-head h1, .empty, .fin-insight-text { text-wrap: balance; }
+
