@@ -12,7 +12,7 @@ import { haptic } from "../touch";
  * Agendas: lembretes do assistente, Google Agenda conectado e feriados nacionais (calculados aqui, sem API).
  */
 
-type Kind = "reminder" | "google" | "holiday";
+type Kind = "reminder" | "google" | "holiday" | "message";
 type Ev = {
   id: string;
   kind: Kind;
@@ -30,6 +30,9 @@ type Ev = {
   color?: string | null;
   intent?: string;
   remindAt?: string;
+  /** mensagem avulsa agendada (send_whatsapp) */
+  directId?: string;
+  status?: string;
 };
 type Tag = { name: string; color: string };
 /** Mesmas cores do servidor (agenda-tags.ts): todas com texto branco legível. */
@@ -95,6 +98,7 @@ function holidays(year: number): Ev[] {
 const CALENDARS: { id: Kind; label: string; color: string; group: "mine" | "other" }[] = [
   { id: "reminder", label: "Lembretes", color: "var(--cal-reminder)", group: "mine" },
   { id: "google", label: "Google Agenda", color: "var(--cal-google)", group: "mine" },
+  { id: "message", label: "Mensagens agendadas", color: "var(--cal-message)", group: "mine" },
   { id: "holiday", label: "Feriados no Brasil", color: "var(--cal-holiday)", group: "other" },
 ];
 
@@ -363,7 +367,8 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
         document.body,
       )}
 
-      {open && <EventDetail ev={open} tags={tags} readonly={readonly} onClose={() => setOpen(null)} onChanged={() => { setOpen(null); void reload(); }} />}
+      {open && open.kind === "message" && <MessageDetail ev={open} onClose={() => setOpen(null)} onChanged={() => { setOpen(null); void reload(); }} />}
+      {open && open.kind !== "message" && <EventDetail ev={open} tags={tags} readonly={readonly} onClose={() => setOpen(null)} onChanged={() => { setOpen(null); void reload(); }} />}
       {creating && (
         <NewReminder
           at={creating}
@@ -692,8 +697,8 @@ function EventRow({ ev, onOpen }: { ev: Ev; onOpen: (e: Ev) => void }) {
       <span className="cal-row-text">
         <span className="ellipsis" title={ev.title}>{ev.title}</span>
         <small className="muted">
-          {ev.kind === "google" ? "Google Agenda" : ev.kind === "holiday" ? "Feriado nacional" : ev.tag ?? (ev.recurring ? "Lembrete recorrente" : ev.remindAt ? "Compromisso" : "Lembrete")}
-          {ev.person ? ` · ${ev.person}` : ""}
+          {ev.kind === "message" ? MSG_STATUS[ev.status ?? ""] ?? "Mensagem agendada" : ev.kind === "google" ? "Google Agenda" : ev.kind === "holiday" ? "Feriado nacional" : ev.tag ?? (ev.recurring ? "Lembrete recorrente" : ev.remindAt ? "Compromisso" : "Lembrete")}
+          {ev.person && ev.kind !== "message" ? ` · ${ev.person}` : ""}
         </small>
       </span>
       <Icon name="chevron-right" size={16} />
@@ -733,6 +738,42 @@ function TagPicker({ tags, tag, color, onChange }: { tags: Tag[]; tag: string; c
         ))}
       </div>
     </div>
+  );
+}
+
+const MSG_STATUS: Record<string, string> = { scheduled: "Mensagem agendada", sending: "Enviando", sent: "Mensagem enviada", failed: "Mensagem não enviada" };
+
+/** Mensagem avulsa agendada: para quem, o texto e cancelar enquanto não saiu. */
+function MessageDetail({ ev, onClose, onChanged }: { ev: Ev; onClose: () => void; onChanged: () => void }) {
+  const s = new Date(ev.start);
+  const [busy, setBusy] = useState(false);
+  const cancel = async () => {
+    const ok = await confirmDialog({ title: "Cancelar esta mensagem?", body: `Ela não será enviada para ${ev.person ?? "a pessoa"}.`, confirmLabel: "Cancelar mensagem", cancelLabel: "Manter", danger: true });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await api(`/api/direct/${ev.directId}`, { method: "DELETE" });
+      onChanged();
+    } catch (e) {
+      setBusy(false);
+      void alertDialog("Não deu para cancelar", (e as Error).message);
+    }
+  };
+  return (
+    <Modal
+      title={MSG_STATUS[ev.status ?? ""] ?? "Mensagem agendada"}
+      icon={<Icon name="send" />}
+      onClose={onClose}
+      footer={ev.status === "scheduled" ? <button className="btn btn-danger" disabled={busy} onClick={cancel}><Icon name="trash" size={16} /> Cancelar envio</button> : undefined}
+    >
+      <dl className="kv">
+        <dt>Para</dt>
+        <dd>{ev.person}</dd>
+        <dt>Quando</dt>
+        <dd>{cap(s.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }))}, {hhmm(s)}</dd>
+      </dl>
+      <p className="cal-msg-text">{ev.intent}</p>
+    </Modal>
   );
 }
 

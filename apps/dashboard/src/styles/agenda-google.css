@@ -43,6 +43,9 @@
 .cal-chip { background: var(--ev, var(--cal-reminder)); color: #fff; box-shadow: none; font-weight: 600; border-radius: 5px; }
 .cal-chip.rec { background: var(--ev, var(--brand-4)); color: #fff; box-shadow: none; }
 .cal-chip.google { background: var(--cal-google); color: #fff; box-shadow: none; }
+.cal-chip.message, .cal-block.message { background: var(--cal-message); color: #fff; box-shadow: none; }
+.cal-bar.message { background: var(--cal-message); }
+.cal-msg-text { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--panel-2); font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cal-chip.holiday { background: var(--cal-holiday); color: #fff; box-shadow: none; }
 .cal-block { background: var(--ev, var(--cal-reminder)); color: #fff; box-shadow: none; display: flex; flex-direction: column; gap: 1px; }
 .cal-block.rec { background: var(--ev, var(--brand-4)); color: #fff; box-shadow: none; }

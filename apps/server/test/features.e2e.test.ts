@@ -429,6 +429,13 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(ev).toMatchObject({ tag: "Pet", color: "#e8710a" });
     expect(cal.tags).toEqual([{ name: "Pet", color: "#e8710a" }]);
     expect(cal.events.every((e: any) => e.person === "Ana")).toBe(true);
+    // mensagem avulsa agendada aparece na agenda de quem mandou e dá para cancelar por lá
+    const { createDirect } = await import("../src/direct.js");
+    const dm: any = await createDirect({ user: { id: user.id, phone: user.phone, name: "Ana" }, phone: "11 95555-4444", name: "Rafael", message: "Oi, aqui é a Ana, segue a proposta", sendAt: new Date(Date.now() + 86400_000), timezone: "America/Sao_Paulo" });
+    const cal2 = (await app.inject({ method: "GET", url: `/api/calendar?${range}`, headers: { cookie: adm } })).json();
+    expect(cal2.events.find((e: any) => e.kind === "message")).toMatchObject({ directId: dm.id, title: "Mensagem para Rafael", status: "scheduled" });
+    expect((await app.inject({ method: "DELETE", url: `/api/direct/${dm.id}`, headers: { cookie: adm } })).json()).toEqual({ ok: true });
+    expect(await db.one("SELECT status FROM direct_messages WHERE id = $1", [dm.id])).toEqual({ status: "cancelled" });
 
     // aprovar a conta liberou o número no WhatsApp
     const wa = await db.one("SELECT status FROM users WHERE id = $1", [user.id]);

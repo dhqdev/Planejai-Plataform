@@ -81,7 +81,7 @@ export async function createDirect(opts: {
   if (sendAt) {
     const boss = await getBoss();
     await boss.send(QUEUES.outbound, { type: "direct", directId: id }, { startAfter: sendAt, retryLimit: 2, retryDelay: 60, singletonKey: `direct:${id}` });
-    return { ok: true, id, scheduled_for: formatLocal(sendAt, opts.timezone), to: who, message: text };
+    return { ok: true, id, scheduled_for: formatLocal(sendAt, opts.timezone), to: who, message: text, tip: "Fica na Agenda do painel, onde dá para cancelar." };
   }
   const r = await sendDirect(id);
   return r.ok ? { ok: true, id, sent_to: who, message: text } : r;
