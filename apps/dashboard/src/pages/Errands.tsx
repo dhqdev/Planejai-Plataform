@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { ago, api, day } from "../api";
 import { Empty, ErrorBox, Loading, PageHead, alertDialog, confirmDialog } from "../components";
 import { FIT_QUERY, useApi, useMedia } from "../hooks";
@@ -46,7 +47,14 @@ const hour = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: 
 export function ErrandsPage() {
   const { data, error, reload } = useApi<Data>("/api/errands", { poll: 10000 });
   const fit = useMedia(FIT_QUERY);
-  const [picked, setPicked] = useState<string | null>(null);
+  // a conversa aberta fica na URL: no celular o "voltar" do aparelho (ou o gesto) volta para a lista
+  const [params, setParams] = useSearchParams();
+  const fromList = Boolean((useLocation().state as { fromList?: boolean } | null)?.fromList);
+  const picked = params.get("r");
+  const setPicked = (id: string) => {
+    setParams({ r: id }, { replace: fit || picked != null, state: { fromList: !fit } });
+    if (!fit) document.getElementById("conteudo")?.scrollTo({ top: 0 });
+  };
   const [busy, setBusy] = useState(false);
   if (!data) return error ? <div className="page"><ErrorBox error={error} /></div> : <Loading />;
 
@@ -79,6 +87,7 @@ export function ErrandsPage() {
   };
 
   const detailOpen = fit || selId != null;
+  const back = () => (fromList ? window.history.back() : setParams({}, { replace: true }));
   const listView = (
     <div className="card errand-list" aria-label="Recados">
       {draft && (
@@ -111,14 +120,14 @@ export function ErrandsPage() {
   );
 
   return (
-    <div className={`page errands-page${fit ? " fit" : ""}`}>
+    <div className={`page errands-page${fit ? " fit" : detailOpen ? " reading" : ""}`}>
       <PageHead title="Recados" subtitle="As conversas que o assistente tem com lugares por você. Atualiza sozinho enquanto a tela está aberta." />
       <div className={`errand-grid${detailOpen && !fit ? " detail-only" : ""}`}>
         {(fit || !detailOpen) && listView}
         {detailOpen && (
           <div className="card errand-detail">
             {!fit && (
-              <button className="btn btn-sm errand-back" onClick={() => setPicked(null)}>
+              <button className="btn btn-sm errand-back" onClick={back}>
                 <Icon name="chevron-left" size={15} /> Recados
               </button>
             )}

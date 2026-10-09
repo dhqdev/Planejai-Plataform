@@ -36,3 +36,22 @@
   .errands-page.fit .errand-chat { flex: 1 1 auto; min-height: 0; overflow: auto; }
   .errands-page.fit .errand-chat > * { flex-shrink: 0; }
 }
+
+/* celular: a conversa ocupa a tela toda, com o "voltar" sempre à mão e o título sem espremer no botão */
+@media (max-width: 1023px), (max-height: 679px) {
+  .errands-page.reading > .page-head { display: none; }
+  .errand-detail { padding: 0 14px 16px; gap: 10px; }
+  .errand-detail .errand-back {
+    position: sticky; top: 0; z-index: 2; align-self: stretch; justify-content: flex-start;
+    margin: 0 -14px; padding: 12px 14px; border: 0; border-bottom: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0;
+    background: var(--panel); box-shadow: none;
+  }
+  .errand-head { flex-wrap: wrap; row-gap: 10px; }
+  .errand-head > div { flex: 1 1 210px; min-width: 0; }
+  .errand-head h3 { font-size: 17px; }
+  .errand-facts { gap: 6px; }
+  .errand-facts > span { padding: 3px 9px; border-radius: 99px; background: var(--panel-2); }
+  .errand-chat { margin: 0 -6px; padding: 10px 8px; }
+  .errand-bubble { max-width: 86%; }
+  .errand-row { padding: 12px; }
+}
