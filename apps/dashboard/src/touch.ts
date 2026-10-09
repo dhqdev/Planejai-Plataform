@@ -79,6 +79,12 @@ export function registerServiceWorker() {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   });
+  // alarme tocou com o app aberto (ou a pessoa tocou na notificação): abre a tela do alarme sem recarregar
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    if (e.data?.type !== "pj-alarm" || typeof e.data.url !== "string" || !e.data.url.startsWith("/alarme")) return;
+    history.pushState(null, "", e.data.url);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
 }
 
 let deferredPrompt: any = null;

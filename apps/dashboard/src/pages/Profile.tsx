@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, phoneFmt } from "../api";
 import type { Me } from "../App";
 import { ErrorBox, PageHead, alertDialog, confirmDialog } from "../components";
+import { AlarmSettings } from "../Alarms";
 import { Connections } from "../Connections";
 import { MyIntegrations } from "../MyIntegrations";
 import { useApi } from "../hooks";
@@ -55,6 +56,7 @@ export function ProfilePage({ me }: { me: Me }) {
       </>
       )}
       {(me.linked || me.owner) && <AboutMe />}
+      {(me.linked || me.owner) && <AlarmSettings />}
       <Sharing />
       <Connections owner={me.owner} />
       {me.linked && !me.owner && <MyIntegrations />}

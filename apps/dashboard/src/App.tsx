@@ -31,6 +31,7 @@ const load = {
   memories: () => import("./pages/Memories"),
   models: () => import("./pages/Models"),
   notifications: () => import("./pages/Notifications"),
+  alarm: () => import("./pages/Alarm"),
   profile: () => import("./pages/Profile"),
   queues: () => import("./pages/Queues"),
   resources: () => import("./pages/Resources"),
@@ -79,6 +80,7 @@ const StoragePage = page(() => load.resources().then((m) => m.StoragePage));
 const TeamPage = page(() => load.team().then((m) => m.TeamPage));
 const CustomTabPage = page(() => load.dashboard().then((m) => m.CustomTabPage));
 const NotificationsPage = page(() => load.notifications().then((m) => m.NotificationsPage));
+const AlarmPage = page(() => load.alarm().then((m) => m.AlarmPage));
 const DocumentsPage = page(() => load.documents().then((m) => m.DocumentsPage));
 const WhatsAppPage = page(() => load.whatsapp().then((m) => m.WhatsAppPage));
 
@@ -376,6 +378,7 @@ export function App() {
           )}
           <Route path="/profile" element={<ProfilePage me={me} />} />
           <Route path="/notificacoes" element={<NotificationsPage />} />
+          <Route path="/alarme" element={<AlarmPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/" element={<DashboardPage me={me} theme={theme} onTheme={toggleTheme} />} />
           {has("convites") && <Route path="/invites" element={<InvitesPage isSuper={isSuper} />} />}
