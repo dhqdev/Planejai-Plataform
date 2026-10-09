@@ -1,11 +1,14 @@
 /* ---------- Recados (conversa do assistente com estabelecimentos) ---------- */
-.errand-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
-.errand-list { display: flex; flex-direction: column; gap: 2px; padding: 6px; min-width: 0; }
-.errand-row { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-radius: 12px; background: transparent; color: inherit; font: inherit; cursor: pointer; min-width: 0; }
+.errand-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); width: 100%; min-width: 0; }
+.errand-grid > * { min-width: 0; max-width: 100%; }
+/* o Safari do iPhone calcula a largura da linha pelo texto inteiro (nowrap): o cartão corta e cada linha é bloco simples, sem flex/grid dentro do botão */
+.errand-list { display: flex; flex-direction: column; gap: 2px; padding: 6px; min-width: 0; overflow: hidden; }
+.errand-row { display: block; width: 100%; max-width: 100%; text-align: left; padding: 10px 12px; border: 0; border-radius: 12px; background: transparent; color: inherit; font: inherit; cursor: pointer; min-width: 0; }
 .errand-row:hover { background: var(--panel-2); }
 .errand-row.active { background: var(--panel-2); box-shadow: inset 2px 0 0 var(--ink); }
 .errand-row-top { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; min-width: 0; }
 .errand-row-top strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.errand-row-goal, .errand-row-last { display: block; min-width: 0; max-width: 100%; margin-top: 3px; }
 .errand-row-goal { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .errand-row-last { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .errand-state { flex-shrink: 0; font-size: 12px; color: var(--muted); white-space: nowrap; }
