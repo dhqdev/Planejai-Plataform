@@ -18,7 +18,7 @@ export function UserMochi({ name, outfit, seed, size = 32, me = false }: { name?
   const label = `Mochi de ${name?.trim() || "alguém"}`;
   const art = Math.round(size * 0.92);
   return (
-    <span className="user-mochi" style={{ width: size, height: size }} role="img" aria-label={label} title={name ?? undefined}>
+    <span className="user-mochi" style={{ width: size, height: size, paddingBottom: Math.round(size * 0.06) }} role="img" aria-label={label} title={name ?? undefined}>
       {me ? <MyMochi size={art} /> : <Mochi size={art} outfit={outfit ?? defaultOutfit(seed ?? name)} still crop title={label} />}
     </span>
   );
