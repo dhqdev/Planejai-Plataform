@@ -411,20 +411,34 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
     return { handled: true, status };
   };
   if (PAID.has(event)) {
-    const due = String(p.dueDate ?? isoDay(new Date()));
+    const due = String(p.dueDate ?? isoDay(new Date())).slice(0, 10);
     const next = addMonth(due);
+    const ref = String(p.id ?? `${sub.asaas_subscription_id}:${due}`);
+    // cartão manda CONFIRMED e depois RECEIVED do mesmo pagamento (o RECEIVED pode vir ~30 dias depois, com o mês seguinte
+    // já em atraso): pagamento já creditado não mexe em nada, senão voltaria para "em dia" e apagaria o link da cobrança nova
+    if (await one("SELECT 1 FROM grain_ledger WHERE user_id = $1 AND reason = 'plano' AND ref = $2", [sub.user_id, ref])) return { handled: true, status: sub.status };
+    // mensalidade de um mês anterior paga depois de uma mais nova: o mês dela já passou e o plano não acumula
+    if (sub.paid_until && next < sub.paid_until) {
+      await notify({ userId: null, kind: "assinatura", title: "Mensalidade antiga paga", body: `${brl(value)}, vencimento ${ddmm(due)}. O plano já está pago até ${ddmm(sub.paid_until)}; nada mudou.`, link: "/settings" });
+      return { handled: true, status: sub.status };
+    }
     const first = !sub.last_payment_at;
     const wasBlocked = sub.status === "overdue";
+    const today = isoDay(new Date());
+    // pagou um mês atrasado e o seguinte também já venceu: continua pendente (o link da cobrança seguinte fica)
+    const status: SubStatus = wasBlocked && next < today ? "overdue" : "active";
     const s = await getSettings();
     // descer de plano vale a partir desta mensalidade
     const planId = sub.next_plan_id ?? sub.plan_id;
     const plan = planById(s, planId);
     const card = p.creditCard ?? {};
-    const r = await set("active", {
+    // o link guardado pode já ser o da cobrança seguinte (PAYMENT_CREATED chegou antes): só apaga o desta
+    const ownLink = !sub.invoice_url || !p.invoiceUrl || p.invoiceUrl === sub.invoice_url;
+    const r = await set(status, {
       paid_until: next,
       next_due_date: next,
       last_payment_at: new Date().toISOString(),
-      invoice_url: null,
+      ...(ownLink ? { invoice_url: null } : {}),
       last_billing_type: p.billingType ?? null,
       plan_id: planId,
       next_plan_id: null,
@@ -432,8 +446,8 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
       ...(card.creditCardNumber ? { card_brand: String(card.creditCardBrand ?? "").slice(0, 20) || null, card_last4: String(card.creditCardNumber).slice(-4) } : {}),
     });
     if (wasBlocked) await query("UPDATE users SET profile = profile - 'billing_notice_at' WHERE id = $1", [sub.user_id]);
-    // cartão manda CONFIRMED e depois RECEIVED do mesmo pagamento: o crédito tem ref do pagamento e entra uma vez só
-    const credited = plan ? await creditGrains(sub.user_id, { amount: plan.grains, bucket: "plan", reason: "plano", ref: String(p.id ?? `${sub.asaas_subscription_id}:${due}`), note: plan.name, set: true }) : null;
+    // o crédito tem ref do pagamento e entra uma vez só (dois eventos ao mesmo tempo: o segundo para aqui)
+    const credited = plan ? await creditGrains(sub.user_id, { amount: plan.grains, bucket: "plan", reason: "plano", ref, note: plan.name, set: true }) : null;
     if (!credited) return r;
     await tellPerson(sub.user_id, first ? BILLING_TEXT.firstPayment(plan!.name, plan!.grains, next) : BILLING_TEXT.renewed(plan!.grains, next));
     void emitEvent("payment.confirmed", { user_id: sub.user_id, value, billing_type: p.billingType ?? null, first, next_due_date: next, payment_id: p.id ?? null, plan: plan!.id });

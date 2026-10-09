@@ -253,6 +253,32 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     expect(await db.one("SELECT plan_id, next_plan_id FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ plan_id: "leve", next_plan_id: null });
   });
 
+  it("pagamento atrasado do cartão ou de mês antigo não volta o plano para em dia nem apaga o link da cobrança nova", async () => {
+    const d1 = (await billing.getSubscription(user.id))!.paid_until!;
+    const d2 = billing.addMonth(d1);
+    const row = () => db.one("SELECT status, invoice_url, to_char(paid_until, 'YYYY-MM-DD') AS paid_until FROM subscriptions WHERE user_id = $1", [user.id]);
+    await hook({ id: "l1", event: "PAYMENT_CREATED", payment: { id: "pay_4", subscription: "sub_1", status: "PENDING", value: 19.9, dueDate: d1, invoiceUrl: "https://sandbox.asaas.com/i/pay_4" } });
+    await hook({ id: "l2", event: "PAYMENT_OVERDUE", payment: { id: "pay_4", subscription: "sub_1", status: "OVERDUE", value: 19.9, dueDate: d1, invoiceUrl: "https://sandbox.asaas.com/i/pay_4" } });
+    expect(await row()).toEqual({ status: "overdue", invoice_url: "https://sandbox.asaas.com/i/pay_4", paid_until: d1 });
+    await db.query("UPDATE wallets SET plan_grains = 100 WHERE user_id = $1", [user.id]);
+    // o cartão do mês passado liquida (RECEIVED) só agora: já foi creditado no CONFIRMED, nada muda
+    expect((await hook({ id: "l3", event: "PAYMENT_RECEIVED", payment: { id: "pay_3", subscription: "sub_1", value: 19.9, billingType: "CREDIT_CARD" } })).json()).toMatchObject({ status: "overdue" });
+    expect(await row()).toEqual({ status: "overdue", invoice_url: "https://sandbox.asaas.com/i/pay_4", paid_until: d1 });
+    expect((await wallet()).plan_grains).toBe(100);
+    // a cobrança seguinte nasce antes de a atrasada ser paga: o link novo fica
+    await hook({ id: "l4", event: "PAYMENT_CREATED", payment: { id: "pay_5", subscription: "sub_1", status: "PENDING", value: 19.9, dueDate: d2, invoiceUrl: "https://sandbox.asaas.com/i/pay_5" } });
+    await hook({ id: "l5", event: "PAYMENT_RECEIVED", payment: { id: "pay_4", subscription: "sub_1", value: 19.9, dueDate: d1, billingType: "PIX", invoiceUrl: "https://sandbox.asaas.com/i/pay_4" } });
+    expect(await row()).toEqual({ status: "active", invoice_url: "https://sandbox.asaas.com/i/pay_5", paid_until: d2 });
+    expect((await wallet()).plan_grains).toBe(1500);
+    // mensalidade de um mês que já passou, paga agora: não volta a data nem recarrega de novo
+    await db.query("UPDATE wallets SET plan_grains = 100 WHERE user_id = $1", [user.id]);
+    const old = new Date(Date.now() - 40 * 86_400_000).toISOString().slice(0, 10);
+    await hook({ id: "l6", event: "PAYMENT_RECEIVED", payment: { id: "pay_0", subscription: "sub_1", value: 19.9, dueDate: old, billingType: "PIX" } });
+    expect(await row()).toEqual({ status: "active", invoice_url: "https://sandbox.asaas.com/i/pay_5", paid_until: d2 });
+    expect((await wallet()).plan_grains).toBe(100);
+    await db.query("UPDATE wallets SET plan_grains = 1500 WHERE user_id = $1", [user.id]);
+  });
+
   it("indicação: cada amigo pagando dá mais desconto na mensalidade de quem convidou, até o teto", async () => {
     await db.query("DELETE FROM pgboss.job WHERE name = 'outbound.send'");
     asaasCalls.length = 0;
