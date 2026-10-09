@@ -198,7 +198,24 @@ export class BrowserSession {
           out.push(`[${n}] ${type}: ${label || "(sem rótulo)"}`);
         }
         const raw = document.body?.innerText ?? "";
-        const text = raw.replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim().slice(0, maxText);
+        // rolou a página: o texto começa onde a pessoa está olhando, senão o modelo só veria o topo de novo
+        let view = raw;
+        if (window.scrollY > 200) {
+          const parts: string[] = [];
+          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+          let last: Element | null = null;
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const t = node.textContent?.trim();
+            const parent = node.parentElement;
+            if (!t || !parent || /^(SCRIPT|STYLE|NOSCRIPT)$/.test(parent.tagName)) continue;
+            const r = parent.getBoundingClientRect();
+            if (r.bottom < -40 || r.top > window.innerHeight * 2.5 || (r.width === 0 && r.height === 0)) continue;
+            parts.push(parent === last ? ` ${t}` : `\n${t}`);
+            last = parent;
+          }
+          view = `(página rolada; texto a partir daqui)\n${parts.join("")}`;
+        }
+        const text = view.replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim().slice(0, maxText);
         // Pix do checkout: o código passa do tamanho do texto e dos rótulos, então vem à parte e inteiro
         const sources = [raw, ...Array.from(document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea")).map((el) => el.value || "")];
         const pix = new Set<string>();

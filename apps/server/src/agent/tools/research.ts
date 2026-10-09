@@ -95,6 +95,8 @@ export const webSearch = defineTool<{ query: string; max_results?: number }>({
   },
 });
 
+const BLOCKED_PAGE = /Hubo un error accediendo|Access Denied|Just a moment|Attention Required|verify you are (a )?human|captcha/i;
+
 export const fetchUrl = defineTool<{ url: string; max_chars?: number }>({
   name: "fetch_url",
   description: "Abre uma página e retorna o texto dela (com links). Usa navegador headless quando disponível, para sites com JavaScript.",
@@ -117,6 +119,10 @@ export const fetchUrl = defineTool<{ url: string; max_chars?: number }>({
       html = await res.text();
     }
     const text = htmlToText(html);
+    // página de bloqueio (Mercado Livre em espanhol, Akamai, Cloudflare): ler de novo não adianta
+    if (text.length < 600 && BLOCKED_PAGE.test(text)) {
+      return { url, blocked: true, error: "O site bloqueou a leitura direta. Abra com browser_open (entra como uma pessoa, já logado se ela conectou a loja)." };
+    }
     return { url, text: text.slice(0, max), truncated: text.length > max };
   },
 });
@@ -338,7 +344,13 @@ export const browserAction = defineTool<{ action: string; ref?: number; text?: s
       return { error: `Já foram ${max} ações no navegador nesta tarefa. Feche (browser_close) e responda com o que já tem.` };
     }
     ctx.room.usage.browserActions++;
-    await b.act(args);
+    try {
+      await b.act(args);
+    } catch (err) {
+      // a página mudou depois da última lista (carregou mais coisa, abriu um menu): devolve a lista nova em vez de um erro seco
+      if (!/No element found|data-pj-ref/.test((err as Error).message)) throw err;
+      return { error: `O item [${args.ref}] não está mais na página (ela mudou). Use a lista nova abaixo.`, ...snapshotText(await b.snapshot()) };
+    }
     return snapshotText(await b.snapshot());
   },
 });

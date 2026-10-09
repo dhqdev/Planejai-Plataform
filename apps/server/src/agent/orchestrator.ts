@@ -346,6 +346,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       summary: conversation.summary,
       specialists: team,
       disconnected,
+      shoppingOff: shopping ? null : owner ? "owner" : "client",
       autoReaction,
       styleNotes: (user as any).style_notes ?? null,
       errands: errandsContext(await openErrands(user.id)),

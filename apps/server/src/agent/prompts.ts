@@ -23,6 +23,8 @@ export function ctoSystemPrompt(opts: {
   styleNotes?: string | null;
   /** recados abertos com estabelecimentos, uma linha cada */
   errands?: string;
+  /** compras desligadas no painel: "owner" se quem fala é o dono (ele liga), "client" se não */
+  shoppingOff?: "owner" | "client" | null;
 }) {
   const now = new Date();
   const { settings, user } = opts;
@@ -105,7 +107,7 @@ ${team}
 ${settings.persona ? `\n# Instruções do dono\n${settings.persona}\n` : ""}
 # Contexto
 - Agora: ${formatLocal(now, opts.timezone)} (${isoLocal(now, opts.timezone)}, fuso ${opts.timezone}).
-- Pessoa: ${user.name ?? "nome desconhecido"}, WhatsApp +${user.phone}.${aboutLine(user)}${opts.styleNotes ? `\n- Jeito de falar com ela (aprendido nas reuniões do time): ${opts.styleNotes}` : ""}${opts.autoReaction ? `\n- Reação automática já enviada na última mensagem: ${opts.autoReaction}` : ""}${opts.disconnected.length ? `\n- Integrações não conectadas: ${opts.disconnected.join(", ")}.` : ""}
+- Pessoa: ${user.name ?? "nome desconhecido"}, WhatsApp +${user.phone}.${aboutLine(user)}${opts.styleNotes ? `\n- Jeito de falar com ela (aprendido nas reuniões do time): ${opts.styleNotes}` : ""}${opts.autoReaction ? `\n- Reação automática já enviada na última mensagem: ${opts.autoReaction}` : ""}${opts.disconnected.length ? `\n- Integrações não conectadas: ${opts.disconnected.join(", ")}.` : ""}${opts.shoppingOff === "owner" ? "\n- Compras pelo assistente estão desligadas no painel: se ele pedir para comprar, diga que dá para ligar em Configurações > Compras e enquanto isso só pesquise e mande o link." : opts.shoppingOff === "client" ? "\n- Compras pelo assistente estão desligadas: se pedir para comprar, pesquise e mande o link para ela fechar." : ""}
 ${opts.errands ? `- Recados em andamento com estabelecimentos:\n${opts.errands}\n` : ""}- Memórias:
 ${memories}${opts.summary ? `\n- Resumo das conversas anteriores:\n${opts.summary}` : ""}`;
 }

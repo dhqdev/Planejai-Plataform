@@ -27,6 +27,8 @@ describe.skipIf(!enabled)("navegador com gravação", () => {
         } else if (req.url?.startsWith("/login")) {
           seen.push(String(req.headers["user-agent"]));
           res.end(`<meta name="viewport" content="width=device-width"><h1>Entrar</h1><input type="password" placeholder="Senha"><button>Entrar</button>`);
+        } else if (req.url?.startsWith("/longa")) {
+          res.end(`<h1>Topo da página</h1><div style="height:4000px">${"<p>enchimento</p>".repeat(5)}</div><h2>Fim com o preço R$ 249,99</h2><button>Adicionar ao carrinho</button>`);
         } else if (req.url?.startsWith("/sessoes")) {
           const filme = new URL(req.url, "http://x").searchParams.get("q");
           res.end(`<h1>Sessões de ${filme}</h1><p>14h30 · 17h00 · 20h15</p>`);
@@ -62,6 +64,26 @@ describe.skipIf(!enabled)("navegador com gravação", () => {
       expect(video).not.toBeNull();
       expect(video!.subarray(4, 8).toString()).toBe("ftyp"); // MP4 de verdade
       expect(video!.length).toBeGreaterThan(1000);
+    } finally {
+      await b.close();
+    }
+  }, 60_000);
+
+  it("rolou a página: o texto e a lista começam onde está a tela; item que sumiu volta como lista nova", async () => {
+    const { BrowserSession } = await import("../src/agent/browser.js");
+    const b = await BrowserSession.open(false);
+    try {
+      await b.goto(`${base}/longa`);
+      expect((await b.snapshot()).text).toContain("Topo da página");
+      await b.page.evaluate(() => window.scrollTo(0, 3800));
+      const s = await b.snapshot();
+      expect(s.text).toContain("R$ 249,99");
+      expect(s.text).not.toContain("Topo da página");
+      const { browserAction } = await import("../src/agent/tools/research.js");
+      const ctx: any = { room: { browser: b, usage: { browserActions: 0 } }, agent: "pesquisador" };
+      const r: any = await browserAction.run({ action: "click", ref: 99 }, ctx);
+      expect(r.error).toMatch(/não está mais na página/);
+      expect(r.clickable ?? r.elements).toBeTruthy();
     } finally {
       await b.close();
     }
