@@ -45,6 +45,15 @@ describe("assinatura: regras sem banco", () => {
     expect(withDiscount(19.9, 10)).toBe(17.91);
     expect(withDiscount(39.9, 0)).toBe(39.9);
   });
+
+  it("próxima mensalidade: mesmo dia no mês seguinte, ou o último dia quando o mês é mais curto", async () => {
+    const { addMonth } = await import("../src/billing.js");
+    expect(addMonth("2026-01-15")).toBe("2026-02-15");
+    expect(addMonth("2026-01-31")).toBe("2026-02-28");
+    expect(addMonth("2028-01-31")).toBe("2028-02-29");
+    expect(addMonth("2026-03-31")).toBe("2026-04-30");
+    expect(addMonth("2026-12-31")).toBe("2027-01-31");
+  });
 });
 
 const enabled = Boolean(process.env.TEST_DATABASE_URL);

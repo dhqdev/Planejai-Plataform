@@ -308,10 +308,11 @@ export async function buyPack(user: any, packId: string, input?: { name?: string
   return createCharge(user, customerId, { kind: "pack", itemId: pack.id, grains: pack.grains, value: pack.price, description: `Planejai: pacote de ${grains(pack.grains)}` });
 }
 
-const addMonth = (isoDate: string) => {
-  const d = new Date(`${isoDate}T12:00:00Z`);
-  d.setUTCMonth(d.getUTCMonth() + 1);
-  return isoDay(d);
+/** Mesmo dia no mês seguinte; sem esse dia lá (31/01, 29/02), cai no último dia do mês (28/02, não 03/03). */
+export const addMonth = (isoDate: string) => {
+  const [y, m, d] = isoDate.slice(0, 10).split("-").map(Number) as [number, number, number];
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return isoDay(new Date(Date.UTC(y, m, Math.min(d, last), 12)));
 };
 
 const brl = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n).replace(/\u00a0/g, " ");
