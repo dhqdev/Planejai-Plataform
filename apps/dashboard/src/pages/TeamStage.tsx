@@ -4,7 +4,7 @@ import "../landing-team.css";
 
 /**
  * Landing, seção do time: uma fila com os sete Mochis e um palco que mostra, em cena animada, o que o escolhido faz
- * (o Maestro distribuindo o pedido, o Tostão lendo o comprovante, o Sininho tocando na hora...). Troca sozinho
+ * (o Juvenal distribuindo o pedido, o Moacir lendo o comprovante, o Cotinha tocando na hora...). Troca sozinho
  * enquanto está na tela; tocar num agente fixa nele. Com movimento reduzido, cada cena aparece já pronta.
  */
 

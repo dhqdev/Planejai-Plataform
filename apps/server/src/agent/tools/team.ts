@@ -36,7 +36,7 @@ export const teamCreateAgent = defineTool<{
   parameters: obj(
     {
       name: { type: "string", description: "Nome curto da área, ex.: Treino, Viagens, Loja" },
-      persona: { type: "string", description: "Apelido simpático de personagem, ex.: Fit, Zé Viagem" },
+      persona: { type: "string", description: "Nome de pessoa engraçado que combine com o assunto, ex.: Valdirene (academia), Seu Arlindo (viagens)" },
       focus: { type: "string", description: "Uma frase: do que ele cuida para esta pessoa" },
       instructions: {
         type: "string",

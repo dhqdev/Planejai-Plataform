@@ -25,10 +25,10 @@ type View = { x: number; y: number; k: number };
 type Msg = { id: number; from: string; to: string };
 
 /**
- * Mapa do time: o Maestro no centro, os especialistas em volta e os agentes de cada cliente no anel de fora,
+ * Mapa do time: o Juvenal no centro, os especialistas em volta e os agentes de cada cliente no anel de fora,
  * num quadro que dá para arrastar, dar zoom (roda com Ctrl, pinça ou os botões) e rolar. Cada agente pode ser
  * arrastado para outro lugar (fica salvo neste navegador) e, tocado, responde e mostra o que faz. Recados
- * correm pelas linhas do Maestro para quem ele chama (mais vezes para quem mais trabalhou nos últimos 7 dias).
+ * correm pelas linhas do Juvenal para quem ele chama (mais vezes para quem mais trabalhou nos últimos 7 dias).
  * Com movimento reduzido, nada corre sozinho.
  */
 
@@ -251,11 +251,11 @@ export function TeamMap() {
   const pick = (n: GraphNode) => {
     if (drag.current?.moved) return;
     setSel((s) => (s === n.id ? null : n.id));
-    say(n.id, n.id === "cto" ? "Maestro aqui, regendo o time." : `${nameOf(n.id)} aqui, ${doingOf(n.id)}.`);
+    say(n.id, n.id === "cto" ? "Juvenal aqui, regendo o time." : `${nameOf(n.id)} aqui, ${doingOf(n.id)}.`);
     setBump((b) => ({ ...b, [n.id]: (b[n.id] ?? 0) + 1 }));
   };
 
-  // recados correndo pelas linhas: o Maestro chama alguém (quem mais trabalhou é chamado mais) e às vezes recebe a volta
+  // recados correndo pelas linhas: o Juvenal chama alguém (quem mais trabalhou é chamado mais) e às vezes recebe a volta
   const seq = useRef(0);
   useEffect(() => {
     if (!data || reduced()) return;
@@ -426,7 +426,7 @@ export function TeamMap() {
             <dd>{data.activity[open.id] ?? 0}</dd>
             {open.id !== "cto" && (
               <>
-                <dt>Acionado pelo Maestro</dt>
+                <dt>Acionado pelo Juvenal</dt>
                 <dd>{data.edges.filter((e) => e.to === open.id).reduce((a, e) => a + e.n, 0)} vezes</dd>
               </>
             )}

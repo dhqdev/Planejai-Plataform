@@ -78,11 +78,11 @@ function useRoleMood(agent: string | null, base: Mood): Mood {
 
 /** Time fixo (espelho de apps/server/src/agent/team.ts) para telas que só têm o id do agente. */
 export const CORE_FACES: Record<string, { persona: string; face: Face }> = {
-  cto: { persona: "Maestro", face: { color: 4, eyes: "happy", mouth: "smile", extra: "crown" } },
-  pesquisador: { persona: "Lupa", face: { color: 6, eyes: "glasses", mouth: "open", extra: "antenna" } },
-  agenda: { persona: "Sininho", face: { color: 2, eyes: "happy", mouth: "smile", extra: "bow" } },
-  financeiro: { persona: "Tostão", face: { color: 7, eyes: "dot", mouth: "grin", extra: "cap" } },
-  comunicacao: { persona: "Carta", face: { color: 1, eyes: "wink", mouth: "cat", extra: "headset" } },
-  produtividade: { persona: "Bloco", face: { color: 0, eyes: "wide", mouth: "smile", extra: "leaf" } },
-  recados: { persona: "Pombo", face: { color: 3, eyes: "dot", mouth: "open", extra: "none" } },
+  cto: { persona: "Juvenal", face: { color: 4, eyes: "happy", mouth: "smile", extra: "crown" } },
+  pesquisador: { persona: "Clotilde", face: { color: 6, eyes: "glasses", mouth: "open", extra: "antenna" } },
+  agenda: { persona: "Cotinha", face: { color: 2, eyes: "happy", mouth: "smile", extra: "bow" } },
+  financeiro: { persona: "Moacir", face: { color: 7, eyes: "dot", mouth: "grin", extra: "cap" } },
+  comunicacao: { persona: "Telma", face: { color: 1, eyes: "wink", mouth: "cat", extra: "headset" } },
+  produtividade: { persona: "Nivaldo", face: { color: 0, eyes: "wide", mouth: "smile", extra: "leaf" } },
+  recados: { persona: "Zezinho", face: { color: 3, eyes: "dot", mouth: "open", extra: "none" } },
 };

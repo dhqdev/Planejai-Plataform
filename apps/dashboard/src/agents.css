@@ -12,18 +12,18 @@
 .agent-prop * { transform-box: fill-box; }
 @keyframes ap-pop { from { transform: scale(0.3); opacity: 0; } to { transform: none; opacity: 1; } }
 
-/* Maestro: a batuta rege e as notas sobem */
+/* Juvenal: a batuta rege e as notas sobem */
 .ap-baton { transform-origin: 10px 31px; transform-box: view-box !important; animation: ap-conduct 1.6s cubic-bezier(.45, 0, .3, 1) infinite; }
 @keyframes ap-conduct { 0%, 100% { transform: rotate(-16deg); } 30% { transform: rotate(12deg); } 55% { transform: rotate(-4deg); } 75% { transform: rotate(8deg); } }
 .ap-note { transform-origin: center; animation: ap-float 2.4s ease-out infinite; opacity: 0; }
 .ap-note.n2 { animation-delay: 1.2s; }
 @keyframes ap-float { 0% { transform: translate(-4px, 6px) scale(0.6); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(3px, -8px) scale(1); opacity: 0; } }
 
-/* Lupa: a lente varre a página */
+/* Clotilde: a lente varre a página */
 .ap-lens { transform-box: view-box !important; animation: ap-sweep 2.8s ease-in-out infinite; }
 @keyframes ap-sweep { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(5px, -2px); } 50% { transform: translate(4px, 4px); } 75% { transform: translate(-2px, 3px); } }
 
-/* Sininho: o sino balança e soa */
+/* Cotinha: o sino balança e soa */
 .ap-bell { transform-origin: 20px 8px; transform-box: view-box !important; animation: ap-swing 2.2s ease-in-out infinite; }
 @keyframes ap-swing { 0%, 55%, 100% { transform: rotate(0); } 62% { transform: rotate(18deg); } 70% { transform: rotate(-15deg); } 78% { transform: rotate(10deg); } 86% { transform: rotate(-6deg); } 93% { transform: rotate(2deg); } }
 .ap-clapper { transform-origin: center; animation: ap-clap 2.2s ease-in-out infinite; }
@@ -31,7 +31,7 @@
 .ap-ring { opacity: 0; animation: ap-ringing 2.2s ease-out infinite; transform-origin: center; }
 @keyframes ap-ringing { 0%, 58% { opacity: 0; transform: scale(0.7); } 66% { opacity: 1; transform: none; } 92%, 100% { opacity: 0; transform: scale(1.2); } }
 
-/* Tostão: a moeda pula, gira e cai na pilha */
+/* Moacir: a moeda pula, gira e cai na pilha */
 .ap-coin { transform-origin: center; animation: ap-coin 1.9s cubic-bezier(.3, 0, .3, 1) infinite; }
 @keyframes ap-coin {
   0% { transform: translateY(6px) scaleX(1); }
@@ -41,7 +41,7 @@
   100% { transform: translateY(6px) scaleX(1); }
 }
 
-/* Carta: a carta sai do envelope e volta */
+/* Telma: a carta sai do envelope e volta */
 .ap-mail { transform-box: view-box !important; animation: ap-bob 2.6s ease-in-out infinite; }
 @keyframes ap-bob { 0%, 100% { transform: translateY(1px); } 50% { transform: translateY(-1.5px); } }
 .ap-letter { animation: ap-letter 2.6s cubic-bezier(.3, .8, .3, 1) infinite; }
@@ -49,13 +49,13 @@
 .ap-flap { transform-origin: 20px 19px; transform-box: view-box !important; animation: ap-flap 2.6s ease-in-out infinite; }
 @keyframes ap-flap { 0%, 100% { transform: scaleY(1); } 18%, 80% { transform: scaleY(-0.6); } }
 
-/* Bloco: os itens vão sendo marcados */
+/* Nivaldo: os itens vão sendo marcados */
 .ap-check { stroke-dasharray: 1; stroke-dashoffset: 1; animation: ap-tick 3s ease-out infinite; }
 .ap-check.c1 { animation-delay: 0.5s; }
 .ap-check.c2 { animation-delay: 1s; }
 @keyframes ap-tick { 0% { stroke-dashoffset: 1; } 18%, 85% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 1; } }
 
-/* Pombo: digitando o recado */
+/* Zezinho: digitando o recado */
 .ap-bubble { transform-box: view-box !important; transform-origin: 11px 32px; animation: ap-talk 3.2s ease-in-out infinite; }
 @keyframes ap-talk { 0%, 100% { transform: scale(1); } 8% { transform: scale(1.06); } 16% { transform: scale(1); } }
 .ap-dot { transform-origin: center; animation: ap-typing 1.2s ease-in-out infinite; }
@@ -86,5 +86,5 @@
 @keyframes ap-live { 0%, 100% { opacity: 0.35; transform: scale(0.8); } 50% { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .team-doing, .team-doing * { animation: none !important; } .team-doing { display: none; } }
 
-/* no celular o quadradinho do rosto encolhe: o rosto vivo acompanha (o anel do Maestro fica certo) */
+/* no celular o quadradinho do rosto encolhe: o rosto vivo acompanha (o anel do Juvenal fica certo) */
 @media (max-width: 767px) { .team-card .face-tile .agent-face.live { width: 100% !important; height: 100% !important; } }

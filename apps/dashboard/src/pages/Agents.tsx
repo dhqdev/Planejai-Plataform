@@ -41,7 +41,7 @@ export function AgentsPage() {
     <div className="page page-wide fit agents-page">
       <PageHead
         title="Agentes"
-        subtitle="O CTO conversa com a pessoa e chama os especialistas. Toda noite às 19h o Maestro (CTO) faz a reunião do time: ajusta o jeito de falar com cada pessoa, passa dicas para cada agente e cria agentes novos, cada um com nome e carinha."
+        subtitle="O CTO conversa com a pessoa e chama os especialistas. Toda noite às 19h o Juvenal (CTO) faz a reunião do time: ajusta o jeito de falar com cada pessoa, passa dicas para cada agente e cria agentes novos, cada um com nome e carinha."
         actions={
           <>
             <Link className="btn" to="/models"><Icon name="cpu" size={16} /> Modelos</Link>

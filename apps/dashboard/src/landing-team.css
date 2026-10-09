@@ -57,7 +57,7 @@
 .sc-panel small { display: block; margin-bottom: 8px; font-size: 11.5px; color: var(--lp-muted); }
 .sc-panel p { margin: 0; font-size: 13px; line-height: 1.4; }
 
-/* Tostão */
+/* Moacir */
 .sc-receipt { display: flex; flex-direction: column; gap: 7px; padding: 14px; border-radius: 10px; background: #fff; border: 1px solid #ececec; box-shadow: 0 14px 30px -24px rgba(0, 0, 0, .45); overflow: hidden; }
 .sc-receipt b { font-size: 14px; }
 .sc-receipt i { display: block; height: 6px; border-radius: 3px; background: #ececec; }
@@ -73,7 +73,7 @@
 .sc-limit { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #f2f2f2; font-size: 12.5px; color: var(--lp-muted); }
 .sc-limit b { color: #121214; }
 
-/* Sininho */
+/* Cotinha */
 .sc-hour, .sc-min { transform-box: view-box; transform-origin: 60px 60px; }
 .sc-hour { transform: rotate(270deg); }
 .sc-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
@@ -85,7 +85,7 @@
 .sc-bell { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; background: #f4effe; }
 .sc-bell svg { transform-origin: 50% 20%; }
 
-/* Lupa */
+/* Clotilde */
 .sc-browser { border-radius: 14px; background: #fff; border: 1px solid #ececec; box-shadow: 0 14px 30px -24px rgba(0, 0, 0, .45); overflow: hidden; }
 .sc-url { display: flex; align-items: center; gap: 5px; padding: 9px 12px; border-bottom: 1px solid #f0f0f0; }
 .sc-url span { width: 7px; height: 7px; border-radius: 50%; background: #dedede; }
@@ -100,12 +100,12 @@
 .sc-tag { position: absolute; right: 10px; top: -8px; padding: 1px 7px; border-radius: 999px; background: var(--lp-violet); color: #fff; font-style: normal; font-size: 10px; font-weight: 600; }
 .sc-lens { z-index: 4; pointer-events: none; transform: translate(14px, 112px); }
 
-/* Pombo */
+/* Zezinho */
 .sc-avatar { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 50%; background: #fff; border: 2px solid #121214; font-size: 13px; font-weight: 600; }
 .sc-avatar.shop { border-color: var(--lp-violet); color: var(--lp-violet); }
 .sc-plane { z-index: 4; opacity: 0; pointer-events: none; }
 
-/* Carta */
+/* Telma */
 .sc-inbox { border-radius: 14px; background: #fff; border: 1px solid #ececec; box-shadow: 0 14px 30px -24px rgba(0, 0, 0, .45); overflow: hidden; }
 .sc-mail { padding: 9px 14px; border-bottom: 1px solid #f4f4f4; transition: opacity .3s; }
 .sc-mail:last-child { border-bottom: 0; }
@@ -116,7 +116,7 @@
 .sc-type { display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; vertical-align: bottom; }
 .sc-draft em { display: block; margin-top: 6px; font-style: normal; font-size: 11px; color: var(--lp-violet); }
 
-/* Bloco */
+/* Nivaldo */
 .sc-node { display: flex; flex-direction: column; justify-content: center; min-height: 72px; padding: 10px 12px; border-radius: 12px; background: #fff; border: 1px solid #ececec; box-shadow: 0 14px 30px -24px rgba(0, 0, 0, .45); z-index: 2; }
 .sc-node small { font-size: 11px; color: var(--lp-muted); }
 .sc-node b { font-size: 13px; }

@@ -41,7 +41,7 @@ export function faceFor(seed: string): Face {
 export interface AgentDef {
   id: string;
   name: string;
-  /** apelido de personagem (ex.: "Tostão") e carinha no painel */
+  /** apelido de personagem (ex.: "Moacir") e carinha no painel */
   persona?: string;
   face?: Face;
   /** ícone no painel (nome do conjunto de ícones do dashboard) */
@@ -60,7 +60,7 @@ export interface AgentDef {
 export const SPECIALISTS: AgentDef[] = [
   {
     id: "pesquisador",
-    persona: "Lupa",
+    persona: "Clotilde",
     face: { color: 6, eyes: "glasses", mouth: "open", extra: "antenna" },
     name: "Pesquisador",
     icon: "search",
@@ -94,7 +94,7 @@ export const SPECIALISTS: AgentDef[] = [
   },
   {
     id: "agenda",
-    persona: "Sininho",
+    persona: "Cotinha",
     face: { color: 2, eyes: "happy", mouth: "smile", extra: "bow" },
     name: "Agenda",
     icon: "calendar",
@@ -115,7 +115,7 @@ export const SPECIALISTS: AgentDef[] = [
   },
   {
     id: "financeiro",
-    persona: "Tostão",
+    persona: "Moacir",
     face: { color: 7, eyes: "dot", mouth: "grin", extra: "cap" },
     name: "Financeiro",
     icon: "wallet",
@@ -156,7 +156,7 @@ export const SPECIALISTS: AgentDef[] = [
   },
   {
     id: "comunicacao",
-    persona: "Carta",
+    persona: "Telma",
     face: { color: 1, eyes: "wink", mouth: "cat", extra: "headset" },
     name: "Comunicação",
     icon: "mail",
@@ -167,7 +167,7 @@ export const SPECIALISTS: AgentDef[] = [
   },
   {
     id: "produtividade",
-    persona: "Bloco",
+    persona: "Nivaldo",
     face: { color: 0, eyes: "wide", mouth: "smile", extra: "leaf" },
     name: "Produtividade",
     icon: "folder",
@@ -197,7 +197,7 @@ export const SPECIALISTS: AgentDef[] = [
   },
   {
     id: "recados",
-    persona: "Pombo",
+    persona: "Zezinho",
     face: { color: 3, eyes: "dot", mouth: "open", extra: "none" },
     name: "Recados",
     icon: "send",
@@ -262,7 +262,7 @@ export const CTO_TOOLS: Tool[] = [
 export const CTO: Omit<AgentDef, "tools"> = {
   id: "cto",
   name: "CTO",
-  persona: "Maestro",
+  persona: "Juvenal",
   face: { color: 4, eyes: "happy", mouth: "smile", extra: "crown" },
   icon: "brain",
   role: "Orquestrador: conversa com a pessoa, decide, delega aos especialistas e compõe a resposta final.",

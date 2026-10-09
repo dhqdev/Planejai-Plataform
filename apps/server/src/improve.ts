@@ -87,7 +87,7 @@ export async function improveUser(userId: string) {
           `tabs.enable só se o uso pede (${Object.entries(OPTIONAL).map(([k, v]) => `${k}: ${v.desc}`).join("; ")}). ` +
           `tabs.custom só para um assunto que se repete muito e merece uma tela (máximo 1 por noite e 3 no total): ícone em ${TAB_ICONS.join(", ")}; widgets em ${TAB_WIDGETS.join(", ")}. ` +
           `create só para assunto que já aparece em ${MIN_DAYS}+ dias nos acumulados e é recorrente hoje, que um especialista atenderia melhor que o time geral e que nenhum agente sob medida dele já cobre; ` +
-          `no máximo 1 por dia e ${MAX_AGENTS} no total. persona = apelido curto e simpático de personagem (ex.: Pipoca, Fit, Zé Viagem). instructions: 3 a 5 frases práticas com o que esse cliente costuma querer (cidade, marcas, faixa de preço, horários) e onde buscar. ` +
+          `no máximo 1 por dia e ${MAX_AGENTS} no total. persona = nome de pessoa engraçado que combine com o assunto (ex.: Valdirene para academia, Seu Arlindo para viagens). instructions: 3 a 5 frases práticas com o que esse cliente costuma querer (cidade, marcas, faixa de preço, horários) e onde buscar. ` +
           "update só se aprendeu algo novo e útil sobre o gosto dele. retire agentes sem uso há muito tempo. Na dúvida, não mude: listas vazias são a resposta normal.",
       },
       { role: "user", content: prompt },

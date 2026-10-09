@@ -20,7 +20,7 @@
 .tm-link.dim { opacity: .25; }
 @keyframes tm-flow { to { stroke-dashoffset: -11; } }
 
-/* recado viajando do Maestro para quem ele chamou (e a volta) */
+/* recado viajando do Juvenal para quem ele chamou (e a volta) */
 .tm-msg {
   position: absolute; left: 0; top: 0; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
   background: var(--violet); box-shadow: 0 0 0 4px color-mix(in srgb, var(--violet) 22%, transparent);
