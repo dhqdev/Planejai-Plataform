@@ -372,6 +372,22 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     for (const url of ["/api/integrations", "/api/settings", "/api/executions", "/api/executions/summary", "/api/accounts", "/api/overview", "/api/queues", "/api/costs", "/api/resources", "/api/resources/storage", `/api/clients/${ana.user_id ?? ana.id}/usage`]) {
       expect((await app.inject({ method: "GET", url, headers: { cookie: adm } })).statusCode).toBe(403);
     }
+    // dono vê quanto vale um grão em tokens e, por cliente, grãos e tokens do OpenRouter
+    const biaUid = (await db.one("SELECT id FROM users WHERE name = 'Bia'")).id;
+    await db.query(
+      `INSERT INTO usage_daily (user_id, day, tokens_in, tokens_out, cost_usd) VALUES ($1, current_date, 3000, 1000, 0.02)
+       ON CONFLICT (user_id, day) DO UPDATE SET tokens_in = usage_daily.tokens_in + 3000, tokens_out = usage_daily.tokens_out + 1000, cost_usd = usage_daily.cost_usd + 0.02`,
+      [biaUid],
+    );
+    const costs = (await app.inject({ method: "GET", url: "/api/costs", headers: { cookie: sup } })).json();
+    expect(costs.grains).toMatchObject({ perUsd: 1000, usdPerGrain: 0.001 });
+    expect(costs.grains.tokensPerGrain).toBeGreaterThan(0);
+    const biaCost = costs.clients.find((c: any) => c.id === biaUid);
+    expect(biaCost.grains).toBe(Math.ceil(biaCost.cost * 1000 - 1e-9));
+    expect(biaCost.tokens).toBeGreaterThanOrEqual(4000);
+    const usage = (await app.inject({ method: "GET", url: `/api/clients/${biaUid}/usage`, headers: { cookie: sup } })).json();
+    expect(usage.totals.tokens_7d).toBeGreaterThanOrEqual(4000);
+    expect(usage.totals).toHaveProperty("grains_7d");
     // particular: nem o dono vê as finanças da Bia, nem pedindo por ?user=
     const bia = await db.one("SELECT id FROM users WHERE name = 'Bia'");
     const supFin = (await app.inject({ method: "GET", url: "/api/finance?month=2026-03", headers: { cookie: sup } })).json();

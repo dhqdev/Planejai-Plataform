@@ -6,6 +6,7 @@ import { emitEvent } from "../../../events.js";
 import { phoneVariants } from "../../../ingest.js";
 import { withOutfits } from "../../../mascot.js";
 import { eraseUserData } from "../../../privacy.js";
+import { getSettings } from "../../../settings.js";
 import { inviteLink } from "../../../social.js";
 import { getTabs, saveTabs } from "../../../tabs.js";
 import { isUuid, withLook } from "./shared.js";
@@ -85,7 +86,8 @@ export function clientRoutes(api: FastifyInstance) {
     const clients = await many(
       `SELECT u.user_id AS id, COALESCE(us.full_name, us.name, '+' || us.phone) AS name, us.phone,
               SUM(u.cost_usd)::float AS cost, SUM(u.executions)::int AS executions, SUM(u.messages)::int AS messages,
-              SUM(u.tokens_in + u.tokens_out)::bigint AS tokens,
+              SUM(u.tokens_in + u.tokens_out)::float AS tokens, SUM(u.tokens_in)::float AS tokens_in, SUM(u.tokens_out)::float AS tokens_out,
+              (SELECT COALESCE(-SUM(g.delta), 0)::int FROM grain_ledger g WHERE g.user_id = u.user_id AND g.reason = 'uso' AND g.created_at > current_date - $1::int) AS grains_charged,
               COALESCE(SUM(u.cost_usd) FILTER (WHERE u.day > current_date - 7), 0)::float AS cost_7d,
               json_agg(json_build_object('day', to_char(u.day, 'YYYY-MM-DD'), 'cost', u.cost_usd::float) ORDER BY u.day) AS series
          FROM usage_daily u JOIN users us ON us.id = u.user_id
@@ -96,7 +98,18 @@ export function clientRoutes(api: FastifyInstance) {
       [days],
     );
     const total = daily.reduce((a, d) => a + d.cost, 0);
-    return { days, total, daily, clients };
+    // grão = custo real em US$ x billingGrainsPerUsd; quantos tokens isso dá depende do modelo, então vai a média real do período
+    const rate = Number((await getSettings()).billingGrainsPerUsd || 1000);
+    const tokens = clients.reduce((a, c) => a + Number(c.tokens ?? 0), 0);
+    const grains = total * rate;
+    for (const c of clients) c.grains = Math.ceil(c.cost * rate - 1e-9);
+    return {
+      days,
+      total,
+      daily,
+      clients,
+      grains: { perUsd: rate, usdPerGrain: 1 / rate, tokens, total: Math.ceil(grains - 1e-9), tokensPerGrain: grains > 0 ? tokens / grains : null },
+    };
   });
 
   // ---------- Acompanhamento de uso de cada cliente ----------
@@ -110,7 +123,12 @@ export function clientRoutes(api: FastifyInstance) {
               COALESCE(SUM(cost_usd) FILTER (WHERE started_at > now() - interval '7 days'), 0)::float AS cost_7d,
               COUNT(*) FILTER (WHERE status = 'error' AND started_at > now() - interval '7 days')::int AS errors_7d,
               MAX(started_at) AS last_at,
-              (SELECT COALESCE(SUM(cost_usd), 0)::float FROM usage_daily WHERE user_id = $1) AS cost_total
+              (SELECT COALESCE(SUM(cost_usd), 0)::float FROM usage_daily WHERE user_id = $1) AS cost_total,
+              (SELECT COALESCE(SUM(tokens_in + tokens_out), 0)::float FROM usage_daily WHERE user_id = $1 AND day > current_date - 7) AS tokens_7d,
+              (SELECT COALESCE(SUM(tokens_in + tokens_out), 0)::float FROM usage_daily WHERE user_id = $1) AS tokens_total,
+              (SELECT COALESCE(-SUM(delta), 0)::int FROM grain_ledger WHERE user_id = $1 AND reason = 'uso' AND created_at > now() - interval '7 days') AS grains_7d,
+              (SELECT COALESCE(-SUM(delta), 0)::int FROM grain_ledger WHERE user_id = $1 AND reason = 'uso') AS grains_used,
+              (SELECT plan_grains + extra_grains FROM wallets WHERE user_id = $1) AS grains_balance
          FROM executions WHERE user_id = $1`,
       [id],
     );
