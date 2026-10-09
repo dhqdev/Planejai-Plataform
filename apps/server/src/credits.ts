@@ -53,11 +53,27 @@ export async function ensureWallet(userId: string, s?: AgentSettings): Promise<W
   let w = await one("SELECT plan_grains, extra_grains FROM wallets WHERE user_id = $1", [userId]);
   if (!w) {
     const welcome = Math.max(0, Math.round(Number(s.billingWelcomeGrains ?? 0)));
-    // a entrada no extrato com ref fixa garante as boas-vindas uma vez só por pessoa
-    const first = welcome > 0
-      ? await one("INSERT INTO grain_ledger (user_id, delta, reason, ref) VALUES ($1, $2, 'boas-vindas', 'welcome') ON CONFLICT DO NOTHING RETURNING id", [userId, welcome])
-      : null;
-    await query("INSERT INTO wallets (user_id, extra_grains, welcome_at) VALUES ($1, $2, now()) ON CONFLICT (user_id) DO NOTHING", [userId, first ? welcome : 0]);
+    // numa transação só: quem cria a carteira é quem dá as boas-vindas. Duas chamadas ao mesmo tempo esperam a primeira
+    // (o INSERT da carteira trava na linha nova) e a segunda não cria nada, então os grãos nunca se perdem no meio.
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const born = await client.query("INSERT INTO wallets (user_id, welcome_at) VALUES ($1, now()) ON CONFLICT (user_id) DO NOTHING RETURNING user_id", [userId]);
+      if (born.rowCount && welcome > 0) {
+        // a entrada no extrato com ref fixa garante as boas-vindas uma vez só por pessoa (mesmo apagando a carteira)
+        const first = await client.query(
+          "INSERT INTO grain_ledger (user_id, delta, reason, ref) VALUES ($1, $2, 'boas-vindas', 'welcome') ON CONFLICT DO NOTHING RETURNING id",
+          [userId, welcome],
+        );
+        if (first.rowCount) await client.query("UPDATE wallets SET extra_grains = $2 WHERE user_id = $1", [userId, welcome]);
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
     w = await one("SELECT plan_grains, extra_grains FROM wallets WHERE user_id = $1", [userId]);
   }
   return { plan: Number(w!.plan_grains), extra: Number(w!.extra_grains), total: Number(w!.plan_grains) + Number(w!.extra_grains) };

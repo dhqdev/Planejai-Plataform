@@ -141,6 +141,12 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     expect(s.billingStartedAt).toBeTruthy();
     expect(await billing.billingAccess(user)).toEqual({ allowed: true, state: "grains", balance: 300 });
     expect(await credits.ensureWallet(user.id)).toEqual({ plan: 0, extra: 300, total: 300 });
+    // várias chamadas ao mesmo tempo na primeira vez: todas veem as boas-vindas, uma vez só no extrato
+    const { upsertUser } = await import("../src/ingest.js");
+    const dani = await upsertUser("5519933330000", "Dani");
+    const firsts = await Promise.all(Array.from({ length: 6 }, () => credits.ensureWallet(dani.id)));
+    expect(firsts.map((w) => w.total)).toEqual([300, 300, 300, 300, 300, 300]);
+    expect(await db.many("SELECT delta FROM grain_ledger WHERE user_id = $1", [dani.id])).toEqual([{ delta: 300 }]);
     // apagar a carteira não dá as boas-vindas de novo
     await db.query("DELETE FROM wallets WHERE user_id = $1", [user.id]);
     expect((await credits.ensureWallet(user.id)).total).toBe(0);
