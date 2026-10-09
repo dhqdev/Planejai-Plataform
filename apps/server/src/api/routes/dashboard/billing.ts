@@ -61,6 +61,8 @@ export function billingRoutes(base: FastifyInstance) {
       linked: true,
       ready: pricing.enabled && (await isConnected("asaas")),
       exempt: grainsExempt(user, s),
+      // já tem cadastro no Asaas: não precisa pedir nome e CPF de novo
+      hasCustomer: Boolean(sub?.asaas_customer_id),
       name: user.full_name ?? user.name ?? "",
       email: user.email ?? req.account.email ?? "",
       wallet,

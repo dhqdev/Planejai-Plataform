@@ -102,7 +102,7 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/memories": load.memories,
   "/settings": load.settings,
   "/profile": load.profile,
-  "/assinatura": load.billing,
+  "/plano": load.billing,
   "/time": load.team,
 };
 function preload(to: string) {
@@ -190,7 +190,7 @@ function adminNav(tabs: AppTabs | null, billing = false): NavItem[] {
     { section: "Conta" },
     { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
     // só aparece quando o dono ligou a cobrança
-    ...(billing ? [{ to: "/assinatura", label: "Assinatura", icon: "card" }] : []),
+    ...(billing ? [{ to: "/plano", label: "Plano e grãos", icon: "card", short: "Plano" }] : []),
     { to: "/profile", label: "Minha conta", icon: "user" },
   ];
 }
@@ -252,8 +252,8 @@ export function App() {
   useEffect(() => onInstallAvailable(() => setInstallable(true)), []);
   const tabs = useApi<AppTabs>(me ? `/api/me/tabs?for=${me.id}` : null);
   const isSuper = me?.role === "superadmin";
-  const billing = useApi<{ plan: { enabled: boolean } }>(me && !isSuper ? "/api/billing" : null);
-  const NAV = !me ? NO_NAV : isSuper ? SUPER_NAV : adminNav(tabs.data ?? null, billing.data?.plan.enabled);
+  const billing = useApi<{ pricing: { enabled: boolean } }>(me && !isSuper ? "/api/billing" : null);
+  const NAV = !me ? NO_NAV : isSuper ? SUPER_NAV : adminNav(tabs.data ?? null, billing.data?.pricing?.enabled);
   const links = NAV.filter((i): i is NavLinkItem => "to" in i);
   // com o app parado, baixa em segundo plano o código das telas do menu desta pessoa (e só delas)
   const routes = links.map((l) => l.to).join(" ");
@@ -368,7 +368,10 @@ export function App() {
               <Route path="/settings" element={<SettingsPage />} />
             </>
           ) : (
-            <Route path="/assinatura" element={<BillingPage />} />
+            <>
+              <Route path="/plano" element={<BillingPage />} />
+              <Route path="/assinatura" element={<Navigate to="/plano" replace />} />
+            </>
           )}
           <Route path="/profile" element={<ProfilePage me={me} />} />
           <Route path="/notificacoes" element={<NotificationsPage />} />

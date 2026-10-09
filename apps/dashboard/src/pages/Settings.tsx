@@ -3,51 +3,83 @@ import { api, brl, phoneFmt } from "../api";
 import { CopyField, ErrorBox, Loading, PageHead } from "../components";
 import { useApi } from "../hooks";
 
-const BILL_STATE: Record<string, string> = { trial: "dias grátis", active: "em dia", blocked: "travado", exempt: "liberado" };
+const BILL_STATE: Record<string, string> = { plan: "com plano", free: "nos grãos grátis", empty: "sem grãos", exempt: "liberado" };
+const nf = new Intl.NumberFormat("pt-BR");
 
-/** Assinatura pelo Asaas: ligar, preço, dias grátis, endereço do webhook e a situação de cada pessoa. */
+/** Grãos e planos pelo Asaas: ligar, vitrine (planos e pacotes), regras, webhook e a situação de cada pessoa. */
 function BillingCard({ form, setForm, save, saved }: { form: any; setForm: (f: any) => void; save: () => void; saved: boolean }) {
   const { data, reload } = useApi<any>("/api/billing/admin");
   const exempt = async (id: string, value: boolean) => {
     await api(`/api/billing/people/${id}`, { method: "PATCH", json: { exempt: value } });
     await reload();
   };
+  const gift = async (id: string, name: string) => {
+    const raw = window.prompt(`Quantos grãos de presente para ${name}?`, "500");
+    const amount = Math.round(Number(raw));
+    if (!raw || !(amount > 0)) return;
+    await api(`/api/billing/people/${id}/grains`, { method: "POST", json: { amount, note: "Presente do responsável" } });
+    await reload();
+  };
+  const plans: any[] = form.billingPlans ?? [];
+  const packs: any[] = form.billingPacks ?? [];
+  const setPlan = (i: number, patch: any) => setForm({ ...form, billingPlans: plans.map((p, j) => (j === i ? { ...p, ...patch } : patch.highlight ? { ...p, highlight: false } : p)) });
+  const setPack = (i: number, patch: any) => setForm({ ...form, billingPacks: packs.map((p, j) => (j === i ? { ...p, ...patch } : p)) });
+  const n = (v: string) => (v === "" ? "" : Number(v));
+  const numField = (key: string, label: string, help: string, max?: number) => (
+    <div className="field">
+      <label>{label}</label>
+      <input className="input" type="number" inputMode="numeric" step={1} min={0} max={max} value={form[key] ?? ""} onChange={(e) => setForm({ ...form, [key]: n(e.target.value) })} />
+      <div className="help">{help}</div>
+    </div>
+  );
   return (
     <div className="card card-pad">
-      <h3>Assinatura (Asaas)</h3>
+      <h3>Grãos e planos (Asaas)</h3>
       <p className="muted" style={{ marginTop: 0 }}>
-        Cobrança mensal dos clientes. Cada pessoa usa de graça pelos dias abaixo; depois, sem assinatura em dia o assistente avisa uma vez por dia e para de responder. Donos nunca são cobrados.
+        Cada resposta gasta grãos pelo custo real da IA. A pessoa ganha os grãos de boas-vindas, depois assina um plano (recarrega todo mês) ou compra pacotes avulsos. Sem grãos, o assistente avisa uma vez por dia e para. Donos nunca gastam.
       </p>
       <div className="field">
         <label className="row" style={{ gap: 8, cursor: "pointer" }}>
           <input type="checkbox" checked={!!form.billingEnabled} onChange={(e) => setForm({ ...form, billingEnabled: e.target.checked })} />
-          Cobrar assinatura
+          Cobrar por grãos
         </label>
         <div className="help">
-          {data?.connected ? (data.mode === "sandbox" ? <><b>Asaas em sandbox:</b> ninguém é cobrado de verdade. Troque por uma chave $aact_prod_ em Integrações &gt; Asaas.</> : "Asaas conectado (produção).") : "Antes de ligar, cole a chave de API e o token do webhook em Integrações > Asaas."} Ao ligar, quem já é cliente ganha os dias grátis a partir de agora.
+          {data?.connected ? (data.mode === "sandbox" ? <><b>Asaas em sandbox:</b> ninguém é cobrado de verdade. Troque por uma chave $aact_prod_ em Integrações &gt; Asaas.</> : "Asaas conectado (produção).") : "Antes de ligar, cole a chave de API e o token do webhook em Integrações > Asaas."} Ao ligar, cada pessoa ganha os grãos de boas-vindas na primeira mensagem.
         </div>
       </div>
-      <div className="field"><label>Nome do plano</label><input className="input" value={form.billingPlanName ?? ""} onChange={(e) => setForm({ ...form, billingPlanName: e.target.value })} /></div>
-      <div className="field">
-        <label>Preço por mês (R$)</label>
-        <input className="input" type="number" inputMode="decimal" step={0.1} min={1} value={form.billingPrice} onChange={(e) => setForm({ ...form, billingPrice: e.target.value === "" ? "" : Number(e.target.value) })} />
-        <div className="help">Vale para novas assinaturas. Quem já assinou continua no valor em que entrou.</div>
+      <h4 className="set-sub">Planos (por mês)</h4>
+      <div className="set-plans">
+        {plans.map((p, i) => (
+          <div key={i} className="set-plan">
+            <input className="input" aria-label="Nome do plano" value={p.name ?? ""} onChange={(e) => setPlan(i, { name: e.target.value })} />
+            <input className="input" aria-label="Preço por mês (R$)" type="number" inputMode="decimal" step={0.1} min={1} value={p.price ?? ""} onChange={(e) => setPlan(i, { price: n(e.target.value) })} />
+            <input className="input" aria-label="Grãos por mês" type="number" inputMode="numeric" step={100} min={1} value={p.grains ?? ""} onChange={(e) => setPlan(i, { grains: n(e.target.value) })} />
+            <input className="input set-plan-blurb" aria-label="Para quem é" placeholder="Para quem é" value={p.blurb ?? ""} onChange={(e) => setPlan(i, { blurb: e.target.value })} />
+            <label className="set-plan-hl"><input type="radio" name="plan-hl" checked={!!p.highlight} onChange={() => setPlan(i, { highlight: true })} /> destaque</label>
+            {plans.length > 1 && <button className="btn btn-sm btn-ghost" onClick={() => setForm({ ...form, billingPlans: plans.filter((_, j) => j !== i) })}>Tirar</button>}
+          </div>
+        ))}
+        {plans.length < 4 && <button className="btn btn-sm" onClick={() => setForm({ ...form, billingPlans: [...plans, { name: "", price: 29.9, grains: 3000, blurb: "" }] })}>Adicionar plano</button>}
+        <div className="help">Nome, R$ por mês e grãos por mês. Mudar o preço vale para quem assinar depois; quem já assina é ajustado na próxima troca.</div>
       </div>
-      <div className="field">
-        <label>Dias grátis</label>
-        <input className="input" type="number" inputMode="numeric" step={1} min={0} value={form.billingTrialDays} onChange={(e) => setForm({ ...form, billingTrialDays: e.target.value === "" ? "" : Number(e.target.value) })} />
+      <h4 className="set-sub">Pacotes avulsos</h4>
+      <div className="set-plans">
+        {packs.map((p, i) => (
+          <div key={i} className="set-plan set-pack">
+            <input className="input" aria-label="Grãos" type="number" inputMode="numeric" step={100} min={1} value={p.grains ?? ""} onChange={(e) => setPack(i, { grains: n(e.target.value), id: "" })} />
+            <input className="input" aria-label="Preço (R$)" type="number" inputMode="decimal" step={0.1} min={1} value={p.price ?? ""} onChange={(e) => setPack(i, { price: n(e.target.value) })} />
+            <button className="btn btn-sm btn-ghost" onClick={() => setForm({ ...form, billingPacks: packs.filter((_, j) => j !== i) })}>Tirar</button>
+          </div>
+        ))}
+        {packs.length < 4 && <button className="btn btn-sm" onClick={() => setForm({ ...form, billingPacks: [...packs, { grains: 1000, price: 19.9 }] })}>Adicionar pacote</button>}
+        <div className="help">Grãos e preço. Deixe o grão do pacote mais caro que o do plano, para valer a pena assinar.</div>
       </div>
       <div className="grid grid-2" style={{ gap: 10 }}>
-        <div className="field">
-          <label>Lembrar o vencimento (dias antes)</label>
-          <input className="input" type="number" inputMode="numeric" step={1} min={0} max={10} value={form.billingReminderDays ?? 3} onChange={(e) => setForm({ ...form, billingReminderDays: e.target.value === "" ? "" : Number(e.target.value) })} />
-          <div className="help">Para quem paga por Pix ou boleto, e de novo no dia. Cartão renova sozinho.</div>
-        </div>
-        <div className="field">
-          <label>Desconto por indicação (%)</label>
-          <input className="input" type="number" inputMode="numeric" step={1} min={0} max={100} value={form.billingReferralPercent ?? 10} onChange={(e) => setForm({ ...form, billingReferralPercent: e.target.value === "" ? "" : Number(e.target.value) })} />
-          <div className="help">Quem convidou ganha na próxima mensalidade quando o convidado paga a primeira vez. 0 desliga.</div>
-        </div>
+        {numField("billingWelcomeGrains", "Grãos de boas-vindas", "Uma vez por pessoa.")}
+        {numField("billingGrainsPerUsd", "Grãos por US$ 1 de IA", "Custo real do OpenRouter. 1.000 = 1 grão a cada US$ 0,001.")}
+        {numField("billingReferralStep", "Desconto por amigo pagante (%)", "Na mensalidade de quem convidou. 0 desliga.", 50)}
+        {numField("billingReferralMax", "Desconto máximo (%)", "Teto somando todos os amigos.", 90)}
+        {numField("billingReminderDays", "Lembrar o vencimento (dias antes)", "Pix ou boleto; cartão renova sozinho.", 10)}
       </div>
       {data?.webhookUrl && (
         <div className="field">
@@ -64,19 +96,21 @@ function BillingCard({ form, setForm, save, saved }: { form: any; setForm: (f: a
         <>
           <h3 style={{ marginTop: 20 }}>Situação</h3>
           <p className="bill-counts">
-            <span><strong>{data.counts.active}</strong> em dia</span>
-            <span><strong>{data.counts.trial}</strong> nos dias grátis</span>
-            <span><strong>{data.counts.blocked}</strong> travados</span>
-            <span><strong>{data.counts.exempt}</strong> liberados</span>
+            <span><strong>{data.counts.plan ?? 0}</strong> com plano</span>
+            <span><strong>{data.counts.free ?? 0}</strong> nos grãos grátis</span>
+            <span><strong>{data.counts.empty ?? 0}</strong> sem grãos</span>
+            <span><strong>{data.counts.exempt ?? 0}</strong> liberados</span>
             <span><strong>{brl(data.mrr)}</strong> por mês</span>
+            <span><strong>{brl(data.packsMonth ?? 0)}</strong> avulsos no mês</span>
           </p>
           <ul className="bill-people">
             {data.people.map((p: any) => (
               <li key={p.id}>
                 <span>{p.name}</span>
-                <small>{p.owner ? "dono" : BILL_STATE[p.state] ?? p.state}</small>
+                <small>{p.owner ? "dono" : `${p.plan ?? BILL_STATE[p.state] ?? p.state}${p.state !== "exempt" ? ` · ${nf.format(p.balance)}` : ""}${p.discount ? ` · -${p.discount}%` : ""}`}</small>
+                {!p.owner && <button className="btn btn-sm btn-ghost" onClick={() => gift(p.id, p.name)}>Dar grãos</button>}
                 {!p.owner && (
-                  <button className="btn btn-sm" onClick={() => exempt(p.id, !p.exempt)}>{p.exempt ? "Voltar a cobrar" : "Liberar sem cobrança"}</button>
+                  <button className="btn btn-sm" onClick={() => exempt(p.id, !p.exempt)}>{p.exempt ? "Voltar a cobrar" : "Liberar"}</button>
                 )}
               </li>
             ))}

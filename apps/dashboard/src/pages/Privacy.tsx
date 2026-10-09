@@ -14,12 +14,12 @@ interface Legal {
  */
 export function PrivacyPage() {
   const [legal, setLegal] = useState<Legal | null>(null);
-  const [plan, setPlan] = useState<{ name: string; price: number; trialDays: number } | null>(null);
+  const [pricing, setPricing] = useState<{ enabled: boolean; welcome: number } | null>(null);
   useEffect(() => {
-    api<{ legal?: Legal; plan?: { name: string; price: number; trialDays: number } | null }>("/api/auth/config").then(
+    api<{ legal?: Legal; pricing?: { enabled: boolean; welcome: number } }>("/api/auth/config").then(
       (c) => {
         setLegal(c.legal ?? null);
-        setPlan(c.plan ?? null);
+        setPricing(c.pricing?.enabled ? c.pricing : null);
       },
       () => {},
     );
@@ -73,8 +73,9 @@ export function PrivacyPage() {
             até 7 dias.
           </li>
           <li>
-            <b>Assinatura</b> (se houver cobrança): nome, CPF ou CNPJ, e-mail e telefone vão para o Asaas, que processa o pagamento. O CPF/CNPJ não fica
-            guardado no Planejai; ficam só o estado da assinatura e as datas, enquanto ela existir e pelo prazo que a lei fiscal exigir.
+            <b>Plano e grãos</b> (se houver cobrança): nome, CPF ou CNPJ, e-mail e telefone vão para o Asaas, que processa o pagamento. O CPF/CNPJ e
+            os dados do cartão não ficam no Planejai; ficam o plano, o saldo e o extrato de grãos, as datas e o final do cartão, enquanto a conta existir e
+            pelo prazo que a lei fiscal exigir.
           </li>
           <li>
             <b>Contas conectadas</b> (Google Agenda, Gmail e outras que você ligar): usadas só para o que você pedir. As chaves ficam criptografadas e
@@ -127,20 +128,23 @@ export function PrivacyPage() {
           respondemos em até 15 dias. Se não ficar satisfeito, você pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD).
         </p>
 
-        {plan && (
+        {pricing && (
           <>
-            <h3>Assinatura</h3>
+            <h3>Plano e grãos</h3>
             <ul>
               <li>
-                O {plan.name} custa {plan.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por mês
-                {plan.trialDays > 0 ? `, com ${plan.trialDays} dias grátis no começo` : ""}. O preço de quem já assinou só muda com aviso antes.
+                O assistente funciona com grãos: cada resposta gasta alguns, conforme o trabalho que deu.{pricing.welcome > 0 ? ` Toda conta nova ganha ${pricing.welcome.toLocaleString("pt-BR")} grãos para começar.` : ""}
               </li>
-              <li>Você cancela quando quiser, em Assinatura no painel; o mês já pago continua valendo até o fim.</li>
               <li>
-                Direito de arrependimento (Código de Defesa do Consumidor, art. 49): nos 7 dias depois da primeira cobrança, você pode desistir e
-                receber o valor de volta, pelo mesmo canal de contato acima.
+                O plano mensal recarrega os grãos dele a cada mês pago (o que sobra do mês não acumula). Pacotes avulsos não vencem. Os preços estão em
+                Plano e grãos no painel; o preço de quem já assina só muda com aviso antes.
               </li>
-              <li>Mensalidade vencida e não paga pausa o assistente até o pagamento; seus dados não são apagados por isso.</li>
+              <li>Você cancela quando quiser, em Plano e grãos no painel; os grãos que já estão na conta continuam valendo até acabar.</li>
+              <li>
+                Direito de arrependimento (Código de Defesa do Consumidor, art. 49): nos 7 dias depois de uma compra, você pode desistir e receber o
+                valor de volta, pelo mesmo canal de contato acima.
+              </li>
+              <li>Sem grãos ou com a mensalidade vencida, o assistente pausa até comprar mais; seus dados não são apagados por isso.</li>
             </ul>
           </>
         )}

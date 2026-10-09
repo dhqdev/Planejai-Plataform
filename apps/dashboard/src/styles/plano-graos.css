@@ -1,0 +1,89 @@
+/* ---------- Plano e grãos: carteira à esquerda, vitrine à direita (cabe em 1366x768 sem rolar a página) ---------- */
+.grain-layout { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; gap: 22px; align-items: start; }
+.grain-wallet { max-width: none; }
+.grain-wallet .bill-head .bill-price { font-size: clamp(34px, 6vw, 42px); color: var(--night-text); }
+.grain-wallet .bill-head .bill-price span { color: var(--night-muted); }
+.grain-bar { height: 6px; border-radius: 99px; background: var(--night-2); margin: 12px 0 0; overflow: hidden; }
+.grain-bar i { display: block; height: 100%; border-radius: inherit; background: var(--violet); transition: width .5s cubic-bezier(.2, .8, .2, 1); }
+.grain-split { margin: 8px 0 0; font-size: 12.5px; color: var(--night-muted); font-variant-numeric: tabular-nums; }
+.grain-facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13.5px; }
+.grain-facts li { display: flex; justify-content: space-between; gap: 12px; }
+.grain-facts li > span { color: var(--muted); }
+.grain-facts li > b { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.grain-facts li:has(.bill-cta) { display: block; }
+.grain-pending { display: block; margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--violet-soft); color: var(--text); font-size: 13px; text-decoration: none; }
+.grain-actions { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 14px; }
+.grain-actions .btn { padding-left: 0; padding-right: 0; }
+.grain-actions .btn + .btn { margin-left: auto; }
+.grain-ref { padding: 18px 24px 20px; border-top: 1px solid var(--border); }
+.grain-ref h3 { margin: 0 0 4px; font-size: 15px; }
+.grain-ref > p { margin: 0; font-size: 13px; color: var(--muted); }
+.grain-steps { display: flex; gap: 4px; margin: 12px 0 0; }
+.grain-steps i { flex: 1; height: 6px; border-radius: 99px; background: var(--panel-2); }
+.grain-steps i.on { background: var(--violet); }
+.grain-friends { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0 !important; }
+.grain-friends span { padding: 3px 10px; border-radius: 99px; background: var(--panel-2); color: var(--muted); font-size: 12px; }
+.grain-friends span.on { background: var(--violet-soft); color: var(--text); }
+.grain-ref .help { margin-top: 10px; }
+
+.grain-shop h2 { margin: 0; font-size: 17px; letter-spacing: -.01em; }
+.grain-shop h2 + .grain-lead { margin: 2px 0 12px; font-size: 13px; }
+.grain-plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.grain-plan { display: flex; flex-direction: column; gap: 6px; padding: 18px; border-radius: 20px; background: var(--panel); border: 1px solid var(--border); transition: border-color .18s, transform .18s; }
+.grain-plan.hl { border-color: var(--violet); box-shadow: 0 14px 34px -26px var(--violet); }
+.grain-plan.mine { background: var(--violet-soft); border-color: transparent; }
+.grain-plan header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.grain-plan h3 { margin: 0; font-size: 16px; }
+.grain-plan .badge { font-size: 11px; }
+.grain-price { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 6px; margin: 4px 0 0; }
+.grain-price b { font-size: 26px; font-weight: 650; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.grain-price s { color: var(--muted); font-size: 13px; }
+.grain-price span { color: var(--muted); font-size: 13px; }
+.grain-amount { margin: 0; font-weight: 600; font-size: 14px; color: var(--violet); }
+.grain-blurb { margin: 0 0 8px; color: var(--muted); font-size: 13px; flex: 1; }
+.grain-plan .btn { justify-content: center; width: 100%; }
+@media (hover: hover) and (pointer: fine) { .grain-plan:not(.mine):hover { transform: translateY(-2px); } }
+
+.grain-packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.grain-pack { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px 16px; border-radius: 16px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; cursor: pointer; text-align: left; transition: border-color .18s, background .18s; }
+.grain-pack b { font-size: 15px; }
+.grain-pack span { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.grain-pack:disabled { opacity: .5; cursor: default; }
+@media (hover: hover) and (pointer: fine) { .grain-pack:not(:disabled):hover { border-color: var(--violet); } }
+.grain-pack:active:not(:disabled) { transform: scale(.98); }
+
+.grain-ledger { list-style: none; margin: 0; padding: 0; }
+.grain-ledger li { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+.grain-ledger small { color: var(--muted); }
+.grain-ledger b { font-variant-numeric: tabular-nums; min-width: 64px; text-align: right; }
+.grain-ledger b.pos { color: var(--ok); }
+
+.grain-checkout .grain-total { display: flex; align-items: baseline; gap: 8px; margin: 0 0 14px; }
+.grain-checkout .grain-total b { font-size: 28px; letter-spacing: -.03em; }
+.grain-checkout .grain-total span { color: var(--muted); font-size: 13px; }
+.grain-methods { border: none; margin: 0 0 14px; padding: 0; display: grid; gap: 8px; }
+.grain-methods legend { font-weight: 600; font-size: 13.5px; margin-bottom: 8px; padding: 0; }
+.grain-methods label { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--border); cursor: pointer; }
+.grain-methods label.on { border-color: var(--violet); background: var(--violet-soft); }
+.grain-methods input { grid-row: span 2; margin-top: 3px; accent-color: var(--violet); }
+.grain-methods span { color: var(--muted); font-size: 12.5px; }
+
+@media (max-width: 1023px) {
+  .grain-layout { grid-template-columns: 1fr; }
+  .grain-wallet { max-width: 520px; }
+}
+@media (max-width: 767px) {
+  .grain-ref { padding-left: 20px; padding-right: 20px; }
+  .grain-plans { grid-template-columns: 1fr; }
+  .grain-packs { grid-template-columns: repeat(3, 1fr); }
+  .grain-pack { padding: 12px; }
+}
+
+/* Configurações > Grãos e planos */
+.set-sub { margin: 16px 0 8px; font-size: 13.5px; }
+.set-plans { display: grid; gap: 8px; margin-bottom: 8px; }
+.set-plan { display: grid; grid-template-columns: 1.2fr .8fr .8fr; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--border); align-items: center; }
+.set-plan .set-plan-blurb { grid-column: 1 / -1; }
+.set-plan-hl { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.set-pack { grid-template-columns: 1fr 1fr auto; }
+.set-plans > .btn { justify-self: start; }
