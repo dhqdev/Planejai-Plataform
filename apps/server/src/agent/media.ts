@@ -240,6 +240,12 @@ export async function preprocessMedia(pending: any[], channel: Channel, tracer: 
         if (parts.audio) {
           const t = await transcribe(parts.audio, "mp3").catch(() => null);
           if (t?.message.content) m.meta.transcript = t.message.content.trim();
+          // a transcrição também custou: soma no passo (senão sai de graça nos grãos e some do custo)
+          if (t) {
+            usage = usage
+              ? { ...usage, tokensIn: usage.tokensIn + t.tokensIn, tokensOut: usage.tokensOut + t.tokensOut, costUsd: usage.costUsd + t.costUsd }
+              : t;
+          }
         }
         await step.ok({ description: m.meta.video_description, transcript: m.meta.transcript }, usage);
       }
