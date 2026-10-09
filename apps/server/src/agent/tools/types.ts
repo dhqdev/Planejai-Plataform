@@ -116,11 +116,14 @@ export async function requireConfirmation(_args: { confirmed_by_user?: boolean }
       JSON.stringify(args),
       summary.slice(0, 500),
     ]);
+    // o servidor manda a pergunta com o resumo dele, ao pé da resposta: o "sim" vale para o que a pessoa leu, não para a frase do modelo
+    ctx.room?.confirmations?.push(summary.slice(0, 500));
   }
   return {
     needs_confirmation: true,
     message:
-      `Ação NÃO executada: precisa do "sim" da pessoa. Pergunte a ela, em uma frase, se pode ${summary}. ` +
+      `Ação NÃO executada: precisa do "sim" da pessoa para ${summary}. ` +
+      "O sistema manda no fim da sua resposta a pergunta com os detalhes exatos: não repita a pergunta nem os detalhes. " +
       "Quando ela responder sim, o sistema executa sozinho exatamente isso; não chame a ferramenta de novo para confirmar.",
   };
 }

@@ -241,11 +241,13 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
   it("liberar as finanças a um contato pede o sim; tirar o acesso segue direto", async () => {
     const gio = await db.one("SELECT id FROM users WHERE phone = '5519922223333'");
     const shared = () => db.one("SELECT 1 AS ok FROM shares WHERE owner_id = $1 AND viewer_id = $2 AND scope = 'finance'", [david.id, gio.id]);
-    await say("libera minhas finanças pro Giovani");
+    const asked = await say("libera minhas finanças pro Giovani");
     expect(await shared()).toBeUndefined();
     expect(await db.one("SELECT summary FROM pending_actions WHERE conversation_id = $1 AND tool = 'share_screen' AND status = 'pending'", [davidConv])).toEqual({
       summary: "Liberar as finanças para Giovani Silva ver no painel",
     });
+    // a pergunta do "sim" sai com o resumo do servidor, não só com a frase do modelo
+    expect(asked.sent.some((s) => s.text?.includes("Responda *sim* para eu liberar as finanças para Giovani Silva ver no painel"))).toBe(true);
     await say("sim");
     expect(await shared()).toEqual({ ok: 1 });
     expect(lastTexts(3).some((t) => t.includes("liberou as finanças pra você"))).toBe(true);

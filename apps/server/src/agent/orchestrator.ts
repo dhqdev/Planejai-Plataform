@@ -438,6 +438,12 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
         `Isso passou do meu limite de ${fmtMinutes(guard.minutes)} e parei aqui pra não te deixar esperando. ` +
         "Quer que eu tente de um jeito mais simples ou dividido em partes?";
     }
+    // pergunta do "sim" com o resumo do servidor: a pessoa confirma o que está escrito aqui, não a frase do modelo
+    const asked = ctx.room.confirmations.at(-1);
+    if (asked) {
+      const what = asked.charAt(0).toLowerCase() + asked.slice(1);
+      result.text = `${result.text.replace(/^\[\[sil[eê]ncio\]\]$/i, "").trim()}\n\n👉 Responda *sim* para eu ${what}`.trim();
+    }
     const silent = !result.text || /^\[\[sil[eê]ncio\]\]$/i.test(result.text.trim());
     const bubbles = silent ? [] : splitBubbles(result.text);
     // mídia que o CTO não posicionou vai depois do primeiro balão

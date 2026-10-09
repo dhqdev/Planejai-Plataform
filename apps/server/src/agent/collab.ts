@@ -53,6 +53,8 @@ export class TeamRoom {
   usage = { browserOpens: 0, browserActions: 0, mapPrints: 0 };
   /** por que esta execução respondeu pela metade (vira "Parcial" em Execuções) */
   partial?: string;
+  /** resumos (do servidor) das ações que ficaram esperando o "sim" nesta execução */
+  confirmations: string[] = [];
   private locks = new Map<string, Promise<unknown>>();
 
   constructor(team: AgentDef[] = SPECIALISTS) {
