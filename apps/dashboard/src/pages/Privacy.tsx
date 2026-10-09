@@ -78,10 +78,9 @@ export function PrivacyPage() {
             pelo prazo que a lei fiscal exigir.
           </li>
           <li>
-            <b>Compras pelo assistente</b> (se você usar): nome completo, CPF, data de nascimento e endereço de entrega ficam criptografados e vão
-            só para o Asaas (para cobrar no cartão ou guardar o saldo) e para a loja (o endereço). Do cartão ficam só a bandeira e o final; o número
-            fica no Asaas. Da sua conta na loja guardamos o login (cookies) criptografado, nunca a senha, até você desconectar. O histórico das compras
-            fica enquanto a conta existir e pelo prazo que a lei fiscal exigir. As regras estão nos <a href="/termos-de-compra">Termos de compra</a>.
+            <b>Compras pelo assistente</b> (se você usar): o endereço de entrega, se você cadastrar, fica criptografado e vai só para a loja. Você
+            paga a loja direto do seu banco, então nenhum dado de pagamento passa por aqui. Da sua conta na loja guardamos o login (cookies)
+            criptografado, nunca a senha, até você desconectar. O histórico das compras fica enquanto a conta existir. As regras estão nos <a href="/termos-de-compra">Termos de compra</a>.
           </li>
           <li>
             <b>Contas conectadas</b> (Google Agenda, Gmail e outras que você ligar): usadas só para o que você pedir. As chaves ficam criptografadas e
@@ -103,7 +102,7 @@ export function PrivacyPage() {
           <li>Provedores de inteligência artificial (via OpenRouter), só com o trecho necessário para responder cada pedido.</li>
           <li>Serviços de busca e de mapas, com o termo ou o endereço pesquisado.</li>
           <li>WhatsApp (Meta) e Telegram, para entregar as mensagens.</li>
-          <li>Asaas, para a cobrança da assinatura e, se você usar, das compras pelo assistente.</li>
+          <li>Asaas, para a cobrança da assinatura e, nas compras pelo assistente, para ler o valor de um Pix da loja (só leitura).</li>
           <li>Lojas onde você pede para o assistente comprar, com o que a compra precisa (produto e endereço de entrega), usando a sua própria conta nelas.</li>
           <li>Google e outros serviços que você mesmo conectar, só no que você pedir.</li>
           <li>

@@ -118,20 +118,11 @@ function BillingSection({ form, setForm }: { form: any; setForm: (f: any) => voi
 }
 
 /**
- * Compras pelo assistente: ligar, os três jeitos de pagar, taxa e limites. Valores em centavos no servidor, em reais aqui.
- * Tudo desligado por padrão; o Pix direto não mexe em dinheiro e é o jeito de começar.
+ * Compras pelo assistente: ligar e os limites. Valores em centavos no servidor, em reais aqui.
+ * Desligado por padrão. A pessoa paga o Pix da loja do banco dela: nenhum dinheiro passa pela sua conta.
  */
 function PurchasesSection({ form, setForm }: { form: any; setForm: (f: any) => void }) {
   const { data } = useApi<any>("/api/compras/admin");
-  const sw = (key: string, title: string, desc: ReactNode) => (
-    <label className="set-switch">
-      <input type="checkbox" checked={!!form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.checked })} />
-      <span>
-        <strong>{title}</strong>
-        <small>{desc}</small>
-      </span>
-    </label>
-  );
   const money = (key: string, label: string, help: string) => (
     <div className="field">
       <label>{label}</label>
@@ -147,44 +138,29 @@ function PurchasesSection({ form, setForm }: { form: any; setForm: (f: any) => v
       <div className="help">{help}</div>
     </div>
   );
-  const on = !!form.purchasesEnabled;
-  const asaasTxt = data?.asaas === "produção" ? "Asaas conectado (produção)." : data?.asaas === "sandbox" ? "Asaas em sandbox: nenhum dinheiro de verdade se move." : "Asaas não conectado: só o Pix direto funciona.";
   return (
-    <Section id="compras" icon="shop" title="Compras pelo assistente" desc="O agente Compras entra na conta da pessoa na loja, monta o carrinho e chega no Pix do checkout. Nada é pago sem o sim dela, e o valor sai do próprio código Pix, nunca do modelo.">
-      {sw("purchasesEnabled", "Ligar compras", <>A tela Compras aparece para todo mundo e o agente entra no time. {asaasTxt} Veja como funciona em <a href="/compras">Compras</a>.</>)}
-      {on && (
+    <Section id="compras" icon="shop" title="Compras pelo assistente" desc="O agente Compras entra na conta da pessoa na loja, monta o carrinho e chega no Pix do checkout. Depois do sim dela, manda o Pix para ela pagar do banco dela. O valor sai do próprio código Pix, nunca do modelo.">
+      <label className="set-switch">
+        <input type="checkbox" checked={!!form.purchasesEnabled} onChange={(e) => setForm({ ...form, purchasesEnabled: e.target.checked })} />
+        <span>
+          <strong>Ligar compras</strong>
+          <small>A tela Compras aparece para todo mundo e o agente entra no time. Sem taxa e sem dinheiro passando por você. Veja como funciona em <a href="/compras">Compras</a>.</small>
+        </span>
+      </label>
+      {form.purchasesEnabled && (
         <>
-          <h4 className="set-sub">Jeitos de pagar</h4>
-          {sw("purchasePix", "Pix direto", "O agente manda o Pix da loja e a pessoa paga do banco dela. O dinheiro nunca passa por você. Sem taxa.")}
-          {sw("purchaseCard", "Cartão por compra", "Cobra no cartão da pessoa pelo Asaas e paga o Pix da loja da sua conta. O cartão cai em cerca de 30 dias: precisa de saldo no Asaas ou antecipação. Falhou depois de cobrar, estorna sozinho.")}
-          {sw("purchaseWallet", "Saldo para compras", "A pessoa carrega por Pix e o assistente gasta dele. É dinheiro de cliente guardado na sua conta: fale com um contador ou advogado antes de ligar.")}
-          {sw("purchaseCardNeedsPlan", "Cartão só para quem já pagou um plano", "Menos risco de contestação com gente nova.")}
-          <h4 className="set-sub">Taxa e limites</h4>
+          <h4 className="set-sub">Limites</h4>
           <div className="set-fields">
-            <div className="field">
-              <label>Taxa de serviço (%)</label>
-              <input className="input" type="number" inputMode="decimal" step={0.5} min={0} max={30} value={form.purchaseFeePercent ?? ""} onChange={(e) => setForm({ ...form, purchaseFeePercent: e.target.value === "" ? "" : Number(e.target.value) })} />
-              <div className="help">No cartão e no saldo. Precisa cobrir a taxa do cartão no Asaas (e a antecipação, se usar).</div>
-            </div>
-            {money("purchaseFeeMinCents", "Taxa mínima (R$)", "Por compra no cartão ou no saldo.")}
-            {money("purchaseMaxCents", "Limite por compra (R$)", "Valor da loja, com frete.")}
-            {money("purchaseMonthMaxCents", "Limite por pessoa em 30 dias (R$)", "Somando todas as compras que não falharam.")}
-            {money("purchaseWalletMaxCents", "Saldo máximo por pessoa (R$)", "Recarga que passaria disso é recusada.")}
+            {money("purchaseMaxCents", "Limite por compra (R$)", "Valor do Pix da loja, com frete.")}
+            {money("purchaseMonthMaxCents", "Limite por pessoa em 30 dias (R$)", "Somando as compras que não foram canceladas.")}
           </div>
-          {(form.purchaseCard || form.purchaseWallet) && (
-            <div className="field">
-              <label>Validação de saque no Asaas</label>
-              <CopyField value={`${location.origin}/webhooks/asaas/saque`} />
-              <div className="help">Asaas &gt; Integrações &gt; Mecanismos de segurança &gt; Validação de saque via webhook, com o mesmo token do webhook de cobranças. Assim só sai da sua conta o Pix de uma compra aprovada, com o valor exato. Ligue só se essa chave do Asaas for usada apenas pelo Planejai.</div>
-            </div>
-          )}
+          <p className="help">Com o Asaas conectado, o assistente também lê o valor de Pix dinâmico que não traz o valor escrito (só leitura, nada é cobrado).</p>
           {data && (
             <p className="bill-counts">
               <span><strong>{data.month?.paid ?? 0}</strong> compras pagas no mês</span>
-              <span><strong>{brl((data.month?.through_asaas ?? 0) / 100)}</strong> pelo Asaas</span>
-              <span><strong>{brl((data.month?.fees ?? 0) / 100)}</strong> de taxas</span>
-              <span><strong>{brl((data.wallets?.balance ?? 0) / 100)}</strong> em saldo de clientes</span>
-              {data.month?.failed > 0 && <span><strong>{data.month.failed}</strong> não concluídas</span>}
+              <span><strong>{brl((data.month?.stores_cents ?? 0) / 100)}</strong> pagos às lojas</span>
+              <span><strong>{data.month?.waiting ?? 0}</strong> esperando o Pix</span>
+              <span><strong>{data.month?.people ?? 0}</strong> pessoas comprando</span>
             </p>
           )}
         </>

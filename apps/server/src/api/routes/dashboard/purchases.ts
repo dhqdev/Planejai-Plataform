@@ -1,20 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { asaasMode } from "../../../billing.js";
-import { one } from "../../../db/pool.js";
-import {
-  acceptPurchaseTerms,
-  buyerProfile,
-  createTopup,
-  forgetCard,
-  listPurchases,
-  purchaseRules,
-  purchasesOverview,
-  saveBuyerProfile,
-  shopWallet,
-  STORES,
-  updatePurchase,
-  walletStatement,
-} from "../../../purchases.js";
+import { acceptPurchaseTerms, buyerProfile, listPurchases, purchaseRules, purchasesOverview, saveBuyerAddress, STORES, updatePurchase } from "../../../purchases.js";
 import { getSettings } from "../../../settings.js";
 import { selfUserId } from "../../../sharing.js";
 import { cancelStoreLogin, connectedStores, disconnectStore, finishStoreLogin, loginFrame, loginInput, startStoreLogin } from "../../../storelogin.js";
@@ -22,7 +7,7 @@ import { isUuid } from "./shared.js";
 
 const fail = (reply: any, err: unknown) => reply.code(400).send({ error: (err as Error).message });
 
-/** Compras pelo assistente de quem está logado: dados de compra, termos, cartão salvo, saldo, lojas conectadas e histórico. */
+/** Compras pelo assistente de quem está logado: endereço de entrega, termos, lojas conectadas e histórico. */
 export function purchaseRoutes(base: FastifyInstance) {
   const uidOf = async (req: any, reply: any) => {
     const uid = await selfUserId(req.account);
@@ -34,21 +19,15 @@ export function purchaseRoutes(base: FastifyInstance) {
     const uid = await uidOf(req, reply);
     if (!uid) return;
     const rules = purchaseRules(await getSettings());
-    const [profile, stores, wallet, statement, purchases] = await Promise.all([
-      buyerProfile(uid),
-      connectedStores(uid),
-      shopWallet(uid),
-      walletStatement(uid),
-      listPurchases(uid),
-    ]);
-    return { rules, profile, stores, wallet, statement, purchases };
+    const [profile, stores, purchases] = await Promise.all([buyerProfile(uid), connectedStores(uid), listPurchases(uid)]);
+    return { rules, profile, stores, purchases };
   });
 
-  base.put<{ Body: unknown }>("/api/compras/perfil", async (req, reply) => {
+  base.put<{ Body: { address?: unknown } }>("/api/compras/endereco", async (req, reply) => {
     const uid = await uidOf(req, reply);
     if (!uid) return;
     try {
-      return await saveBuyerProfile(uid, req.body, req.ip);
+      return await saveBuyerAddress(uid, req.body?.address);
     } catch (err) {
       return fail(reply, err);
     }
@@ -60,26 +39,7 @@ export function purchaseRoutes(base: FastifyInstance) {
     return acceptPurchaseTerms(uid, req.ip);
   });
 
-  base.delete("/api/compras/cartao", async (req, reply) => {
-    const uid = await uidOf(req, reply);
-    if (!uid) return;
-    await forgetCard(uid);
-    return { ok: true };
-  });
-
-  base.post<{ Body: { cents?: number } }>("/api/compras/recarga", async (req, reply) => {
-    const uid = await uidOf(req, reply);
-    if (!uid) return;
-    try {
-      const user = await one("SELECT * FROM users WHERE id = $1", [uid]);
-      const top = await createTopup(user, Number(req.body?.cents));
-      return { invoice_url: top?.invoice_url ?? null };
-    } catch (err) {
-      return fail(reply, err);
-    }
-  });
-
-  base.patch<{ Params: { id: string }; Body: { status?: "delivered" | "canceled" } }>("/api/compras/:id", async (req, reply) => {
+  base.patch<{ Params: { id: string }; Body: { status?: "paid" | "delivered" | "canceled" } }>("/api/compras/:id", async (req, reply) => {
     const uid = await uidOf(req, reply);
     if (!uid) return;
     if (!isUuid(req.params.id)) return reply.code(404).send({ error: "Compra não encontrada." });
@@ -148,10 +108,7 @@ export function purchaseRoutes(base: FastifyInstance) {
   });
 }
 
-/** Visão do dono: o que passou pelo Asaas, taxas, saldo guardado dos clientes e as últimas compras. */
+/** Visão do dono: quantas compras o assistente fechou no mês (só números). */
 export function purchaseAdminRoutes(api: FastifyInstance) {
-  api.get("/api/compras/admin", async () => {
-    const [overview, mode] = await Promise.all([purchasesOverview(), asaasMode()]);
-    return { ...overview, asaas: mode, rules: purchaseRules(await getSettings()) };
-  });
+  api.get("/api/compras/admin", async () => ({ month: await purchasesOverview(), rules: purchaseRules(await getSettings()) }));
 }

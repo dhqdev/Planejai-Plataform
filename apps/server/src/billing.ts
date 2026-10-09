@@ -156,7 +156,7 @@ export async function referralDiscount(userId: string, s?: AgentSettings) {
 }
 
 /** Cliente no Asaas: cria uma vez (com nome e CPF/CNPJ) e guarda só o id. */
-export async function ensureCustomer(user: any, input?: { name?: string; cpfCnpj?: string; email?: string | null }) {
+async function ensureCustomer(user: any, input?: { name?: string; cpfCnpj?: string; email?: string | null }) {
   const existing = await getSubscription(user.id);
   if (existing?.asaas_customer_id) return existing.asaas_customer_id;
   const name = String(input?.name ?? "").trim().slice(0, 100);
@@ -387,15 +387,6 @@ export async function handleAsaasEvent(body: any): Promise<{ handled: boolean; s
   const event = String(body?.event ?? "");
   const p = body?.payment ?? {};
   const ref = String(p.externalReference ?? "");
-  // compras pelo assistente e recargas do saldo de compras têm o próprio tratamento (purchases.ts)
-  if (/^(purchase|topup):/.test(ref)) {
-    const key = eventKey(body);
-    if (key && (await one("SELECT 1 FROM asaas_events WHERE id = $1", [key]))) return { handled: true, duplicate: true };
-    const { handlePurchasePayment } = await import("./purchases.js");
-    const r = await handlePurchasePayment(event, p);
-    if (key && r.handled) await query("INSERT INTO asaas_events (id, event) VALUES ($1, $2) ON CONFLICT DO NOTHING", [key, event]);
-    return r;
-  }
   const subId = p.subscription ?? body?.subscription?.id;
   const purchase = !subId && ref.startsWith("grains:") ? await one("SELECT * FROM grain_purchases WHERE id::text = $1", [ref.slice(7)]) : null;
   const sub = subId ? await one<SubscriptionRow>(`SELECT ${SUB_COLS} FROM subscriptions WHERE asaas_subscription_id = $1`, [String(subId)]) : null;

@@ -1,7 +1,5 @@
 /* Como funcionam as compras (prefixo cf-): fluxo animado por forma de pagamento. Base preto e branco; o roxo marca só o dinheiro andando, o passo atual e o nó que recebe. Vira coluna quando o cartão fica estreito (celular). */
 .cf { display: grid; gap: 0; }
-.cf-tabs { margin-bottom: 12px; }
-.cf-tabs button { display: inline-flex; align-items: center; gap: 6px; }
 
 .cf-card { padding: 16px; container-type: inline-size; }
 
@@ -129,15 +127,7 @@
 .cp-span-all { grid-column: 1 / -1; }
 .cp-form-foot { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 6px; }
 .cp-form.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); text-align: left; }
-.cp-card-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; font-size: 14px; }
-.cp-balance { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; margin: 8px 0 0; font-variant-numeric: tabular-nums; }
-.cp-topup { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-.cp-topup .input { max-width: 120px; }
-.cp-prefix { color: var(--muted); font-size: 14px; }
-.cp-ledger, .cp-list { list-style: none; margin: 12px 0 0; padding: 0; }
-.cp-ledger li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 13px; border-top: 1px solid var(--border); }
-.cp-ledger .pos { color: var(--ok); font-variant-numeric: tabular-nums; }
-.cp-ledger .neg { font-variant-numeric: tabular-nums; }
+.cp-list { list-style: none; margin: 12px 0 0; padding: 0; }
 .cp-list li { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--border); }
 .cp-list li:first-child { border-top: 0; }
 .cp-list-main { display: grid; gap: 2px; min-width: 0; }

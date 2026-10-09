@@ -6,8 +6,6 @@ import { Empty, ErrorBox, Loading, Modal, PageHead, confirmDialog } from "../com
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 
-type Method = "pix" | "card" | "wallet";
-
 interface Address {
   cep: string;
   street: string;
@@ -18,69 +16,46 @@ interface Address {
   state: string;
 }
 export interface BuyerProfile {
-  filled: boolean;
-  full_name: string;
-  cpf_end: string | null;
-  birth_date: string;
   address: Address | null;
   terms: { version: string; accepted: boolean; accepted_at: string | null };
-  card: { brand: string | null; last4: string } | null;
 }
 interface Rules {
   enabled: boolean;
-  methods: Record<Method, boolean>;
-  feePercent: number;
-  feeMinCents: number;
   maxCents: number;
   monthMaxCents: number;
-  walletMaxCents: number;
-  cardNeedsPlan: boolean;
 }
 interface Purchase {
   id: string;
   store: string;
   title: string;
   url: string | null;
-  method: Method;
   store_cents: number;
-  fee_cents: number;
-  total_cents: number;
   status: string;
   order_ref: string | null;
   tracking: string | null;
   error: string | null;
-  invoice_url: string | null;
   created_at: string;
 }
 interface Data {
   rules: Rules;
   profile: BuyerProfile;
   stores: { id: string; name: string; connected: boolean; updated_at: string | null }[];
-  wallet: { balance: number; held: number };
-  statement: { kind: string; delta_cents: number; note: string | null; created_at: string }[];
   purchases: Purchase[];
 }
 
 const reais = (cents: number) => brl(cents / 100);
 const STATUS: Record<string, [string, string]> = {
+  awaiting_confirm: ["Esperando seu sim", "warn"],
   awaiting_person: ["Esperando seu Pix", "warn"],
-  charging: ["Esperando o cartão", "warn"],
-  charged: ["Finalizando na loja", "warn"],
-  approved: ["Finalizando na loja", "warn"],
-  paying_store: ["Pagando a loja", "warn"],
   paid: ["Pago na loja", "ok"],
   delivered: ["Entregue", "ok"],
-  failed: ["Não deu certo", "err"],
-  refunded: ["Estornado", "err"],
   canceled: ["Cancelado", ""],
 };
-const METHOD: Record<Method, string> = { pix: "Pix direto", card: "Cartão", wallet: "Saldo" };
-const LEDGER: Record<string, string> = { recarga: "Recarga por Pix", reserva: "Compra", devolucao: "Devolução", compra: "Compra concluída", ajuste: "Ajuste" };
 const dateBR = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 
 /**
- * Compras pelo assistente: o que falta para comprar (termos, dados, loja, cartão, saldo), a explicação animada,
- * as lojas conectadas, o saldo e o histórico. O dono vê também a explicação do lado dele e o atalho para as regras.
+ * Compras pelo assistente (Pix direto): o que falta para comprar (termos, loja, endereço), a explicação animada,
+ * as lojas conectadas e o histórico. O dono vê também a explicação do lado dele e o atalho para as regras.
  */
 export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
   const { data, error, reload } = useApi<Data>("/api/compras");
@@ -100,22 +75,20 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
     );
   }
 
-  const needCard = rules.methods.card;
   const anyStore = data.stores.some((s) => s.connected);
   const steps: { done: boolean; label: string; href: string }[] = [
     { done: profile.terms.accepted, label: "Aceitar os Termos de compra", href: "#cp-termos" },
     { done: anyStore, label: "Conectar sua conta numa loja", href: "#cp-lojas" },
-    ...(rules.methods.card || rules.methods.wallet ? [{ done: profile.filled, label: "Preencher CPF, nascimento e endereço", href: "#cp-dados" }] : []),
   ];
   const ready = steps.every((s) => s.done);
 
   return (
     <div className="page cp-page">
-      <PageHead title="Compras" subtitle='Mande no WhatsApp: "compra pra mim um fone JBL no Mercado Livre". O assistente acha, monta o carrinho e só paga depois do seu sim.' />
+      <PageHead title="Compras" subtitle='Mande no WhatsApp: "compra pra mim um fone JBL no Mercado Livre". O assistente acha, monta o carrinho e, depois do seu sim, te manda o Pix da loja.' />
 
       {isSuper && off && (
         <div className="card card-pad cp-note">
-          <Icon name="settings" size={16} /> As compras estão desligadas para todo mundo. Ligue e escolha os jeitos de pagar em <Link to="/settings#compras">Configurações &gt; Compras</Link>.
+          <Icon name="settings" size={16} /> As compras estão desligadas para todo mundo. Ligue e ajuste os limites em <Link to="/settings#compras">Configurações &gt; Compras</Link>.
         </div>
       )}
 
@@ -133,8 +106,7 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
           ))}
         </ul>
         <p className="muted cp-small">
-          Limite de {reais(rules.maxCents)} por compra e {reais(rules.monthMaxCents)} em 30 dias.
-          {(rules.methods.card || rules.methods.wallet) && ` No cartão e no saldo há taxa de serviço de ${rules.feePercent}% (mínimo ${reais(rules.feeMinCents)}); o Pix direto não tem taxa.`}
+          Você paga o Pix da loja direto do seu banco, sem taxa. Limite de {reais(rules.maxCents)} por compra e {reais(rules.monthMaxCents)} em 30 dias.
         </p>
       </section>
 
@@ -148,7 +120,7 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
             </div>
           )}
         </div>
-        <ComoFuncionaCompras audience={view} methods={isSuper && view === "dono" ? { pix: true, card: true, wallet: true } : rules.methods} />
+        <ComoFuncionaCompras audience={view} />
       </section>
 
       <div className="cp-grid">
@@ -193,38 +165,11 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
           )}
         </section>
 
-        {(rules.methods.card || rules.methods.wallet || profile.filled) && (
-          <section id="cp-dados" className="card card-pad cp-wide">
-            <h3 className="cp-h"><Icon name="user" size={16} /> Seus dados de compra</h3>
-            <p className="muted cp-small">O Asaas pede CPF e nascimento para cobrar no cartão e para o saldo. O endereço é onde o assistente manda entregar. Fica criptografado e só vai para o Asaas e para a loja.</p>
-            <BuyerForm profile={profile} onSaved={reload} />
-          </section>
-        )}
-
-        {needCard && (
-          <section className="card card-pad">
-            <h3 className="cp-h"><Icon name="card" size={16} /> Cartão</h3>
-            {profile.card ? (
-              <div className="cp-card-row">
-                <span>{profile.card.brand ?? "Cartão"} final <strong>{profile.card.last4}</strong></span>
-                <button
-                  className="btn btn-sm btn-ghost"
-                  onClick={async () => {
-                    await api("/api/compras/cartao", { method: "DELETE" });
-                    reload();
-                  }}
-                >
-                  Tirar
-                </button>
-              </div>
-            ) : (
-              <p className="muted cp-small">Na primeira compra no cartão você recebe um link seguro do Asaas para digitar o cartão. Depois ele fica salvo lá (aqui guardamos só o final).</p>
-            )}
-            {rules.cardNeedsPlan && <p className="muted cp-small">Compra no cartão é para quem já pagou um plano.</p>}
-          </section>
-        )}
-
-        {rules.methods.wallet && <WalletCard data={data} onChange={reload} />}
+        <section id="cp-dados" className="card card-pad cp-wide">
+          <h3 className="cp-h"><Icon name="user" size={16} /> Endereço de entrega</h3>
+          <p className="muted cp-small">Opcional. Sem ele, o assistente usa o endereço principal da sua conta na loja e confirma com você. Fica criptografado e só vai para a loja.</p>
+          <AddressForm profile={profile} onSaved={reload} />
+        </section>
 
         <section className="card card-pad cp-wide">
           <h3 className="cp-h"><Icon name="file" size={16} /> Suas compras</h3>
@@ -239,25 +184,24 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
                     <div className="cp-list-main">
                       <strong>{p.url ? <a href={p.url} target="_blank" rel="noreferrer">{p.title}</a> : p.title}</strong>
                       <small>
-                        {dateBR(p.created_at)} · {data.stores.find((s) => s.id === p.store)?.name ?? p.store} · {METHOD[p.method]}
+                        {dateBR(p.created_at)} · {data.stores.find((s) => s.id === p.store)?.name ?? p.store}
                         {p.order_ref ? ` · pedido ${p.order_ref}` : ""}
                         {p.tracking ? ` · rastreio ${p.tracking}` : ""}
                       </small>
-                      {p.error && ["failed", "refunded", "canceled"].includes(p.status) && <small className="cp-err">{p.error}</small>}
+                      {p.error && p.status === "canceled" && <small className="cp-err">{p.error}</small>}
                     </div>
                     <div className="cp-list-side">
-                      <strong>{reais(p.total_cents)}</strong>
+                      <strong>{reais(p.store_cents)}</strong>
                       <span className={`badge${tone ? ` badge-${tone}` : ""}`}>{label}</span>
-                      {p.status === "charging" && p.invoice_url && <a className="btn btn-sm" href={p.invoice_url} target="_blank" rel="noreferrer">Pagar no cartão</a>}
-                      {p.status === "paid" && (
+                      {(p.status === "awaiting_person" || p.status === "paid") && (
                         <button
                           className="btn btn-sm btn-ghost"
                           onClick={async () => {
-                            await api(`/api/compras/${p.id}`, { method: "PATCH", json: { status: "delivered" } });
+                            await api(`/api/compras/${p.id}`, { method: "PATCH", json: { status: p.status === "paid" ? "delivered" : "paid" } });
                             reload();
                           }}
                         >
-                          Chegou
+                          {p.status === "paid" ? "Chegou" : "Já paguei"}
                         </button>
                       )}
                     </div>
@@ -313,27 +257,17 @@ function AcceptTerms({ onDone }: { onDone: () => void }) {
 
 const UFS = "AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO".split(" ");
 const cepMask = (v: string) => v.replace(/\D/g, "").slice(0, 8).replace(/^(\d{5})(\d)/, "$1-$2");
-const cpfMask = (v: string) =>
-  v
-    .replace(/\D/g, "")
-    .slice(0, 11)
-    .replace(/^(\d{3})(\d)/, "$1.$2")
-    .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
-    .replace(/\.(\d{3})(\d)/, ".$1-$2");
-
-/** Nome, CPF, nascimento e endereço de entrega. O CEP preenche rua, bairro e cidade. Usado aqui e no cadastro. */
-export function BuyerForm({ profile, onSaved, compact }: { profile: BuyerProfile | null; onSaved: () => void; compact?: boolean }) {
+/** Endereço de entrega. O CEP preenche rua, bairro e cidade. Usado aqui e no cadastro. */
+export function AddressForm({ profile, onSaved, compact }: { profile: BuyerProfile | null; onSaved: () => void; compact?: boolean }) {
+  const a = profile?.address;
   const [f, setF] = useState({
-    full_name: profile?.full_name ?? "",
-    cpf: "",
-    birth_date: profile?.birth_date ?? "",
-    cep: profile?.address?.cep ? cepMask(profile.address.cep) : "",
-    street: profile?.address?.street ?? "",
-    number: profile?.address?.number ?? "",
-    complement: profile?.address?.complement ?? "",
-    district: profile?.address?.district ?? "",
-    city: profile?.address?.city ?? "",
-    state: profile?.address?.state ?? "",
+    cep: a?.cep ? cepMask(a.cep) : "",
+    street: a?.street ?? "",
+    number: a?.number ?? "",
+    complement: a?.complement ?? "",
+    district: a?.district ?? "",
+    city: a?.city ?? "",
+    state: a?.state ?? "",
   });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -354,17 +288,8 @@ export function BuyerForm({ profile, onSaved, compact }: { profile: BuyerProfile
     setErr(null);
     setBusy(true);
     try {
-      await api("/api/compras/perfil", {
-        method: "PUT",
-        json: {
-          full_name: f.full_name,
-          cpf: f.cpf,
-          birth_date: f.birth_date,
-          address: { cep: f.cep, street: f.street, number: f.number, complement: f.complement, district: f.district, city: f.city, state: f.state },
-        },
-      });
+      await api("/api/compras/endereco", { method: "PUT", json: { address: f } });
       setSaved(true);
-      setF((x) => ({ ...x, cpf: "" }));
       onSaved();
     } catch (e2) {
       setErr((e2 as Error).message);
@@ -374,25 +299,6 @@ export function BuyerForm({ profile, onSaved, compact }: { profile: BuyerProfile
   };
   return (
     <form className={`cp-form ${compact ? "compact" : ""}`} onSubmit={submit}>
-      <div className="field cp-span2">
-        <label>Nome completo</label>
-        <input className="input" autoComplete="name" value={f.full_name} onChange={set("full_name")} required />
-      </div>
-      <div className="field">
-        <label>CPF</label>
-        <input
-          className="input"
-          inputMode="numeric"
-          placeholder={profile?.cpf_end ? `final ${profile.cpf_end} (digite para trocar)` : "000.000.000-00"}
-          value={f.cpf}
-          onChange={(e) => setF((x) => ({ ...x, cpf: cpfMask(e.target.value) }))}
-          required={!profile?.cpf_end}
-        />
-      </div>
-      <div className="field">
-        <label>Nascimento</label>
-        <input className="input" type="date" autoComplete="bday" value={f.birth_date} onChange={set("birth_date")} required />
-      </div>
       <div className="field">
         <label>CEP</label>
         <input
@@ -438,52 +344,9 @@ export function BuyerForm({ profile, onSaved, compact }: { profile: BuyerProfile
       <div className="cp-form-foot cp-span-all">
         {err && <span className="cp-err">{err}</span>}
         {saved && !err && <span className="cp-ok"><Icon name="check" size={14} /> Salvo</span>}
-        <button className="btn btn-primary" disabled={busy}>{busy ? "Salvando…" : "Salvar dados"}</button>
+        <button className="btn btn-primary" disabled={busy}>{busy ? "Salvando…" : "Salvar endereço"}</button>
       </div>
     </form>
-  );
-}
-
-function WalletCard({ data, onChange }: { data: Data; onChange: () => void }) {
-  const [value, setValue] = useState("50");
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const top = async () => {
-    setErr(null);
-    setBusy(true);
-    try {
-      const r = await api<{ invoice_url: string | null }>("/api/compras/recarga", { method: "POST", json: { cents: Math.round(Number(value.replace(",", ".")) * 100) } });
-      if (r.invoice_url) window.open(r.invoice_url, "_blank", "noopener");
-      onChange();
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <section className="card card-pad">
-      <h3 className="cp-h"><Icon name="wallet" size={16} /> Saldo para compras</h3>
-      <p className="cp-balance">{reais(data.wallet.balance)}</p>
-      {data.wallet.held > 0 && <p className="muted cp-small">{reais(data.wallet.held)} reservados numa compra em andamento.</p>}
-      <div className="cp-topup">
-        <span className="cp-prefix">R$</span>
-        <input className="input" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} aria-label="Valor da recarga" />
-        <button className="btn btn-primary btn-sm" disabled={busy} onClick={top}>Carregar por Pix</button>
-      </div>
-      {err && <p className="cp-err">{err}</p>}
-      <p className="muted cp-small">Só por Pix, cai na hora. Saldo máximo de {reais(data.rules.walletMaxCents)}.</p>
-      {data.statement.length > 0 && (
-        <ul className="cp-ledger">
-          {data.statement.slice(0, 8).map((e, i) => (
-            <li key={i}>
-              <span>{LEDGER[e.kind] ?? e.kind}{e.note ? ` · ${e.note}` : ""}</span>
-              <span className={e.delta_cents >= 0 ? "pos" : "neg"}>{e.delta_cents === 0 ? "-" : `${e.delta_cents > 0 ? "+" : ""}${reais(e.delta_cents)}`}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 

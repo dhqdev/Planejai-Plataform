@@ -21,7 +21,7 @@ export interface Onboarding {
 }
 
 // formulário de compra só baixa se o dono ligou as compras
-const BuyerForm = lazy(() => import("./Compras").then((m) => ({ default: m.BuyerForm })));
+const AddressForm = lazy(() => import("./Compras").then((m) => ({ default: m.AddressForm })));
 
 /** Mesma regra do servidor: a pergunta condicional só vale se a "mãe" teve uma das respostas. */
 function active(questions: Question[], answers: Answers) {
@@ -106,8 +106,8 @@ export function Welcome({ data, name, onDone }: { data: Onboarding; name?: strin
         <div className="welcome-body welcome-shop">
           <h1 id="welcome-shop">Quer que eu compre coisas pra você?</h1>
           <p className="muted welcome-hint">
-            É só pedir no WhatsApp: eu acho o produto, monto o carrinho e só pago depois do seu sim. Para isso preciso do seu CPF, nascimento e
-            endereço de entrega. Fica tudo criptografado e dá para preencher depois em Compras.
+            É só pedir no WhatsApp: eu acho o produto, monto o carrinho e, depois do seu sim, te mando o Pix da loja para você pagar do seu
+            banco. Se quiser, já deixe o endereço de entrega (fica criptografado e dá para mudar depois em Compras).
           </p>
           <label className="cp-agree">
             <input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
@@ -115,7 +115,7 @@ export function Welcome({ data, name, onDone }: { data: Onboarding; name?: strin
           </label>
           {terms ? (
             <Suspense fallback={<p className="muted">Carregando…</p>}>
-              <BuyerForm
+              <AddressForm
                 profile={null}
                 compact
                 onSaved={async () => {
@@ -123,6 +123,15 @@ export function Welcome({ data, name, onDone }: { data: Onboarding; name?: strin
                   onDone();
                 }}
               />
+              <button
+                className="link-btn"
+                onClick={async () => {
+                  await api("/api/compras/termos", { method: "POST" }).catch(() => {});
+                  onDone();
+                }}
+              >
+                Aceitar sem endereço por enquanto
+              </button>
             </Suspense>
           ) : (
             <p className="muted welcome-hint">Marque o aceite para preencher.</p>
