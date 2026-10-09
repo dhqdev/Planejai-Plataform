@@ -67,7 +67,20 @@ async function tagWorkflow(api: (m: string, p: string, b?: unknown) => Promise<a
 }
 const PLANEJAI_NODES = new Set(["planejai.notify", "planejai.agent"]);
 /** Nada que leia segredo da instância ou rode código fora do sandbox das expressões. */
-const FORBIDDEN = /\$env|\$vars|\$secrets|process\.|require\s*\(|constructor|__proto__|\$getWorkflowStaticData|\$execution\.customData/i;
+const FORBIDDEN = /\$env|\$vars|\$secrets|process\.|require\s*\(|constructor|__proto__|prototype|\$getWorkflowStaticData|\$execution|\bthis\b|globalThis|\bFunction\b|\beval\b/i;
+/**
+ * Fluxo de cliente só usa estas variáveis do n8n. Lista do que pode, e não do que não pode: uma lista de proibidos
+ * deixa passar truques como $evaluateExpression("{{ $"+"env.X }}"), que lê a chave da API interna.
+ */
+const CLIENT_VARS = new Set(["$json", "$input", "$now", "$today", "$node", "$item", "$items", "$itemIndex", "$runIndex", "$index", "$position", "$prevNode", "$binary", "$jmespath", "$if", "$ifEmpty", "$min", "$max"]);
+
+/** Motivo pelo qual os parâmetros de um nó de cliente não podem ir para o n8n, ou null. */
+export function clientParamsProblem(params: unknown): string | null {
+  const text = JSON.stringify(params ?? {});
+  if (FORBIDDEN.test(text)) return "usa algo que não é permitido ($env, $vars, código)";
+  for (const m of text.matchAll(/\$[A-Za-z_]\w*/g)) if (!CLIENT_VARS.has(m[0])) return `usa ${m[0]}, que não é permitido em automação de cliente`;
+  return null;
+}
 
 /** Fluxo de cliente não dispara mais vezes que isso: cada disparo pode custar uma chamada de IA e uma mensagem. */
 export const MIN_CLIENT_INTERVAL_MIN = 15;
@@ -163,7 +176,8 @@ export async function buildWorkflow(input: { nodes: ShortNode[]; connections: Sh
     const params = n.parameters ?? {};
     let node: Record<string, unknown>;
     if (PLANEJAI_NODES.has(n.type)) {
-      if (!owner && FORBIDDEN.test(JSON.stringify(params))) throw new Error(`O nó "${n.name}" usa algo que não é permitido`);
+      const why = owner ? null : clientParamsProblem(params);
+      if (why) throw new Error(`O nó "${n.name}" ${why}`);
       node = planejaiNode(n, userId);
     } else if (owner && !CLIENT_NODES.has(short)) {
       // dono: qualquer nó, com a versão que ele informar (ou 1)
@@ -171,7 +185,8 @@ export async function buildWorkflow(input: { nodes: ShortNode[]; connections: Sh
     } else {
       if (!CLIENT_NODES.has(short)) throw new Error(`Nó "${n.type}" não permitido. Use: ${[...CLIENT_NODES, ...PLANEJAI_NODES].join(", ")}`);
       if (!owner) {
-        if (FORBIDDEN.test(JSON.stringify(params))) throw new Error(`O nó "${n.name}" usa algo que não é permitido ($env, $vars, código)`);
+        const why = clientParamsProblem(params);
+        if (why) throw new Error(`O nó "${n.name}" ${why}`);
         if (short === "httpRequest") {
           const url = String(params.url ?? "");
           if (!url || url.includes("{{") || url.startsWith("=")) throw new Error(`O nó "${n.name}" precisa de uma URL fixa (sem expressão)`);

@@ -42,6 +42,10 @@ describe("automações no n8n", () => {
     const bad = [
       [trig, { name: "C", type: "code", parameters: { jsCode: "return []" } }],
       [trig, { name: "S", type: "set", parameters: { value: "={{ $env.PLANEJAI_API_KEY }}" } }],
+      // montar o nome da variável em pedaços não passa: só variáveis da lista entram
+      [trig, { name: "A", type: "planejai.notify", parameters: { text: '{{ $evaluateExpression("{{ $"+"env.PLANEJAI_API_KEY }}") }}' } }],
+      [trig, { name: "A", type: "planejai.agent", parameters: { instruction: "{{ this['$e'+'nv'] }}" } }],
+      [trig, { name: "S", type: "set", parameters: { value: "={{ $workflow.id }} {{ $execution.id }}" } }],
       [trig, { name: "H", type: "httpRequest", parameters: { url: "={{ $json.u }}" } }],
       [trig, { name: "H", type: "httpRequest", parameters: { url: "https://x.com", authentication: "predefinedCredentialType" } }],
       [{ name: "N", type: "noOp" }],
@@ -51,6 +55,14 @@ describe("automações no n8n", () => {
       const connections = nodes.slice(1).map((n, i) => ({ from: nodes[i]!.name, to: n.name }));
       await expect(buildWorkflow({ ...base, owner: false, nodes, connections }), JSON.stringify(nodes)).rejects.toThrow();
     }
+    // o que um fluxo comum de cliente usa continua valendo
+    const ok = await buildWorkflow({
+      ...base,
+      owner: false,
+      nodes: [trig, { name: "A", type: "planejai.agent", parameters: { instruction: "Resuma: {{ $json.title }} {{ $('T').item.json.x }} em {{ $now.toFormat('dd/MM') }}; custa R$ 10" } }],
+      connections: [{ from: "T", to: "A" }],
+    });
+    expect(ok.nodes).toHaveLength(2);
     // o dono pode usar qualquer nó
     const wf = await buildWorkflow({ ...base, owner: true, nodes: [trig, { name: "C", type: "code", parameters: { jsCode: "return []" } }], connections: [{ from: "T", to: "C" }] });
     expect(wf.nodes[1]!.type).toBe("n8n-nodes-base.code");
