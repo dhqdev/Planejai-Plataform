@@ -13,6 +13,68 @@ import { Story } from "./Story";
 
 /* ================= Detalhe ================= */
 
+const STATUS_TXT: Record<string, string> = { success: "ok", error: "erro", running: "rodando" };
+/** Argumentos de tool call vêm como texto JSON: abre para ler sem barras invertidas. */
+const openArgs = (_k: string, v: unknown) => {
+  if (_k !== "arguments" || typeof v !== "string") return v;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v;
+  }
+};
+const pretty = (v: unknown) => (v == null ? "(vazio)" : typeof v === "string" ? v : JSON.stringify(v, openArgs, 2));
+
+/** A execução inteira em texto: resumo e, passo a passo, entrada, saída e erro (para colar numa conversa ou num chamado). */
+export function executionText(data: any, steps: Step[]) {
+  const head = [
+    `Execução ${data.id} · ${TRIGGER_LABEL[data.trigger] ?? data.trigger} · ${STATUS_TXT[data.status] ?? data.status} · ${fullWhen(data.started_at)}`,
+    `Duração ${dur(data.duration_ms)} · custo ${usdBR(data.cost_usd)} · tokens ${tok(data.tokens_in)} entrada, ${tok(data.tokens_out)} saída`,
+  ];
+  if (data.error) head.push(`Erro: ${data.error}`);
+  if (data.content_purged) head.push("Conversa de cliente: o texto não fica guardado, só as métricas.");
+  const body = steps.map((s, i) => {
+    const meta = [s.agent, s.type, s.model && shortModel(s.model), STATUS_TXT[s.status] ?? s.status, s.duration_ms != null && dur(s.duration_ms), Number(s.cost_usd) > 0 && usdBR(s.cost_usd)].filter(Boolean).join(" · ");
+    return [`## ${i + 1}. ${s.name} (${meta})`, s.error && `Erro: ${s.error}`, `Entrada:\n${pretty(s.input)}`, `Saída:\n${pretty(s.output)}`].filter(Boolean).join("\n");
+  });
+  return [...head, "", ...body].join("\n\n").replace(/\n{3,}/g, "\n\n");
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // sem permissão de área de transferência (http, navegador antigo): seleção num textarea escondido
+    const ta = Object.assign(document.createElement("textarea"), { value: text });
+    ta.style.cssText = "position:fixed;opacity:0;top:0;left:0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  }
+}
+
+function CopyAll({ data, steps }: { data: any; steps: Step[] }) {
+  const [state, setState] = useState<"idle" | "ok" | "fail">("idle");
+  return (
+    <button
+      type="button"
+      className="btn exd-copy"
+      title="Copia o resumo e a entrada e saída de todos os passos"
+      onClick={async () => {
+        haptic(5);
+        setState((await copyText(executionText(data, steps))) ? "ok" : "fail");
+        setTimeout(() => setState("idle"), 1600);
+      }}
+    >
+      <Icon name={state === "ok" ? "check" : "copy"} size={14} />
+      <span className="label">{state === "ok" ? "Copiado" : state === "fail" ? "Não copiou" : "Copiar tudo"}</span>
+    </button>
+  );
+}
+
 type View = "story" | "canvas";
 
 /** História ou Canvas: a escolha fica guardada no aparelho. */
@@ -63,6 +125,7 @@ export function ExecutionDetailPage() {
           <h1 className={data.content_purged ? "purged" : ""}>{executionTitle(data, 12)}</h1>
         </div>
         <Status status={data.status} />
+        <CopyAll data={data} steps={steps} />
         <div className="ex-pills exd-toggle" role="tablist" aria-label="Visualização">
           <button role="tab" aria-selected={view === "story"} className={view === "story" ? "active" : ""} onClick={() => pick("story")}><Icon name="list" size={14} /> História</button>
           <button role="tab" aria-selected={view === "canvas"} className={view === "canvas" ? "active" : ""} onClick={() => pick("canvas")}><Icon name="graph" size={14} /> Canvas</button>
