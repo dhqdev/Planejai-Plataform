@@ -83,6 +83,7 @@ function cutShort(res: ChatResult) {
 }
 
 /** Chave de uma chamada para reconhecer a mesma ferramenta com os mesmos argumentos. */
+const MAKER = /^make_/;
 const callKey = (c: ToolCall) => `${c.function.name}:${c.function.arguments ?? ""}`;
 
 export function toSpecs(tools: Tool[]): ToolSpec[] {
@@ -274,6 +275,9 @@ export async function runToolLoop(opts: {
       // pedido de confirmação não é erro: a mesma chamada com o sim tem que passar
       if (failedResult(r.content) && !r.content.includes('"needs_confirmation"')) failed.set(callKey(calls[i]!), r.content);
     }
+    // fez algo novo (imagem, PDF, áudio...): a chamada que falhou por falta disso pode dar certo agora
+    // ("manda a foto pra mãe" -> attach falhou -> make_picture -> attach de novo, igual, e agora acha a imagem)
+    if (results.some((r, i) => MAKER.test(calls[i]!.function.name) && !failedResult(r.content))) failed.clear();
     if (guard?.expired) return { text: "", steps: step, messages, timedOut: true };
     if (quickOnly && results.every((r) => !failedResult(r.content))) {
       messages.push({ role: "assistant", content: said });
