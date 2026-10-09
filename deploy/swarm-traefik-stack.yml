@@ -109,6 +109,28 @@ services:
         condition: any
         delay: 5s
 
+  # Para escalar as conversas, troque o serviço "worker" acima por estes dois (mesma imagem e rede):
+  # channel:          # WhatsApp, envios, Telegram e jobs agendados. Sempre 1 réplica.
+  #   image: ghcr.io/dhqdev/planejai-plataform:latest
+  #   environment:
+  #     <<: *env
+  #     ROLE: channel
+  #   networks: [network_public, planejai_internal, planejai_browser]
+  #   deploy:
+  #     replicas: 1
+  #     update_config: { parallelism: 1, order: stop-first }
+  #     restart_policy: { condition: any, delay: 5s }
+  # conversations:    # time de agentes, lembretes, recados, resumos. Quantas réplicas quiser.
+  #   image: ghcr.io/dhqdev/planejai-plataform:latest
+  #   environment:
+  #     <<: *env
+  #     ROLE: conversations
+  #   networks: [network_public, planejai_internal, planejai_browser]
+  #   deploy:
+  #     replicas: 2
+  #     update_config: { parallelism: 1, order: start-first }
+  #     restart_policy: { condition: any, delay: 5s }
+
   db:
     image: postgres:16-alpine
     environment:

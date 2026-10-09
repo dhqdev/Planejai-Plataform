@@ -9,7 +9,7 @@ import { many, one, query } from "./db/pool.js";
 import { isOwner, phoneVariants, upsertConversation } from "./ingest.js";
 import { QUEUES, getBoss } from "./queue/boss.js";
 import { pushShort } from "./shortmem.js";
-import { whatsapp } from "./whatsapp/session.js";
+import { findOnWhatsApp } from "./whatsapp/rpc.js";
 
 /**
  * Convites e contatos. Só se entra na plataforma por convite: quem é convidado recebe a mensagem no WhatsApp
@@ -36,18 +36,7 @@ const strip = (s: string) =>
 /** Endereço no WhatsApp: no Baileys pergunta ao WhatsApp qual variante (com ou sem o 9) existe. */
 export async function jidFor(phone: string, channel: Channel): Promise<string> {
   if (channel.id !== "baileys") return phone;
-  const sock = whatsapp.connected ? whatsapp.sock : null;
-  if (sock) {
-    for (const v of phoneVariants(phone)) {
-      try {
-        const [r] = (await sock.onWhatsApp(`${v}@s.whatsapp.net`)) ?? [];
-        if (r?.exists) return r.jid;
-      } catch {
-        /* tenta a próxima */
-      }
-    }
-  }
-  return `${phone}@s.whatsapp.net`;
+  return (await findOnWhatsApp(phoneVariants(phone))) ?? `${phone}@s.whatsapp.net`;
 }
 
 /** Conversa de WhatsApp da pessoa (cria se ela ainda não falou com o assistente). */

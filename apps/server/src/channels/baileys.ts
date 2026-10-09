@@ -1,5 +1,6 @@
 import type { WASocket } from "baileys";
 import { safeFetch } from "../net.js";
+import { callChannel, holdsWhatsApp } from "../whatsapp/rpc.js";
 import { isConnectionError, whatsapp, type WhatsAppSession } from "../whatsapp/session.js";
 import type { Channel, InboundMessage, OutboundImage } from "./types.js";
 
@@ -8,11 +9,17 @@ const SEND_WAIT_MS = 45_000;
 /** "digitando...", lido e reação são acessórios: esperam pouco */
 const EXTRA_WAIT_MS = 5_000;
 
-/** Canal WhatsApp embutido (Baileys). Usa o socket do processo que segura a conexão (o worker). */
+/**
+ * Canal WhatsApp embutido (Baileys). No processo que segura a conexão (ROLE channel/worker/all) usa o socket
+ * direto; nos outros (ROLE=conversations) cada envio vai ao channel pela fila whatsapp.send (whatsapp/rpc.ts).
+ */
 export class BaileysChannel implements Channel {
   id = "baileys";
 
-  constructor(private session: WhatsAppSession = whatsapp) {}
+  constructor(
+    private session: WhatsAppSession = whatsapp,
+    private readonly remote = !holdsWhatsApp(),
+  ) {}
 
   configured() {
     return true;
@@ -42,6 +49,7 @@ export class BaileysChannel implements Channel {
   }
 
   async sendText(jid: string, text: string, opts?: { quotedId?: string }) {
+    if (this.remote) return { id: (await callChannel({ op: "text", jid, text, quotedId: opts?.quotedId }, SEND_WAIT_MS)).id };
     const r = await this.run((s) =>
       s.sendMessage(
         jid,
@@ -53,6 +61,7 @@ export class BaileysChannel implements Channel {
   }
 
   async sendImage(jid: string, image: OutboundImage) {
+    if (this.remote) return { id: (await callChannel({ op: "media", jid, image }, SEND_WAIT_MS)).id };
     // URL de fora é baixada aqui, só da internet pública (net.ts), em vez de a biblioteca buscar sozinha
     const content = image.base64 ? Buffer.from(image.base64, "base64") : await downloadMedia(image.url!);
     const r = await this.run((s) =>
@@ -68,6 +77,7 @@ export class BaileysChannel implements Channel {
   }
 
   async react(jid: string, messageId: string, emoji: string) {
+    if (this.remote) return void (await callChannel({ op: "react", jid, messageId, emoji }, EXTRA_WAIT_MS));
     await this.run((s) => s.sendMessage(jid, { react: { text: emoji, key: { remoteJid: jid, id: messageId, fromMe: false } } }), EXTRA_WAIT_MS);
   }
 
@@ -75,6 +85,7 @@ export class BaileysChannel implements Channel {
   private pauseTimers = new Map<string, NodeJS.Timeout>();
 
   async setTyping(jid: string, ms: number) {
+    if (this.remote) return void (await callChannel({ op: "typing", jid, ms }, EXTRA_WAIT_MS));
     const s = await this.session.ready(EXTRA_WAIT_MS);
     clearTimeout(this.pauseTimers.get(jid));
     await s.sendPresenceUpdate("composing", jid);
@@ -87,6 +98,7 @@ export class BaileysChannel implements Channel {
   }
 
   async markRead(jid: string, messageId: string) {
+    if (this.remote) return void (await callChannel({ op: "read", jid, messageId }, EXTRA_WAIT_MS));
     await this.run((s) => s.readMessages([{ remoteJid: jid, id: messageId, fromMe: false }]), EXTRA_WAIT_MS);
   }
 }

@@ -12,6 +12,8 @@ export const QUEUES = {
   outbound: "outbound.send",
   financeDaily: "finance.daily",
   errand: "errand.reply",
+  /** envio pedido por uma réplica ROLE=conversations ao processo que segura o WhatsApp (whatsapp/rpc.ts) */
+  waRpc: "whatsapp.send",
 } as const;
 
 let boss: PgBoss | null = null;
@@ -31,6 +33,7 @@ export async function getBoss(): Promise<PgBoss> {
   await b.createQueue(QUEUES.outbound, { name: QUEUES.outbound, policy: "standard" });
   await b.createQueue(QUEUES.financeDaily, { name: QUEUES.financeDaily, policy: "singleton" });
   await b.createQueue(QUEUES.errand, { name: QUEUES.errand, policy: "short" });
+  await b.createQueue(QUEUES.waRpc, { name: QUEUES.waRpc, policy: "standard" });
   boss = b;
   return b;
 }
@@ -52,6 +55,7 @@ export const QUEUE_LABELS: Record<string, string> = {
   [QUEUES.outbound]: "Envios",
   [QUEUES.financeDaily]: "Contas e mensalidades",
   [QUEUES.errand]: "Recados",
+  [QUEUES.waRpc]: "Envios entre processos",
 };
 
 /**

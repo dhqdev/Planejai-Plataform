@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-/** Arquivo que o worker renova a cada 15s; o healthcheck confere a idade dele. */
+/** Arquivo que o processo de filas (worker, channel ou conversations) renova a cada 15s; o healthcheck confere a idade. */
 export const ALIVE_FILE = join(tmpdir(), "planejai-worker-alive");
 
 export function startAliveBeat() {

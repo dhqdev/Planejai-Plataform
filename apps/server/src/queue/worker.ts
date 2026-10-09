@@ -12,9 +12,23 @@ import { billingReminders } from "../billing.js";
 import { remindBills } from "../bills.js";
 import { config } from "../config.js";
 import { afterFire } from "../reminders.js";
+import { runsChannel, runsConversations } from "../roles.js";
 import { QUEUES, getBoss } from "./boss.js";
 
-export async function startWorker(log: { info: (...a: any[]) => void; error: (...a: any[]) => void }, concurrency = 4) {
+type WorkerLog = { info: (...a: any[]) => void; warn: (...a: any[]) => void; error: (...a: any[]) => void };
+
+/**
+ * Registra os consumidores das filas conforme o papel (roles.ts): ROLE=worker/all fazem as duas partes.
+ * Os jobs agendados (boss.schedule) ficam só na parte do canal: 1 réplica, um dono só para o cron.
+ */
+export async function startWorker(log: WorkerLog, concurrency = 4, parts = { channel: runsChannel(), conversations: runsConversations() }) {
+  if (parts.conversations) await startConversations(log, concurrency);
+  if (parts.channel) await startChannelJobs(log);
+  log.info(`worker iniciado (${[parts.channel && "canal", parts.conversations && "conversas"].filter(Boolean).join(" + ")})`);
+}
+
+/** Conversas, lembretes, recados e resumos: escala em N réplicas (ROLE=conversations). */
+async function startConversations(log: WorkerLog, concurrency: number) {
   const boss = await getBoss();
 
   // Cada registro de work() é um consumidor independente: N conversas em paralelo.
@@ -67,6 +81,11 @@ export async function startWorker(log: { info: (...a: any[]) => void; error: (..
   await boss.work<{ conversationId: string }>(QUEUES.summarize, { batchSize: 1, pollingIntervalSeconds: 10 }, async ([job]) => {
     if (job) await summarizeConversation(job.data.conversationId);
   });
+}
+
+/** Envios, convites, Telegram por polling e todos os jobs agendados: 1 réplica (ROLE=channel). */
+async function startChannelJobs(log: WorkerLog) {
+  const boss = await getBoss();
 
   await boss.work(QUEUES.purge, { batchSize: 1, pollingIntervalSeconds: 30 }, async () => {
     await purgeOld(log);
@@ -104,8 +123,12 @@ export async function startWorker(log: { info: (...a: any[]) => void; error: (..
     if (job) await runOutboundJob(job.data);
   });
 
-  // Telegram sem webhook (sem https público): o worker busca as mensagens
-  startTelegramPolling(log);
+  // envios pedidos pelas réplicas de conversa (ROLE=conversations) a quem segura o WhatsApp
+  if (config.WHATSAPP_PROVIDER === "baileys") {
+    const { startChannelRpc } = await import("../whatsapp/rpc-server.js");
+    await startChannelRpc(log);
+  }
 
-  log.info("worker iniciado (filas: processamento, lembretes, resumos)");
+  // Telegram sem webhook (sem https público): só um processo pode buscar as mensagens
+  startTelegramPolling(log);
 }

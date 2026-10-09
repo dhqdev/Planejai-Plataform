@@ -10,7 +10,7 @@ import { createReminder } from "./reminders.js";
 import { markSeen } from "./shortmem.js";
 import { jidFor, notifyUser, outboundChannel } from "./social.js";
 import { formatLocal } from "./time.js";
-import { whatsapp } from "./whatsapp/session.js";
+import { findOnWhatsApp } from "./whatsapp/rpc.js";
 
 /**
  * Recados: o assistente fala com um estabelecimento (petshop, salão, clínica) pelo WhatsApp em nome da pessoa.
@@ -73,19 +73,7 @@ export async function openErrands(userId: string): Promise<Errand[]> {
 }
 
 /** Este número do WhatsApp existe? (só dá para saber com o Baileys conectado; senão confia) */
-async function onWhatsApp(phone: string): Promise<string | null | undefined> {
-  const sock = whatsapp.connected ? whatsapp.sock : null;
-  if (!sock) return undefined;
-  for (const v of phoneVariants(phone)) {
-    try {
-      const [r] = (await sock.onWhatsApp(`${v}@s.whatsapp.net`)) ?? [];
-      if (r?.exists) return r.jid;
-    } catch {
-      /* tenta a próxima */
-    }
-  }
-  return null;
-}
+const onWhatsApp = (phone: string) => findOnWhatsApp(phoneVariants(phone));
 
 export async function startErrand(opts: {
   user: { id: string; phone: string; name?: string | null; full_name?: string | null };

@@ -53,7 +53,7 @@ Dica: `rg -n "<nome>" apps/server/src apps/dashboard/src` acha qualquer função
 
 ```
 apps/server/src/
-  index.ts                 entrada; ROLE=all|api|worker
+  index.ts                 entrada; ROLE=all|api|worker|channel|conversations (roles.ts, ver deploy.md)
   config.ts                variáveis de ambiente (zod) — toda env nova entra aqui e no .env.example
   settings.ts              ajustes do painel (travas GUARD_LIMITS, assinatura, cadastro) com faixa permitida
   ingest.ts                webhook -> usuário/conversa/mensagem -> fila (debounce por conversa)
@@ -78,7 +78,8 @@ apps/server/src/
   channels/                baileys.ts (padrão), evolution.ts, cloud.ts (Meta), telegram.ts, PlaygroundChannel; wa-message.ts parseia WAMessage
   whatsapp/                session.ts (conexão Baileys: QR, pareamento, reconexão, LISTEN wa_command), lease.ts (aluguel
                            holder/lease_until renovado a cada 15s, vence em 45s), pairing.ts, inbound.ts, outbound.ts,
-                           commands.ts, status.ts, disconnect.ts, auth-state.ts (chaves Signal na tabela wa_auth).
+                           commands.ts, status.ts, disconnect.ts, auth-state.ts (chaves Signal na tabela wa_auth),
+                           rpc.ts/rpc-server.ts (ROLE=conversations envia pelo channel: fila whatsapp.send + NOTIFY).
                            Pareado = creds.account + me. Queda de sessão pareada vira 'reconnecting' + backoff 2s..60s;
                            só loggedOut/403 pede QR. Teste com socket falso: test/whatsapp-reconnect.e2e.test.ts
   agent/

@@ -7,7 +7,7 @@ const bool = z
 
 const schema = z.object({
   NODE_ENV: z.string().default("production"),
-  ROLE: z.enum(["all", "api", "worker"]).default("all"),
+  ROLE: z.enum(["all", "api", "worker", "channel", "conversations"]).default("all"),
   PORT: z.coerce.number().default(3000),
   PUBLIC_URL: z.string().default("http://localhost:3000"),
   LOG_LEVEL: z.string().default("info"),

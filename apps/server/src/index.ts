@@ -7,6 +7,8 @@ import { reencryptStale } from "./integrations/registry.js";
 import { startProcessBeat } from "./resources.js";
 import { stopBoss } from "./queue/boss.js";
 import { startWorker } from "./queue/worker.js";
+import { runsApi, runsChannel, runsConversations } from "./roles.js";
+import { stopRpcClient } from "./whatsapp/rpc.js";
 import { whatsapp } from "./whatsapp/session.js";
 
 async function main() {
@@ -24,19 +26,21 @@ async function main() {
 
   // foto de memória e CPU deste processo para a tela Servidor (API e worker)
   startProcessBeat();
-  if (config.ROLE === "all" || config.ROLE === "worker") {
+  // papéis em roles.ts: worker/all = channel + conversations; channel = 1 réplica; conversations = N réplicas
+  if (runsChannel() || runsConversations()) {
     await startWorker(log, config.WORKER_CONCURRENCY);
     startAliveBeat();
-    // A conexão do WhatsApp (Baileys) mora no worker, junto de quem envia as respostas
-    if (config.WHATSAPP_PROVIDER === "baileys") await whatsapp.start(log);
+    // A conexão do WhatsApp (Baileys) mora no processo do canal; as réplicas de conversa enviam por ele (whatsapp/rpc.ts)
+    if (runsChannel() && config.WHATSAPP_PROVIDER === "baileys") await whatsapp.start(log);
   }
-  if (config.ROLE === "all" || config.ROLE === "api") {
+  if (runsApi()) {
     await app.listen({ port: config.PORT, host: "0.0.0.0" });
   }
 
   const shutdown = async (signal: string) => {
     log.info(`${signal} recebido, encerrando`);
     await whatsapp.stop().catch(() => {});
+    await stopRpcClient().catch(() => {});
     await app.close().catch(() => {});
     await stopBoss().catch(() => {});
     await pool.end().catch(() => {});

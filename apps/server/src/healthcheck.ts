@@ -1,8 +1,8 @@
 /**
  * Healthcheck do container (Dockerfile HEALTHCHECK): `node apps/server/dist/healthcheck.js`.
  * - api/all: o /health responde (banco no ar).
- * - worker/all: o processo está vivo (arquivo de batida renovado a cada 15s) e, com Baileys, a conexão do
- *   WhatsApp que ESTE container segura não está travada (aluguel renovado e sem ficar "conectando" para sempre).
+ * - worker/all/channel/conversations: o processo está vivo (arquivo de batida renovado a cada 15s).
+ * - worker/all/channel, com Baileys: a conexão do WhatsApp que ESTE container segura não está travada (aluguel renovado e sem ficar "conectando" para sempre).
  *   A sessão religa sozinha com espera de até 60s entre tentativas (whatsapp/session.ts); se mesmo assim ficar
  *   caída por mais de 10 min (~10 tentativas), um processo novo (DNS, sockets e memória limpos) é a próxima aposta.
  *   Com interval=30s e retries=3 do HEALTHCHECK, o Swarm reinicia ~11-12 min depois da queda.
@@ -13,9 +13,10 @@ import { hostname } from "node:os";
 import pg from "pg";
 import { config } from "./config.js";
 import { ALIVE_FILE } from "./alive.js";
+import { runsApi, runsChannel } from "./roles.js";
 
 async function check(): Promise<string | null> {
-  if (config.ROLE !== "worker") {
+  if (runsApi()) {
     const res = await fetch(`http://127.0.0.1:${config.PORT}/health`, { signal: AbortSignal.timeout(4000) }).catch(() => null);
     if (!res?.ok) return "api sem resposta em /health";
   }
@@ -30,7 +31,8 @@ async function check(): Promise<string | null> {
   // sem arquivo = ainda subindo (o start-period do HEALTHCHECK cobre); arquivo velho = processo travado
   if (age !== Infinity && age > 90_000) return `worker parado há ${Math.round(age / 1000)}s`;
 
-  if (config.WHATSAPP_PROVIDER !== "baileys") return null;
+  // conversations não segura o WhatsApp: basta estar vivo
+  if (!runsChannel() || config.WHATSAPP_PROVIDER !== "baileys") return null;
   const client = new pg.Client({ connectionString: config.DATABASE_URL, connectionTimeoutMillis: 3000 });
   try {
     await client.connect();

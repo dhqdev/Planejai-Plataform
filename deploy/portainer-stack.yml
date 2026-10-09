@@ -77,6 +77,24 @@ services:
         condition: service_healthy
     networks: [planejai, planejai_browser]
 
+  # Para escalar as conversas, troque o "worker" acima por estes dois (o padrão continua sendo o worker):
+  # channel:          # WhatsApp, envios, Telegram e jobs agendados. Sempre 1 réplica.
+  #   image: ghcr.io/dhqdev/planejai-plataform:${PLANEJAI_TAG:-latest}
+  #   restart: unless-stopped
+  #   environment:
+  #     <<: *app-env
+  #     ROLE: channel
+  #   depends_on: { db: { condition: service_healthy } }
+  #   networks: [planejai, planejai_browser]
+  # conversations:    # time de agentes, lembretes, recados, resumos. Escale com "deploy: { replicas: N }".
+  #   image: ghcr.io/dhqdev/planejai-plataform:${PLANEJAI_TAG:-latest}
+  #   restart: unless-stopped
+  #   environment:
+  #     <<: *app-env
+  #     ROLE: conversations
+  #   depends_on: { db: { condition: service_healthy } }
+  #   networks: [planejai, planejai_browser]
+
   db:
     image: postgres:16-alpine
     restart: unless-stopped
