@@ -9,10 +9,11 @@
   --night-text: #111111;
   --night-muted: #6b6b6b;
   --night-shadow: rgba(0, 0, 0, .06);
+  --night-card: #ffffff;
   --marsh: var(--violet-soft);
   --marsh-ink: var(--violet);
 }
-:root[data-theme="dark"] { --night: #171717; --night-2: #1f1f1f; --night-line: rgba(255, 255, 255, .08); --night-hover: rgba(255, 255, 255, .05); --night-text: #f1f1ee; --night-muted: #9a9a94; --night-shadow: rgba(0, 0, 0, .4); }
+:root[data-theme="dark"] { --night: #171717; --night-2: #1f1f1f; --night-line: rgba(255, 255, 255, .08); --night-hover: rgba(255, 255, 255, .05); --night-text: #f1f1ee; --night-muted: #9a9a94; --night-shadow: rgba(0, 0, 0, .4); --night-card: #1f1f1f; }
 
 @media (min-width: 768px) {
   .sidebar {
@@ -38,7 +39,7 @@
   .sidebar-foot .btn { background: transparent; color: var(--night-muted); border-color: var(--night-line); box-shadow: none; }
   /* rodapé do menu: cartão da conta com tema e sair em ícones */
   .sidebar-foot { border-top: none; padding-top: 10px; }
-  .sidebar-foot .me-card { gap: 10px; padding: 8px 8px 8px 10px; border: 1px solid var(--night-line); border-radius: 16px; background: var(--night-hover); }
+  .sidebar-foot .me-card { gap: 10px; padding: 8px 8px 8px 10px; border: 1px solid var(--night-line); border-radius: 16px; background: var(--night-card); box-shadow: 0 1px 2px var(--night-shadow), 0 4px 14px var(--night-shadow); }
   .sidebar-foot .me-text { flex: 1; min-width: 0; }
   .sidebar-foot .me-text .role-tag { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sidebar-foot .me-actions { display: flex; gap: 2px; flex-shrink: 0; }
@@ -50,7 +51,7 @@
   .sidebar .nav a:not(.active):hover { background: var(--night-hover); color: var(--night-text); }
   .sidebar .nav a:not(.active):hover .ico { transform: translateX(1px) scale(1.06); }
   .sidebar-foot .btn:hover { background: var(--night-hover); color: var(--night-text); }
-  .sidebar-foot .me-act:hover { background: var(--night); color: var(--night-text); }
+  .sidebar-foot .me-act:hover { background: var(--night-hover); color: var(--night-text); }
 }
 @media (max-width: 1180px) and (min-width: 768px) {
   .sidebar .nav a { width: 50px; height: 46px; padding: 0; }
@@ -142,3 +143,6 @@
 }
 @media (max-width: 767px) { .modal-bg:has(.more-sheet) .modal-scrim { background: rgba(10, 4, 24, .42); } }
 
+
+/* troca de tema: o tema novo abre num círculo a partir do botão (App.tsx toggleTheme) */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }

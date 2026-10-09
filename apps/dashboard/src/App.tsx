@@ -1,5 +1,6 @@
 import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { flushSync } from "react-dom";
 import { api } from "./api";
 import { BlockLoader } from "./BlockLoader";
 import { Empty, Loading, Modal } from "./components";
@@ -287,15 +288,32 @@ export function App() {
     return () => window.removeEventListener("pj:welcome", open);
   }, [me?.id]);
 
-  const toggleTheme = () => {
+  const toggleTheme = (e?: { clientX: number; clientY: number }) => {
     const next = theme === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
+    const apply = () => {
+      document.documentElement.dataset.theme = next;
+      flushSync(() => setTheme(next));
+    };
     try {
       localStorage.setItem("pj-theme", next);
     } catch {
       /* sem storage */
     }
-    setTheme(next);
+    // tema novo abre num círculo a partir do botão (navegador sem View Transitions troca na hora)
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => { ready: Promise<void> } };
+    if (!doc.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) return apply();
+    const x = e?.clientX || innerWidth / 2;
+    const y = e?.clientY || innerHeight / 2;
+    const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+    doc
+      .startViewTransition(apply)
+      .ready.then(() =>
+        document.documentElement.animate(
+          { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+          { duration: 520, easing: "cubic-bezier(.4,0,.2,1)", pseudoElement: "::view-transition-new(root)" },
+        ),
+      )
+      .catch(() => {});
   };
 
   // termos e privacidade abrem sem login (link do cadastro e do convite no WhatsApp)
