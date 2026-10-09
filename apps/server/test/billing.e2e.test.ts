@@ -211,8 +211,8 @@ describe.skipIf(!enabled)("assinatura pelo Asaas (e2e)", () => {
 
     // lembrete de vencimento: quem paga por Pix ouve 3 dias antes; cartão não
     await db.query("DELETE FROM pgboss.job WHERE name = 'outbound.send'");
-    await db.query("UPDATE subscriptions SET status = 'active', next_due_date = CURRENT_DATE + 3, last_billing_type = 'PIX', reminded_on = NULL WHERE user_id = $1", [beto.id]);
-    await db.query("UPDATE subscriptions SET next_due_date = CURRENT_DATE + 3, last_billing_type = 'CREDIT_CARD' WHERE user_id = $1", [ana.id]);
+    await db.query("UPDATE subscriptions SET status = 'active', next_due_date = (now() AT TIME ZONE 'America/Sao_Paulo')::date + 3, last_billing_type = 'PIX', reminded_on = NULL WHERE user_id = $1", [beto.id]);
+    await db.query("UPDATE subscriptions SET next_due_date = (now() AT TIME ZONE 'America/Sao_Paulo')::date + 3, last_billing_type = 'CREDIT_CARD' WHERE user_id = $1", [ana.id]);
     expect((await billing.billingReminders()).due).toBe(1);
     expect((await outbox())[0]).toMatchObject({ userId: beto.id, text: expect.stringMatching(/vence a sua mensalidade de R\$ 19,90/) });
     // mesmo dia: não repete
