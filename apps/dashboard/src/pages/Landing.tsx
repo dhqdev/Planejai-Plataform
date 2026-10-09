@@ -691,11 +691,6 @@ export function LandingPage() {
                     Já tenho conta
                   </a>
                 </div>
-                <ul className="lp-trust">
-                  <li>Sem app para instalar</li>
-                  <li>Só age com o seu sim</li>
-                  <li>Você apaga tudo quando quiser</li>
-                </ul>
               </div>
               <div className="lp-hero-stage">
                 <HeroChat scene={scene} onScene={setScene} />

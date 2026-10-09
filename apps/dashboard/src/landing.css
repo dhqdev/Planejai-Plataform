@@ -72,12 +72,6 @@
 }
 .lp-live { width: 8px; height: 8px; border-radius: 50%; background: #25d366; box-shadow: 0 0 0 0 rgba(37, 211, 102, .5); animation: lp-live 2s ease-out infinite; }
 @keyframes lp-live { 70% { box-shadow: 0 0 0 7px rgba(37, 211, 102, 0); } 100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); } }
-.lp-trust { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 30px 0 0; padding: 0; list-style: none; font-size: 14px; color: var(--lp-muted); }
-.lp-trust li { display: inline-flex; align-items: center; gap: 7px; }
-.lp-trust li::before {
-  content: ""; width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
-  background: var(--lp-ink) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 8.2l2.2 2.2 4.8-4.8' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 16px no-repeat;
-}
 .lp-hero-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr); gap: 72px; align-items: center; min-height: min(640px, calc(100vh - 200px)); }
 .hc-title { display: flex; flex-direction: column; font-size: clamp(44px, 6vw, 84px); line-height: 1.02; letter-spacing: -0.048em; font-weight: 600; }
 .hc-l2 { white-space: nowrap; }
@@ -302,7 +296,6 @@
   .lp-hero-bg { padding: 16px 0 40px; }
   .lp-hero-bg::after { width: 90vw; right: -20%; top: 40%; }
   .lp-eyebrow { margin-bottom: 18px; font-size: 13px; }
-  .lp-trust { margin-top: 20px; gap: 8px 16px; font-size: 13px; }
   .lp-hero-grid, .lp-safe, .lp-faq-wrap, .lp-final-grid { grid-template-columns: 1fr; }
   .lp-hero-grid { gap: 8px; min-height: 0; }
   .hc-title { font-size: clamp(36px, 10.4vw, 52px); }
@@ -360,7 +353,6 @@
 .hc-l2 { animation: lp-rise .9s var(--lp-ease) both .3s; }
 .lp-hero-copy > .lp-lead { animation-delay: .42s; }
 .lp-hero-copy > .lp-hero-cta { animation-delay: .52s; }
-.lp-hero-copy > .lp-trust { animation-delay: .62s; }
 @keyframes lp-rise { from { opacity: 0; transform: translateY(.5em); } }
 .lp-hero-stage::before { animation: lp-grow 1.4s var(--lp-ease) both .1s; scale: calc(1 + var(--hero, 0) * .25); }
 @keyframes lp-grow { from { opacity: 0; transform: scale(.55); } }
