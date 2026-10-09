@@ -9,6 +9,7 @@ const enabled = Boolean(process.env.TEST_DATABASE_URL);
 
 let server: http.Server;
 let seq = 0;
+const writerAsks: string[] = [];
 const call = (name: string, args: unknown) => ({ id: `s${++seq}`, type: "function", function: { name, arguments: JSON.stringify(args) } });
 const completion = (content: string | null, tool_calls?: unknown[]) => ({
   model: "fake/model",
@@ -34,6 +35,10 @@ function fakeOpenRouter(body: any) {
       }),
     );
   }
+  if (system.includes("conteúdo de um PDF")) {
+    writerAsks.push(String(last.content));
+    return completion(JSON.stringify({ subtitle: "Lições de dinheiro", sections: [{ title: "Os dois pais", text: "Um resumo.\n\nOutro parágrafo." }, { title: "Ativos e passivos", items: ["Ativo põe dinheiro no bolso"] }] }));
+  }
   if (system.includes("avisando a pessoa")) return completion("Saiu a data do show do Coldplay em SP: 12/03. https://ex.com/coldplay");
   if (system.includes("CTO de um time")) {
     const userText = String(body.messages.findLast((m: any) => m.role === "user")?.content ?? "");
@@ -50,6 +55,8 @@ function fakeOpenRouter(body: any) {
       if ((body.max_tokens ?? 0) < 8000) return { ...completion('<tool_call>{"name":"make_pdf","arguments":{"title":"Pai Rico","sections":[{"heading":"Quem'), choices: [{ message: { role: "assistant", content: '<tool_call>{"name":"make_pdf","arguments":{"title":"Pai Rico","sections":[{"heading":"Quem' }, finish_reason: "length" }] };
       return completion('<tool_call>{"name":"make_pdf","arguments":{"title":"Pai Rico","sections":[{"heading":"Quem foi Kiyosaki","text":"Um resumo."}]}}</tool_call>');
     }
+    // como em produção: o CTO manda só título e roteiro, sem seções
+    if (userText.includes("resumo em pdf do pai rico")) return completion(null, [call("make_pdf", { title: "Pai Rico, Pai Pobre", subtitle: "Resumo do livro", brief: "Resumo completo do livro, lições principais" })]);
     if (userText.includes("amanhã às 7h manda pro Giovani")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "Bom dia, Gio!", in_minutes: 600 })]);
     if (userText.includes("manda esse look")) return completion(null, [call("send_to_contact", { contact: "giovani", message: "Olha esse look, o que acha?", attach_photo: true })]);
     return completion("ok");
@@ -194,6 +201,12 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     const sent = ch.sent;
     expect(sent.some((s) => s.text?.includes("tool_call"))).toBe(false);
     expect(sent.find((s) => s.type === "image")).toMatchObject({ image: { kind: "document", mimetype: "application/pdf", fileName: "Pai Rico.pdf" } });
+  });
+
+  it.skipIf(!process.env.CHROME_PATH)("pdf pedido só com título e roteiro: a ferramenta escreve o texto e manda o PDF", async () => {
+    const ch = await say("me manda um resumo em pdf do pai rico");
+    expect(writerAsks.at(-1)).toContain("Resumo completo do livro");
+    expect(ch.sent.find((s) => s.type === "image")).toMatchObject({ image: { kind: "document", fileName: "Pai Rico, Pai Pobre.pdf" } });
   });
 
   it("lembrete que pede para mandar algo a um contato só cria a pendência", async () => {
