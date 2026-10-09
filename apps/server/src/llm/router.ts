@@ -85,6 +85,15 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     maxTokens: 800,
   },
   {
+    task: "errand_check",
+    label: "Trava dos recados",
+    why: "Confere cada mensagem antes de ir para um estabelecimento (ofensa, trote, assunto nada a ver). Entrada curta e JSON de uma linha: o mais barato.",
+    model: "deepseek/deepseek-v4.1-flash",
+    fallbacks: ["xiaomi/mimo-v2.6-flash"],
+    temperature: 0,
+    maxTokens: 150,
+  },
+  {
     task: "vision",
     label: "Visão (fotos recebidas)",
     why: "Descreve fotos/prints/comprovantes antes do CTO responder.",

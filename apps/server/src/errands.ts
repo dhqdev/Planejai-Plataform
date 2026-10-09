@@ -9,8 +9,10 @@ import { resolveTag } from "./agenda-tags.js";
 import { createReminder } from "./reminders.js";
 import { markSeen } from "./shortmem.js";
 import { jidFor, notifyUser, outboundChannel } from "./social.js";
-import { formatLocal } from "./time.js";
+import { config } from "./config.js";
+import { formatLocal, isoLocal } from "./time.js";
 import { findOnWhatsApp } from "./whatsapp/rpc.js";
+import { MAX_ERRAND_TEXT } from "./agent/errand-check.js";
 
 /**
  * Recados: o assistente fala com um estabelecimento (petshop, salão, clínica) pelo WhatsApp em nome da pessoa.
@@ -59,13 +61,32 @@ export interface Errand {
 
 const firstName = (u: { full_name?: string | null; name?: string | null }) => (u.full_name || u.name || "").split(" ")[0] || null;
 
-/** O estabelecimento precisa saber que fala com um assistente: se a primeira mensagem não diz, o servidor diz. */
-export function introduce(text: string, personName: string | null) {
+/** "bom dia", "boa tarde" ou "boa noite" no fuso da pessoa. */
+export function greetingFor(date: Date, timezone: string) {
+  const h = Number(isoLocal(date, timezone).slice(11, 13));
+  return h >= 5 && h < 12 ? "bom dia" : h >= 12 && h < 18 ? "boa tarde" : "boa noite";
+}
+
+const END = "(?=[\\s!,.?]|$)";
+const GREETING = new RegExp(`^\\s*((oi|olá|ola|e aí|e ai)${END})?[!,.]*\\s*((bom dia|boa tarde|boa noite)${END})?[!,.]*\\s*((tudo bem|tudo bom|como vai)${END})?[!,.?]*\\s*`, "i");
+
+/**
+ * Primeira mensagem para o estabelecimento: cumprimento certo para a hora local e a apresentação honesta
+ * (assistente virtual de quem). Se o texto já se apresenta, só acerta o "bom dia/boa tarde/boa noite".
+ * Sem fuso (mensagem direta, que pode ser agendada para outra hora) fica a apresentação curta, sem período do dia.
+ */
+export function introduce(text: string, personName: string | null, timezone?: string, now = new Date()) {
   const t = text.trim();
-  if (/assistente/i.test(t)) return t;
-  const who = personName ? `assistente virtual de ${personName}` : "um assistente virtual";
-  const rest = t.replace(/^(oi|olá|ola|bom dia|boa tarde|boa noite)[!,.]?\s*/i, "");
-  return `Oi! Aqui é ${who}. ${rest.charAt(0).toUpperCase()}${rest.slice(1)}`;
+  if (!timezone) {
+    if (/assistente/i.test(t)) return t;
+    const rest = t.replace(/^(oi|olá|ola|bom dia|boa tarde|boa noite)[!,.]?\s*/i, "");
+    return `Oi! Aqui é ${personName ? `assistente virtual de ${personName}` : "um assistente virtual"}. ${rest.charAt(0).toUpperCase()}${rest.slice(1)}`;
+  }
+  const hello = greetingFor(now, timezone);
+  if (/assistente/i.test(t)) return t.replace(/\b(bom dia|boa tarde|boa noite)\b/i, (m) => (m[0] === "B" ? hello.charAt(0).toUpperCase() + hello.slice(1) : hello));
+  const who = personName ? `o assistente virtual de ${personName}` : "um assistente virtual";
+  const rest = t.replace(GREETING, "");
+  return `Oi, ${hello}! Tudo bem? Aqui é ${who}. ${rest.charAt(0).toUpperCase()}${rest.slice(1)}`.trim();
 }
 
 export async function openErrands(userId: string): Promise<Errand[]> {
@@ -84,6 +105,7 @@ export async function startErrand(opts: {
   goal: string;
   allowed?: string | null;
   hours?: number;
+  timezone?: string;
 }) {
   const phone = normalizePhone(opts.phone);
   if (phone.length < 12 || phone.length > 13) return { ok: false, error: `Telefone inválido: ${opts.phone}. Precisa do DDD.` };
@@ -102,7 +124,7 @@ export async function startErrand(opts: {
   if (exists === null) return { ok: false, error: `O número ${phone} não tem WhatsApp. Sugira à pessoa ligar: +${phone}.`, no_whatsapp: true };
   const channel = outboundChannel();
   const jid = exists ?? (await jidFor(phone, channel));
-  const text = redactSecrets(humanize(introduce(opts.message, firstName(opts.user))));
+  const text = redactSecrets(humanize(introduce(opts.message, firstName(opts.user), opts.timezone ?? config.DEFAULT_TIMEZONE)));
   await channel.sendText(jid, text);
   const hours = Math.min(Math.max(opts.hours ?? 24, 1), 72);
   const log: ErrandLogEntry[] = [{ from: "nos", text, at: new Date().toISOString() }];
@@ -111,24 +133,33 @@ export async function startErrand(opts: {
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, now() + make_interval(hours => $9)) RETURNING id`,
     [opts.user.id, opts.conversationId, opts.place.slice(0, 120), phone, jid, opts.goal.slice(0, 1000), opts.allowed?.slice(0, 500) || null, JSON.stringify(log), hours],
   );
-  return { ok: true, errand_id: row!.id, sent_to: `${opts.place} (+${phone})`, message: text, waiting_hours: hours };
+  return {
+    ok: true,
+    errand_id: row!.id,
+    sent_to: `${opts.place} (+${phone})`,
+    message: text,
+    waiting_hours: hours,
+    tip: `Conte em uma linha que dá para acompanhar a conversa em ${followUrl()}`,
+  };
 }
 
 /** Mensagem nossa para o estabelecimento, dentro das travas. */
-export async function sendToErrand(errandId: string, text: string) {
+export async function sendToErrand(errandId: string, text: string, opts: { sameTurn?: boolean } = {}) {
   const e = await one<Errand>("SELECT * FROM errands WHERE id = $1", [errandId]);
-  if (!e || !OPEN.includes(e.status)) return { ok: false, error: "Esse recado já terminou." };
+  // sameTurn: o agente fechou (ou levou à pessoa) nesta mesma vez e a despedida ainda está saindo
+  const live = e && (OPEN.includes(e.status) || (opts.sameTurn && ["done", "failed"].includes(e.status)));
+  if (!e || !live) return { ok: false, error: "Esse recado já terminou." };
   if (e.sent >= MAX_ERRAND_MESSAGES) return { ok: false, error: `Já foram ${MAX_ERRAND_MESSAGES} mensagens para eles. Feche com errand_done ou pergunte à pessoa.` };
-  const clean = redactSecrets(humanize(text.trim())).slice(0, 1000);
+  const clean = redactSecrets(humanize(text.trim())).slice(0, MAX_ERRAND_TEXT);
   if (!clean) return { ok: false, error: "Mensagem vazia" };
   await outboundChannel().sendText(e.jid, clean);
   await query(
     // fechar e responder podem vir juntos (em paralelo): mandar não reabre um recado que acabou de fechar
     `UPDATE errands SET sent = sent + 1, log = log || $2::jsonb, updated_at = now(),
-       status = CASE WHEN status IN ('waiting', 'asking') THEN 'waiting' ELSE status END,
-       question = CASE WHEN status IN ('waiting', 'asking') THEN NULL ELSE question END
+       status = CASE WHEN status IN ('waiting', 'asking') AND NOT $3 THEN 'waiting' ELSE status END,
+       question = CASE WHEN status IN ('waiting', 'asking') AND NOT $3 THEN NULL ELSE question END
      WHERE id = $1`,
-    [errandId, JSON.stringify([{ from: "nos", text: clean, at: new Date().toISOString() }])],
+    [errandId, JSON.stringify([{ from: "nos", text: clean, at: new Date().toISOString() }]), Boolean(opts.sameTurn)],
   );
   return { ok: true, sent: clean, messages_left: MAX_ERRAND_MESSAGES - e.sent - 1 };
 }
@@ -215,4 +246,95 @@ export function errandsContext(list: Errand[]) {
         (e.allowed ? ` · já liberado: ${e.allowed}` : ""),
     )
     .join("\n");
+}
+
+/** Onde a pessoa acompanha a conversa no painel. */
+export const followUrl = () => `${config.PUBLIC_URL.replace(/\/+$/, "")}/recados`;
+
+/** Situação para a tela: esperando eles, esperando você (decisão ou o "sim"), concluído, cancelado, vencido. */
+function stateOf(e: Pick<Errand, "status" | "expires_at">, pending: boolean) {
+  if (OPEN.includes(e.status) && new Date(e.expires_at).getTime() < Date.now()) return "expired";
+  if (pending || e.status === "asking") return "you";
+  if (e.status === "waiting") return "them";
+  return e.status; // done, failed, cancelled, expired
+}
+
+interface PendingErrand {
+  id: string;
+  tool: "errand_start" | "errand_continue";
+  args: { place?: string; phone?: string; message?: string; goal?: string; allowed?: string; errand_id?: string };
+  created_at: string;
+}
+
+/** Pedidos de recado esperando o "sim" da pessoa no WhatsApp (o mesmo prazo do confirm.ts). */
+async function pendingErrands(userId: string) {
+  return many<PendingErrand>(
+    `SELECT id::text, tool, args, created_at FROM pending_actions
+      WHERE user_id = $1 AND tool IN ('errand_start', 'errand_continue') AND status = 'pending' AND created_at > now() - interval '30 minutes'
+      ORDER BY id DESC`,
+    [userId],
+  );
+}
+
+/** O texto exato que sai quando a pessoa disser "sim" (mesmo caminho do startErrand/sendToErrand). */
+function previewOf(p: PendingErrand, user: { name?: string | null; full_name?: string | null; timezone?: string | null }) {
+  const raw = String(p.args.message ?? "");
+  const text = p.tool === "errand_start" ? introduce(raw, firstName(user), user.timezone ?? config.DEFAULT_TIMEZONE) : raw.trim();
+  return redactSecrets(humanize(text)).slice(0, MAX_ERRAND_TEXT);
+}
+
+/** Lista da tela Recados: só os da própria pessoa, com os pedidos que ainda esperam o "sim". */
+export async function listErrands(userId: string) {
+  const user = await one("SELECT name, full_name, timezone FROM users WHERE id = $1", [userId]);
+  if (!user) return { errands: [], drafts: [], follow: followUrl() };
+  const pending = await pendingErrands(userId);
+  const rows = await many<Errand & { created_at: string; updated_at: string }>(
+    `SELECT * FROM errands WHERE user_id = $1 ORDER BY (status IN ('waiting', 'asking') AND expires_at > now()) DESC, updated_at DESC LIMIT 50`,
+    [userId],
+  );
+  const waitingYes = new Map(pending.filter((p) => p.tool === "errand_continue").map((p) => [String(p.args.errand_id), p]));
+  return {
+    // recado novo ainda não enviado: a pessoa vê exatamente o que vai sair antes de dizer "sim"
+    drafts: pending
+      .filter((p) => p.tool === "errand_start")
+      .slice(0, 1)
+      .map((p) => ({ id: p.id, place: p.args.place ?? "", phone: p.args.phone ?? "", goal: p.args.goal ?? "", allowed: p.args.allowed ?? null, preview: previewOf(p, user), created_at: p.created_at })),
+    errands: rows.map((e) => {
+      const p = waitingYes.get(e.id);
+      const last = e.log.at(-1);
+      return {
+        id: e.id,
+        place: e.place,
+        phone: e.phone,
+        goal: e.goal,
+        allowed: e.allowed,
+        state: stateOf(e, Boolean(p)),
+        question: OPEN.includes(e.status) ? e.question : null,
+        outcome: e.outcome,
+        appointment_at: e.appointment_at,
+        messages_left: Math.max(0, MAX_ERRAND_MESSAGES - e.sent),
+        expires_at: e.expires_at,
+        created_at: e.created_at,
+        updated_at: e.updated_at,
+        last: last ? { from: last.from, text: last.text.slice(0, 140), at: last.at } : null,
+        log: e.log.map((l) => ({ from: l.from, text: l.text || (l.kind ? `(${l.kind})` : ""), at: l.at })),
+        next: p ? { preview: previewOf(p, user), allowed: p.args.allowed ?? null, created_at: p.created_at } : null,
+      };
+    }),
+    follow: followUrl(),
+  };
+}
+
+/** Cancelar pela tela: não manda nada para o estabelecimento, só para de acompanhar. */
+export async function cancelErrand(id: string, userId: string) {
+  const e = await one<Errand>("SELECT * FROM errands WHERE id::text = $1 AND user_id = $2", [id, userId]);
+  if (!e) return null;
+  await query("UPDATE pending_actions SET status = 'cancelled', resolved_at = now() WHERE user_id = $1 AND tool = 'errand_continue' AND status = 'pending' AND args->>'errand_id' = $2", [userId, e.id]);
+  return finishErrand(e.id, { status: "cancelled", outcome: "cancelado pela pessoa no painel", timezone: config.DEFAULT_TIMEZONE });
+}
+
+/** Descartar um recado que ainda esperava o "sim" (nada tinha saído). */
+export async function discardErrandDraft(id: string, userId: string) {
+  const r = await one("UPDATE pending_actions SET status = 'cancelled', resolved_at = now() WHERE id::text = $1 AND user_id = $2 AND tool = 'errand_start' AND status = 'pending' RETURNING id", [id, userId]);
+  return Boolean(r);
 }

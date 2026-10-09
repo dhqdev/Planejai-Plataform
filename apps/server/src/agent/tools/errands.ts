@@ -1,5 +1,6 @@
 import { one, query } from "../../db/pool.js";
 import { MAX_ERRAND_MESSAGES, finishErrand, openErrands, sendToErrand, startErrand } from "../../errands.js";
+import { blockedResult, checkErrandText } from "../errand-check.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 export const errandStart = defineTool<{ place: string; phone: string; message: string; goal: string; allowed?: string; hours?: number; confirmed_by_user?: boolean }>({
@@ -12,7 +13,10 @@ export const errandStart = defineTool<{ place: string; phone: string; message: s
     {
       place: { type: "string", description: "Nome do lugar" },
       phone: { type: "string", description: "Telefone/WhatsApp do lugar, com DDD" },
-      message: { type: "string", description: "Primeira mensagem, curta e educada (o sistema apresenta como assistente da pessoa)" },
+      message: {
+        type: "string",
+        description: "Primeira mensagem: cumprimento, contexto mínimo e a pergunta no fim, natural (o sistema acerta bom dia/boa tarde e apresenta como assistente da pessoa)",
+      },
       goal: { type: "string", description: "O que a pessoa quer resolver, com data e serviço" },
       allowed: { type: "string", description: "Condição já liberada para fechar sozinho (opcional)" },
       hours: { type: "number", description: "Quanto esperar resposta, padrão 24h" },
@@ -21,13 +25,18 @@ export const errandStart = defineTool<{ place: string; phone: string; message: s
     ["place", "phone", "message", "goal"],
   ),
   async run(args, ctx) {
+    // a trava confere antes de pedir o "sim": mensagem ofensiva, trote ou nada a ver nem chega a ser proposta
+    if (!ctx.approvedAction) {
+      const check = await checkErrandText({ place: args.place, goal: args.goal, message: args.message }, ctx.tracer, ctx.agent);
+      if (!check.ok) return blockedResult(check);
+    }
     const gate = await requireConfirmation(
       args,
       `mandar no WhatsApp de ${args.place} (${args.phone}): "${args.message}"` + (args.allowed ? `, e se ${args.allowed.replace(/^se\s+/i, "")}, eu fecho por você` : ", e te trago a resposta"),
       ctx,
     );
     if (gate) return gate;
-    return startErrand({ user: ctx.user, conversationId: ctx.conversation.id, place: args.place, phone: args.phone, message: args.message, goal: args.goal, allowed: args.allowed, hours: args.hours });
+    return startErrand({ user: ctx.user, conversationId: ctx.conversation.id, place: args.place, phone: args.phone, message: args.message, goal: args.goal, allowed: args.allowed, hours: args.hours, timezone: ctx.timezone });
   },
 });
 
@@ -38,8 +47,13 @@ export const errandContinue = defineTool<{ errand_id: string; message: string; a
     "allowed: o que a pessoa acabou de liberar para fechar sem perguntar de novo.",
   parameters: obj({ errand_id: { type: "string" }, message: { type: "string" }, allowed: { type: "string" }, ...CONFIRM_PARAM }, ["errand_id", "message"]),
   async run(args, ctx) {
-    const e = await one("SELECT place FROM errands WHERE id::text = $1 AND user_id = $2", [args.errand_id, ctx.user.id]);
+    const e = await one("SELECT place, goal, log FROM errands WHERE id::text = $1 AND user_id = $2", [args.errand_id, ctx.user.id]);
     if (!e) return { ok: false, error: "Recado não encontrado" };
+    if (!ctx.approvedAction) {
+      const previous = [...(e.log as { from: string; text: string }[])].reverse().find((l) => l.from === "nos")?.text;
+      const check = await checkErrandText({ place: e.place, goal: e.goal, message: args.message, previous }, ctx.tracer, ctx.agent);
+      if (!check.ok) return blockedResult(check);
+    }
     const gate = await requireConfirmation(args, `responder para ${e.place}: "${args.message}"`, ctx);
     if (gate) return gate;
     await query(

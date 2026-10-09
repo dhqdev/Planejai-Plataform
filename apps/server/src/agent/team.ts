@@ -206,7 +206,9 @@ export const SPECIALISTS: AgentDef[] = [
       "e agenda dentro do que ela liberou ('se tiver 18h, marca'). As respostas deles são acompanhadas sozinhas, mesmo depois desta conversa.",
     instructions:
       "Ache o lugar com places_nearby (endereço da pessoa) e o telefone; sem telefone, uma web_search pelo nome + 'whatsapp'. " +
-      "Monte o errand_start: message curta e educada (o sistema já apresenta como assistente da pessoa), goal com serviço e data absoluta, " +
+      "Monte o errand_start: message como gente, sem cumprimento (o sistema põe 'Oi, boa tarde! Tudo bem? Aqui é o assistente virtual de X.'): " +
+      "contexto mínimo e depois a pergunta com jeito, uma só (ex.: 'Ela tem um shih-tzu e queria saber sobre tosa com vocês. Vocês conseguem me passar o valor?'), nunca só a pergunta seca; " +
+      "goal com serviço, detalhes que ela deu e data absoluta, " +
       "allowed só com o que a pessoa liberou de forma concreta (ex.: 'se tiver banho às 18h de hoje, confirmar'). " +
       "errand_start não envia nada: o sistema guarda e pergunta à pessoa. Devolva ao CTO, em uma frase, para quem vai, o texto e o que fica liberado, para ele perguntar o sim. " +
       "Sem número com WhatsApp, devolva o telefone para a pessoa ligar.",
