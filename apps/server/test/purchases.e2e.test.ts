@@ -34,6 +34,21 @@ describe("compras: regras sem banco", () => {
     expect(storeOf("https://www.kabum.com.br/produto/1")).toBe("kabum");
   });
 
+  it("cookies colados: JSON da extensão, cookies.txt e cabeçalho", async () => {
+    const { parseCookieText } = await import("../src/storelogin.js");
+    const json = JSON.stringify([{ name: "ssid", value: "abc", domain: ".mercadolivre.com.br", path: "/", expirationDate: 1900000000.5, httpOnly: true, secure: true, sameSite: "no_restriction" }]);
+    expect(parseCookieText(json, "mercadolivre.com.br")).toEqual([
+      { name: "ssid", value: "abc", domain: ".mercadolivre.com.br", path: "/", expires: 1900000000.5, httpOnly: true, secure: true, sameSite: "None" },
+    ]);
+    const txt = "# Netscape HTTP Cookie File\n#HttpOnly_.shopee.com.br\tTRUE\t/\tTRUE\t1900000000\tSPC_EC\txyz\n";
+    expect(parseCookieText(txt, "shopee.com.br")).toMatchObject([{ name: "SPC_EC", value: "xyz", domain: ".shopee.com.br", httpOnly: true, secure: true }]);
+    expect(parseCookieText("Cookie: a=1; b=2=3", "kabum.com.br")).toMatchObject([
+      { name: "a", value: "1", domain: ".kabum.com.br" },
+      { name: "b", value: "2=3" },
+    ]);
+    expect(() => parseCookieText("[{", "x.com")).toThrow(/JSON/);
+  });
+
   it("código de verificação no e-mail da loja", async () => {
     const { extractLoginCode } = await import("../src/stores.js");
     expect(extractLoginCode("Seu código de verificação é 482913. Válido por 10 minutos")).toBe("482913");
@@ -226,6 +241,18 @@ describe.skipIf(!enabled)("compras pelo assistente (e2e)", () => {
     expect(typed).toEqual(["s3gredo!"]);
     expect(JSON.stringify(r)).not.toContain("s3gredo");
     expect(fake).toMatchObject({ store: custom.id, saveLogin: true });
+
+    // cookies colados: só os da própria loja ficam, criptografados
+    const sl = await import("../src/storelogin.js");
+    const pasted = JSON.stringify([
+      { name: "sess", value: "ok", domain: ".lojadobairro.com.br" },
+      { name: "track", value: "x", domain: ".google.com" },
+    ]);
+    expect(await sl.importStoreCookies(user.id, custom.id, pasted)).toMatchObject({ ok: true, count: 1 });
+    expect((await sl.storeCookies(user.id, custom.id)).map((c) => c.name)).toEqual(["sess"]);
+    expect((await db.one("SELECT cookies FROM store_sessions WHERE user_id = $1 AND store = $2", [user.id, custom.id])).cookies).not.toContain("sess");
+    await expect(sl.importStoreCookies(user.id, custom.id, JSON.stringify([{ name: "a", value: "b", domain: "google.com" }]))).rejects.toThrow(/Nenhum/);
+    await expect(sl.importStoreCookies(user.id, "nao-existe", pasted)).rejects.toThrow(/não encontrada/);
 
     await st.removeCustomStore(user.id, custom.id);
     expect(await st.storeAccess(user.id, custom.id)).toBeNull();

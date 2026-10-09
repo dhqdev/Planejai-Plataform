@@ -79,7 +79,7 @@ export function PurchaseTermsPage() {
         <h3>Sua conta na loja</h3>
         <ul>
           <li>Você entra na sua conta da loja pelo painel, numa janela que mostra a página da própria loja. Senha e códigos vão direto para a loja; o assistente nunca vê sua senha.</li>
-          <li>Guardamos o login que a loja devolve (cookies), criptografado, para o assistente entrar na sua conta na hora de comprar. Você desconecta quando quiser em Compras.</li>
+          <li>Guardamos o login que a loja devolve (cookies), ou os cookies que você colar da loja já logada, criptografado, para o assistente entrar na sua conta na hora de comprar. Você desconecta quando quiser em Compras.</li>
           <li>
             <b>Login automático (opcional):</b> se você salvar o e-mail e a senha de uma loja, eles ficam criptografados e, quando o login vencer, o
             sistema digita os dois direto no site daquela loja, sem o assistente ver. Se a loja mandar um código por e-mail e o seu Gmail estiver

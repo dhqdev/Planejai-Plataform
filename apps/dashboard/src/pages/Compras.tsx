@@ -518,15 +518,34 @@ export function AddressForm({ profile, onSaved, compact }: { profile: BuyerProfi
 }
 
 /**
- * Janela ao vivo para a pessoa entrar na conta da loja: mostra a tela do navegador do servidor e manda os toques
- * e o que ela digita. O que é digitado vai direto para a página da loja, sem passar pelo assistente.
+ * Login da pessoa na conta dela da loja, de dois jeitos: entrando numa janela ao vivo (a tela do navegador do servidor,
+ * com os toques e o que ela digita indo direto para a página da loja, sem passar pelo assistente) ou colando os cookies
+ * da loja já logada no navegador dela, para quando a loja barra o login vindo do servidor.
  */
-// celular ou tablet na mão: a loja abre como no celular; notebook: como no computador
-const isPhone = () => typeof window !== "undefined" && (window.matchMedia("(max-width: 760px)").matches || window.matchMedia("(pointer: coarse)").matches);
+// celular de verdade (ou tela estreita): a loja abre em pé, como no celular; notebook e computador: deitada
+const isPhone = () =>
+  typeof window !== "undefined" && (/Android|iPhone|iPod|Mobile/i.test(navigator.userAgent) || window.matchMedia("(max-width: 760px)").matches);
 const PASS_KEYS = new Set(["Enter", "Backspace", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Delete"]);
 
 function StoreLogin({ store, name, onClose }: { store: string; name: string; onClose: (ok: boolean) => void }) {
-  const [device] = useState(() => (isPhone() ? "mobile" : "desktop"));
+  const [device] = useState<"mobile" | "desktop">(() => (isPhone() ? "mobile" : "desktop"));
+  const [tab, setTab] = useState<"live" | "cookies">("live");
+  return (
+    <Modal title={`Entrar no ${name}`} icon={<Icon name="shop" />} wide className={`cp-login-modal cp-login-${device}`} onClose={() => onClose(false)}>
+      <div className="tabs cp-login-tabs" role="tablist">
+        <button role="tab" aria-selected={tab === "live"} className={`tab ${tab === "live" ? "active" : ""}`} onClick={() => setTab("live")}>Entrar aqui</button>
+        <button role="tab" aria-selected={tab === "cookies"} className={`tab ${tab === "cookies" ? "active" : ""}`} onClick={() => setTab("cookies")}>Já estou logado (colar cookies)</button>
+      </div>
+      {tab === "live" ? (
+        <LiveLogin store={store} name={name} device={device} onClose={onClose} onCookies={() => setTab("cookies")} />
+      ) : (
+        <CookiePaste store={store} name={name} device={device} onClose={onClose} />
+      )}
+    </Modal>
+  );
+}
+
+function LiveLogin({ store, name, device, onClose, onCookies }: { store: string; name: string; device: "mobile" | "desktop"; onClose: (ok: boolean) => void; onCookies: () => void }) {
   const [sess, setSess] = useState<{ id: string; width: number; height: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -615,53 +634,110 @@ function StoreLogin({ store, name, onClose }: { store: string; name: string; onC
     }
   };
 
+  const desktop = device === "desktop";
   return (
-    <Modal
-      title={`Entrar no ${name}`}
-      icon={<Icon name="shop" />}
-      wide={device === "desktop"}
-      className={device === "desktop" ? "cp-login-modal" : undefined}
-      onClose={() => onClose(false)}
-      footer={
-        <>
-          <button className="btn" onClick={() => onClose(false)}>Cancelar</button>
-          <button className="btn btn-primary" disabled={!sess || busy} onClick={finish}>{busy ? "Guardando…" : "Pronto, entrei"}</button>
-        </>
-      }
-    >
-      <p className="muted cp-small">
-        {device === "desktop"
-          ? "Clique na tela da loja e digite normalmente; a roda do mouse rola a página. Entre na sua conta como sempre, inclusive com o código que a loja mandar."
-          : "Toque na tela da loja para escolher os campos e use a caixa abaixo para digitar. Entre na sua conta normalmente, inclusive com o código que a loja mandar."}
-      </p>
-      {err && <p className="cp-err">{err}</p>}
-      <div className={`cp-live cp-live-${device}`} tabIndex={device === "desktop" ? 0 : undefined} onKeyDown={device === "desktop" ? typeKey : undefined} onWheel={device === "desktop" ? wheel : undefined}>
+    <div className={`cp-login cp-login-${device}`}>
+      <div className={`cp-live cp-live-${device}`} tabIndex={desktop ? 0 : undefined} onKeyDown={desktop ? typeKey : undefined} onWheel={desktop ? wheel : undefined}>
         {sess ? (
           <img ref={imgRef} src={`/api/compras/login/${sess.id}/tela?t=${tick}`} alt={`Tela do ${name}`} onClick={click} width={sess.width} height={sess.height} />
         ) : (
           !err && <div className="cp-live-wait">Abrindo o {name}…</div>
         )}
       </div>
-      <form
-        className="cp-type"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!text) return;
-          void send({ type: "text", text }).then(() => setText(""));
-        }}
-      >
-        <input className="input" type={hide ? "password" : "text"} autoComplete="off" placeholder="Digite aqui e toque em Enviar" value={text} onChange={(e) => setText(e.target.value)} />
-        <button type="button" className="icon-btn sm" title={hide ? "Mostrar" : "Esconder"} onClick={() => setHide(!hide)}><Icon name="eye" size={16} /></button>
-        <button className="btn btn-sm">Enviar</button>
-      </form>
-      <div className="cp-keys">
-        <button className="btn btn-sm btn-ghost" onClick={() => send({ type: "key", key: "Enter" })}>Enter</button>
-        <button className="btn btn-sm btn-ghost" onClick={() => send({ type: "key", key: "Backspace" })}>Apagar</button>
-        <button className="btn btn-sm btn-ghost" onClick={() => send({ type: "key", key: "Tab" })}>Próximo campo</button>
-        <button className="btn btn-sm btn-ghost" onClick={() => send({ type: "scroll", dy: -500 })}>Subir</button>
-        <button className="btn btn-sm btn-ghost" onClick={() => send({ type: "scroll", dy: 500 })}>Descer</button>
-        <button className="btn btn-sm btn-ghost" onClick={() => send({ type: "back" })}>Voltar</button>
+      <div className="cp-login-side">
+        <p className="muted cp-small">
+          {desktop
+            ? "Clique na tela da loja e digite normalmente; a roda do mouse rola a página. Entre na sua conta como sempre, inclusive com o código que a loja mandar."
+            : "Toque no campo na tela da loja e digite na caixa abaixo."}
+        </p>
+        {err && <p className="cp-err">{err}</p>}
+        <form
+          className="cp-type"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!text) return;
+            void send({ type: "text", text }).then(() => setText(""));
+          }}
+        >
+          <input className="input" type={hide ? "password" : "text"} autoComplete="off" placeholder="Digite aqui e envie" value={text} onChange={(e) => setText(e.target.value)} />
+          <button type="button" className="icon-btn sm" title={hide ? "Mostrar" : "Esconder"} onClick={() => setHide(!hide)}><Icon name="eye" size={16} /></button>
+          <button className="btn btn-sm">Enviar</button>
+        </form>
+        <div className="cp-keys">
+          <button className="btn btn-sm btn-ghost" onClick={() => send({ type: "key", key: "Enter" })}>Enter</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => send({ type: "key", key: "Backspace" })}>Apagar</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => send({ type: "key", key: "Tab" })}>Próximo campo</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => send({ type: "scroll", dy: -500 })}>Subir</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => send({ type: "scroll", dy: 500 })}>Descer</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => send({ type: "back" })}>Voltar</button>
+        </div>
+        <p className="muted cp-small cp-login-alt">
+          A loja deu erro ou não deixou entrar? <button type="button" className="cp-linklike" onClick={onCookies}>Cole os cookies da loja já logada</button>.
+        </p>
+        <div className="cp-login-actions">
+          <button className="btn" onClick={() => onClose(false)}>Cancelar</button>
+          <button className="btn btn-primary" disabled={!sess || busy} onClick={finish}>{busy ? "Guardando…" : "Pronto, entrei"}</button>
+        </div>
       </div>
-    </Modal>
+    </div>
+  );
+}
+
+/** Cookies da loja já logada no navegador da pessoa, com o passo a passo ali mesmo. */
+function CookiePaste({ store, name, device, onClose }: { store: string; name: string; device: "mobile" | "desktop"; onClose: (ok: boolean) => void }) {
+  const [text, setText] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/compras/lojas/${store}/cookies`, { method: "POST", json: { text }, headers: { "x-pj-quiet": "1" } });
+      onClose(true);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="cp-cookies" onSubmit={save}>
+      <div className="cp-cookies-how">
+        <p>
+          <strong>O que é isso?</strong> Cookie é o "lembrete de login" que o site guarda no seu navegador. Se você já está logado na loja ({name}) no seu
+          computador, dá para copiar esse lembrete e colar aqui: a assistente entra na sua conta direto, sem senha e sem código. Serve muito quando a loja não
+          deixa entrar pela janela.
+        </p>
+        <ol>
+          <li>No computador, abra a loja ({name}) no Chrome e confira que está logado na sua conta.</li>
+          <li>
+            Instale a extensão gratuita{" "}
+            <a href="https://cookie-editor.com/" target="_blank" rel="noreferrer">Cookie-Editor</a>.
+          </li>
+          <li>Com a página da loja aberta, clique no ícone da extensão, depois em <b>Export</b> e em <b>JSON</b>. Ela copia tudo sozinha.</li>
+          <li>Volte aqui, cole na caixa abaixo e clique em <b>Salvar</b>.</li>
+        </ol>
+        {device === "mobile" && <p className="cp-small muted">No celular o navegador não deixa exportar cookies: faça isso num computador e cole aqui por lá.</p>}
+        <p className="cp-small muted">
+          Guardamos só os cookies dessa loja, criptografados, e você pode desconectar quando quiser. Não mande esses cookies para ninguém: eles abrem a sua conta.
+          Se você sair da conta na loja ou trocar a senha, eles param de valer e é só colar de novo.
+        </p>
+      </div>
+      <textarea
+        className="input cp-cookies-text"
+        rows={device === "mobile" ? 5 : 7}
+        spellCheck={false}
+        autoComplete="off"
+        placeholder='Cole aqui o que a extensão copiou (começa com [{"domain": ...)'
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
+      {err && <p className="cp-err">{err}</p>}
+      <div className="cp-login-actions">
+        <button type="button" className="btn" onClick={() => onClose(false)}>Cancelar</button>
+        <button className="btn btn-primary" disabled={!text.trim() || busy}>{busy ? "Salvando…" : "Salvar"}</button>
+      </div>
+    </form>
   );
 }

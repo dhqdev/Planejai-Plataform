@@ -143,16 +143,31 @@
 .cp-list-main { display: grid; gap: 2px; min-width: 0; }
 .cp-list-main a { color: var(--text); }
 .cp-list-side { display: flex; align-items: center; gap: 10px; flex: none; font-variant-numeric: tabular-nums; }
-.cp-live { display: grid; place-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-top: 12px; }
-.cp-live img { display: block; width: 100%; height: auto; cursor: pointer; }
-.cp-live-mobile img { max-width: 390px; max-height: calc(100dvh - 330px); width: auto; }
-.cp-live-desktop img { max-height: calc(100dvh - 330px); width: auto; max-width: 100%; }
+/* janela de login da loja: notebook deitado com os controles ao lado; celular em pé ocupando a tela */
+.modal.wide.cp-login-desktop { width: min(1560px, 100%); max-height: 96dvh; }
+.cp-login-modal .modal-body { padding: 0 16px 16px; }
+.cp-login-tabs { margin: 0 -16px 12px; padding: 0 12px; position: sticky; top: 0; z-index: 1; background: var(--panel); }
+.cp-login-desktop .cp-login { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+.cp-login-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cp-login-side > p { margin: 0; }
+.cp-live { display: grid; place-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.cp-live img { display: block; height: auto; cursor: pointer; }
+.cp-live-desktop img { max-height: calc(96dvh - 140px); width: auto; max-width: 100%; aspect-ratio: 1280 / 800; }
+.cp-live-mobile img { max-width: 100%; max-height: calc(100dvh - 250px); width: auto; aspect-ratio: 390 / 780; }
 .cp-live-desktop:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
-.modal.wide.cp-login-modal { width: min(1120px, 100%); }
-.cp-live-wait { padding: 120px 16px; color: var(--muted); font-size: 14px; }
-.cp-type { display: flex; gap: 8px; margin-top: 12px; }
-.cp-type .input { flex: 1; }
-.cp-keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.cp-live-wait { padding: 160px 16px; color: var(--muted); font-size: 14px; }
+.cp-type { display: flex; gap: 8px; }
+.cp-type .input { flex: 1; min-width: 0; }
+.cp-keys { display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-login-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.cp-login-desktop .cp-login-side .cp-login-actions { margin-top: 6px; }
+.cp-login-desktop .cp-login-side .cp-login-actions .btn { flex: 1; }
+.cp-linklike { border: 0; background: none; padding: 0; font: inherit; color: var(--text); text-decoration: underline; cursor: pointer; }
+.cp-cookies { display: grid; gap: 12px; max-width: 760px; margin: 0 auto; }
+.cp-cookies-how p { margin: 0 0 8px; }
+.cp-cookies-how a { color: var(--text); text-decoration: underline; font-weight: 600; }
+.cp-cookies-how ol { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 4px; }
+.cp-cookies-text { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; resize: vertical; }
 .welcome-shop { max-width: 560px; margin: 0 auto; }
 .welcome-shop .cp-agree { justify-content: center; margin: 8px 0 4px; }
 
@@ -166,4 +181,9 @@
   .cp-list li { flex-direction: column; gap: 8px; }
   .cp-list-side { flex-wrap: wrap; }
   .cp-how-head .tabs { width: 100%; }
+  .modal.cp-login-modal { max-height: 98dvh; }
+  .cp-login-mobile .cp-login { display: grid; gap: 10px; }
+  .cp-login-mobile .cp-keys { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .cp-login-mobile .cp-keys .btn { flex: none; }
+  .cp-login-mobile .cp-login-actions .btn { flex: 1; }
 }

@@ -3,7 +3,7 @@ import { acceptPurchaseTerms, buyerProfile, listPurchases, purchaseRules, purcha
 import { getSettings } from "../../../settings.js";
 import { selfUserId } from "../../../sharing.js";
 import { addCustomStore, clearStoreAccess, removeCustomStore, saveStoreAccess, storeDefFor } from "../../../stores.js";
-import { cancelStoreLogin, connectedStores, disconnectStore, finishStoreLogin, loginFrame, loginInput, startStoreLogin } from "../../../storelogin.js";
+import { cancelStoreLogin, connectedStores, disconnectStore, finishStoreLogin, importStoreCookies, loginFrame, loginInput, startStoreLogin } from "../../../storelogin.js";
 import { isUuid } from "./shared.js";
 
 const fail = (reply: any, err: unknown) => reply.code(400).send({ error: (err as Error).message });
@@ -97,6 +97,17 @@ export function purchaseRoutes(base: FastifyInstance) {
     if (!(await storeDefFor(uid, req.params.store))) return reply.code(404).send({ error: "Loja não encontrada." });
     try {
       return await startStoreLogin(uid, req.params.store, req.body?.device === "mobile" ? "mobile" : "desktop");
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  // Cookies da loja já logada no navegador da pessoa, colados no painel
+  base.post<{ Params: { store: string }; Body: { text?: string } }>("/api/compras/lojas/:store/cookies", async (req, reply) => {
+    const uid = await uidOf(req, reply);
+    if (!uid) return;
+    try {
+      return await importStoreCookies(uid, req.params.store, req.body?.text);
     } catch (err) {
       return fail(reply, err);
     }

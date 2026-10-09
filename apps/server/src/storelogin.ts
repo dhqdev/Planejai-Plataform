@@ -176,3 +176,88 @@ export async function connectedStores(userId: string) {
 export async function disconnectStore(userId: string, store: string) {
   await query("DELETE FROM store_sessions WHERE user_id = $1 AND store = $2", [userId, store]);
 }
+
+const SAME_SITE: Record<string, StoredCookie["sameSite"]> = { strict: "Strict", lax: "Lax", none: "None", no_restriction: "None" };
+
+/** Lê os cookies colados: JSON das extensões (Cookie-Editor, EditThisCookie), cookies.txt (Netscape) ou o cabeçalho "a=b; c=d". */
+export function parseCookieText(text: string, fallbackDomain: string): StoredCookie[] {
+  const t = text.trim();
+  if (!t) return [];
+  if (t.startsWith("[") || t.startsWith("{")) {
+    let data: any;
+    try {
+      data = JSON.parse(t);
+    } catch {
+      throw new Error("Não consegui ler esse JSON. Copie de novo pela extensão (Exportar > JSON) e cole tudo.");
+    }
+    const list: any[] = Array.isArray(data) ? data : Array.isArray(data?.cookies) ? data.cookies : [];
+    return list
+      .filter((c) => c && typeof c.name === "string" && c.value != null)
+      .map((c) => {
+        const exp = Number(c.expirationDate ?? c.expires ?? c.expiry);
+        return {
+          name: c.name,
+          value: String(c.value),
+          domain: String(c.domain || fallbackDomain),
+          path: typeof c.path === "string" ? c.path : "/",
+          ...(Number.isFinite(exp) && exp > 0 ? { expires: exp } : {}),
+          httpOnly: Boolean(c.httpOnly),
+          secure: Boolean(c.secure),
+          ...(SAME_SITE[String(c.sameSite ?? "").toLowerCase()] ? { sameSite: SAME_SITE[String(c.sameSite).toLowerCase()] } : {}),
+        };
+      });
+  }
+  const lines = t.split(/\r?\n/).filter((l) => l.trim() && (!l.startsWith("#") || l.startsWith("#HttpOnly_")));
+  if (lines.some((l) => l.split("\t").length >= 7)) {
+    return lines
+      .map((l) => l.split("\t"))
+      .filter((p) => p.length >= 7)
+      .map(([domain, , path, secure, expires, name, ...value]) => {
+        const httpOnly = domain!.startsWith("#HttpOnly_");
+        const exp = Number(expires);
+        return {
+          name: name!,
+          value: value.join("\t"),
+          domain: httpOnly ? domain!.slice("#HttpOnly_".length) : domain!,
+          path: path || "/",
+          ...(exp > 0 ? { expires: exp } : {}),
+          httpOnly,
+          secure: secure === "TRUE",
+        };
+      });
+  }
+  // cabeçalho Cookie copiado do DevTools
+  return t
+    .replace(/^cookie:\s*/i, "")
+    .split(";")
+    .map((p) => p.trim())
+    .filter((p) => p.includes("="))
+    .map((p) => {
+      const i = p.indexOf("=");
+      return { name: p.slice(0, i).trim(), value: p.slice(i + 1).trim(), domain: `.${fallbackDomain}`, path: "/", secure: true };
+    });
+}
+
+/**
+ * A pessoa cola os cookies da loja já logada no navegador dela (útil quando a loja barra o login vindo do servidor).
+ * Só ficam os cookies dos domínios da própria loja, criptografados como no login pela janela.
+ */
+export async function importStoreCookies(userId: string, store: string, text: unknown) {
+  const def = await storeDefFor(userId, store);
+  if (!def) throw new Error("Loja não encontrada.");
+  if (typeof text !== "string" || !text.trim()) throw new Error("Cole os cookies da loja.");
+  if (text.length > 200_000) throw new Error("Texto grande demais. Exporte só os cookies dessa loja.");
+  const ok = (domain: string) => {
+    const d = domain.replace(/^\./, "").toLowerCase();
+    return def.domains.some((s) => d === s || d.endsWith(`.${s}`));
+  };
+  const all = parseCookieText(text, def.domains[0]!);
+  const cookies = all.filter((c) => c.name && c.name.length <= 256 && c.value.length <= 4096 && !/[\r\n]/.test(c.value) && ok(c.domain)).slice(0, 300);
+  if (!cookies.length) {
+    throw new Error(
+      all.length ? `Nenhum desses cookies é de ${def.name}. Abra o site da loja antes de exportar.` : "Não achei cookies nesse texto. Exporte pela extensão em JSON e cole tudo.",
+    );
+  }
+  await saveStoreCookies(userId, store, cookies);
+  return { ok: true, store, count: cookies.length };
+}
