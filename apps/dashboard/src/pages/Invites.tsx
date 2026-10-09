@@ -3,6 +3,7 @@ import { api, ago, phoneFmt } from "../api";
 import { CopyField, Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
+import { UserMochi } from "../mochi/UserMochi";
 
 const STATUS: Record<string, string> = { pending: "Aguardando cadastro", accepted: "Entrou", declined: "Recusou", expired: "Expirado" };
 
@@ -175,7 +176,7 @@ export function InvitesPage({ isSuper }: { isSuper: boolean }) {
             </div>
             {(contacts.data ?? []).map((c) => (
               <div className="line-item" key={c.id} style={{ padding: "10px 16px" }}>
-                <Icon name="user" size={16} />
+                <UserMochi name={c.name} outfit={c.outfit} seed={c.id} size={28} />
                 <span style={{ flex: 1 }}>{c.name}</span>
                 <span className="muted">{phoneFmt(c.phone)}</span>
               </div>

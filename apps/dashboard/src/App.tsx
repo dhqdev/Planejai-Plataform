@@ -6,6 +6,7 @@ import { Empty, Loading, Modal } from "./components";
 import { clearApiCache, prefetchApi, useApi } from "./hooks";
 import { Icon } from "./icons";
 import { openWardrobe } from "./mochi/state";
+import { UserMochi } from "./mochi/UserMochi";
 import { MochiButton, MochiIcon, WardrobeHost } from "./mochi/Wardrobe";
 import { useUnread } from "./notify";
 import { AuthPage } from "./pages/Login";
@@ -324,7 +325,7 @@ export function App() {
         <Nav items={NAV} isSuper={isSuper} />
         <div className="sidebar-foot">
           <div className="me">
-            <div className="avatar">{(me.name ?? me.email).slice(0, 1).toUpperCase()}</div>
+            <UserMochi me name={me.name ?? me.email} size={32} />
             <div style={{ minWidth: 0 }}>
               <div className="me-name">{me.name ?? me.email}</div>
               <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · <span className="app-version">v{__APP_VERSION__}</span></div>
@@ -437,7 +438,7 @@ export function App() {
             </div>
           )}
           <div className="me more-me">
-            <div className="avatar">{(me.name ?? me.email).slice(0, 1).toUpperCase()}</div>
+            <UserMochi me name={me.name ?? me.email} size={28} />
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className="me-name">{me.name ?? me.email}</div>
               <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · <span className="app-version">v{__APP_VERSION__}</span></div>

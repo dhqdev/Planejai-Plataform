@@ -28,7 +28,7 @@ export function Story({ data, steps, clientAgents }: { data: any; steps: Step[];
       )}
 
       <div className="tl-item tl-in">
-        <div className="tl-rail"><PersonAvatar name={person ?? TRIGGER_LABEL[data.trigger]} size={30} /></div>
+        <div className="tl-rail"><PersonAvatar name={person ?? TRIGGER_LABEL[data.trigger]} userId={person ? data.user_id : null} outfit={data.outfit} size={30} /></div>
         <div className="tl-body">
           <div className="tl-head static">
             <span className="tl-title">{data.trigger === "message" || data.trigger === "playground" ? `${person ?? "Pessoa"} mandou` : TRIGGER_FALLBACK[data.trigger] ?? "Início"}</span>

@@ -1,5 +1,7 @@
 import { AgentFace } from "../../faces";
 import { Icon } from "../../icons";
+import type { Outfit } from "../../mochi/Mochi";
+import { UserMochi } from "../../mochi/UserMochi";
 import { who, type AgentMeta } from "./labels";
 
 export function AgentAvatar({ meta, size = 24 }: { meta: AgentMeta; size?: number }) {
@@ -11,7 +13,9 @@ export function AgentAvatar({ meta, size = 24 }: { meta: AgentMeta; size?: numbe
   );
 }
 
-export function PersonAvatar({ name, size = 30 }: { name?: string | null; size?: number }) {
+/** Pessoa da execução: o Mochi dela com a roupinha escolhida. Sem pessoa (lembrete, sistema), as iniciais do gatilho. */
+export function PersonAvatar({ name, size = 30, userId, outfit }: { name?: string | null; size?: number; userId?: string | null; outfit?: Outfit | null }) {
+  if (userId) return <UserMochi name={name} outfit={outfit} seed={userId} size={size} />;
   const initials = String(name ?? "?").trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "?";
   return <span className="ex-person" style={{ width: size, height: size, fontSize: size * 0.38 }}>{initials}</span>;
 }
