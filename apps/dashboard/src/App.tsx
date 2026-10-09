@@ -330,27 +330,29 @@ export function App() {
         </div>
         <Nav items={NAV} isSuper={isSuper} />
         <div className="sidebar-foot">
-          <div className="me">
-            <UserMochi me name={me.name ?? me.email} size={32} />
-            <div style={{ minWidth: 0 }}>
+          {/* um cartão só: quem está logado à esquerda, tema e sair como ícones à direita */}
+          <div className="me me-card">
+            <UserMochi me name={me.name ?? me.email} size={34} />
+            <div className="me-text">
               <div className="me-name">{me.name ?? me.email}</div>
               <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · <span className="app-version">v{__APP_VERSION__}</span></div>
             </div>
-          </div>
-          <div className="row">
-            <button className="btn btn-sm" style={{ flex: 1 }} onClick={toggleTheme} aria-label="Trocar tema">
-              <Icon name={theme === "dark" ? "sun" : "moon"} size={15} /> <span className="label">{theme === "dark" ? "Claro" : "Escuro"}</span>
-            </button>
-            <button
-              className="btn btn-sm"
-              onClick={async () => {
-                await api("/api/auth/logout", { method: "POST" });
-                setMe(null);
-              }}
-              aria-label="Sair"
-            >
-              <Icon name="logout" size={15} /> <span className="label">Sair</span>
-            </button>
+            <div className="me-actions">
+              <button className="me-act" onClick={toggleTheme} aria-label={theme === "dark" ? "Tema claro" : "Tema escuro"} title={theme === "dark" ? "Tema claro" : "Tema escuro"}>
+                <Icon name={theme === "dark" ? "sun" : "moon"} size={17} />
+              </button>
+              <button
+                className="me-act"
+                onClick={async () => {
+                  await api("/api/auth/logout", { method: "POST" });
+                  setMe(null);
+                }}
+                aria-label="Sair"
+                title="Sair"
+              >
+                <Icon name="logout" size={17} />
+              </button>
+            </div>
           </div>
         </div>
       </aside>
