@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { requireAuth, requireSuper } from "../server.js";
 import { accountRoutes } from "./dashboard/accounts.js";
 import { agendaRoutes } from "./dashboard/agenda.js";
+import { alarmActionRoutes, alarmRoutes } from "./dashboard/alarms.js";
 import { billingAdminRoutes, billingRoutes } from "./dashboard/billing.js";
 import { clientRoutes } from "./dashboard/clients.js";
 import { executionRoutes } from "./dashboard/executions.js";
@@ -22,6 +23,7 @@ import { whatsappRoutes } from "./dashboard/whatsapp.js";
 export async function registerDashboardRoutes(app: FastifyInstance) {
   // Sem login: quem valida é o state assinado
   integrationCallbackRoutes(app);
+  alarmActionRoutes(app);
 
   await app.register(async (base) => {
     base.addHook("preHandler", requireAuth);
@@ -31,6 +33,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     financeRoutes(base);
     inviteRoutes(base);
     agendaRoutes(base);
+    alarmRoutes(base);
     memoryRoutes(base);
     teamRoutes(base);
     billingRoutes(base);

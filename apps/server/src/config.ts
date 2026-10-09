@@ -56,6 +56,11 @@ const schema = z.object({
   TAVILY_API_KEY: z.string().default(""),
   /** Google Places (lugares perto, com telefone) pela stack; sem ela a busca de lugares usa o OpenStreetMap */
   GOOGLE_MAPS_API_KEY: z.string().default(""),
+  /** Web Push do alarme (PWA). Vazias = o servidor gera um par na primeira vez e guarda cifrado em settings */
+  VAPID_PUBLIC_KEY: z.string().default(""),
+  VAPID_PRIVATE_KEY: z.string().default(""),
+  /** contato que os serviços de push veem (mailto: ou https:); vazio = PUBLIC_URL (https) ou mailto:ADMIN_EMAIL */
+  VAPID_SUBJECT: z.string().default(""),
   N8N_EVENTS_URL: z.string().default(""),
   // Arquivos (documentos e mídias) num bucket S3 compatível (Cloudflare R2, S3, B2); vazio = ficam no Postgres
   STORAGE_S3_ENDPOINT: z.string().default(""),

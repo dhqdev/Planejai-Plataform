@@ -18,7 +18,7 @@ const SLOW_TOOL = /^(ask_|browser_|screenshot_url)/;
  * Google, Notion, GitHub, Linear, Slack e Mercado Pago são pessoais (PERSONAL_INTEGRATIONS):
  * cada cliente usa só a conta que ele mesmo conectou, nunca a do dono.
  */
-export const OWNER_INTEGRATIONS = new Set(["n8n"]);
+export const OWNER_INTEGRATIONS = new Set(["n8n", "twilio"]);
 
 /** De quem são as credenciais pessoais (Google do cliente ou do dono) durante uma chamada. */
 export function personOf(user: { id: string; phone: string }) {

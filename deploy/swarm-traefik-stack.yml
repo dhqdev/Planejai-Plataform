@@ -34,6 +34,10 @@ x-env: &env
   TAVILY_API_KEY: ""
   # Lugares perto com telefone (Google Places API New). Sem ela usa o OpenStreetMap, grátis.
   GOOGLE_MAPS_API_KEY: ""
+  # Alarme no celular (Web Push). Vazias = o app gera as chaves sozinho e guarda cifradas no banco.
+  VAPID_PUBLIC_KEY: ""
+  VAPID_PRIVATE_KEY: ""
+  VAPID_SUBJECT: ""
   # Arquivos (documentos e mídias) num bucket S3/R2 em vez do Postgres. Vazio = ficam no banco (docs/operacao.md)
   STORAGE_S3_ENDPOINT: ""
   STORAGE_S3_BUCKET: ""

@@ -506,6 +506,7 @@ const ICONS: Record<string, string> = {
   shop: "shop",
   send: "send",
   workflow: "graph",
+  phone: "phone",
 };
 
 export function IntegrationIcon({ icon }: { icon: string }) {

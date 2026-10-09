@@ -65,8 +65,8 @@ apps/server/src/
   crypto.ts                AES-256-GCM das credenciais (ENCRYPTION_KEY + chaves antigas)
   ratelimit.ts             limites por IP/e-mail (login, cadastro, convite)
   time.ts                  fuso e datas locais
-  reminders.ts  watches.ts  improve.ts  errands.ts  bills.ts  billing.ts
-                           lembretes, De olho, reunião noturna, recados, contas fixas, assinatura Asaas
+  reminders.ts  watches.ts  improve.ts  errands.ts  bills.ts  billing.ts  alarms.ts
+                           lembretes, De olho, reunião noturna, recados, contas fixas, assinatura Asaas, alarme (push + Twilio)
   social.ts  onboarding.ts  tabs.ts  privacy.ts
                            convites/contatos, perguntas de boas-vindas, abas do cliente, LGPD (eraseUserData)
   documents.ts  storage.ts  notifications.ts  events.ts  telegram.ts  logincode.ts

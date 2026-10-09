@@ -374,6 +374,36 @@ export const INTEGRATIONS: IntegrationDef[] = [
     },
   },
   {
+    id: "twilio",
+    name: "Twilio (ligação do alarme)",
+    description: "O alarme também liga para o celular da pessoa e fala o lembrete. Conta da plataforma, limite de 10 ligações por pessoa por dia.",
+    category: "Comunicação",
+    icon: "phone",
+    docsUrl: "https://console.twilio.com/",
+    fields: [
+      { key: "account_sid", label: "Account SID", type: "text", required: true, placeholder: "AC...", help: "No Console do Twilio, em Account Info na página inicial." },
+      { key: "auth_token", label: "Auth Token", type: "password", required: true, help: "Logo abaixo do Account SID (clique em mostrar)." },
+      {
+        key: "from_number",
+        label: "Número que liga",
+        type: "text",
+        required: true,
+        placeholder: "+5511999999999",
+        help: "Um número com voz comprado no Twilio (Phone Numbers > Buy a number), no formato +55... Conta trial só liga para números verificados.",
+      },
+    ],
+    test: async (c) => {
+      if (!/^AC[0-9a-f]{32}$/i.test(c.account_sid ?? "")) throw new Error("Account SID começa com AC e tem 34 caracteres");
+      if (!/^\+\d{10,15}$/.test(c.from_number ?? "")) throw new Error("Número no formato +5511999999999");
+      const auth = { Authorization: `Basic ${Buffer.from(`${c.account_sid}:${c.auth_token}`).toString("base64")}` };
+      const base = `https://api.twilio.com/2010-04-01/Accounts/${c.account_sid}`;
+      const acc = await okJson(await fetch(`${base}.json`, { headers: auth, signal: timed() }), "Twilio");
+      const nums = await okJson(await fetch(`${base}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(c.from_number!)}`, { headers: auth, signal: timed() }), "Twilio");
+      if (!nums.incoming_phone_numbers?.length) throw new Error(`O número ${c.from_number} não está nessa conta do Twilio`);
+      return `Conectado: ${acc.friendly_name ?? "conta Twilio"}${acc.type === "Trial" ? " (trial: só liga para números verificados)" : ""}`;
+    },
+  },
+  {
     id: "n8n",
     name: "n8n",
     description: "Suas automações do n8n: o assistente lista e dispara fluxos, o n8n manda mensagens e cria contas pela API interna e recebe eventos da plataforma.",

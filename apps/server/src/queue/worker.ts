@@ -12,6 +12,7 @@ import { billingReminders } from "../billing.js";
 import { remindBills } from "../bills.js";
 import { config } from "../config.js";
 import { afterFire } from "../reminders.js";
+import { startAlarmWorker } from "../alarms.js";
 import { runsChannel, runsConversations } from "../roles.js";
 import { QUEUES, getBoss } from "./boss.js";
 
@@ -69,6 +70,9 @@ async function startConversations(log: WorkerLog, concurrency: number) {
       await afterFire(reminder.id, ok);
     }
   });
+
+  // alarme: notificação no celular, ligação (Twilio) e WhatsApp, sem IA
+  await startAlarmWorker(boss);
 
   // recados: o estabelecimento respondeu, o agente de recados decide o próximo passo
   await boss.work<{ errandId: string }>(QUEUES.errand, { batchSize: 1, pollingIntervalSeconds: 3 }, async ([job]) => {
