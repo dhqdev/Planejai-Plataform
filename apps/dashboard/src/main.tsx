@@ -4,7 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import "./styles.css";
 import "./motion.css";
-import { installFieldLabels } from "./a11y";
+import { installFieldLabels, installKeyboard } from "./a11y";
 import { installRipple } from "./motion";
 import { installTouchFeedback, registerServiceWorker } from "./touch";
 import { watchForUpdates } from "./update";
@@ -20,6 +20,7 @@ installTouchFeedback();
 installRipple();
 registerServiceWorker();
 installFieldLabels();
+installKeyboard();
 watchForUpdates();
 
 try {

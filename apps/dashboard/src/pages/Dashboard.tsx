@@ -73,7 +73,7 @@ function RecentExecutions() {
   return (
     <>
       {data.map((e) => (
-        <div key={e.id} className="line-item clickable" onClick={() => nav(`/executions/${e.id}`)}>
+        <div key={e.id} className="line-item clickable" role="button" tabIndex={0} onClick={() => nav(`/executions/${e.id}`)}>
           <Status status={e.status} />
           <span className="ellipsis" style={{ flex: 1 }}>{e.input}</span>
           <span className="muted" style={{ fontSize: 12 }}>{ago(e.started_at)}</span>

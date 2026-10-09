@@ -1,0 +1,6 @@
+/* ---------- Teclado: pular para o conteúdo e foco da área principal ---------- */
+.skip-link { position: fixed; top: 8px; left: 8px; z-index: 1000; padding: 10px 16px; border-radius: var(--radius-sm); background: var(--ink); color: var(--on-ink); font-weight: 600; font-size: 14px; text-decoration: none; transform: translateY(-200%); }
+.skip-link:focus, .skip-link:focus-visible { transform: none; outline: 2px solid var(--violet); outline-offset: 2px; }
+.main:focus { outline: none; }
+[role="tab"]:focus-visible, [role="button"]:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+.tl-head:focus-visible, .line-item[role="button"]:focus-visible { outline-offset: -2px; }

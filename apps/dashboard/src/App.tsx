@@ -305,6 +305,7 @@ export function App() {
   return (
     <UnreadProvider>
     <div className="layout">
+      <a className="skip-link" href="#conteudo" onClick={(e) => { e.preventDefault(); mainRef.current?.focus(); }}>Pular para o conteúdo</a>
       <header className="topbar">
         <MochiButton size={50} />
         <strong className="topbar-title">{titleFor(loc.pathname, NAV)}</strong>
@@ -346,7 +347,7 @@ export function App() {
           </div>
         </div>
       </aside>
-      <main className="main" ref={mainRef}>
+      <main className="main" id="conteudo" tabIndex={-1} ref={mainRef}>
         <PullToRefresh target={mainRef} />
         <Suspense fallback={<Loading />}>
         {isSuper && <SubTabs path={loc.pathname} />}

@@ -75,6 +75,8 @@ function FlowCanvas({ data, steps, onSelect, selected }: { data: any; steps: Ste
             key={n.key}
             className={`node ${n.status} ${selected && n.step && selected.id === n.step.id ? "selected" : ""}`}
             style={{ left: n.x, top: n.y, width: W }}
+            role="button"
+            tabIndex={0}
             onClick={() => { haptic(4); onSelect(n.step?.id ?? null); }}
           >
             {n.status && (

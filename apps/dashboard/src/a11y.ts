@@ -15,6 +15,43 @@ function linkFields(root: ParentNode) {
   }
 }
 
+/**
+ * Teclado para o que não é <button>/<a>:
+ * - qualquer role="button" (div/span) ativa com Enter e Espaço, como um botão de verdade
+ *   (quem já trata a tecla chama preventDefault e não dispara duas vezes);
+ * - dentro de role="tablist", setas (esquerda/direita, cima/baixo), Home e End movem para a aba vizinha e a ativam.
+ */
+export function installKeyboard() {
+  document.addEventListener("keydown", (e) => {
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    const t = e.target;
+    if (!(t instanceof HTMLElement)) return;
+
+    if ((e.key === "Enter" || e.key === " ") && t.getAttribute("role") === "button" && t.tagName !== "BUTTON" && t.tagName !== "A") {
+      e.preventDefault();
+      t.click();
+      return;
+    }
+
+    if (t.getAttribute("role") !== "tab") return;
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) return;
+    const list = t.closest<HTMLElement>('[role="tablist"]');
+    if (!list) return;
+    const tabs = [...list.querySelectorAll<HTMLElement>('[role="tab"]')].filter(
+      (x) => x.closest('[role="tablist"]') === list && !(x as HTMLButtonElement).disabled,
+    );
+    const at = tabs.indexOf(t);
+    if (at < 0 || tabs.length < 2) return;
+    let to: number;
+    if (e.key === "Home") to = 0;
+    else if (e.key === "End") to = tabs.length - 1;
+    else to = (at + (e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 1) + tabs.length) % tabs.length;
+    e.preventDefault();
+    tabs[to]!.focus();
+    tabs[to]!.click();
+  });
+}
+
 export function installFieldLabels() {
   linkFields(document);
   let queued = false;

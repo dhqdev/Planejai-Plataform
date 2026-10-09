@@ -152,7 +152,7 @@ function StepItem({ step: s, kids, tree, clientAgents }: { step: Step; kids: Ste
       <div className={`tl-item tl-info ${guard ? "guard" : ""}`}>
         <div className="tl-rail"><span className="tl-dot"><Icon name={guard ? "shield" : "check"} size={13} /></span></div>
         <div className="tl-body">
-          <div className="tl-head" onClick={toggle} role="button" aria-expanded={open}>
+          <div className="tl-head" onClick={toggle} role="button" tabIndex={0} aria-expanded={open}>
             <span className="tl-title">{s.name.charAt(0).toUpperCase() + s.name.slice(1)}</span>
             <span className="tl-sub inline">{argSummary(s.input)}</span>
             <span className="spacer" />
@@ -172,7 +172,7 @@ function StepItem({ step: s, kids, tree, clientAgents }: { step: Step; kids: Ste
       <div className={`tl-item tl-llm ${err ? "err" : ""} ${running ? "running" : ""}`}>
         <div className="tl-rail"><span className="tl-dot small"><Icon name="sparkle" size={11} /></span></div>
         <div className="tl-body">
-          <div className="tl-head" onClick={toggle} role="button" aria-expanded={open}>
+          <div className="tl-head" onClick={toggle} role="button" tabIndex={0} aria-expanded={open}>
             <span className="tl-title">{running ? `${who(me)} está pensando` : `${who(me)} pensou`}</span>
             {!open && calls.length > 0 && <span className="tl-sub inline">e decidiu: {calls.map((c) => callLabel(c, clientAgents)).join(", ")}</span>}
             <span className="spacer" />
@@ -199,7 +199,7 @@ function StepItem({ step: s, kids, tree, clientAgents }: { step: Step; kids: Ste
     <div className={`tl-item tl-tool ${err ? "err" : ""} ${running ? "running" : ""}`}>
       <div className="tl-rail"><span className="tl-dot"><Icon name={toolIcon(s.name)} size={13} /></span></div>
       <div className="tl-body">
-        <div className="tl-head" onClick={toggle} role="button" aria-expanded={open}>
+        <div className="tl-head" onClick={toggle} role="button" tabIndex={0} aria-expanded={open}>
           <span className="tl-title">{toolLabel(s.name)}</span>
           {s.output?.cache && <span className="chip-mini">cache</span>}
           <span className="spacer" />
