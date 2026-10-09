@@ -254,6 +254,9 @@ export async function cancelSubscription(userId: string) {
   await syncInviterDiscount(userId).catch(() => {});
 }
 
+/** O Asaas não aceita cobrança abaixo de R$ 5. */
+export const ASAAS_MIN_CHARGE = 5;
+
 /** Muda o valor da assinatura no Asaas (e da cobrança que já está em aberto). */
 async function setSubscriptionValue(sub: SubscriptionRow, value: number, description?: string) {
   await asaas("POST", `/subscriptions/${sub.asaas_subscription_id}`, { value, updatePendingPayments: true, ...(description ? { description } : {}) });
@@ -263,10 +266,11 @@ async function setSubscriptionValue(sub: SubscriptionRow, value: number, descrip
  * Troca de plano.
  * - Subir: paga hoje a diferença do mês (com o desconto de indicação) e, quando cair, ganha a diferença de grãos na hora;
  *   a mensalidade passa a ser a do plano novo.
+ * - Subir com diferença abaixo de ASAAS_MIN_CHARGE: não cobra nada agora; vale da próxima mensalidade, como descer.
  * - Descer: vale a partir da próxima mensalidade (os grãos deste mês ficam).
  * - Ainda sem nenhum pagamento: só troca o plano da primeira cobrança.
  */
-export async function changePlan(user: any, planId: string): Promise<{ kind: "upgrade" | "downgrade" | "switched"; invoiceUrl?: string | null; plan: BillingPlan }> {
+export async function changePlan(user: any, planId: string): Promise<{ kind: "upgrade" | "downgrade" | "scheduled" | "switched"; invoiceUrl?: string | null; plan: BillingPlan }> {
   const s = await getSettings();
   const sub = await getSubscription(user.id);
   if (!hasPlan(sub)) throw new Error("Você ainda não tem plano. Escolha um para assinar.");
@@ -292,7 +296,13 @@ export async function changePlan(user: any, planId: string): Promise<{ kind: "up
     await query("UPDATE subscriptions SET next_plan_id = $2, value = $3, updated_at = now() WHERE user_id = $1", [user.id, next.id, withDiscount(next.price, percent)]);
     return { kind: "downgrade", plan: next };
   }
-  const value = Math.max(1, withDiscount(next.price - now.price, percent));
+  const value = withDiscount(next.price - now.price, percent);
+  if (value < ASAAS_MIN_CHARGE) {
+    // diferença menor que a cobrança mínima do Asaas: não cobra agora; o plano novo (valor e grãos) vale da próxima mensalidade
+    await setSubscriptionValue(sub, withDiscount(next.price, percent), desc);
+    await query("UPDATE subscriptions SET next_plan_id = $2, value = $3, updated_at = now() WHERE user_id = $1", [user.id, next.id, withDiscount(next.price, percent)]);
+    return { kind: "scheduled", plan: next };
+  }
   const extra = Math.max(0, next.grains - now.grains);
   const purchase = await createCharge(user, sub.asaas_customer_id, {
     kind: "upgrade",

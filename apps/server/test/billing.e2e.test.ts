@@ -300,6 +300,16 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     await hook({ id: "s4", event: "PAYMENT_CONFIRMED", payment: { id: "pay_3", subscription: "sub_1", value: 19.9, billingType: "CREDIT_CARD" } });
     expect(await wallet()).toEqual({ plan_grains: 1500, extra_grains: 500 });
     expect(await db.one("SELECT plan_id, next_plan_id FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ plan_id: "leve", next_plan_id: null });
+
+    // subir com diferença abaixo do mínimo do Asaas (R$ 5): não cobra agora, vale da próxima mensalidade
+    await settings.saveSettings({ billingPlans: [...settings.DEFAULT_PLANS, { name: "Leve mais", price: 22.9, grains: 1800 }] as any });
+    asaasCalls.length = 0;
+    expect((await billing.changePlan(user, "leve-mais")).kind).toBe("scheduled");
+    expect(asaasCalls.find((c) => c.path === "/payments")).toBeUndefined();
+    expect(asaasCalls.at(-1)).toMatchObject({ method: "POST", path: "/subscriptions/sub_1", body: { value: 22.9, updatePendingPayments: true } });
+    expect(await db.one("SELECT plan_id, next_plan_id, value::float AS value FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ plan_id: "leve", next_plan_id: "leve-mais", value: 22.9 });
+    expect((await billing.changePlan(user, "leve")).kind).toBe("switched");
+    await settings.saveSettings({ billingPlans: settings.DEFAULT_PLANS });
   });
 
   it("pagamento atrasado do cartão ou de mês antigo não volta o plano para em dia nem apaga o link da cobrança nova", async () => {
