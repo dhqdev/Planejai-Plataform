@@ -230,9 +230,18 @@ function useReveal(root: RefObject<HTMLDivElement | null>) {
       },
       { root: el, rootMargin: "0px 0px -12% 0px" },
     );
-    for (const n of el.querySelectorAll("[data-reveal]")) io.observe(n);
+    const watch = () => {
+      for (const n of el.querySelectorAll<HTMLElement>("[data-reveal]:not([data-in])")) io.observe(n);
+    };
+    watch();
+    // seções que chegam depois (planos vêm de /api/auth/config) também precisam aparecer
+    const mo = new MutationObserver(watch);
+    mo.observe(el, { childList: true, subtree: true });
     el.classList.add("reveal-on");
-    return () => io.disconnect();
+    return () => {
+      io.disconnect();
+      mo.disconnect();
+    };
   }, [root]);
 }
 
