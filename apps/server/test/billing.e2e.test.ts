@@ -70,6 +70,8 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
   const asaasCalls: { method: string; path: string; body: any }[] = [];
   const TOKEN = "token-do-webhook-bem-comprido";
   let payN = 0;
+  let subN = 0;
+  let paymentsEmptyOnce = false;
   const reloadUser = async () => (user = await db.one("SELECT * FROM users WHERE id = $1", [user.id]));
   const wallet = async (id = user.id) => db.one("SELECT plan_grains, extra_grains FROM wallets WHERE user_id = $1", [id]);
   const outbox = async () => (await db.many("SELECT data FROM pgboss.job WHERE name = 'outbound.send' ORDER BY created_on")).map((r) => r.data);
@@ -84,8 +86,24 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
       asaasCalls.push({ method, path, body: init?.body ? JSON.parse(init.body) : null });
       const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
       if (path === "/customers") return json({ id: "cus_1" });
-      if (path === "/subscriptions") return json({ id: "sub_1" });
-      if (path === "/subscriptions/sub_1/payments") return json({ data: [{ id: "pay_1", invoiceUrl: "https://sandbox.asaas.com/i/pay_1" }] });
+      if (path === "/subscriptions" && method === "POST") return json({ id: `sub_${++subN}` });
+      const subPayments = path.match(/^\/subscriptions\/(sub_\d+)\/payments$/);
+      if (subPayments) {
+        if (paymentsEmptyOnce) {
+          paymentsEmptyOnce = false;
+          return json({ data: [] });
+        }
+        const id = subPayments[1] === "sub_1" ? "pay_1" : `pay_${subPayments[1]}`;
+        const today = new Date().toISOString().slice(0, 10);
+        // fora de ordem de propósito: vale a primeira em aberto pela data
+        return json({
+          data: [
+            { id: "pay_later", status: "PENDING", dueDate: "2099-01-01", invoiceUrl: "https://sandbox.asaas.com/i/pay_later" },
+            { id: "pay_old", status: "RECEIVED", dueDate: "2000-01-01", invoiceUrl: "https://sandbox.asaas.com/i/pay_old" },
+            { id, status: "PENDING", dueDate: today, invoiceUrl: `https://sandbox.asaas.com/i/${id}` },
+          ],
+        });
+      }
       if (path === "/payments" && method === "POST") {
         payN++;
         return json({ id: `pay_av_${payN}`, invoiceUrl: `https://sandbox.asaas.com/i/pay_av_${payN}` });
@@ -213,7 +231,6 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     expect(asaasCalls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /subscriptions", "GET /subscriptions/sub_1/payments"]);
     expect(asaasCalls[0]!.body).toMatchObject({ customer: "cus_1", billingType: "CREDIT_CARD", cycle: "MONTHLY", value: 39.9, description: "Planejai Dia a dia (4.000 grãos por mês)" });
     expect(sub).toMatchObject({ status: "trial", plan_id: "dia-a-dia", pay_method: "card", invoice_url: "https://sandbox.asaas.com/i/pay_1" });
-    await expect(billing.subscribe(user, { planId: "leve" })).rejects.toThrow(/já tem um plano/);
 
     const due = new Date().toISOString().slice(0, 10);
     const card = { creditCardNumber: "4242", creditCardBrand: "VISA" };
@@ -332,5 +349,35 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     expect(o.mrr).toBeGreaterThan(0);
     // avulsos do mês: pacote + diferença da troca de plano
     expect(o.packsMonth).toBe(49.9);
+  });
+
+  it("assinar de novo começa do zero; primeira mensalidade sem pagar avisa o atraso uma vez e deixa assinar de novo", async () => {
+    await db.query("DELETE FROM pgboss.job WHERE name = 'outbound.send'");
+    asaasCalls.length = 0;
+    const sub = await billing.subscribe(user, { planId: "leve", method: "pix" });
+    expect(sub).toMatchObject({ status: "trial", asaas_subscription_id: "sub_2", invoice_url: "https://sandbox.asaas.com/i/pay_sub_2", pay_method: "pix" });
+    expect(await db.one("SELECT last_payment_at, last_billing_type, card_brand, card_last4, reminded_on FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({
+      last_payment_at: null,
+      last_billing_type: null,
+      card_brand: null,
+      card_last4: null,
+      reminded_on: null,
+    });
+    // venceu sem pagar: avisa uma vez; a cobrança vencida do mês seguinte só atualiza o link
+    await hook({ id: "n1", event: "PAYMENT_OVERDUE", payment: { id: "pay_sub_2", subscription: "sub_2", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_sub_2" } });
+    await hook({ id: "n2", event: "PAYMENT_OVERDUE", payment: { id: "pay_sub_2b", subscription: "sub_2", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_sub_2b" } });
+    expect((await outbox()).filter((m: any) => /venceu/.test(m.text))).toHaveLength(1);
+    expect(await db.one("SELECT status, invoice_url FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ status: "overdue", invoice_url: "https://sandbox.asaas.com/i/pay_sub_2b" });
+    // nunca pagou: pode assinar de novo; a assinatura velha sai do Asaas (e o Asaas pode demorar um instante para gerar a cobrança)
+    asaasCalls.length = 0;
+    paymentsEmptyOnce = true;
+    const again = await billing.subscribe(user, { planId: "dia-a-dia", method: "card" });
+    expect(asaasCalls.map((c) => `${c.method} ${c.path}`)).toEqual(["DELETE /subscriptions/sub_2", "POST /subscriptions", "GET /subscriptions/sub_3/payments", "GET /subscriptions/sub_3/payments"]);
+    expect(again).toMatchObject({ status: "trial", asaas_subscription_id: "sub_3", plan_id: "dia-a-dia", invoice_url: "https://sandbox.asaas.com/i/pay_sub_3" });
+    // o Asaas avisa que apagou a velha: não é mais a nossa, nada muda
+    expect((await hook({ id: "n3", event: "SUBSCRIPTION_DELETED", subscription: { id: "sub_2" } })).json()).toMatchObject({ handled: false });
+    // depois de pagar a primeira, assinar de novo volta a ser recusado
+    await hook({ id: "n4", event: "PAYMENT_CONFIRMED", payment: { id: "pay_sub_3", subscription: "sub_3", value: 39.9, billingType: "CREDIT_CARD" } });
+    await expect(billing.subscribe(user, { planId: "leve" })).rejects.toThrow(/já tem um plano/);
   });
 });

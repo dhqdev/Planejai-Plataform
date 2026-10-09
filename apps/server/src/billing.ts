@@ -189,9 +189,13 @@ export async function subscribe(user: any, input: { planId: string; method?: Pay
   const plan = planById(s, input.planId);
   if (!plan) throw new Error("Plano não encontrado.");
   const existing = await getSubscription(user.id);
-  if (hasPlan(existing)) throw new Error("Você já tem um plano. Use a troca de plano.");
+  // a primeira mensalidade nunca foi paga: dá para assinar de novo (outro plano ou outra forma de pagamento)
+  const unpaid = hasPlan(existing) && !existing.last_payment_at && (existing.status === "trial" || existing.status === "overdue");
+  if (hasPlan(existing) && !unpaid) throw new Error("Você já tem um plano. Use a troca de plano.");
   const customerId = await ensureCustomer(user, input);
   const method: PayMethod = input.method === "pix" ? "pix" : "card";
+  // a assinatura velha sai do Asaas antes, senão ele continua gerando uma cobrança vencida por mês
+  if (unpaid) await deleteAsaasSubscription(existing.asaas_subscription_id!);
   const { percent } = await referralDiscount(user.id, s);
   const value = withDiscount(plan.price, percent);
   const created = await asaas("POST", "/subscriptions", {
@@ -204,10 +208,12 @@ export async function subscribe(user: any, input: { planId: string; method?: Pay
     description: `Planejai ${plan.name} (${grains(plan.grains)} por mês)`,
     externalReference: user.id,
   });
-  const first = (await asaas("GET", `/subscriptions/${created.id}/payments`).catch(() => null))?.data?.[0];
+  const first = await firstOpenPayment(String(created.id));
+  // assinatura nova começa do zero: nada do plano anterior (pagamento, cartão, lembrete) fica valendo
   const row = await one<SubscriptionRow>(
     `UPDATE subscriptions SET asaas_subscription_id = $2, status = 'trial', value = $3, base_value = $4, discount_percent = $5, plan_id = $6,
-            next_plan_id = NULL, pay_method = $7, next_due_date = $8, invoice_url = $9, paid_until = NULL, updated_at = now()
+            next_plan_id = NULL, pay_method = $7, next_due_date = $8, invoice_url = $9, paid_until = NULL, last_payment_at = NULL,
+            last_billing_type = NULL, card_brand = NULL, card_last4 = NULL, reminded_on = NULL, updated_at = now()
       WHERE user_id = $1 RETURNING ${SUB_COLS}`,
     [user.id, String(created.id), value, plan.price, percent, plan.id, method, isoDay(new Date()), first?.invoiceUrl ?? null],
   );
@@ -215,14 +221,35 @@ export async function subscribe(user: any, input: { planId: string; method?: Pay
   return row!;
 }
 
+/**
+ * A cobrança em aberto mais antiga da assinatura (a primeira mensalidade). O Asaas às vezes ainda não gerou a cobrança
+ * logo depois de criar a assinatura: tenta mais uma vez depois de um instante.
+ */
+async function firstOpenPayment(subscriptionId: string) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const list: any[] = (await asaas("GET", `/subscriptions/${subscriptionId}/payments`).catch(() => null))?.data ?? [];
+    const open = list
+      .filter((x) => x && (!x.status || x.status === "PENDING"))
+      .sort((a, b) => String(a.dueDate ?? "").localeCompare(String(b.dueDate ?? "")));
+    if (open[0]) return open[0];
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
+  }
+  return null;
+}
+
+/** Apaga a assinatura no Asaas; se ela já não existe lá, segue. */
+async function deleteAsaasSubscription(id: string) {
+  await asaas("DELETE", `/subscriptions/${id}`).catch((e: Error) => {
+    if (!/404|não encontrad|not found/i.test(e.message)) throw e;
+  });
+}
+
 /** Cancela no Asaas. Os grãos que já estão na carteira continuam valendo até acabar. */
 export async function cancelSubscription(userId: string) {
   const sub = await getSubscription(userId);
   if (!hasPlan(sub)) throw new Error("Não há plano para cancelar.");
-  await asaas("DELETE", `/subscriptions/${sub.asaas_subscription_id}`).catch((e: Error) => {
-    // já não existe do lado do Asaas: segue e marca como cancelada aqui
-    if (!/404|não encontrad|not found/i.test(e.message)) throw e;
-  });
+  // já não existe do lado do Asaas: segue e marca como cancelada aqui
+  await deleteAsaasSubscription(sub.asaas_subscription_id!);
   await query("UPDATE subscriptions SET status = 'canceled', invoice_url = NULL, next_plan_id = NULL, updated_at = now() WHERE user_id = $1", [userId]);
   await syncInviterDiscount(userId).catch(() => {});
 }
@@ -466,6 +493,8 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
       return { handled: true, status: sub.status };
     case "PAYMENT_OVERDUE": {
       const link = p.invoiceUrl ?? sub.invoice_url ?? billingLink();
+      // nunca pagou nada e já foi avisada do atraso: o Asaas gera uma cobrança vencida por mês, mas o aviso sai uma vez só
+      if (!sub.last_payment_at && sub.status === "overdue") return set("overdue", { invoice_url: link });
       const r = await set("overdue", { invoice_url: link });
       await tellPerson(sub.user_id, BILLING_TEXT.overdue(value, link));
       void emitEvent("payment.overdue", { user_id: sub.user_id, value, invoice_url: link, due_date: p.dueDate ?? null });
