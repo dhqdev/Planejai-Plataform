@@ -72,13 +72,23 @@ const grainsText = (n: number) => `${nf.format(Math.max(0, Math.round(n)))} ${Ma
 const ddmm = (iso?: string | null) => (iso ? iso.slice(0, 10).split("-").slice(1).reverse().join("/") : "–");
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 
-/** Abre a página de pagamento numa aba nova. A aba é aberta no clique (senão o navegador bloqueia) e recebe o link depois. */
+/** O Asaas não aceita cobrança abaixo disto: subir de plano com diferença menor vale da próxima mensalidade. */
+const ASAAS_MIN_CHARGE = 5;
+const NO_LINK = "O pedido foi registrado, mas o link de pagamento ainda não chegou. Atualize a página em instantes para pagar.";
+
+/**
+ * Abre a página de pagamento numa aba nova. A aba é aberta no clique (senão o navegador bloqueia) e recebe o link depois.
+ * Devolve false quando o link não veio (a aba é fechada e quem chamou avisa a pessoa).
+ */
 async function payIn(run: () => Promise<string | null | undefined>) {
   const tab = window.open("", "_blank");
+  // a página de pagamento não ganha acesso a esta aba
+  if (tab) tab.opener = null;
   try {
     const url = await run();
     if (url && tab) tab.location.href = url;
     else tab?.close();
+    return Boolean(url);
   } catch (e) {
     tab?.close();
     throw e;
@@ -104,21 +114,28 @@ export function BillingPage() {
   const priceOf = (p: Plan) => referral?.prices.find((x) => x.id === p.id)?.withDiscount ?? p.price;
 
   const changePlan = async (plan: Plan) => {
-    const up = plan.price > currentPrice;
+    // primeira mensalidade ainda não paga: só troca o plano dela, sem cobrança de diferença
+    const firstUnpaid = !sub?.lastPaymentAt;
+    const difference = Math.round((plan.price - currentPrice) * (1 - discount / 100) * 100) / 100;
+    const up = !firstUnpaid && plan.price > currentPrice && difference >= ASAAS_MIN_CHARGE;
     const ok = await confirmDialog({
-      title: up ? `Subir para o ${plan.name}?` : plan.id === current ? `Continuar no ${plan.name}?` : `Mudar para o ${plan.name}?`,
-      body: up
-        ? `Você paga hoje só a diferença deste mês (${brl(Math.max(1, (plan.price - currentPrice) * (1 - discount / 100)))}) e ganha ${grainsText(plan.grains - (sub?.plan?.grains ?? 0))} assim que o pagamento cair. Depois a mensalidade passa a ser ${brl(priceOf(plan))}.`
-        : plan.id === current
-          ? "A troca agendada é desfeita e a mensalidade continua a mesma."
-          : `Vale a partir da próxima mensalidade (${ddmm(sub?.nextDueDate)}), que passa a ser ${brl(priceOf(plan))}. Os grãos deste mês continuam com você.`,
+      title: plan.price > currentPrice ? `Subir para o ${plan.name}?` : plan.id === current ? `Continuar no ${plan.name}?` : `Mudar para o ${plan.name}?`,
+      body: firstUnpaid
+        ? `Sua primeira mensalidade ainda não foi paga, então só troco o plano dela: passa a ser ${brl(priceOf(plan))}, com ${grainsText(plan.grains)} quando o pagamento cair.`
+        : up
+          ? `Você paga hoje só a diferença deste mês (${brl(difference)}) e ganha ${grainsText(plan.grains - (sub?.plan?.grains ?? 0))} assim que o pagamento cair. Depois a mensalidade passa a ser ${brl(priceOf(plan))}.`
+          : plan.id === current
+            ? "A troca agendada é desfeita e a mensalidade continua a mesma."
+            : `Vale a partir da próxima mensalidade (${ddmm(sub?.nextDueDate)}), que passa a ser ${brl(priceOf(plan))}. Os grãos deste mês continuam com você.`,
       confirmLabel: up ? "Ir para o pagamento" : "Confirmar",
     });
     if (!ok) return;
     setErr(null);
     try {
-      if (up) await payIn(async () => (await api<{ invoiceUrl: string | null }>("/api/billing/change-plan", { method: "POST", json: { planId: plan.id } })).invoiceUrl);
-      else await api("/api/billing/change-plan", { method: "POST", json: { planId: plan.id } });
+      if (up) {
+        const opened = await payIn(async () => (await api<{ invoiceUrl: string | null }>("/api/billing/change-plan", { method: "POST", json: { planId: plan.id } })).invoiceUrl);
+        if (!opened) setErr(NO_LINK);
+      } else await api("/api/billing/change-plan", { method: "POST", json: { planId: plan.id } });
       await reload();
     } catch (e) {
       setErr((e as Error).message);
@@ -314,8 +331,9 @@ export function BillingPage() {
           defaultName={data.name ?? ""}
           price={checkout.kind === "plan" ? priceOf(checkout.plan) : checkout.pack.price}
           onClose={() => setCheckout(null)}
-          onDone={async () => {
+          onDone={async (message) => {
             setCheckout(null);
+            setErr(message ?? null);
             await reload();
           }}
         />
@@ -344,7 +362,7 @@ export function BillingPage() {
 }
 
 /** Assinar um plano ou comprar um pacote: forma de pagamento e, na primeira vez, nome e CPF/CNPJ para o Asaas. */
-function CheckoutModal({ checkout, needsDoc, defaultName, price, onClose, onDone }: { checkout: Checkout; needsDoc: boolean; defaultName: string; price: number; onClose: () => void; onDone: () => void }) {
+function CheckoutModal({ checkout, needsDoc, defaultName, price, onClose, onDone }: { checkout: Checkout; needsDoc: boolean; defaultName: string; price: number; onClose: () => void; onDone: (message?: string) => void }) {
   const [method, setMethod] = useState<"card" | "pix">("card");
   const [name, setName] = useState(defaultName);
   const [doc, setDoc] = useState("");
@@ -357,12 +375,13 @@ function CheckoutModal({ checkout, needsDoc, defaultName, price, onClose, onDone
     setBusy(true);
     try {
       const who = needsDoc ? { name, cpfCnpj: doc } : {};
-      await payIn(async () =>
+      const opened = await payIn(async () =>
         plan
           ? (await api<{ invoiceUrl: string | null }>("/api/billing/subscribe", { method: "POST", json: { planId: plan.id, method, ...who } })).invoiceUrl
           : (await api<{ invoiceUrl: string | null }>("/api/billing/pack", { method: "POST", json: { packId: checkout.kind === "pack" ? checkout.pack.id : "", ...who } })).invoiceUrl,
       );
-      onDone();
+      // a cobrança existe, só o link não veio: a tela avisa em vez de fechar calada
+      onDone(opened ? undefined : NO_LINK);
     } catch (e) {
       setErr((e as Error).message);
     } finally {
