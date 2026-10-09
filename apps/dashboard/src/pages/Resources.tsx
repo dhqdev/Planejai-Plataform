@@ -121,10 +121,12 @@ function dur(s: number) {
   const d = Math.floor(s / 86400);
   return `${d} ${d === 1 ? "dia" : "dias"} ${Math.floor((s % 86400) / 3600)}h`;
 }
-const ROLE_LABEL: Record<string, string> = { api: "API e painel", worker: "Worker", app: "App (API e worker)" };
+const ROLE_LABEL: Record<string, string> = { api: "API e painel", worker: "Worker", channel: "Canal (WhatsApp)", conversations: "Conversas", app: "App (API e worker)" };
 const ROLE_HINT: Record<string, string> = {
   api: "Responde o painel, os webhooks e a API do n8n",
   worker: "Roda o time de agentes, as filas e o WhatsApp",
+  channel: "Segura o WhatsApp, faz os envios e os jobs agendados",
+  conversations: "Roda o time de agentes nas conversas (pode ter várias réplicas)",
   app: "Tudo num processo só (ROLE=all)",
 };
 
@@ -247,7 +249,7 @@ export function ServerPage() {
   const redisFull = rd?.ok && rd.max ? pct(rd.used ?? 0, rd.max) : 0;
   const maxTable = Math.max(1, ...pg.tables.map((t) => t.total));
   const maxGroup = Math.max(1, ...(rd?.groups ?? []).map((g) => g.bytes));
-  const workers = procs.filter((p) => p.role === "worker").length;
+  const workers = procs.filter((p) => p.role === "worker" || p.role === "channel" || p.role === "conversations").length;
 
   return (
     <div className="page page-wide fit srv-page">
