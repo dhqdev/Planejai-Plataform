@@ -99,14 +99,26 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   // estado da folha fora do React: muda a cada quadro
-  const g = useRef({ y: 0, v: 0, h: 0, raf: 0, timer: 0, leaving: false });
+  const g = useRef({ y: 0, v: 0, h: 0, raf: 0, timer: 0, leaving: false, open: [] as Animation[] });
 
   const paint = () => {
     const s = g.current;
     if (sheet.current) sheet.current.style.transform = s.y ? `translate3d(0, ${s.y}px, 0)` : "";
     if (scrim.current) scrim.current.style.opacity = String(1 - Math.min(1, Math.max(0, s.y / (s.h || 1))));
   };
+  // a subida roda no compositor (Web Animations): não engasga enquanto o React ainda monta o conteúdo.
+  // Se o dedo pegar a folha no meio, ela para onde está e a mola assume dali.
+  const settle = () => {
+    const s = g.current;
+    if (!s.open.length || !sheet.current) return;
+    s.y = new DOMMatrixReadOnly(getComputedStyle(sheet.current).transform).m42;
+    s.v = 0;
+    s.open.forEach((a) => a.cancel());
+    s.open = [];
+    paint();
+  };
   const stop = () => {
+    settle();
     cancelAnimationFrame(g.current.raf);
     clearTimeout(g.current.timer);
     g.current.raf = 0;
@@ -149,6 +161,7 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
       s.timer = window.setTimeout(finish, 160);
       return;
     }
+    stop();
     s.h = sheet.current.offsetHeight;
     spring(s.h + 24, finish);
     // aba em segundo plano não roda requestAnimationFrame: fecha mesmo assim
@@ -159,18 +172,27 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // celular: a folha sobe com a mesma mola (e não com keyframes), para poder ser pega no meio do caminho
+  // celular: a folha sobe de baixo. Animação do navegador (não requestAnimationFrame), que segue lisa mesmo
+  // com a tela ainda montando; a curva é a mesma de folha do iOS.
   useLayoutEffect(() => {
     const el = sheet.current;
     const s = g.current;
-    if (el && isPhone() && !lessMotion()) {
+    if (el && isPhone() && !lessMotion() && typeof el.animate === "function") {
       s.h = el.offsetHeight;
-      s.y = s.h;
+      s.y = 0;
       s.v = 0;
-      paint();
-      spring(0);
+      const timing = { duration: 380, easing: "cubic-bezier(0.32, 0.72, 0, 1)" };
+      const up = el.animate([{ transform: `translate3d(0, ${s.h}px, 0)` }, { transform: "translate3d(0, 0, 0)" }], timing);
+      s.open = [up];
+      if (scrim.current) s.open.push(scrim.current.animate([{ opacity: 0 }, { opacity: 1 }], timing));
+      up.onfinish = () => {
+        s.open = [];
+      };
     }
-    return stop;
+    return () => {
+      stop();
+      g.current.open.forEach((a) => a.cancel());
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -280,7 +302,7 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
       if (t.closest("input, textarea, select, [contenteditable], [data-drop], [data-no-drag]")) return;
       const p = e.touches[0]!;
       // pegou a folha em movimento (abrindo, voltando ou fechando): ela para na mão
-      const moving = s.raf !== 0 || s.y !== 0;
+      const moving = s.raf !== 0 || s.y !== 0 || s.open.length > 0;
       if (moving) {
         stop();
         s.leaving = false;

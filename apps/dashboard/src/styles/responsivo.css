@@ -116,7 +116,7 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
     width: 100%; max-height: 92dvh; border-radius: 22px 22px 0 0; border-bottom: none;
     padding-bottom: env(safe-area-inset-bottom); animation: none; will-change: transform;
   }
-  /* quem move a folha é a mola do Modal (components.tsx): acompanha o dedo e pode ser pega no meio do caminho */
+  /* quem move a folha é o Modal (components.tsx): sobe por animação do navegador, depois a mola segue o dedo */
   .modal-scrim, .modal-bg.closing .modal-scrim, .modal-bg.closing .modal { animation: none; }
   /* puxou para cima além do limite: não abre fresta embaixo */
   .modal::after { content: ""; position: absolute; left: -1px; right: -1px; top: 100%; height: 50vh; background: var(--panel); }
