@@ -126,6 +126,11 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
       } else if (mode === "forgot") {
         const me = await api<Me>("/api/auth/reset", { method: "POST", json: { challenge: reset, code: otp, password: form.password } });
         onLogin(me);
+      } else if (mode === "register" && challenge) {
+        const r = await api("/api/auth/register", { method: "POST", json: { ...form, code: code ?? undefined, accept_terms: true, challenge: challenge.id, verify_code: otp } });
+        if (code) history.replaceState(null, "", "/");
+        if (r.pending) setDone(r.message);
+        else onLogin(r);
       } else if (mode === "login" && challenge) {
         const me = await api<Me>("/api/auth/login/verify", { method: "POST", json: { challenge: challenge.id, code: otp } });
         if (code) history.replaceState(null, "", "/");
@@ -142,6 +147,12 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
       } else {
         if (!terms) throw new Error("Para criar a conta, aceite os termos de uso e a política de privacidade.");
         const r = await api("/api/auth/register", { method: "POST", json: { ...form, code: code ?? undefined, accept_terms: true } });
+        // o número precisa ser confirmado com o código que chega no WhatsApp
+        if (r.needs_code) {
+          setChallenge({ id: r.challenge, to: r.to ?? "seu WhatsApp" });
+          setOtp("");
+          return;
+        }
         if (code) history.replaceState(null, "", "/");
         if (r.pending) setDone(r.message);
         else onLogin(r);
@@ -192,8 +203,10 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
           </div>
           {challenge ? (
             <>
-              <h1>Confirme que é você</h1>
-              <p className="muted" style={{ marginTop: 0, marginBottom: 20 }}>Este navegador é novo. Mandamos um código de 6 dígitos para o WhatsApp {challenge.to}.</p>
+              <h1>{mode === "register" ? "Confirme seu WhatsApp" : "Confirme que é você"}</h1>
+              <p className="muted" style={{ marginTop: 0, marginBottom: 20 }}>
+                {mode === "register" ? "Para criar a conta, mandamos" : "Este navegador é novo. Mandamos"} um código de 6 dígitos para o WhatsApp {challenge.to}.
+              </p>
               <div className="field">
                 <label>Código</label>
                 <input
@@ -209,11 +222,11 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
               </div>
               <ErrorBox error={error} />
               <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12, padding: "10px 12px" }} disabled={busy || otp.length !== 6} onClick={() => haptic(10)}>
-                {busy ? "Conferindo…" : "Entrar"}
+                {busy ? "Conferindo…" : mode === "register" ? "Criar conta" : "Entrar"}
               </button>
               <p className="muted" style={{ textAlign: "center", marginBottom: 0, fontSize: 13 }}>
                 Não chegou?{" "}
-                <button type="button" className="link" onClick={() => { setChallenge(null); setError(null); setOtp(""); }}>Voltar e entrar de novo</button>
+                <button type="button" className="link" onClick={() => { setChallenge(null); setError(null); setOtp(""); }}>{mode === "register" ? "Voltar e conferir o número" : "Voltar e entrar de novo"}</button>
               </p>
             </>
           ) : mode === "forgot" ? (

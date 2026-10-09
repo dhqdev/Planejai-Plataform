@@ -122,6 +122,31 @@ describe.skipIf(!enabled)("painel: notificações, documentos e login (e2e)", ()
     expect(n.json().items.some((i: any) => i.kind === "seguranca")).toBe(true);
   });
 
+  it("cadastro só cria a conta depois do código no WhatsApp informado; número com conta não cadastra de novo", async () => {
+    await (await import("../src/settings.js")).saveSettings({ signupMode: "open" });
+    const { upsertUser } = await import("../src/ingest.js");
+    await upsertUser("5519911110009", "Caio"); // já usa o assistente, ainda sem painel
+    const form = { name: "Caio Lima", email: "caio@x.com", password: "senha-forte-1", phone: "(19) 91111-0009", accept_terms: true };
+    const first = await app.inject({ method: "POST", url: "/api/auth/register", payload: form });
+    expect(first.json()).toMatchObject({ needs_code: true });
+    expect(cookieOf(first)).toBeUndefined();
+    expect(await db.one("SELECT 1 AS ok FROM accounts WHERE email = 'caio@x.com'")).toBeUndefined();
+    const job = await db.one("SELECT data FROM pgboss.job WHERE name = 'outbound.send' ORDER BY created_on DESC LIMIT 1");
+    expect(job.data).toMatchObject({ phone: "5519911110009", channel: "whatsapp" });
+    const real = job.data.text.match(/\d{6}/)[0];
+    const { challenge } = first.json();
+    // código errado não cria; o código não serve para outro e-mail
+    expect((await app.inject({ method: "POST", url: "/api/auth/register", payload: { ...form, challenge, verify_code: "000000" } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: "/api/auth/register", payload: { ...form, email: "outro@x.com", challenge, verify_code: real } })).statusCode).toBe(401);
+    const ok = await app.inject({ method: "POST", url: "/api/auth/register", payload: { ...form, challenge, verify_code: real } });
+    expect(ok.statusCode).toBe(200);
+    expect(cookieOf(ok)).toBeTruthy();
+    // o mesmo WhatsApp não vira outra conta, nem com outro e-mail
+    const twice = await app.inject({ method: "POST", url: "/api/auth/register", payload: { ...form, email: "golpe@x.com" } });
+    expect(twice.statusCode).toBe(409);
+    await (await import("../src/settings.js")).saveSettings({ signupMode: "invite" });
+  });
+
   it("código usado não vale de novo e sem WhatsApp conectado entra só com a senha", async () => {
     const { startChallenge, verifyChallenge } = await import("../src/logincode.js");
     const { loadAccount } = await import("../src/accounts.js");

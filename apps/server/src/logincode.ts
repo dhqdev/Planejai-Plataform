@@ -41,7 +41,7 @@ export async function phoneFor(account: Account): Promise<string | null> {
 }
 
 /** Só pede código se der para entregar: senão a pessoa ficaria trancada fora (ex.: WhatsApp caiu). */
-async function whatsappReady() {
+export async function whatsappReady() {
   if (config.WHATSAPP_PROVIDER === "none") return false;
   if (config.WHATSAPP_PROVIDER !== "baileys") return true;
   const s = await one("SELECT 1 FROM wa_sessions WHERE status = 'connected' AND heartbeat_at > now() - interval '90 seconds'");
@@ -84,6 +84,41 @@ export async function verifyChallenge(challenge: string, code: string): Promise<
   const used = await one("UPDATE login_codes SET used_at = now() WHERE id = $1 AND used_at IS NULL RETURNING account_id", [row.id]);
   if (!used) return { ok: false, error: "Código já usado." };
   return { ok: true, accountId: used.account_id };
+}
+
+/**
+ * Cadastro: antes de criar a conta, um código vai para o WhatsApp informado. Sem isso qualquer pessoa
+ * se cadastraria com o número de outra e veria os dados de quem já usa o assistente por ele.
+ * O código fica preso ao par telefone + e-mail (account_id = "signup:<hash>"), então não serve para outro número.
+ */
+const signupKey = (phone: string, email: string) => `signup:${sha(`${phone}|${email}`)}`;
+
+export async function startSignupChallenge(phone: string, email: string, sendCode: (phone: string, text: string) => Promise<unknown>) {
+  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  const row = await one<{ id: string }>(
+    `INSERT INTO login_codes (account_id, code_hash, expires_at, purpose) VALUES ($1, 'x', now() + interval '${CODE_TTL_MIN} minutes', 'signup') RETURNING id`,
+    [signupKey(phone, email)],
+  );
+  await query("UPDATE login_codes SET code_hash = $2 WHERE id = $1", [row!.id, codeHash(row!.id, code)]);
+  await sendCode(phone, `Seu código para criar a conta no Planejai: ${code}\n\nVale por ${CODE_TTL_MIN} minutos. Se não foi você que pediu, pode ignorar.`);
+  return { challenge: row!.id, to: mask(phone) };
+}
+
+/** Confere o código do cadastro para aquele telefone + e-mail. Gasta o código só se bater. */
+export async function verifySignup(challenge: string, code: string, phone: string, email: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const expired = { ok: false as const, error: "O código expirou. Volte e peça outro." };
+  if (!/^[0-9a-f-]{36}$/i.test(challenge)) return expired;
+  const row = await one("SELECT * FROM login_codes WHERE id = $1 AND purpose = 'signup' AND used_at IS NULL AND expires_at > now()", [challenge]);
+  if (!row || row.account_id !== signupKey(phone, email)) return expired;
+  if (row.attempts >= MAX_ATTEMPTS) return { ok: false, error: "Muitas tentativas. Volte e peça outro código." };
+  const clean = String(code ?? "").replace(/\D/g, "");
+  if (clean.length !== 6 || !safeEqual(codeHash(row.id, clean), row.code_hash)) {
+    await query("UPDATE login_codes SET attempts = attempts + 1 WHERE id = $1", [row.id]);
+    return { ok: false, error: "Código errado." };
+  }
+  const used = await one("UPDATE login_codes SET used_at = now() WHERE id = $1 AND used_at IS NULL RETURNING id", [row.id]);
+  if (!used) return { ok: false, error: "Código já usado." };
+  return { ok: true };
 }
 
 /**

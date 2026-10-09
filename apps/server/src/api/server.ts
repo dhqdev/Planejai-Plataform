@@ -19,7 +19,7 @@ import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { registerInternalRoutes } from "./routes/internal.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerSecurity, trustProxySetting } from "./security.js";
-import { DEVICE_COOKIE, isTrustedDevice, startChallenge, startReset, trustDevice, verifyChallenge, verifyReset } from "../logincode.js";
+import { DEVICE_COOKIE, isTrustedDevice, startChallenge, startReset, startSignupChallenge, trustDevice, verifyChallenge, verifyReset, verifySignup, whatsappReady } from "../logincode.js";
 import { emitEvent } from "../events.js";
 import { notify } from "../notifications.js";
 import { QUEUES, getBoss } from "../queue/boss.js";
@@ -197,7 +197,7 @@ export async function buildServer() {
   });
 
   // Cadastro: no modo convite (padrão) só entra quem tem o código; vira admin da própria conta, ligado ao WhatsApp
-  app.post<{ Body: { name?: string; email?: string; password?: string; phone?: string; code?: string; accept_terms?: boolean } }>("/api/auth/register", async (req, reply) => {
+  app.post<{ Body: { name?: string; email?: string; password?: string; phone?: string; code?: string; accept_terms?: boolean; challenge?: string; verify_code?: string } }>("/api/auth/register", async (req, reply) => {
     if ((await hit(`register:ip:${req.ip}`, 3600)) > 20) return tooMany(reply);
     const { signupMode } = await getSettings();
     if (signupMode === "closed") return reply.code(403).send({ error: "Cadastros estão fechados." });
@@ -221,17 +221,33 @@ export async function buildServer() {
     if (email === config.ADMIN_EMAIL.toLowerCase() || (await one("SELECT 1 FROM accounts WHERE email = $1", [email]))) {
       return reply.code(409).send({ error: "Já existe uma conta com esse e-mail" });
     }
-    if (invite && !invite.phone) {
-      if (await one("SELECT 1 FROM accounts WHERE phone = ANY($1)", [phoneVariants(phone)])) {
-        return reply.code(409).send({ error: "Esse WhatsApp já tem conta. Entre com seu e-mail e senha." });
+    // um WhatsApp, uma conta: vale para todo tipo de convite (o convite por telefone não pode ser reusado por outra pessoa)
+    const variants = phoneVariants(phone);
+    const taken = await one(
+      "SELECT 1 FROM accounts WHERE phone = ANY($1) OR user_id IN (SELECT id FROM users WHERE phone = ANY($1))",
+      [variants],
+    );
+    if (taken) return reply.code(409).send({ error: "Esse WhatsApp já tem conta. Entre com seu e-mail e senha." });
+    // prova de que o número é da pessoa: código no WhatsApp antes de criar a conta
+    if (config.LOGIN_CODE) {
+      if (!req.body?.challenge) {
+        if ((await hit(`register:phone:${phone}`, 3600)) > 5) return tooMany(reply);
+        if (!(await whatsappReady())) return reply.code(503).send({ error: "Não consegui mandar o código no WhatsApp agora. Tente de novo em alguns minutos." });
+        const ch = await startSignupChallenge(phone, email, (to, text) =>
+          getBoss().then((b) => b.send(QUEUES.outbound, { type: "send", userId: null, phone: to, channel: "whatsapp", text }, { retryLimit: 1 })),
+        );
+        return { needs_code: true, challenge: ch.challenge, to: ch.to };
       }
+      const ok = await verifySignup(String(req.body.challenge), String(req.body?.verify_code ?? ""), phone, email);
+      if (!ok.ok) return reply.code(401).send({ error: ok.error });
+    }
+    if (invite && !invite.phone) {
       // marca o código como usado antes de criar a conta: dois cadastros ao mesmo tempo não usam o mesmo convite
       const claimed = await one("UPDATE invites SET status = 'accepted', responded_at = now() WHERE id = $1 AND status = 'pending' RETURNING id", [invite.id]);
       if (!claimed) return reply.code(400).send({ error: "Esse convite já foi usado. Peça um novo a quem te convidou." });
     }
     // convite vale como aprovação
     const open = signupMode === "open" || Boolean(invite);
-    const variants = phoneVariants(phone);
     let user = await one("SELECT * FROM users WHERE phone = ANY($1)", [variants]);
     if (!user) {
       user = await one("INSERT INTO users (phone, name, full_name, email, status, invited_by, terms_accepted_at) VALUES ($1, $2, $2, $3, $4, $5, now()) RETURNING *", [
