@@ -20,7 +20,9 @@ export function agendaRoutes(base: FastifyInstance) {
   const self = async (a: Parameters<typeof selfUserId>[0]) => (await selfUserId(a)) ?? NOBODY;
   // ---------- Lembretes ----------
   base.get("/api/reminders", async (req) => listReminders(await self(req.account)));
-  base.delete<{ Params: { id: string } }>("/api/reminders/:id", async (req) => ({ ok: await cancelReminder(req.params.id, await self(req.account)) }));
+  base.delete<{ Params: { id: string } }>("/api/reminders/:id", async (req, reply) =>
+    (await cancelReminder(req.params.id, await self(req.account))) ? { ok: true } : reply.code(404).send({ error: "Esse lembrete já foi enviado ou excluído." }),
+  );
 
   // novo lembrete pelo painel (calendário): vai para a conversa mais recente da própria pessoa
   base.post<{ Body: { intent?: string; at?: string; tag?: string; color?: string } }>("/api/reminders", async (req, reply) => {

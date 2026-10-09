@@ -449,7 +449,8 @@ function useDrag(onDrop: (ev: Ev, target: HTMLElement, e: PointerEvent) => void)
     const el = e.currentTarget as HTMLElement;
     const startX = e.clientX;
     const startY = e.clientY;
-    let active = e.pointerType === "mouse";
+    // mouse só vira arrasto depois de andar uns pixels: clique parado abre o detalhe (antes virava "soltar no mesmo dia")
+    let active = false;
     let ghost: HTMLElement | null = null;
     let hover: HTMLElement | null = null;
     const hold = e.pointerType === "mouse" ? null : setTimeout(() => { active = true; haptic(14); begin(); }, 380);
@@ -811,9 +812,9 @@ function EventDetail({ ev, tags, readonly, onClose, onChanged }: { ev: Ev; tags:
               disabled={busy}
               onClick={async () => {
                 const ok = await confirmDialog({
-                  title: ev.recurring ? "Cancelar todas as repetições?" : "Cancelar este lembrete?",
+                  title: ev.recurring ? "Excluir todas as repetições?" : "Excluir este lembrete?",
                   body: ev.recurring ? `“${ev.title}” deixa de repetir e nenhum aviso futuro é enviado.` : `“${ev.title}” não será mais enviado no WhatsApp.`,
-                  confirmLabel: "Cancelar lembrete",
+                  confirmLabel: "Excluir",
                   cancelLabel: "Manter",
                   danger: true,
                 });
@@ -824,11 +825,11 @@ function EventDetail({ ev, tags, readonly, onClose, onChanged }: { ev: Ev; tags:
                   onChanged();
                 } catch (e) {
                   setBusy(false);
-                  void alertDialog("Não deu para cancelar", (e as Error).message);
+                  void alertDialog("Não deu para excluir", (e as Error).message);
                 }
               }}
             >
-              <Icon name="trash" size={16} /> Cancelar
+              <Icon name="trash" size={16} /> Excluir
             </button>
             {dirty && <button className="btn btn-primary" disabled={busy || !look.title.trim()} onClick={save}>{busy ? "Salvando…" : "Salvar"}</button>}
           </>
