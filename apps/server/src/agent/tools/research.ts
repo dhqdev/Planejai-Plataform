@@ -245,7 +245,7 @@ async function saveMediaFile(ctx: ToolContext, kind: string, mimetype: string, d
   return id;
 }
 
-function snapshotText(s: Snapshot) {
+export function snapshotText(s: Snapshot) {
   return {
     url: s.url,
     title: s.title,
@@ -262,10 +262,10 @@ export async function finishBrowser(ctx: ToolContext, opts: { send?: boolean; ca
   ctx.room.browser = undefined;
   const video = await b.stopRecording().catch(() => null);
   // login da loja renovado durante a navegação: guarda os cookies novos
-  if (b.store) {
+  if (b.store && b.saveLogin) {
     const { saveStoreCookies } = await import("../../storelogin.js");
-    const { STORES } = await import("../../purchases.js");
-    const fresh = await b.cookiesFor(STORES[b.store]?.domains ?? []).catch(() => []);
+    const { storeDefFor } = await import("../../stores.js");
+    const fresh = await b.cookiesFor((await storeDefFor(ctx.user.id, b.store))?.domains ?? []).catch(() => []);
     if (fresh.length) await saveStoreCookies(ctx.user.id, b.store, fresh).catch(() => {});
   }
   await b.close();
@@ -304,7 +304,8 @@ export const browserOpen = defineTool<{ url: string; record?: boolean; send_reco
     const { cookiesForUrl } = await import("../../storelogin.js");
     const login = await cookiesForUrl(ctx.user.id, args.url).catch(() => ({ store: null, cookies: [] }));
     const b = await BrowserSession.open(Boolean(args.record || args.send_recording), { cookies: login.cookies });
-    if (login.cookies.length) b.store = login.store;
+    b.store = login.store;
+    b.saveLogin = login.cookies.length > 0;
     b.sendRecording = Boolean(args.send_recording);
     ctx.room.browser = b;
     await b.goto(args.url);

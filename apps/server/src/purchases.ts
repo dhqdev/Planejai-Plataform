@@ -6,6 +6,7 @@ import { getCredentials } from "./integrations/registry.js";
 import { notify } from "./notifications.js";
 import { parsePixCode } from "./pixcode.js";
 import { type AgentSettings, getSettings } from "./settings.js";
+import { STORES, storeDefFor, storeOfFor } from "./stores.js";
 
 /**
  * Compras pelo assistente, só com Pix direto. O agente acha o produto, entra na conta da pessoa na loja (login que ela
@@ -15,26 +16,9 @@ import { type AgentSettings, getSettings } from "./settings.js";
  */
 
 /** Versão dos Termos de compra: mudou o texto, sobe a data e todo mundo aceita de novo. */
-export const TERMS_VERSION = "2026-10-09";
+export const TERMS_VERSION = "2026-10-09.2";
 
-export const STORES: Record<string, { name: string; domains: string[]; home: string }> = {
-  mercadolivre: { name: "Mercado Livre", domains: ["mercadolivre.com.br", "mercadolivre.com", "mercadolibre.com", "mercadopago.com.br"], home: "https://www.mercadolivre.com.br/" },
-  shopee: { name: "Shopee", domains: ["shopee.com.br"], home: "https://shopee.com.br/buyer/login" },
-  amazon: { name: "Amazon", domains: ["amazon.com.br"], home: "https://www.amazon.com.br/" },
-  magalu: { name: "Magalu", domains: ["magazineluiza.com.br", "magalu.com"], home: "https://www.magazineluiza.com.br/" },
-};
-
-const hostMatches = (host: string, domain: string) => host === domain || host.endsWith(`.${domain}`);
-
-/** Loja conhecida de uma URL ("mercadolivre"), ou null. */
-export function storeOf(url: string | null | undefined): string | null {
-  try {
-    const host = new URL(String(url)).hostname.toLowerCase();
-    return Object.entries(STORES).find(([, s]) => s.domains.some((d) => hostMatches(host, d)))?.[0] ?? null;
-  } catch {
-    return null;
-  }
-}
+export { STORES, storeOf } from "./stores.js";
 
 export const brl = (cents: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100).replace(/ /g, " ");
@@ -206,7 +190,7 @@ export async function preparePurchase(userId: string, input: { title: string; ur
   const s = await getSettings();
   const title = clip(input.title, 140);
   if (!title) throw new Error("Diga o que está sendo comprado (title).");
-  const store = storeOf(input.url) ?? (input.store && STORES[input.store] ? input.store : null) ?? clip(input.store, 40).toLowerCase();
+  const store = (await storeOfFor(userId, input.url)) ?? (input.store && (await storeDefFor(userId, input.store)) ? input.store : null) ?? clip(input.store, 40).toLowerCase();
   if (!store) throw new Error("Qual loja? Mande a url do produto.");
   const row = await profileRow(userId);
   const early = await blockedReason(userId, 0, s, row);
@@ -221,12 +205,12 @@ export async function preparePurchase(userId: string, input: { title: string; ur
      VALUES ($1, $2, $3, $4, 'pix', $5, 0, $5, $6, $7) RETURNING *`,
     [userId, store, title, input.url ? clip(input.url, 500) : null, pix.cents, pix.payload, pix.receiver],
   );
-  return { purchase: p!, summary: purchaseSummary(p!) };
+  return { purchase: p!, summary: purchaseSummary(p!, (await storeDefFor(userId, store))?.name) };
 }
 
-export function purchaseSummary(p: PurchaseRow) {
+export function purchaseSummary(p: PurchaseRow, storeName?: string) {
   const who = p.store_receiver ? ` (Pix para ${p.store_receiver})` : "";
-  return `comprar "${p.title}" no ${STORES[p.store]?.name ?? p.store} por ${brl(p.store_cents)}${who}, com o Pix da loja pago por ela no banco dela`;
+  return `comprar "${p.title}" no ${storeName ?? STORES[p.store]?.name ?? p.store} por ${brl(p.store_cents)}${who}, com o Pix da loja pago por ela no banco dela`;
 }
 
 /** A pessoa disse "sim" (conferido pelo servidor): manda o Pix da loja para ela pagar. */

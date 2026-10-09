@@ -3,12 +3,16 @@ import { parsePixCode } from "../../pixcode.js";
 import { approvePurchase, brl, buyerProfile, listPurchases, preparePurchase, purchaseRules, STATUS_TXT, updatePurchase } from "../../purchases.js";
 import { getSettings } from "../../settings.js";
 import { connectedStores } from "../../storelogin.js";
+import { extractLoginCode, storeAccess, storeDefFor, storeOfFor } from "../../stores.js";
+import { googleApi } from "../../integrations/google.js";
+import { bodyText, GMAIL } from "./communication.js";
+import { snapshotText } from "./research.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 export const purchaseInfo = defineTool<Record<string, never>>({
   name: "purchase_info",
   description:
-    "Antes de comprar: lojas em que a pessoa conectou a conta (o navegador entra já logado), endereço de entrega dela e limites. " +
+    "Antes de comprar: lojas em que a pessoa conectou a conta (o navegador entra já logado) ou salvou o acesso, endereço de entrega dela e limites. " +
     "Chame uma vez no começo de cada compra.",
   parameters: obj({}),
   async run(_args, ctx) {
@@ -20,7 +24,10 @@ export const purchaseInfo = defineTool<Record<string, never>>({
       enabled: true,
       payment: "Pix direto: no checkout escolha Pix; a pessoa paga o código do banco dela depois do sim.",
       terms_accepted: profile.terms.accepted,
-      stores: stores.map((x) => `${x.name} (${x.id}): ${x.connected ? "conta conectada" : "sem conta conectada"}`),
+      // só as lojas que ela usa: o catálogo inteiro custaria token à toa
+      stores: stores
+        .filter((x) => x.connected || x.access || x.custom)
+        .map((x) => `${x.name} (${x.site}): ${[x.connected ? "logada" : "sem login", x.access ? "acesso salvo" : ""].filter(Boolean).join(", ")}`),
       delivery_address: a ? `${a.street}, ${a.number}${a.complement ? ` ${a.complement}` : ""}, ${a.district}, ${a.city}/${a.state}, CEP ${a.cep}` : "não cadastrado: use o endereço principal da conta da loja e diga qual é",
       limits: { per_purchase: brl(rules.maxCents), per_30_days: brl(rules.monthMaxCents) },
       ...(!profile.terms.accepted ? { missing: "Ela ainda não aceitou os Termos de compra: peça para abrir Compras no painel." } : {}),
@@ -96,5 +103,80 @@ export const purchaseUpdate = defineTool<{ id: string; order_ref?: string; track
     } catch (err) {
       return { ok: false, error: (err as Error).message };
     }
+  },
+});
+
+/** Loja da página aberta agora, se for uma loja (do catálogo ou cadastrada) da pessoa. */
+async function storeOnPage(ctx: Parameters<typeof purchaseInfo.run>[1]) {
+  const b = ctx.room.browser;
+  if (!b) return { error: "Abra a loja primeiro com browser_open." } as const;
+  const store = await storeOfFor(ctx.user.id, b.page.url());
+  if (!store) return { error: "A página aberta não é de uma loja da pessoa. Senha e código só são digitados no site da própria loja." } as const;
+  return { b, store } as const;
+}
+
+export const storeLoginFill = defineTool<{ ref: number; field: "email" | "password" }>({
+  name: "store_login_fill",
+  description:
+    "Login vencido na loja: digita no campo (ref) o e-mail ou a senha que a pessoa salvou para essa loja. O sistema digita, você não vê o valor. " +
+    "Só funciona no site da própria loja. Sem acesso salvo, devolva ao CTO que ela precisa entrar de novo em Compras no painel.",
+  parameters: obj(
+    { ref: { type: "number", description: "número do campo na última lista" }, field: { type: "string", enum: ["email", "password"] } },
+    ["ref", "field"],
+  ),
+  async run(args, ctx) {
+    const on = await storeOnPage(ctx);
+    if ("error" in on) return { ok: false, error: on.error };
+    const access = await storeAccess(ctx.user.id, on.store);
+    const value = args.field === "password" ? access?.password : access?.email;
+    if (!value) return { ok: false, error: `A pessoa não salvou ${args.field === "password" ? "a senha" : "o e-mail"} dessa loja. Peça para ela entrar de novo em Compras no painel.` };
+    try {
+      await on.b.fillSecret(Number(args.ref), value, args.field === "password" ? "a senha da loja" : "o e-mail da loja");
+    } catch {
+      return { ok: false, error: "Campo não encontrado. Veja a lista de novo." };
+    }
+    on.b.store = on.store;
+    on.b.saveLogin = true;
+    return { ok: true, ...snapshotText(await on.b.snapshot()) };
+  },
+});
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export const storeLoginCode = defineTool<{ ref: number }>({
+  name: "store_login_code",
+  description:
+    "A loja mandou um código de verificação para o e-mail da pessoa: o sistema procura o código no Gmail dela (só e-mails da loja, recentes) e digita no campo (ref). " +
+    "Você não vê o código. Peça o código à loja antes (clique em enviar código por e-mail) e chame logo depois.",
+  integration: "google",
+  parameters: obj({ ref: { type: "number", description: "número do campo do código na última lista" } }, ["ref"]),
+  async run(args, ctx) {
+    const on = await storeOnPage(ctx);
+    if ("error" in on) return { ok: false, error: on.error };
+    const def = await storeDefFor(ctx.user.id, on.store);
+    const from = (def?.domains ?? []).map((d) => `from:${d}`).join(" OR ");
+    const since = on.b.openedAt - 60_000;
+    let code: string | null = null;
+    // o e-mail pode levar alguns segundos para chegar
+    for (let i = 0; i < 4 && !code; i++) {
+      if (i) await sleep(10_000);
+      const list = await googleApi(`${GMAIL}/messages?q=${encodeURIComponent(`(${from}) newer_than:1d`)}&maxResults=3`);
+      for (const m of list.messages ?? []) {
+        const full = await googleApi(`${GMAIL}/messages/${m.id}?format=full`);
+        if (Number(full.internalDate ?? 0) < since) continue;
+        const subject = full.payload?.headers?.find((h: any) => h.name.toLowerCase() === "subject")?.value ?? "";
+        code = extractLoginCode(`${subject}\n${bodyText(full.payload)}`);
+        if (code) break;
+      }
+    }
+    if (!code) return { ok: false, error: `Nenhum código de ${def?.name ?? "da loja"} chegou no Gmail dela. Confira se a loja mandou para o e-mail (e não por SMS); se for SMS, peça para ela entrar em Compras no painel.` };
+    try {
+      await on.b.fillSecret(Number(args.ref), code, "o código do e-mail");
+    } catch {
+      return { ok: false, error: "Campo não encontrado. Veja a lista de novo." };
+    }
+    on.b.store = on.store;
+    on.b.saveLogin = true;
+    return { ok: true, ...snapshotText(await on.b.snapshot()) };
   },
 });

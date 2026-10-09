@@ -1,4 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+// sem DNS no sandbox: o site cadastrado como loja passa direto (a regra de rede interna tem teste próprio em net)
+vi.mock("../src/net.js", async (orig) => ({ ...(await orig<typeof import("../src/net.js")>()), checkedUrl: async (u: string) => u }));
 
 /** Compras pelo assistente (só Pix direto): Pix da loja, termos, limites, sim conferido e acompanhamento. */
 describe("compras: regras sem banco", () => {
@@ -28,6 +31,15 @@ describe("compras: regras sem banco", () => {
     expect(storeOf("https://shopee.com.br/x")).toBe("shopee");
     expect(storeOf("https://mercadolivre.com.br.golpe.com/")).toBeNull();
     expect(storeOf("lixo")).toBeNull();
+    expect(storeOf("https://www.kabum.com.br/produto/1")).toBe("kabum");
+  });
+
+  it("código de verificação no e-mail da loja", async () => {
+    const { extractLoginCode } = await import("../src/stores.js");
+    expect(extractLoginCode("Seu código de verificação é 482913. Válido por 10 minutos")).toBe("482913");
+    expect(extractLoginCode("Use the code 7731 to sign in")).toBe("7731");
+    expect(extractLoginCode("Acesse sua conta: 384756")).toBe("384756");
+    expect(extractLoginCode("Pedido 2026 confirmado, total R$ 152,90")).toBeNull();
   });
 });
 
@@ -147,5 +159,48 @@ describe.skipIf(!enabled)("compras pelo assistente (e2e)", () => {
     expect(await shop.purchasesOverview()).toMatchObject({ paid: 1, stores_cents: 8990 });
     const cfg = (await app.inject({ method: "GET", url: "/api/auth/config" })).json();
     expect(cfg.purchases).toMatchObject({ enabled: true, maxCents: 30_000 });
+  });
+
+  it("lojas: cadastrada pela pessoa, acesso salvo criptografado e senha digitada só no site da loja", async () => {
+    const st = await import("../src/stores.js");
+    await expect(st.addCustomStore(user.id, { url: "com.br" })).rejects.toThrow(/inválido/);
+    await expect(st.addCustomStore(user.id, { url: "https://mail.google.com" })).rejects.toThrow(/não é uma loja/);
+    await expect(st.addCustomStore(user.id, { url: "http://lojinha.com.br" })).rejects.toThrow(/https/);
+    expect(await st.addCustomStore(user.id, { url: "https://produto.mercadolivre.com.br/x" })).toMatchObject({ id: "mercadolivre" });
+    const custom = await st.addCustomStore(user.id, { name: "Loja do Bairro", url: "www.lojadobairro.com.br/promo" });
+    expect(custom).toMatchObject({ id: "u-lojadobairro-com-br", domains: ["lojadobairro.com.br"] });
+    expect(await st.storeOfFor(user.id, "https://loja.lojadobairro.com.br/p/1")).toBe(custom.id);
+    expect(await st.storeOfFor(user.id, "https://lojadobairro.com.br.golpe.com/")).toBeNull();
+
+    await st.saveStoreAccess(user.id, custom.id, { email: "carla@x.com", password: "s3gredo!" });
+    expect((await db.one("SELECT data FROM store_logins WHERE user_id = $1 AND store = $2", [user.id, custom.id])).data).not.toContain("s3gredo");
+    // senha em branco ao editar mantém a anterior
+    await st.saveStoreAccess(user.id, custom.id, { email: "carla2@x.com" });
+    expect(await st.storeAccess(user.id, custom.id)).toEqual({ email: "carla2@x.com", password: "s3gredo!" });
+    const { connectedStores } = await import("../src/storelogin.js");
+    expect((await connectedStores(user.id)).find((x) => x.id === custom.id)).toMatchObject({ custom: true, access: true, connected: false });
+
+    const { storeLoginFill } = await import("../src/agent/tools/purchases.js");
+    const typed: string[] = [];
+    const fake: any = {
+      page: { url: () => "https://golpe.com/login" },
+      fillSecret: async (_ref: number, v: string) => void typed.push(v),
+      snapshot: async () => ({ url: "x", title: "", text: "", elements: "" }),
+      store: null,
+      saveLogin: false,
+    };
+    const ctx: any = { user, room: { browser: fake }, agent: "compras" };
+    expect(await storeLoginFill.run({ ref: 1, field: "password" }, ctx)).toMatchObject({ ok: false });
+    expect(typed).toEqual([]);
+    fake.page.url = () => "https://www.lojadobairro.com.br/entrar";
+    const r: any = await storeLoginFill.run({ ref: 1, field: "password" }, ctx);
+    expect(r.ok).toBe(true);
+    expect(typed).toEqual(["s3gredo!"]);
+    expect(JSON.stringify(r)).not.toContain("s3gredo");
+    expect(fake).toMatchObject({ store: custom.id, saveLogin: true });
+
+    await st.removeCustomStore(user.id, custom.id);
+    expect(await st.storeAccess(user.id, custom.id)).toBeNull();
+    expect(await st.storeOfFor(user.id, "https://lojadobairro.com.br/")).toBeNull();
   });
 });

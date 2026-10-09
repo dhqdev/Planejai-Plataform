@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import { acceptPurchaseTerms, buyerProfile, listPurchases, purchaseRules, purchasesOverview, saveBuyerAddress, STORES, updatePurchase } from "../../../purchases.js";
+import { acceptPurchaseTerms, buyerProfile, listPurchases, purchaseRules, purchasesOverview, saveBuyerAddress, updatePurchase } from "../../../purchases.js";
 import { getSettings } from "../../../settings.js";
 import { selfUserId } from "../../../sharing.js";
+import { addCustomStore, clearStoreAccess, removeCustomStore, saveStoreAccess, storeDefFor } from "../../../stores.js";
 import { cancelStoreLogin, connectedStores, disconnectStore, finishStoreLogin, loginFrame, loginInput, startStoreLogin } from "../../../storelogin.js";
 import { isUuid } from "./shared.js";
 
@@ -50,11 +51,50 @@ export function purchaseRoutes(base: FastifyInstance) {
     }
   });
 
+  // ---------- Lojas que a pessoa cadastra e acesso salvo (e-mail e senha, criptografados) ----------
+  base.post<{ Body: { name?: string; url?: string } }>("/api/compras/lojas", async (req, reply) => {
+    const uid = await uidOf(req, reply);
+    if (!uid) return;
+    try {
+      return await addCustomStore(uid, req.body ?? {});
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  base.delete<{ Params: { store: string } }>("/api/compras/lojas/:store/cadastro", async (req, reply) => {
+    const uid = await uidOf(req, reply);
+    if (!uid) return;
+    try {
+      await removeCustomStore(uid, req.params.store);
+      return { ok: true };
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  base.put<{ Params: { store: string }; Body: { email?: string; password?: string } }>("/api/compras/lojas/:store/acesso", async (req, reply) => {
+    const uid = await uidOf(req, reply);
+    if (!uid) return;
+    try {
+      return await saveStoreAccess(uid, req.params.store, req.body ?? {});
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  base.delete<{ Params: { store: string } }>("/api/compras/lojas/:store/acesso", async (req, reply) => {
+    const uid = await uidOf(req, reply);
+    if (!uid) return;
+    await clearStoreAccess(uid, req.params.store);
+    return { ok: true };
+  });
+
   // ---------- Conta da pessoa na loja: login feito por ela numa janela ao vivo ----------
   base.post<{ Params: { store: string } }>("/api/compras/lojas/:store/login", async (req, reply) => {
     const uid = await uidOf(req, reply);
     if (!uid) return;
-    if (!STORES[req.params.store]) return reply.code(404).send({ error: "Loja não suportada." });
+    if (!(await storeDefFor(uid, req.params.store))) return reply.code(404).send({ error: "Loja não encontrada." });
     try {
       return await startStoreLogin(uid, req.params.store);
     } catch (err) {

@@ -13,13 +13,19 @@ A pessoa pede no WhatsApp ("compra pra mim um fone JBL no Mercado Livre") e o ag
 - Limites do dono por compra (`purchaseMaxCents`) e em 30 dias (`purchaseMonthMaxCents`, `spentLast30`).
 - Sem termos aceitos (`TERMS_VERSION`) nada sai.
 
+## Lojas (`stores.ts`)
+- Catálogo `STORES` (Mercado Livre, Shopee, Amazon, Magalu, Americanas, KaBuM!, Shein e outras ~30). Na tela, "Adicionar loja" mostra o catálogo com busca e "Outra loja".
+- Loja cadastrada pela pessoa (`addCustomStore`, tabela `user_stores`, id `u-<site>`): só https, site público (`checkedUrl`), nada de sufixo sozinho (`com.br`) nem Google/Gmail/redes. Site do catálogo volta a loja do catálogo. Use `storeOfFor`/`storeDefFor`/`storesOf` (pessoa + catálogo); `storeOf` é só o catálogo.
+
 ## Login na loja (`storelogin.ts`)
-A pessoa entra na conta dela numa janela ao vivo do painel: o servidor abre o navegador (`BrowserSession`), o painel mostra prints e manda cliques e texto (`/api/compras/login/:id`). Senha e código não passam pelo modelo. No "Pronto, entrei" guardamos só os cookies da loja, criptografados (`store_sessions`). A janela não sai do site da loja. O `browser_open` carrega os cookies da loja da URL e, no `browser_close`, guarda os renovados. O agente de compras tem 35 ações no navegador (`MAX_SHOP_ACTIONS`); a página volta com `pix_codes` quando acha um Pix.
+A pessoa entra na conta dela numa janela ao vivo do painel: o servidor abre o navegador (`BrowserSession`), o painel mostra prints e manda cliques e texto (`/api/compras/login/:id`). Senha e código não passam pelo modelo. No "Pronto, entrei" guardamos só os cookies da loja, criptografados (`store_sessions`). A janela não sai do site da loja. O `browser_open` carrega os cookies da loja da URL e, no `browser_close`, guarda os renovados (`saveLogin`: entrou logada ou fez login na navegação). O agente de compras tem 35 ações no navegador (`MAX_SHOP_ACTIONS`); a página volta com `pix_codes` quando acha um Pix.
+
+**Login automático (opcional):** a pessoa salva e-mail e senha da loja em "Login automático" (`saveStoreAccess`, tabela `store_logins`, `encryptJson`; senha em branco mantém a anterior). Login vencido: a Nina chama `store_login_fill` (e-mail ou senha) e `store_login_code` (código que a loja mandou por e-mail, achado no Gmail da pessoa só em e-mails da loja depois que o navegador abriu, `extractLoginCode`). O servidor digita com `fillSecret` só se a página aberta for da loja (`storeOfFor`); o valor não volta para o modelo, não entra nas ações e campo de senha não mostra valor no snapshot. SMS não dá: ela pede para a pessoa entrar de novo no painel.
 
 ## Dados e termos
 - `buyer_profiles`: só o endereço de entrega, criptografado (`encryptJson`), e o aceite dos termos. Endereço é opcional: sem ele o agente usa o endereço da conta da loja. Pedido no fim das perguntas de boas-vindas (`pages/Welcome.tsx`, opcional) e em Compras (`AddressForm`).
-- Termos em `/termos-de-compra` (`pages/PurchaseTerms.tsx`). Mudou algo importante: suba `TERMS_VERSION` e todo mundo aceita de novo. Privacidade (`pages/Privacy.tsx`) cita o endereço, os cookies da loja e a leitura do Pix no Asaas.
-- Migrações `db/migrations/034_compras.sql` e `db/migrations/035_compras_so_pix.sql`. Testes em `test/purchases.e2e.test.ts`.
+- Termos em `/termos-de-compra` (`pages/PurchaseTerms.tsx`). Mudou algo importante: suba `TERMS_VERSION` e todo mundo aceita de novo. Privacidade (`pages/Privacy.tsx`) cita o endereço, os cookies e o acesso salvo da loja, a leitura do código no Gmail e a do Pix no Asaas.
+- Migrações `db/migrations/034_compras.sql`, `db/migrations/035_compras_so_pix.sql` e `db/migrations/036_lojas_da_pessoa.sql`. Testes em `test/purchases.e2e.test.ts`.
 
 ## Não testado de verdade
-O decode do Asaas real e o login nas lojas pelo Browserless: o sandbox de desenvolvimento não alcança essas URLs. Teste primeiro com uma conta sua no Mercado Livre.
+O decode do Asaas real, o login nas lojas pelo Browserless e o login automático (e-mail, senha e código) em loja de verdade: o sandbox de desenvolvimento não alcança essas URLs. Teste primeiro com uma conta sua no Mercado Livre.

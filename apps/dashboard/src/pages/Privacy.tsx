@@ -80,7 +80,8 @@ export function PrivacyPage() {
           <li>
             <b>Compras pelo assistente</b> (se você usar): o endereço de entrega, se você cadastrar, fica criptografado e vai só para a loja. Você
             paga a loja direto do seu banco, então nenhum dado de pagamento passa por aqui. Da sua conta na loja guardamos o login (cookies)
-            criptografado, nunca a senha, até você desconectar. O histórico das compras fica enquanto a conta existir. As regras estão nos <a href="/termos-de-compra">Termos de compra</a>.
+            criptografado até você desconectar, e o e-mail e a senha da loja só se você ligar o login automático (criptografados, digitados só no
+            site daquela loja). Com o Gmail conectado, o sistema lê os e-mails recentes da loja só para achar o código de acesso. O histórico das compras fica enquanto a conta existir. As regras estão nos <a href="/termos-de-compra">Termos de compra</a>.
           </li>
           <li>
             <b>Contas conectadas</b> (Google Agenda, Gmail e outras que você ligar): usadas só para o que você pedir. As chaves ficam criptografadas e

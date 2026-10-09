@@ -36,10 +36,19 @@ interface Purchase {
   error: string | null;
   created_at: string;
 }
+interface Store {
+  id: string;
+  name: string;
+  site: string;
+  custom: boolean;
+  connected: boolean;
+  access: boolean;
+  updated_at: string | null;
+}
 interface Data {
   rules: Rules;
   profile: BuyerProfile;
-  stores: { id: string; name: string; connected: boolean; updated_at: string | null }[];
+  stores: Store[];
   purchases: Purchase[];
 }
 
@@ -61,6 +70,8 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
   const { data, error, reload } = useApi<Data>("/api/compras");
   const [view, setView] = useState<"cliente" | "dono">(isSuper ? "dono" : "cliente");
   const [login, setLogin] = useState<string | null>(null);
+  const [access, setAccess] = useState<Store | null>(null);
+  const [adding, setAdding] = useState(false);
   if (error) return <div className="page"><ErrorBox error={error} /></div>;
   if (!data) return <Loading />;
   const { rules, profile } = data;
@@ -124,37 +135,7 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
       </section>
 
       <div className="cp-grid">
-        <section id="cp-lojas" className="card card-pad">
-          <h3 className="cp-h"><Icon name="shop" size={16} /> Suas lojas</h3>
-          <p className="muted cp-small">Você entra na sua conta numa janela daqui; senha e código vão direto para a loja, sem passar pelo assistente. Guardamos só o login, criptografado.</p>
-          <ul className="cp-stores">
-            {data.stores.map((s) => (
-              <li key={s.id}>
-                <span>
-                  <strong>{s.name}</strong>
-                  <small>{s.connected ? `conectada${s.updated_at ? ` em ${dateBR(s.updated_at)}` : ""}` : "não conectada"}</small>
-                </span>
-                {s.connected ? (
-                  <span className="cp-row-actions">
-                    <button className="btn btn-sm btn-ghost" onClick={() => setLogin(s.id)}>Entrar de novo</button>
-                    <button
-                      className="btn btn-sm"
-                      onClick={async () => {
-                        if (!(await confirmDialog({ title: `Desconectar ${s.name}?`, body: "O assistente para de entrar na sua conta. Dá para conectar de novo quando quiser.", confirmLabel: "Desconectar", danger: true }))) return;
-                        await api(`/api/compras/lojas/${s.id}`, { method: "DELETE" });
-                        reload();
-                      }}
-                    >
-                      Desconectar
-                    </button>
-                  </span>
-                ) : (
-                  <button className="btn btn-sm btn-primary" onClick={() => setLogin(s.id)}>Conectar</button>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
+        <StoresCard stores={data.stores} onLogin={setLogin} onAccess={setAccess} onAdd={() => setAdding(true)} onChange={reload} />
 
         <section id="cp-termos" className="card card-pad">
           <ComprasPoliticaResumo />
@@ -165,7 +146,7 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
           )}
         </section>
 
-        <section id="cp-dados" className="card card-pad cp-wide">
+        <section id="cp-dados" className="card card-pad">
           <h3 className="cp-h"><Icon name="user" size={16} /> Endereço de entrega</h3>
           <p className="muted cp-small">Opcional. Sem ele, o assistente usa o endereço principal da sua conta na loja e confirma com você. Fica criptografado e só vai para a loja.</p>
           <AddressForm profile={profile} onSaved={reload} />
@@ -213,10 +194,21 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
         </section>
       </div>
 
+      {access && <AccessModal store={access} onClose={(ok) => { setAccess(null); if (ok) reload(); }} />}
+      {adding && (
+        <AddStoreModal
+          onClose={(id) => {
+            setAdding(false);
+            if (!id) return;
+            reload();
+            setLogin(id);
+          }}
+        />
+      )}
       {login && (
         <StoreLogin
           store={login}
-          name={data.stores.find((s) => s.id === login)?.name ?? login}
+          name={data.stores.find((s) => s.id === login)?.name ?? "site da loja"}
           onClose={(ok) => {
             setLogin(null);
             if (ok) reload();
@@ -224,6 +216,181 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
         />
       )}
     </div>
+  );
+}
+
+/** Lojas da pessoa (conectadas, com acesso salvo ou cadastradas por ela) e o catálogo para adicionar mais. */
+function StoresCard({ stores, onLogin, onAccess, onAdd, onChange }: { stores: Store[]; onLogin: (id: string) => void; onAccess: (s: Store) => void; onAdd: () => void; onChange: () => void }) {
+  const [q, setQ] = useState("");
+  const mine = stores.filter((s) => s.connected || s.access || s.custom);
+  const norm = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const rest = stores.filter((s) => !mine.includes(s) && norm(`${s.name} ${s.site}`).includes(norm(q.trim())));
+  const status = (s: Store) =>
+    [s.connected ? `conectada${s.updated_at ? ` em ${dateBR(s.updated_at)}` : ""}` : "não conectada", s.access ? "login automático" : ""].filter(Boolean).join(" · ");
+  return (
+    <section id="cp-lojas" className="card card-pad cp-wide">
+      <h3 className="cp-h"><Icon name="shop" size={16} /> Suas lojas</h3>
+      <p className="muted cp-small">Você entra na sua conta numa janela daqui; senha e código vão direto para a loja, sem passar pelo assistente. Guardamos só o login, criptografado.</p>
+      {mine.length ? (
+        <ul className="cp-stores">
+          {mine.map((s) => (
+            <li key={s.id}>
+              <span>
+                <strong>{s.name}</strong>
+                <small>{s.custom ? `${s.site} · ` : ""}{status(s)}</small>
+              </span>
+              <span className="cp-row-actions">
+                <button className={`btn btn-sm ${s.connected ? "btn-ghost" : "btn-primary"}`} onClick={() => onLogin(s.id)}>{s.connected ? "Entrar de novo" : "Conectar"}</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => onAccess(s)}>Login automático</button>
+                <button
+                  className="btn btn-sm"
+                  onClick={async () => {
+                    const body = s.custom ? "Ela sai da sua lista, com o login e o acesso salvos." : "O assistente para de entrar na sua conta e o acesso salvo é apagado. Dá para conectar de novo quando quiser.";
+                    if (!(await confirmDialog({ title: `${s.custom ? "Tirar" : "Desconectar"} ${s.name}?`, body, confirmLabel: s.custom ? "Tirar" : "Desconectar", danger: true }))) return;
+                    if (s.custom) await api(`/api/compras/lojas/${s.id}/cadastro`, { method: "DELETE" });
+                    else {
+                      await api(`/api/compras/lojas/${s.id}`, { method: "DELETE" });
+                      await api(`/api/compras/lojas/${s.id}/acesso`, { method: "DELETE" });
+                    }
+                    onChange();
+                  }}
+                >
+                  {s.custom ? "Tirar" : "Desconectar"}
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted cp-small cp-empty">Nenhuma loja ainda. Escolha uma abaixo.</p>
+      )}
+
+      <div className="cp-add">
+        <div className="cp-add-head">
+          <strong>Adicionar loja</strong>
+          <input className="input" type="search" placeholder="Buscar loja" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar loja" />
+        </div>
+        <div className="cp-chips">
+          {rest.map((s) => (
+            <button key={s.id} className="cp-chip" onClick={() => onLogin(s.id)}>
+              <Icon name="plus" size={13} /> {s.name}
+            </button>
+          ))}
+          <button className="cp-chip cp-chip-other" onClick={onAdd}>
+            <Icon name="link" size={13} /> Outra loja
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Cadastra uma loja que não está na lista, pelo site. */
+function AddStoreModal({ onClose }: { onClose: (id: string | null) => void }) {
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const save = async (e?: FormEvent) => {
+    e?.preventDefault();
+    setErr(null);
+    setBusy(true);
+    try {
+      const r = await api<{ id: string }>("/api/compras/lojas", { method: "POST", json: { name, url } });
+      onClose(r.id);
+    } catch (e2) {
+      setErr((e2 as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title="Outra loja"
+      icon={<Icon name="shop" />}
+      onClose={() => onClose(null)}
+      footer={
+        <>
+          <button className="btn" onClick={() => onClose(null)}>Cancelar</button>
+          <button className="btn btn-primary" disabled={busy || !url.trim()} onClick={() => save()}>{busy ? "Salvando…" : "Adicionar e entrar"}</button>
+        </>
+      }
+    >
+      <form className="cp-form compact" onSubmit={save}>
+        <div className="field cp-span-all">
+          <label>Site da loja</label>
+          <input className="input" inputMode="url" placeholder="www.lojaexemplo.com.br" value={url} onChange={(e) => setUrl(e.target.value)} autoFocus required />
+        </div>
+        <div className="field cp-span-all">
+          <label>Nome (opcional)</label>
+          <input className="input" placeholder="Loja Exemplo" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
+        </div>
+      </form>
+      <p className="muted cp-small">Depois você entra na sua conta dela. A compra só fecha se a loja aceitar Pix.</p>
+      {err && <p className="cp-err">{err}</p>}
+    </Modal>
+  );
+}
+
+/** E-mail e senha da loja para a Nina entrar de novo sozinha quando o login vencer. */
+function AccessModal({ store, onClose }: { store: Store; onClose: (ok: boolean) => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const save = async (e?: FormEvent) => {
+    e?.preventDefault();
+    setErr(null);
+    setBusy(true);
+    try {
+      await api(`/api/compras/lojas/${store.id}/acesso`, { method: "PUT", json: { email, password } });
+      onClose(true);
+    } catch (e2) {
+      setErr((e2 as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={`Login automático no ${store.name}`}
+      icon={<Icon name="shield" />}
+      onClose={() => onClose(false)}
+      footer={
+        <>
+          {store.access && (
+            <button
+              className="btn btn-ghost"
+              onClick={async () => {
+                await api(`/api/compras/lojas/${store.id}/acesso`, { method: "DELETE" });
+                onClose(true);
+              }}
+            >
+              Apagar acesso
+            </button>
+          )}
+          <button className="btn" onClick={() => onClose(false)}>Cancelar</button>
+          <button className="btn btn-primary" disabled={busy || (!email.trim() && !password)} onClick={() => save()}>{busy ? "Salvando…" : "Salvar"}</button>
+        </>
+      }
+    >
+      <p className="muted cp-small">
+        Quando o login da loja vencer, a Nina entra de novo sozinha: o sistema digita o e-mail e a senha direto no site da loja, sem o assistente ver. Se a loja
+        mandar um código por e-mail e o seu Gmail estiver conectado em Minha conta, ela pega o código lá. Código por SMS continua com você.
+      </p>
+      <form className="cp-form compact" onSubmit={save}>
+        <div className="field cp-span-all">
+          <label>E-mail ou usuário da loja</label>
+          <input className="input" autoComplete="off" placeholder={store.access ? "deixe em branco para manter" : ""} value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div className="field cp-span-all">
+          <label>Senha da loja</label>
+          <input className="input" type="password" autoComplete="new-password" placeholder={store.access ? "deixe em branco para manter" : ""} value={password} onChange={(e) => setPassword(e.target.value)} />
+        </div>
+      </form>
+      <p className="muted cp-small">Fica criptografado e só é usado no site dessa loja. Você apaga quando quiser.</p>
+      {err && <p className="cp-err">{err}</p>}
+    </Modal>
   );
 }
 
@@ -419,7 +586,7 @@ function StoreLogin({ store, name, onClose }: { store: string; name: string; onC
   return (
     <Modal
       title={`Entrar no ${name}`}
-      icon="shop"
+      icon={<Icon name="shop" />}
       onClose={() => onClose(false)}
       footer={
         <>

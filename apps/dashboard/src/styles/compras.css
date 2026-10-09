@@ -116,6 +116,15 @@
 .cp-stores li > span:first-child { display: grid; }
 .cp-stores small, .cp-list small { color: var(--muted); font-size: 12.5px; }
 .cp-row-actions { display: flex; gap: 6px; }
+.cp-empty { margin-top: 12px; }
+.cp-add { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.cp-add-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; font-size: 14px; }
+.cp-add-head .input { max-width: 220px; }
+.cp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.cp-chip { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: inherit; font: inherit; font-size: 13px; cursor: pointer; transition: border-color .15s, background .15s; }
+.cp-chip:hover { border-color: var(--text); background: var(--soft); }
+.cp-chip:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+.cp-chip-other { border-style: dashed; }
 .cp-accept { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
 .cp-agree { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer; }
 .cp-agree input { margin-top: 3px; accent-color: var(--violet); }
@@ -125,6 +134,7 @@
 .cp-form .field { margin: 0; }
 .cp-span2 { grid-column: span 2; }
 .cp-span-all { grid-column: 1 / -1; }
+#cp-dados .cp-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .cp-form-foot { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 6px; }
 .cp-form.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); text-align: left; }
 .cp-list { list-style: none; margin: 12px 0 0; padding: 0; }
@@ -144,6 +154,10 @@
 
 @media (max-width: 760px) {
   .cp-grid { grid-template-columns: 1fr; }
+  .cp-stores li { flex-wrap: wrap; }
+  .cp-row-actions { flex-wrap: wrap; }
+  .cp-add-head { flex-wrap: wrap; }
+  .cp-add-head .input { max-width: none; }
   .cp-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cp-list li { flex-direction: column; gap: 8px; }
   .cp-list-side { flex-wrap: wrap; }

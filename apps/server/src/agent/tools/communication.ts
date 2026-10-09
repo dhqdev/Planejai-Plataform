@@ -4,11 +4,11 @@ import { EMAIL } from "./agenda.js";
 import { htmlToText } from "./research.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
-const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
+export const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 
 const header = (msg: any, name: string) => msg.payload?.headers?.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value;
 
-function bodyText(part: any): string {
+export function bodyText(part: any): string {
   if (!part) return "";
   if (part.mimeType === "text/plain" && part.body?.data) return Buffer.from(part.body.data, "base64url").toString("utf8");
   if (part.parts) {

@@ -78,9 +78,15 @@ export function PurchaseTermsPage() {
 
         <h3>Sua conta na loja</h3>
         <ul>
-          <li>Você entra na sua conta da loja pelo painel, numa janela que mostra a página da própria loja. Senha e códigos vão direto para a loja; o assistente nunca vê nem guarda sua senha.</li>
-          <li>Guardamos só o login que a loja devolve (cookies), criptografado, para o assistente entrar na sua conta na hora de comprar. Você desconecta quando quiser em Compras.</li>
-          <li>O assistente só usa a sua conta para as compras que você pedir, e nunca digita senha, código ou cartão em site nenhum.</li>
+          <li>Você entra na sua conta da loja pelo painel, numa janela que mostra a página da própria loja. Senha e códigos vão direto para a loja; o assistente nunca vê sua senha.</li>
+          <li>Guardamos o login que a loja devolve (cookies), criptografado, para o assistente entrar na sua conta na hora de comprar. Você desconecta quando quiser em Compras.</li>
+          <li>
+            <b>Login automático (opcional):</b> se você salvar o e-mail e a senha de uma loja, eles ficam criptografados e, quando o login vencer, o
+            sistema digita os dois direto no site daquela loja, sem o assistente ver. Se a loja mandar um código por e-mail e o seu Gmail estiver
+            conectado, o sistema procura o código só nos e-mails recentes daquela loja e digita do mesmo jeito. Você apaga o acesso quando quiser.
+          </li>
+          <li>Você também pode cadastrar uma loja que não está na lista, pelo site dela. A compra só fecha se a loja aceitar Pix.</li>
+          <li>O assistente só usa a sua conta para as compras que você pedir, e nunca digita cartão em site nenhum.</li>
         </ul>
 
         <h3>Seus dados nas compras</h3>

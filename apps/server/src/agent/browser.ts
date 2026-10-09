@@ -49,6 +49,9 @@ export class BrowserSession {
   actions: string[] = [];
   /** loja em que entrou com o login da pessoa (para guardar os cookies renovados no fim) */
   store: string | null = null;
+  /** guardar os cookies da loja no fim: entrou já logada ou fez login nesta navegação */
+  saveLogin = false;
+  readonly openedAt = Date.now();
 
   private constructor(private browser: Browser, readonly page: Page) {}
 
@@ -125,7 +128,9 @@ export class BrowserSession {
           if (r.width < 4 || r.height < 4 || r.bottom < 0 || r.top > window.innerHeight * 2.5) continue;
           const st = getComputedStyle(el);
           if (st.visibility === "hidden" || st.display === "none") continue;
-          const label = (el.getAttribute("aria-label") || el.innerText || (el as HTMLInputElement).placeholder || (el as HTMLInputElement).value || el.getAttribute("title") || "")
+          // senha e o que o servidor digitou como segredo nunca aparecem para o modelo
+          const secret = (el as HTMLInputElement).type === "password" || el.hasAttribute("data-pj-secret");
+          const label = (el.getAttribute("aria-label") || el.innerText || (el as HTMLInputElement).placeholder || (secret ? "" : (el as HTMLInputElement).value) || el.getAttribute("title") || "")
             .replace(/\s+/g, " ")
             .trim()
             .slice(0, 70);
@@ -229,6 +234,16 @@ export class BrowserSession {
       default:
         throw new Error(`ação desconhecida: ${a.action}`);
     }
+  }
+
+  /** Digita um segredo (senha, código do e-mail) sem registrar o texto nas ações nem mostrar o valor na página para o modelo. */
+  async fillSecret(ref: number, value: string, label: string) {
+    const target = `[data-pj-ref="${ref}"]`;
+    await this.highlight(String(ref));
+    this.actions.push(`digitar ${label} em [${ref}]`);
+    await this.page.$eval(target, (el) => el.setAttribute("data-pj-secret", "1"));
+    await this.page.click(target, { count: 3 } as any).catch(() => {});
+    await this.page.type(target, value, { delay: 40 });
   }
 
   /** Cookies dos domínios pedidos (para guardar o login da loja). */

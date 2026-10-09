@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { BrowserSession, type StoredCookie } from "./agent/browser.js";
 import { decryptJson, encryptJson } from "./crypto.js";
 import { many, one, query } from "./db/pool.js";
-import { STORES, storeOf } from "./purchases.js";
+import { storeDefFor, storeOfFor, storesOf } from "./stores.js";
 
 /**
  * Login da pessoa na conta dela de uma loja, feito por ELA no painel: o servidor abre um navegador na página da loja,
@@ -18,6 +18,7 @@ interface Live {
   id: string;
   userId: string;
   store: string;
+  def: { domains: string[]; home: string };
   session: BrowserSession;
   touched: number;
 }
@@ -44,15 +45,15 @@ function own(id: string, userId: string) {
 }
 
 export async function startStoreLogin(userId: string, store: string) {
-  const def = STORES[store];
-  if (!def) throw new Error("Loja não suportada.");
+  const def = await storeDefFor(userId, store);
+  if (!def) throw new Error("Loja não encontrada.");
   // uma janela por pessoa
   for (const l of [...live.values()]) if (l.userId === userId) await closeLive(l.id);
   if (live.size >= MAX_LIVE) throw new Error("Muita gente conectando loja agora. Tente de novo em um minuto.");
   const session = await BrowserSession.open(false, { cookies: await storeCookies(userId, store) });
   await session.page.setViewport({ width: 420, height: 760, isMobile: true, hasTouch: false });
   const id = randomUUID();
-  live.set(id, { id, userId, store, session, touched: Date.now() });
+  live.set(id, { id, userId, store, def, session, touched: Date.now() });
   await session.goto(def.home).catch(async (err) => {
     await closeLive(id);
     throw err;
@@ -97,7 +98,7 @@ export async function loginInput(id: string, userId: string, input: LoginInput) 
   }
   await new Promise((r) => setTimeout(r, 400));
   // a janela é só para entrar na loja: saiu do site dela, volta para o começo
-  if (storeOf(page.url()) !== l.store && page.url() !== "about:blank") await l.session.goto(STORES[l.store]!.home).catch(() => {});
+  if ((await storeOfFor(userId, page.url())) !== l.store && page.url() !== "about:blank") await l.session.goto(l.def.home).catch(() => {});
   return { url: page.url() };
 }
 
@@ -105,7 +106,7 @@ export async function loginInput(id: string, userId: string, input: LoginInput) 
 export async function finishStoreLogin(id: string, userId: string) {
   const l = own(id, userId);
   try {
-    const cookies = await l.session.cookiesFor(STORES[l.store]!.domains);
+    const cookies = await l.session.cookiesFor(l.def.domains);
     if (!cookies.length) throw new Error("A loja não guardou nenhum login. Entre na sua conta antes de concluir.");
     await saveStoreCookies(userId, l.store, cookies);
     return { ok: true, store: l.store };
@@ -138,15 +139,28 @@ export async function storeCookies(userId: string, store: string): Promise<Store
 
 /** Cookies da loja dessa URL, se a pessoa conectou a conta dela. */
 export async function cookiesForUrl(userId: string, url: string) {
-  const store = storeOf(url);
+  const store = await storeOfFor(userId, url);
   return store ? { store, cookies: await storeCookies(userId, store) } : { store: null, cookies: [] };
 }
 
+/** Lojas para a tela: as do catálogo e as que a pessoa cadastrou, com login conectado e acesso salvo. */
 export async function connectedStores(userId: string) {
-  const rows = await many("SELECT store, updated_at FROM store_sessions WHERE user_id = $1", [userId]);
-  return Object.entries(STORES).map(([id, s]) => {
+  const [rows, access, defs] = await Promise.all([
+    many("SELECT store, updated_at FROM store_sessions WHERE user_id = $1", [userId]),
+    many("SELECT store FROM store_logins WHERE user_id = $1", [userId]),
+    storesOf(userId),
+  ]);
+  return Object.entries(defs).map(([id, s]) => {
     const r = rows.find((x) => x.store === id);
-    return { id, name: s.name, connected: Boolean(r), updated_at: r?.updated_at ?? null };
+    return {
+      id,
+      name: s.name,
+      site: s.domains[0]!,
+      custom: Boolean(s.custom),
+      connected: Boolean(r),
+      updated_at: r?.updated_at ?? null,
+      access: access.some((x) => x.store === id),
+    };
   });
 }
 
