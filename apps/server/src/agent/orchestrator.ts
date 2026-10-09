@@ -314,14 +314,17 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     const history = [...past.filter((e) => !pendingIds.has(e.id) && e.ts > summarizedTs), ...fresh];
 
     const messages: ChatMessage[] = [];
+    let afterEvent = false;
     for (const m of history) {
       if (m.role === "assistant") messages.push({ role: "assistant", content: m.text });
       else if (m.role === "event") messages.push({ role: "user", content: `[evento do sistema] ${m.text}` });
       else {
         const isNew = pendingIds.has(m.id);
-        const prefix = isNew ? `[msg_id=${m.id}] ` : "";
+        // logo depois de um recado de terceiro, deixa claro que quem fala agora é a própria pessoa (senão o modelo mistura os dois)
+        const prefix = `${isNew ? `[msg_id=${m.id}] ` : ""}${afterEvent ? "[a própria pessoa, para você] " : ""}`;
         messages.push({ role: "user", content: `${prefix}${m.text}` });
       }
+      afterEvent = m.role === "event";
     }
     // Só entra no time quem tem pelo menos uma ferramenta utilizável (menos token e nada de delegação inútil)
     const team: AgentDef[] = [];
