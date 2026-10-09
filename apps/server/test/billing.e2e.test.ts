@@ -328,10 +328,10 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     expect(await db.one("SELECT discount_percent, value::float AS value FROM subscriptions WHERE user_id = $1", [ana.id])).toEqual({ discount_percent: 5, value: 18.9 });
     expect((await outbox()).find((m: any) => m.userId === beto.id && /pay_b2/.test(m.text))).toBeTruthy();
 
-    // lembrete de vencimento: Pix ouve antes; cartão não
+    // lembrete de vencimento: assinatura Pix/boleto ouve antes (mesmo tendo pago um mês no cartão); assinatura no cartão não
     await db.query("DELETE FROM pgboss.job WHERE name = 'outbound.send'");
-    await db.query("UPDATE subscriptions SET status = 'active', next_due_date = (now() AT TIME ZONE 'America/Sao_Paulo')::date + 3, last_billing_type = 'PIX', reminded_on = NULL WHERE user_id = $1", [beto.id]);
-    await db.query("UPDATE subscriptions SET next_due_date = (now() AT TIME ZONE 'America/Sao_Paulo')::date + 3, last_billing_type = 'CREDIT_CARD' WHERE user_id = ANY($1)", [[ana.id, caio.id]]);
+    await db.query("UPDATE subscriptions SET status = 'active', next_due_date = (now() AT TIME ZONE 'America/Sao_Paulo')::date + 3, pay_method = 'pix', last_billing_type = 'CREDIT_CARD', reminded_on = NULL WHERE user_id = $1", [beto.id]);
+    await db.query("UPDATE subscriptions SET next_due_date = (now() AT TIME ZONE 'America/Sao_Paulo')::date + 3, pay_method = 'card', last_billing_type = 'CREDIT_CARD' WHERE user_id = ANY($1)", [[ana.id, caio.id]]);
     expect((await billing.billingReminders()).due).toBe(1);
     expect((await outbox())[0]).toMatchObject({ userId: beto.id, text: expect.stringMatching(/vence a sua mensalidade de R\$ 19,90/) });
     expect((await billing.billingReminders()).due).toBe(0);

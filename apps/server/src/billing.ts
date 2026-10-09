@@ -566,7 +566,8 @@ export async function syncDiscount(userId: string) {
 
 /**
  * Rodada diária (de manhã): lembra o vencimento de quem paga plano por Pix/boleto (N dias antes e no dia)
- * e confere o desconto de indicação de quem tem plano. Cartão renova sozinho: não lembra.
+ * e confere o desconto de indicação de quem tem plano. Assinatura no cartão renova sozinha: não lembra. Vale a forma
+ * escolhida na assinatura (pay_method): quem é Pix/boleto e pagou um mês no cartão continua recebendo o lembrete.
  */
 export async function billingReminders(log?: { info: (...a: any[]) => void; error: (...a: any[]) => void }) {
   const s = await getSettings();
@@ -578,7 +579,7 @@ export async function billingReminders(log?: { info: (...a: any[]) => void; erro
     `SELECT s.*, to_char(s.next_due_date, 'YYYY-MM-DD') AS next_due_date, (s.next_due_date - $1::date) AS days
        FROM subscriptions s JOIN users u ON u.id = s.user_id
       WHERE s.status IN ('trial', 'active') AND s.asaas_subscription_id IS NOT NULL AND s.next_due_date IS NOT NULL AND u.status = 'active' AND NOT u.billing_exempt
-        AND COALESCE(s.last_billing_type, '') <> 'CREDIT_CARD' AND COALESCE(s.pay_method, '') <> 'card' AND s.reminded_on IS DISTINCT FROM $1::date
+        AND COALESCE(s.pay_method, '') <> 'card' AND s.reminded_on IS DISTINCT FROM $1::date
         AND (s.next_due_date - $1::date) IN ($2::int, 0)`,
     [today, before],
   );
