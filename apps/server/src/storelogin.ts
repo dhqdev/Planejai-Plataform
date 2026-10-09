@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { BrowserSession, type StoredCookie } from "./agent/browser.js";
+import { BrowserSession, DEVICES, type StoredCookie } from "./agent/browser.js";
 import { decryptJson, encryptJson } from "./crypto.js";
 import { many, one, query } from "./db/pool.js";
 import { storeDefFor, storeOfFor, storesOf } from "./stores.js";
@@ -19,6 +19,7 @@ interface Live {
   userId: string;
   store: string;
   def: { domains: string[]; home: string };
+  device: keyof typeof DEVICES;
   session: BrowserSession;
   touched: number;
 }
@@ -44,21 +45,22 @@ function own(id: string, userId: string) {
   return l;
 }
 
-export async function startStoreLogin(userId: string, store: string) {
+/** Abre a loja no tamanho do aparelho de quem está entrando (notebook ou celular), para a página não vir cortada. */
+export async function startStoreLogin(userId: string, store: string, device: keyof typeof DEVICES = "desktop") {
   const def = await storeDefFor(userId, store);
   if (!def) throw new Error("Loja não encontrada.");
   // uma janela por pessoa
   for (const l of [...live.values()]) if (l.userId === userId) await closeLive(l.id);
   if (live.size >= MAX_LIVE) throw new Error("Muita gente conectando loja agora. Tente de novo em um minuto.");
-  const session = await BrowserSession.open(false, { cookies: await storeCookies(userId, store) });
-  await session.page.setViewport({ width: 420, height: 760, isMobile: true, hasTouch: false });
+  if (!DEVICES[device]) device = "desktop";
+  const session = await BrowserSession.open(false, { cookies: await storeCookies(userId, store), device });
   const id = randomUUID();
-  live.set(id, { id, userId, store, def, session, touched: Date.now() });
+  live.set(id, { id, userId, store, def, device, session, touched: Date.now() });
   await session.goto(def.home).catch(async (err) => {
     await closeLive(id);
     throw err;
   });
-  return { id, width: 420, height: 760 };
+  return { id, width: DEVICES[device].width, height: DEVICES[device].height, device };
 }
 
 export async function loginFrame(id: string, userId: string) {
@@ -75,9 +77,12 @@ export async function loginInput(id: string, userId: string, input: LoginInput) 
   const page = l.session.page;
   switch (input?.type) {
     case "click": {
-      const x = Math.max(0, Math.min(420, Number(input.x) || 0));
-      const y = Math.max(0, Math.min(760, Number(input.y) || 0));
-      await page.mouse.click(x, y);
+      const { width, height } = DEVICES[l.device];
+      const x = Math.max(0, Math.min(width, Number(input.x) || 0));
+      const y = Math.max(0, Math.min(height, Number(input.y) || 0));
+      // no celular a loja espera toque, não clique de mouse
+      if (l.device === "mobile") await page.touchscreen.tap(x, y);
+      else await page.mouse.click(x, y);
       break;
     }
     case "text":
@@ -87,9 +92,13 @@ export async function loginInput(id: string, userId: string, input: LoginInput) 
       if (!KEYS.has(input.key)) throw new Error("tecla não permitida");
       await page.keyboard.press(input.key as any);
       break;
-    case "scroll":
+    case "scroll": {
+      // rola onde a pessoa está olhando (meio da tela), que pode ser uma lista com rolagem própria
+      const { width, height } = DEVICES[l.device];
+      await page.mouse.move(width / 2, height / 2);
       await page.mouse.wheel({ deltaY: Math.max(-1500, Math.min(1500, Number(input.dy) || 0)) });
       break;
+    }
     case "back":
       await page.goBack({ waitUntil: "domcontentloaded", timeout: 15_000 }).catch(() => {});
       break;

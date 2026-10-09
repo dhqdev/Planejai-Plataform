@@ -144,7 +144,11 @@
 .cp-list-main a { color: var(--text); }
 .cp-list-side { display: flex; align-items: center; gap: 10px; flex: none; font-variant-numeric: tabular-nums; }
 .cp-live { display: grid; place-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-top: 12px; }
-.cp-live img { display: block; width: 100%; max-width: 360px; height: auto; cursor: pointer; }
+.cp-live img { display: block; width: 100%; height: auto; cursor: pointer; }
+.cp-live-mobile img { max-width: 390px; max-height: calc(100dvh - 330px); width: auto; }
+.cp-live-desktop img { max-height: calc(100dvh - 330px); width: auto; max-width: 100%; }
+.cp-live-desktop:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+.modal.wide.cp-login-modal { width: min(1120px, 100%); }
 .cp-live-wait { padding: 120px 16px; color: var(--muted); font-size: 14px; }
 .cp-type { display: flex; gap: 8px; margin-top: 12px; }
 .cp-type .input { flex: 1; }

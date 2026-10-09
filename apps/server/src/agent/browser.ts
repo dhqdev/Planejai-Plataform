@@ -40,6 +40,41 @@ export interface Snapshot {
  * em vídeo. Para economizar tokens, o agente recebe só o texto da página e a lista numerada de
  * elementos clicáveis, nunca a imagem.
  */
+/** Tamanho da tela de cada aparelho (o painel mostra a tela da loja do jeito que a pessoa está vendo). */
+export const DEVICES = {
+  desktop: { width: 1280, height: 800, isMobile: false, hasTouch: false },
+  mobile: { width: 390, height: 780, isMobile: true, hasTouch: true },
+} as const;
+
+/**
+ * O Chrome sem tela se anuncia como "HeadlessChrome" e com navigator.webdriver ligado, e várias lojas (Mercado Livre,
+ * Shopee) respondem com página de erro ou em espanhol. Aqui ele se apresenta como um Chrome comum, em português e no
+ * fuso de São Paulo, no tamanho do aparelho de quem está usando. Não burla captcha nem login: só não parece robô à toa.
+ */
+async function passAsPerson(page: Page, version: string, device: keyof typeof DEVICES) {
+  const major = version.match(/(\d+)\./)?.[1] ?? "130";
+  const mobile = device === "mobile";
+  const ua = mobile
+    ? `Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Mobile Safari/537.36`
+    : `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`;
+  const brands = [
+    { brand: "Chromium", version: major },
+    { brand: "Google Chrome", version: major },
+    { brand: "Not?A_Brand", version: "99" },
+  ];
+  await page
+    .setUserAgent(ua, { brands, fullVersion: `${major}.0.0.0`, platform: mobile ? "Android" : "Windows", platformVersion: mobile ? "14.0.0" : "10.0.0", architecture: mobile ? "" : "x86", model: mobile ? "Pixel 8" : "", mobile })
+    .catch(() => {});
+  await page.emulateTimezone("America/Sao_Paulo").catch(() => {});
+  await page.setViewport({ ...DEVICES[device], deviceScaleFactor: 1 });
+  await page
+    .evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+      Object.defineProperty(navigator, "languages", { get: () => ["pt-BR", "pt", "en-US"] });
+    })
+    .catch(() => {});
+}
+
 export class BrowserSession {
   private frames: { data: Buffer; ts: number }[] = [];
   private cdp: CDPSession | null = null;
@@ -55,7 +90,7 @@ export class BrowserSession {
 
   private constructor(private browser: Browser, readonly page: Page) {}
 
-  static async open(record: boolean, opts: { cookies?: StoredCookie[] } = {}): Promise<BrowserSession> {
+  static async open(record: boolean, opts: { cookies?: StoredCookie[]; device?: "desktop" | "mobile" } = {}): Promise<BrowserSession> {
     const puppeteer = (await import("puppeteer-core")).default;
     const b = await getCredentials("browserless");
     let browser: Browser;
@@ -78,6 +113,7 @@ export class BrowserSession {
     // login da pessoa numa loja (feito por ela no painel): entra já logada
     if (opts.cookies?.length) await page.setCookie(...(opts.cookies as any[])).catch(() => {});
     await page.setExtraHTTPHeaders({ "Accept-Language": "pt-BR,pt;q=0.9" });
+    await passAsPerson(page, await browser.version(), opts.device ?? "desktop");
     // nenhum pedido da página (link, redirecionamento, script, imagem) pode ir para a rede interna da stack
     await page.setRequestInterception(true);
     page.on("request", (req) => {

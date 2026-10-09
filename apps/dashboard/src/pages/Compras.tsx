@@ -1,4 +1,4 @@
-import { type FormEvent, type MouseEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, type MouseEvent, type WheelEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, brl } from "../api";
 import { ComoFuncionaCompras, ComprasPoliticaResumo } from "../ComoFuncionaCompras";
@@ -521,7 +521,12 @@ export function AddressForm({ profile, onSaved, compact }: { profile: BuyerProfi
  * Janela ao vivo para a pessoa entrar na conta da loja: mostra a tela do navegador do servidor e manda os toques
  * e o que ela digita. O que é digitado vai direto para a página da loja, sem passar pelo assistente.
  */
+// celular ou tablet na mão: a loja abre como no celular; notebook: como no computador
+const isPhone = () => typeof window !== "undefined" && (window.matchMedia("(max-width: 760px)").matches || window.matchMedia("(pointer: coarse)").matches);
+const PASS_KEYS = new Set(["Enter", "Backspace", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Delete"]);
+
 function StoreLogin({ store, name, onClose }: { store: string; name: string; onClose: (ok: boolean) => void }) {
+  const [device] = useState(() => (isPhone() ? "mobile" : "desktop"));
   const [sess, setSess] = useState<{ id: string; width: number; height: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -534,7 +539,7 @@ function StoreLogin({ store, name, onClose }: { store: string; name: string; onC
 
   useEffect(() => {
     let alive = true;
-    api<{ id: string; width: number; height: number }>(`/api/compras/lojas/${store}/login`, { method: "POST", headers: quiet }).then(
+    api<{ id: string; width: number; height: number }>(`/api/compras/lojas/${store}/login`, { method: "POST", headers: quiet, json: { device } }).then(
       (s) => {
         if (!alive) return void api(`/api/compras/login/${s.id}`, { method: "DELETE", headers: quiet }).catch(() => {});
         idRef.current = s.id;
@@ -569,6 +574,33 @@ function StoreLogin({ store, name, onClose }: { store: string; name: string; onC
     const r = img.getBoundingClientRect();
     void send({ type: "click", x: Math.round(((e.clientX - r.left) / r.width) * sess.width), y: Math.round(((e.clientY - r.top) / r.height) * sess.height) });
   };
+  // no notebook dá para digitar direto na tela da loja (clique nela antes) e rolar com a roda do mouse
+  const pending = useRef("");
+  const flush = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typeKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key.length === 1) {
+      e.preventDefault();
+      pending.current += e.key;
+      if (flush.current) clearTimeout(flush.current);
+      flush.current = setTimeout(() => {
+        const text = pending.current;
+        pending.current = "";
+        void send({ type: "text", text });
+      }, 250);
+    } else if (PASS_KEYS.has(e.key)) {
+      e.preventDefault();
+      void send({ type: "key", key: e.key });
+    }
+  };
+  const lastWheel = useRef(0);
+  const wheel = (e: WheelEvent<HTMLDivElement>) => {
+    const now = Date.now();
+    if (now - lastWheel.current < 300) return;
+    lastWheel.current = now;
+    void send({ type: "scroll", dy: Math.sign(e.deltaY) * 400 });
+  };
+
   const finish = async () => {
     if (!sess) return;
     setBusy(true);
@@ -587,6 +619,8 @@ function StoreLogin({ store, name, onClose }: { store: string; name: string; onC
     <Modal
       title={`Entrar no ${name}`}
       icon={<Icon name="shop" />}
+      wide={device === "desktop"}
+      className={device === "desktop" ? "cp-login-modal" : undefined}
       onClose={() => onClose(false)}
       footer={
         <>
@@ -595,9 +629,13 @@ function StoreLogin({ store, name, onClose }: { store: string; name: string; onC
         </>
       }
     >
-      <p className="muted cp-small">Toque na tela da loja para escolher os campos e use a caixa abaixo para digitar. Entre na sua conta normalmente, inclusive com o código que a loja mandar.</p>
+      <p className="muted cp-small">
+        {device === "desktop"
+          ? "Clique na tela da loja e digite normalmente; a roda do mouse rola a página. Entre na sua conta como sempre, inclusive com o código que a loja mandar."
+          : "Toque na tela da loja para escolher os campos e use a caixa abaixo para digitar. Entre na sua conta normalmente, inclusive com o código que a loja mandar."}
+      </p>
       {err && <p className="cp-err">{err}</p>}
-      <div className="cp-live">
+      <div className={`cp-live cp-live-${device}`} tabIndex={device === "desktop" ? 0 : undefined} onKeyDown={device === "desktop" ? typeKey : undefined} onWheel={device === "desktop" ? wheel : undefined}>
         {sess ? (
           <img ref={imgRef} src={`/api/compras/login/${sess.id}/tela?t=${tick}`} alt={`Tela do ${name}`} onClick={click} width={sess.width} height={sess.height} />
         ) : (

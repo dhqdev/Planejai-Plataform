@@ -91,12 +91,12 @@ export function purchaseRoutes(base: FastifyInstance) {
   });
 
   // ---------- Conta da pessoa na loja: login feito por ela numa janela ao vivo ----------
-  base.post<{ Params: { store: string } }>("/api/compras/lojas/:store/login", async (req, reply) => {
+  base.post<{ Params: { store: string }; Body: { device?: string } }>("/api/compras/lojas/:store/login", async (req, reply) => {
     const uid = await uidOf(req, reply);
     if (!uid) return;
     if (!(await storeDefFor(uid, req.params.store))) return reply.code(404).send({ error: "Loja não encontrada." });
     try {
-      return await startStoreLogin(uid, req.params.store);
+      return await startStoreLogin(uid, req.params.store, req.body?.device === "mobile" ? "mobile" : "desktop");
     } catch (err) {
       return fail(reply, err);
     }

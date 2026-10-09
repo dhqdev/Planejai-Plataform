@@ -10,12 +10,16 @@ const enabled = Boolean(process.env.CHROME_PATH && process.env.TEST_DATABASE_URL
 describe.skipIf(!enabled)("navegador com gravação", () => {
   let server: http.Server;
   let base = "";
+  const seen: string[] = [];
   beforeAll(async () => {
     await (await import("../src/db/migrate.js")).migrate(() => {});
     server = http
       .createServer((req, res) => {
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        if (req.url?.startsWith("/sessoes")) {
+        if (req.url?.startsWith("/login")) {
+          seen.push(String(req.headers["user-agent"]));
+          res.end(`<meta name="viewport" content="width=device-width"><h1>Entrar</h1><input type="password" placeholder="Senha"><button>Entrar</button>`);
+        } else if (req.url?.startsWith("/sessoes")) {
           const filme = new URL(req.url, "http://x").searchParams.get("q");
           res.end(`<h1>Sessões de ${filme}</h1><p>14h30 · 17h00 · 20h15</p>`);
         } else {
@@ -52,6 +56,30 @@ describe.skipIf(!enabled)("navegador com gravação", () => {
       expect(video!.length).toBeGreaterThan(1000);
     } finally {
       await b.close();
+    }
+  }, 60_000);
+
+  it("loja abre como um Chrome comum, no tamanho do aparelho, e a senha digitada não aparece para o modelo", async () => {
+    const { BrowserSession } = await import("../src/agent/browser.js");
+    for (const device of ["mobile", "desktop"] as const) {
+      const b = await BrowserSession.open(false, { device });
+      try {
+        await b.goto(`${base}/login`);
+        const info = await b.page.evaluate(() => ({ ua: navigator.userAgent, webdriver: navigator.webdriver, w: innerWidth, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, lang: navigator.languages[0] }));
+        expect(info.ua).not.toMatch(/Headless/);
+        expect(seen.at(-1)).not.toMatch(/Headless/);
+        expect(info.webdriver).toBeFalsy();
+        expect(info).toMatchObject({ w: device === "mobile" ? 390 : 1280, tz: "America/Sao_Paulo", lang: "pt-BR" });
+        expect(info.ua.includes("Mobile")).toBe(device === "mobile");
+        const ref = Number((await b.snapshot()).elements.match(/\[(\d+)\] campo password/)?.[1]);
+        await b.fillSecret(ref, "s3gredo!", "a senha da loja");
+        const after = await b.snapshot();
+        expect(JSON.stringify(after)).not.toContain("s3gredo");
+        expect(b.actions.join(" ")).not.toContain("s3gredo");
+        expect(await b.page.$eval("input", (el) => (el as HTMLInputElement).value)).toBe("s3gredo!");
+      } finally {
+        await b.close();
+      }
     }
   }, 60_000);
 });
