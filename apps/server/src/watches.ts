@@ -6,6 +6,7 @@ import { mercadolivreSearch, webSearch } from "./agent/tools/research.js";
 import { Tracer } from "./agent/trace.js";
 import { notifyUser } from "./social.js";
 import { brl } from "./agent/tools/finance.js";
+import { billingAccess } from "./billing.js";
 
 /**
  * Acompanhamentos: o assistente fica de olho em algo que a pessoa quer (preço de um produto, novidade de um assunto)
@@ -158,9 +159,12 @@ async function checkOne(w: any): Promise<boolean> {
     return false;
   }
   const first = !w.checks;
+  // carteira de grãos zerada: sem IA. Preço tem aviso pronto; novidade precisa da IA para filtrar, então espera
+  const noAi = !(await billingAccess(ctx.user)).allowed;
+  if (noAi && w.kind === "news") return false;
   let out = w.kind === "price" ? await checkPrice(w, ctx) : await checkNews(w, ctx);
   let sent = false;
-  if (out.found && out.facts) sent = await send(w, out.facts, out.fallback ?? null, out.mayBeIrrelevant);
+  if (out.found && out.facts) sent = await send(w, out.facts, out.fallback ?? null, out.mayBeIrrelevant, noAi);
   // a IA leu os resultados novos e nada respondia ao pedido
   if (out.found && !sent) out = { found: false, summary: "apareceram resultados, mas nada que responda ao seu pedido." };
   await query("UPDATE watches SET checks = checks + 1, last_check_at = now(), last_result = $2 WHERE id = $1", [
@@ -236,7 +240,13 @@ async function checkNews(w: any, ctx: any): Promise<Outcome> {
 }
 
 /** Escreve a mensagem com o modelo barato (ou usa o texto pronto se a IA falhar) e manda. */
-async function send(w: any, facts: string, fallback: string | null, mayBeIrrelevant = false): Promise<boolean> {
+async function send(w: any, facts: string, fallback: string | null, mayBeIrrelevant = false, noAi = false): Promise<boolean> {
+  if (noAi) {
+    if (!fallback) return false;
+    await notifyUser(w.user_id, fallback);
+    await query("UPDATE watches SET notified = notified + 1 WHERE id = $1", [w.id]);
+    return true;
+  }
   const tracer = await Tracer.start({ trigger: "watch", userId: w.user_id, conversationId: w.conversation_id, input: facts.slice(0, 2000) });
   let text = fallback;
   try {

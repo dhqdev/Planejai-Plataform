@@ -52,9 +52,11 @@ export class Tracer {
   private constructor(
     readonly executionId: string,
     readonly userId: string | null,
+    /** trabalho da própria plataforma (melhoria noturna): conta o custo, mas não tira grãos da pessoa */
+    readonly noCharge = false,
   ) {}
 
-  static async start(opts: { trigger: string; userId?: string | null; conversationId?: string | null; input?: string }) {
+  static async start(opts: { trigger: string; userId?: string | null; conversationId?: string | null; input?: string; noCharge?: boolean }) {
     const row = await one<{ id: string }>(
       "INSERT INTO executions (trigger, user_id, conversation_id, input) VALUES ($1, $2, $3, $4) RETURNING id",
       [opts.trigger, opts.userId ?? null, opts.conversationId ?? null, opts.input == null ? null : maskPersonal(opts.input)],
@@ -65,7 +67,7 @@ export class Tracer {
         [opts.userId],
       ).catch(() => {});
     }
-    return new Tracer(row!.id, opts.userId ?? null);
+    return new Tracer(row!.id, opts.userId ?? null, Boolean(opts.noCharge));
   }
 
   async step(opts: { agent: string; type: StepType; name: string; input?: unknown; parentId?: number | null; model?: string }): Promise<StepHandle> {
@@ -78,6 +80,7 @@ export class Tracer {
     const id = row!.id;
     const execId = this.executionId;
     const userId = this.userId;
+    const charge = !this.noCharge;
     return {
       id,
       async ok(output, usage) {
@@ -99,7 +102,7 @@ export class Tracer {
               [userId, usage.tokensIn ?? 0, usage.tokensOut ?? 0, usage.costUsd ?? 0],
             ).catch(() => {});
             // grãos: o custo real deste passo sai da carteira da pessoa (cobrança desligada não faz nada)
-            if (usage.costUsd) void chargeUsage(userId, usage.costUsd).catch(() => {});
+            if (usage.costUsd && charge) void chargeUsage(userId, usage.costUsd).catch(() => {});
           }
         }
       },

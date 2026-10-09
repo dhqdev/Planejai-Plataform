@@ -1,4 +1,5 @@
 import { getSettings } from "../settings.js";
+import { billingAccess } from "../billing.js";
 import { one, query } from "../db/pool.js";
 import { type Errand, type ErrandLogEntry, MAX_ERRAND_MESSAGES, finishErrand, sendToErrand } from "../errands.js";
 import type { ChatMessage } from "../llm/types.js";
@@ -87,6 +88,13 @@ export async function runErrandTurn(errandId: string) {
   const person = (user.full_name || user.name || "a pessoa").split(" ")[0]!;
   const lastTheirs = e.log.filter((l) => l.from === "eles").slice(-3).map((l) => l.text).join("\n");
   const tracer = await Tracer.start({ trigger: "errand", userId: user.id, conversationId: conversation.id, input: `${e.place}: ${lastTheirs}` });
+  // carteira de grãos zerada: o recado espera (a próxima resposta deles chama de novo quando houver grão)
+  if (!(await billingAccess(user, settings)).allowed) {
+    const step = await tracer.step({ agent: "recados", type: "info", name: "trava: grãos" });
+    await step.ok({ blocked: true });
+    await tracer.finish("[grãos: recado esperando]");
+    return null;
+  }
 
   try {
     // áudio, foto ou documento deles: interpreta uma vez e guarda o texto no recado (a mídia sai do banco)

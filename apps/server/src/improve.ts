@@ -57,7 +57,8 @@ export async function improveUser(userId: string) {
   );
   const tabs = await getTabs(userId);
 
-  const tracer = await Tracer.start({ trigger: "improve", userId, input: `${asks.length} pedidos nas últimas 24h` });
+  // a reunião noturna é otimização da plataforma: o custo aparece no uso, mas não sai da carteira de grãos da pessoa
+  const tracer = await Tracer.start({ trigger: "improve", userId, input: `${asks.length} pedidos nas últimas 24h`, noCharge: true });
   const step = await tracer.step({ agent: "cto", type: "llm", name: "reunião noturna do time" });
   const prompt =
     `Pedidos do cliente nas últimas 24h (um por linha):\n${asks.map((a) => `- ${a.t}`).join("\n")}\n\n` +

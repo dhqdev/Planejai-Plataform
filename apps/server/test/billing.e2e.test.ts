@@ -152,9 +152,15 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
 
   it("o uso desconta pelo custo real, soma no extrato do dia, avisa quando está acabando e quando zera", async () => {
     await db.query("DELETE FROM pgboss.job WHERE name = 'outbound.send'");
+    const { Tracer } = await import("../src/agent/trace.js");
+    // a reunião noturna é da plataforma: o custo conta no uso do dia, mas não sai da carteira
+    const nightly = await Tracer.start({ trigger: "improve", userId: user.id, input: "teste", noCharge: true });
+    await (await nightly.step({ agent: "cto", type: "llm", name: "reunião" })).ok({}, { model: "x", tokensIn: 10, tokensOut: 10, costUsd: 0.2 });
+    await new Promise((r) => setTimeout(r, 100));
+    expect(Number((await wallet()).extra_grains)).toBe(300);
+    expect(Number((await db.one("SELECT cost_usd FROM usage_daily WHERE user_id = $1", [user.id])).cost_usd)).toBeCloseTo(0.2);
     expect(await credits.chargeUsage(user.id, 0.05)).toEqual({ charged: 50, left: 250 });
     // o passo do Tracer com custo também desconta (sem travar a resposta)
-    const { Tracer } = await import("../src/agent/trace.js");
     const tracer = await Tracer.start({ trigger: "message", userId: user.id, conversationId: convId, input: "teste" });
     const step = await tracer.step({ agent: "cto", type: "llm", name: "teste" });
     await step.ok({}, { model: "x", tokensIn: 10, tokensOut: 10, costUsd: 0.1 });
@@ -196,6 +202,26 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     expect(next.channel.sent).toHaveLength(1);
     expect(next.channel.sent[0]!.text).toMatch(/grãos acabaram[\s\S]*\/plano$/);
     expect((await say("alô", "b3")).channel.sent).toEqual([]);
+
+    // lembrete sai com o texto pronto, sem IA; automação sem texto pronto fica em silêncio
+    const steps = async (id: string | null) => (await db.many("SELECT name FROM execution_steps WHERE execution_id = $1", [id])).map((r) => r.name);
+    const remind = new channels.PlaygroundChannel();
+    const r1 = await processConversation(convId, { trigger: "reminder", event: "Lembrete agendado: pagar a luz", plainText: "Lembrete: pagar a luz", channel: remind });
+    expect(remind.sent.map((m: any) => m.text)).toEqual(["Lembrete: pagar a luz"]);
+    expect(await steps(r1.executionId)).toEqual(["trava: grãos (lembrete sem IA)"]);
+    const auto = new channels.PlaygroundChannel();
+    const r2 = await processConversation(convId, { trigger: "reminder", event: "Uma automação disparou", channel: auto });
+    expect(auto.sent).toEqual([]);
+    expect(await steps(r2.executionId)).toEqual(["trava: grãos"]);
+    // recado: o estabelecimento respondeu, mas sem grãos o agente de recados não roda
+    const errand = await db.one(
+      `INSERT INTO errands (user_id, conversation_id, place, phone, jid, goal, log, expires_at)
+       VALUES ($1, $2, 'Barbearia', '5519900000000', '5519900000000@s.whatsapp.net', 'marcar corte', $3, now() + interval '1 day') RETURNING id`,
+      [user.id, convId, JSON.stringify([{ from: "eles", text: "tenho às 15h" }])],
+    );
+    const { runErrandTurn } = await import("../src/agent/errand-agent.js");
+    expect(await runErrandTurn(errand.id)).toBeNull();
+    expect(await db.one("SELECT status FROM errands WHERE id = $1", [errand.id])).toEqual({ status: "waiting" });
   });
 
   it("pacote avulso: cobrança no Asaas com referência própria, entra uma vez só quando paga e destrava", async () => {

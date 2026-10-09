@@ -190,20 +190,31 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       return { executionId: tracer.executionId, bubbles: [], outbox: new Outbox() };
     }
   }
-  // Lembrete de quem passou do limite de custo: sai o texto pronto, sem IA (um cron mal pedido não vira custo sem teto)
+  // Lembrete, recado ou automação com a carteira de grãos zerada: nada de IA de graça
+  const noGrains = proactive && settings.billingEnabled && !(await billingAccess(user, settings)).allowed;
+  // Lembrete de quem passou do limite de custo ou ficou sem grãos: sai o texto pronto, sem IA (um cron mal pedido não vira custo sem teto)
   if (opts.trigger === "reminder" && opts.plainText && !isOwner(user.phone)) {
-    const hit = await costLimitHit(user.id, settings.dailyCostLimitUsd);
+    const hit = noGrains ? { trava: "sem grãos" } : await costLimitHit(user.id, settings.dailyCostLimitUsd);
     if (hit) {
       const events = pending.filter((m) => m.role === "event");
       await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [events.map((m) => m.id)]);
       const tracer = await Tracer.start({ trigger: opts.trigger, userId: user.id, conversationId, input: opts.plainText });
-      const step = await tracer.step({ agent: "cto", type: "info", name: "trava: limite diário (lembrete sem IA)", input: hit });
+      const step = await tracer.step({ agent: "cto", type: "info", name: noGrains ? "trava: grãos (lembrete sem IA)" : "trava: limite diário (lembrete sem IA)", input: hit });
       await step.ok({ texto_pronto: true });
       await channel.sendText(conversation.remote_jid, opts.plainText).catch(() => {});
       await pushShort(conversationId, [{ id: Date.now(), role: "assistant", text: opts.plainText, ts: Date.now() }]).catch(() => {});
       await tracer.finish(opts.plainText);
       return { executionId: tracer.executionId, bubbles: [{ type: "text", text: opts.plainText }], outbox: new Outbox() };
     }
+  }
+  // Sem texto pronto (recado, automação): fica em silêncio; o aviso de grãos zerados já saiu
+  if (noGrains) {
+    await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
+    const tracer = await Tracer.start({ trigger: opts.trigger, userId: user.id, conversationId, input: pending.map((m) => m.content).join("\n") });
+    const step = await tracer.step({ agent: "cto", type: "info", name: "trava: grãos", input: { situacao: "empty" } });
+    await step.ok({ blocked: true });
+    await tracer.finish("[grãos: silêncio]");
+    return { executionId: tracer.executionId, bubbles: [], outbox: new Outbox() };
   }
   // Grãos: a carteira zerou. Avisa uma vez por dia com o link para comprar mais e não chama a IA.
   if (opts.trigger === "message" && settings.billingEnabled) {
