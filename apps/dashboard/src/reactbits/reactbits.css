@@ -42,3 +42,32 @@
   .rb-rot-word.out { display: none; }
   .rb-glare::before { display: none; }
 }
+
+/* ---------- ShinyText ---------- */
+.rb-shiny {
+  background: linear-gradient(110deg, currentColor 40%, color-mix(in srgb, currentColor 25%, #fff) 50%, currentColor 60%) 0 0 / 250% 100%;
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  animation: rb-shiny var(--rb-shiny-s, 3.2s) linear infinite;
+}
+@keyframes rb-shiny { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+
+/* ---------- BlurText ---------- */
+.rb-blur-w { display: inline-block; animation: rb-blur-in .9s cubic-bezier(.2, .9, .25, 1) var(--rb-d, 0s) both; }
+@keyframes rb-blur-in { from { opacity: 0; filter: blur(12px); transform: translateY(.35em); } to { opacity: 1; filter: blur(0); transform: none; } }
+
+/* ---------- Spotlight (pontinhos + luz que segue o mouse) ---------- */
+.rb-spot { position: relative; isolation: isolate; }
+.rb-spot-dots, .rb-spot-light { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+.rb-spot-dots {
+  background: radial-gradient(var(--rb-dot, rgba(0, 0, 0, .09)) 1px, transparent 1.6px) 0 0 / 22px 22px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 65% at 50% 40%, #000 30%, transparent 75%); mask-image: radial-gradient(ellipse 70% 65% at 50% 40%, #000 30%, transparent 75%);
+}
+.rb-spot-light {
+  opacity: var(--rb-so, 0); transition: opacity .4s;
+  background: radial-gradient(420px circle at var(--rb-sx, 50%) var(--rb-sy, 50%), var(--rb-glow, rgba(101, 16, 224, .09)), transparent 70%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rb-shiny { animation: none; -webkit-text-fill-color: currentColor; background: none; }
+  .rb-blur-w { animation: none; }
+}

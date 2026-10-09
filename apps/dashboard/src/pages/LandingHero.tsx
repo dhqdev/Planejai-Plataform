@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Mochi, type Mood, type Outfit } from "../mochi/Mochi";
+import { BlurText } from "../reactbits/BlurText";
 import { CountUp } from "../reactbits/CountUp";
 import { RotatingText } from "../reactbits/RotatingText";
 
@@ -228,7 +229,7 @@ export function HeroTitle({ scene }: { scene: number }) {
   return (
     <h1 className="hc-title" aria-label="Você manda no WhatsApp. Ele resolve.">
       <span className="hc-l1" aria-hidden="true">
-        Você manda.
+        <BlurText text="Você manda." delay={0.12} start={0.05} />
       </span>
       <span className="hc-l2" aria-hidden="true">
         Ele <RotatingText texts={SCENES.map((x) => x.verb)} index={scene} staggerDuration={0.02} />

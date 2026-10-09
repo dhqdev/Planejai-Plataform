@@ -8,6 +8,8 @@ import { ClickSpark } from "../reactbits/ClickSpark";
 import { CountUp } from "../reactbits/CountUp";
 import { GlareHover } from "../reactbits/GlareHover";
 import { LogoLoop } from "../reactbits/LogoLoop";
+import { ShinyText } from "../reactbits/ShinyText";
+import { Spotlight } from "../reactbits/Spotlight";
 import "../landing.css";
 import { HeroChat, HeroTitle } from "./LandingHero";
 import { TeamStage, type StageAgent } from "./TeamStage";
@@ -259,6 +261,17 @@ const ASKS = [
   "toda segunda às 7h, academia",
   "resume meus e-mails de hoje",
   "o que eu tenho amanhã?",
+];
+/** Segunda faixa, correndo ao contrário. */
+const ASKS_2 = [
+  "pergunta no petshop se tem banho às 18h",
+  "divide a conta do jantar em 4",
+  "manda um bom dia pro Gio às 7h",
+  "tem Duna hoje no Iguatemi?",
+  "anota: 1.200 de aluguel todo dia 5",
+  "me manda isso em áudio",
+  "faz um PDF com o resumo do livro",
+  "qual o melhor horário pra academia amanhã?",
 ];
 
 /** O que cada um faz, em poucas palavras (a cena do TeamStage mostra o resto). O nome vem de CORE_FACES. */
@@ -661,21 +674,34 @@ export function LandingPage() {
 
       <main>
         <section className="lp-hero">
-          <div className="lp-wrap lp-hero-grid">
-            <div className="lp-hero-copy">
-              <HeroTitle scene={scene} />
-              <p className="lp-lead">Seu assistente pessoal no WhatsApp.</p>
-              <div className="lp-hero-cta">
-                {primary(true)}
-                <a className="lp-link" href="/login" onClick={go}>
-                  Já tenho conta
-                </a>
+          <Spotlight className="lp-hero-bg">
+            <div className="lp-wrap lp-hero-grid">
+              <div className="lp-hero-copy">
+                <span className="lp-eyebrow">
+                  <i className="lp-live" aria-hidden="true" />
+                  <ShinyText>Um time de assistentes no seu WhatsApp</ShinyText>
+                </span>
+                <HeroTitle scene={scene} />
+                <p className="lp-lead">
+                  Anota seus gastos, lembra dos compromissos, pesquisa e fala com lojas por você. <span>É só mandar mensagem.</span>
+                </p>
+                <div className="lp-hero-cta">
+                  {primary(true)}
+                  <a className="lp-link" href="/login" onClick={go}>
+                    Já tenho conta
+                  </a>
+                </div>
+                <ul className="lp-trust">
+                  <li>Sem app para instalar</li>
+                  <li>Só age com o seu sim</li>
+                  <li>Você apaga tudo quando quiser</li>
+                </ul>
+              </div>
+              <div className="lp-hero-stage">
+                <HeroChat scene={scene} onScene={setScene} />
               </div>
             </div>
-            <div className="lp-hero-stage">
-              <HeroChat scene={scene} onScene={setScene} />
-            </div>
-          </div>
+          </Spotlight>
         </section>
 
         <section className="lp-asks" aria-label="Exemplos de pedidos">
@@ -686,6 +712,14 @@ export function LandingPage() {
             gap={10}
             ariaLabel="Exemplos de pedidos"
             renderItem={(a) => <span className="lp-ask">{a}</span>}
+          />
+          <LogoLoop
+            items={ASKS_2}
+            itemKey={(a) => a}
+            speed={-24}
+            gap={10}
+            ariaLabel="Mais exemplos de pedidos"
+            renderItem={(a) => <span className="lp-ask alt">{a}</span>}
           />
         </section>
 
