@@ -3,6 +3,7 @@ import { tellPerson } from "./credits.js";
 import { decryptJson, encryptJson } from "./crypto.js";
 import { many, one, query } from "./db/pool.js";
 import { getCredentials } from "./integrations/registry.js";
+import { safeFetch } from "./net.js";
 import { notify } from "./notifications.js";
 import { parsePixCode } from "./pixcode.js";
 import { type AgentSettings, getSettings } from "./settings.js";
@@ -133,16 +134,46 @@ export async function spentLast30(userId: string) {
  * Lê o código Pix da loja e acha o valor. Vale o valor escrito no código; Pix dinâmico sem valor escrito precisa do
  * Asaas conectado para ler a cobrança (só leitura: nada é pago por aqui).
  */
+/**
+ * Valor de uma cobrança Pix dinâmica direto no banco de quem recebe: o endereço do campo 25 devolve um JWS com o
+ * valor (padrão do Banco Central). É o valor que o banco vai cobrar de verdade, não o que está escrito no código.
+ */
+export async function readPixLocation(url: string): Promise<{ cents: number }> {
+  const res = await safeFetch(`https://${url.replace(/^https?:\/\//i, "")}`, { headers: { accept: "application/jose, */*" }, signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`cobrança Pix respondeu ${res.status}`);
+  const parts = (await res.text()).trim().split(".");
+  if (parts.length !== 3) throw new Error("cobrança Pix sem JWS");
+  const body = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8"));
+  const value = String(body?.valor?.original ?? body?.valor?.final ?? "");
+  if (!/^\d+(\.\d{1,2})?$/.test(value)) throw new Error("cobrança Pix sem valor");
+  return { cents: Math.round(Number(value) * 100) };
+}
+
+/**
+ * Confere o Pix do checkout. Só vale Pix dinâmico (a cobrança que a loja gera na hora): um Pix fixo, de chave, é o
+ * que um golpista consegue plantar numa página. O valor vem da cobrança no banco (ou do decode do Asaas), nunca só
+ * do campo 54; se o campo 54 existir, tem que bater.
+ */
 export async function checkStorePix(raw: string): Promise<{ payload: string; cents: number; receiver: string | null }> {
   const code = parsePixCode(raw);
   if (!code) throw new Error("O código Pix está incompleto ou não é um Pix copia e cola. Copie de novo o código inteiro do checkout.");
-  if (code.cents) return { payload: code.payload, cents: code.cents, receiver: code.receiver };
-  const connected = Boolean((await getCredentials("asaas").catch(() => null))?.api_key);
-  if (!connected) throw new Error("Esse Pix não traz o valor escrito no código, então não dá para conferir o total. Mande o total que aparece no checkout e o link para a pessoa conferir.");
-  const dec: any = await asaas("POST", "/pix/qrCodes/decode", { payload: code.payload });
-  const cents = Math.round(Number(dec?.totalValue ?? dec?.value ?? 0) * 100);
-  if (!(cents > 0)) throw new Error("Não deu para ler o valor desse Pix. Gere o código de novo no checkout.");
-  return { payload: code.payload, cents, receiver: dec?.receiver?.name ?? code.receiver };
+  if (!code.dynamic || !code.url) throw new Error("Esse Pix é fixo (de chave), não a cobrança que a loja gera no pagamento. Por segurança, só vale o Pix gerado no checkout da loja.");
+  let cents: number | null = null;
+  let receiver = code.receiver;
+  try {
+    cents = (await readPixLocation(code.url)).cents;
+  } catch {
+    // banco da loja não respondeu: o Asaas lê a mesma cobrança, se estiver conectado
+    if ((await getCredentials("asaas").catch(() => null))?.api_key) {
+      const dec: any = await asaas("POST", "/pix/qrCodes/decode", { payload: code.payload }).catch(() => null);
+      const v = Math.round(Number(dec?.totalValue ?? dec?.value ?? 0) * 100);
+      if (v > 0) cents = v;
+      receiver = dec?.receiver?.name ?? receiver;
+    }
+  }
+  if (!cents || cents <= 0) throw new Error("Não deu para conferir o valor desse Pix no banco da loja. Gere o código de novo no checkout.");
+  if (code.cents && code.cents !== cents) throw new Error("O valor escrito no Pix não bate com a cobrança no banco. Não feche essa compra.");
+  return { payload: code.payload, cents, receiver };
 }
 
 // ---------------- Compra ----------------
@@ -190,8 +221,9 @@ export async function preparePurchase(userId: string, input: { title: string; ur
   const s = await getSettings();
   const title = clip(input.title, 140);
   if (!title) throw new Error("Diga o que está sendo comprado (title).");
-  const store = (await storeOfFor(userId, input.url)) ?? (input.store && (await storeDefFor(userId, input.store)) ? input.store : null) ?? clip(input.store, 40).toLowerCase();
-  if (!store) throw new Error("Qual loja? Mande a url do produto.");
+  // só loja conhecida (catálogo ou cadastrada pela pessoa): o nome dela vai na pergunta do sim
+  const store = (await storeOfFor(userId, input.url)) ?? (input.store && (await storeDefFor(userId, input.store)) ? input.store : null);
+  if (!store) throw new Error("Essa página não é de uma loja da pessoa. Feche a compra no site da loja.");
   const row = await profileRow(userId);
   const early = await blockedReason(userId, 0, s, row);
   if (early) throw new Error(early);

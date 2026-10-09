@@ -56,14 +56,24 @@ describe.skipIf(!enabled)("compras pelo assistente (e2e)", () => {
   const realFetch = globalThis.fetch;
   let decodeCents = 0;
   let n = 0;
+  // valor de cada cobrança dinâmica no "banco da loja" (o JWS que o endereço do campo 25 devolve)
+  const charges = new Map<string, number>();
+  const jws = (cents: number) => `e30.${Buffer.from(JSON.stringify({ valor: { original: (cents / 100).toFixed(2) } })).toString("base64url")}.sig`;
   const outbox = async () => (await db.many("SELECT data FROM pgboss.job WHERE name = 'outbound.send' ORDER BY created_on")).map((r) => r.data);
-  const code = (cents: number) => pix.buildPixCode({ key: "loja@exemplo.com", cents, receiver: "MERCADO PAGO", city: "OSASCO", txid: `t${++n}` });
-  const dynamic = () => pix.buildPixCode({ url: `pix.loja.com/qr/${++n}`, receiver: "LOJA", city: "SP" });
+  const code = (cents: number, written = cents) => {
+    const url = `pix.loja.com/qr/v2/${++n}`;
+    charges.set(url, cents);
+    return pix.buildPixCode({ url, cents: written, receiver: "MERCADO PAGO", city: "OSASCO" });
+  };
+  const dynamic = () => pix.buildPixCode({ url: `pix.semresposta.com/qr/${++n}`, receiver: "LOJA", city: "SP" });
   const row = (id: string) => db.one("SELECT * FROM purchases WHERE id = $1", [id]);
 
   beforeAll(async () => {
     globalThis.fetch = (async (url: any, init?: any) => {
       const u = String(url);
+      const charge = charges.get(u.replace(/^https:\/\//, ""));
+      if (charge != null) return new Response(jws(charge), { status: 200 });
+      if (u.includes("pix.semresposta.com")) return new Response("", { status: 404 });
       if (!u.includes("asaas.com")) return realFetch(url, init);
       const body = init?.body ? JSON.parse(init.body) : null;
       return new Response(JSON.stringify({ payload: body?.payload, value: decodeCents / 100, receiver: { name: "Loja Dinâmica" } }), { status: 200, headers: { "content-type": "application/json" } });
@@ -99,8 +109,10 @@ describe.skipIf(!enabled)("compras pelo assistente (e2e)", () => {
   it("pergunta o sim com o valor do Pix e, no sim, manda o código sozinho para a pessoa pagar", async () => {
     await db.query("DELETE FROM pgboss.job WHERE name = 'outbound.send'");
     const { purchaseStart } = await import("../src/agent/tools/purchases.js");
-    const args = { title: "Fone JBL", url: "https://www.mercadolivre.com.br/x", pix_code: code(8990) };
-    const ctx: any = { user, conversation: { id: convId }, agent: "compras", toolCall: { name: "purchase_start", args } };
+    const args = { title: "Fone JBL", pix_code: code(8990) };
+    // o navegador está no checkout da loja e o Pix está na página
+    const browser: any = { page: { url: () => "https://www.mercadolivre.com.br/checkout/pix" }, snapshot: async () => ({ pix: [args.pix_code] }) };
+    const ctx: any = { user, conversation: { id: convId }, agent: "compras", room: { browser }, toolCall: { name: "purchase_start", args } };
     const asked: any = await purchaseStart.run(args, ctx);
     expect(asked.needs_confirmation).toBe(true);
     expect(asked.message).toContain('comprar "Fone JBL" no Mercado Livre por R$ 89,90 (Pix para MERCADO PAGO)');
@@ -118,8 +130,24 @@ describe.skipIf(!enabled)("compras pelo assistente (e2e)", () => {
     expect(await shop.updatePurchase(user.id, p.id, { status: "delivered", tracking: "BR1" })).toMatchObject({ status: "delivered", order_ref: "2000123", tracking: "BR1" });
   });
 
-  it("Pix dinâmico sem valor escrito: sem Asaas não confere; com Asaas lê a cobrança (só leitura)", async () => {
-    await expect(shop.preparePurchase(user.id, { title: "Mouse", url: "https://shopee.com.br/m", pix_code: dynamic() })).rejects.toThrow(/não traz o valor/);
+  it("Pix fixo, valor escrito diferente da cobrança, Pix fora da página e loja desconhecida não passam", async () => {
+    const fixo = pix.buildPixCode({ key: "golpista@x.com", cents: 8990, receiver: "LOJA OFICIAL", city: "SP" });
+    await expect(shop.preparePurchase(user.id, { title: "Fone", url: "https://www.mercadolivre.com.br/x", pix_code: fixo })).rejects.toThrow(/fixo/);
+    await expect(shop.preparePurchase(user.id, { title: "Fone", url: "https://www.mercadolivre.com.br/x", pix_code: code(15000, 8990) })).rejects.toThrow(/não bate/);
+    await expect(shop.preparePurchase(user.id, { title: "Fone", url: "https://golpe.com/x", pix_code: code(8990) })).rejects.toThrow(/não é de uma loja/);
+    const { purchaseStart } = await import("../src/agent/tools/purchases.js");
+    const planted = code(8990);
+    const ctx = (url: string, onPage: string[]): any => ({ user, conversation: { id: convId }, agent: "compras", room: { browser: { page: { url: () => url }, snapshot: async () => ({ pix: onPage }) } } });
+    // código que o modelo trouxe de outro lugar (anúncio, mensagem) e não está na página aberta
+    expect(await purchaseStart.run({ title: "Fone", pix_code: planted }, ctx("https://www.mercadolivre.com.br/checkout", [code(8990)]))).toMatchObject({ ok: false, error: expect.stringMatching(/não está na página/) });
+    // página de outro site
+    expect(await purchaseStart.run({ title: "Fone", pix_code: planted }, ctx("https://golpe.com/pix", [planted]))).toMatchObject({ ok: false, error: expect.stringMatching(/não é de uma loja/) });
+    // sem navegador aberto
+    expect(await purchaseStart.run({ title: "Fone", pix_code: planted }, { user, room: {} } as any)).toMatchObject({ ok: false });
+  });
+
+  it("Pix dinâmico sem resposta do banco da loja: sem Asaas não confere; com Asaas lê a cobrança (só leitura)", async () => {
+    await expect(shop.preparePurchase(user.id, { title: "Mouse", url: "https://shopee.com.br/m", pix_code: dynamic() })).rejects.toThrow(/conferir o valor/);
     const { saveCredentials } = await import("../src/integrations/registry.js");
     await saveCredentials("asaas", { api_key: "$aact_hmlg_teste", webhook_token: "x".repeat(20) });
     decodeCents = 4590;

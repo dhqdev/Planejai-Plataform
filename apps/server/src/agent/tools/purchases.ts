@@ -35,17 +35,15 @@ export const purchaseInfo = defineTool<Record<string, never>>({
   },
 });
 
-export const purchaseStart = defineTool<{ title: string; url?: string; store?: string; pix_code: string; confirmed_by_user?: boolean }>({
+export const purchaseStart = defineTool<{ title: string; pix_code: string; confirmed_by_user?: boolean }>({
   name: "purchase_start",
   description:
-    "Fecha a compra depois que o carrinho está pronto no checkout e você escolheu Pix como pagamento na loja: passe o código Pix copia e cola INTEIRO que a loja gerou. " +
+    "Fecha a compra com o navegador ainda aberto na página de pagamento da loja, depois de escolher Pix: passe o código de pix_codes INTEIRO que a loja gerou. " +
     "O servidor lê o valor exato do Pix, confere os limites e pergunta o sim à pessoa. Depois do sim, o sistema manda o código para ela pagar do banco dela. " +
     "Nunca invente valor: ele sai do código.",
   parameters: obj(
     {
       title: { type: "string", description: "o que está sendo comprado, curto (ex.: Fone JBL Tune 520BT preto)" },
-      url: { type: "string", description: "link do produto ou do checkout" },
-      store: { type: "string", description: "mercadolivre, shopee, amazon, magalu (se não tiver url)" },
       pix_code: { type: "string", description: "código Pix copia e cola gerado no checkout, inteiro" },
       ...CONFIRM_PARAM,
     },
@@ -59,9 +57,18 @@ export const purchaseStart = defineTool<{ title: string; url?: string; store?: s
       if (!p) return { ok: false, error: "Esse pedido de compra expirou. Gere o Pix de novo no checkout se ela ainda quiser." };
       return approvePurchase(ctx.user.id, p.id);
     }
+    // o Pix tem que estar na página da loja aberta agora: código vindo de outro lugar (anúncio, mensagem, outro site) não vale
+    const b = ctx.room.browser;
+    if (!b) return { ok: false, error: "Abra o checkout da loja com browser_open e gere o Pix lá antes." };
+    const pageUrl = b.page.url();
+    const store = await storeOfFor(ctx.user.id, pageUrl);
+    if (!store) return { ok: false, error: "A página aberta não é de uma loja da pessoa. O Pix só vale gerado no checkout da loja." };
+    const want = parsePixCode(args.pix_code)?.payload;
+    const onPage = ((await b.snapshot()).pix ?? []).map((c) => parsePixCode(c)?.payload);
+    if (!want || !onPage.includes(want)) return { ok: false, error: "Esse código não está na página de pagamento aberta. Use o código de pix_codes dessa página." };
     let prepared;
     try {
-      prepared = await preparePurchase(ctx.user.id, args);
+      prepared = await preparePurchase(ctx.user.id, { title: args.title, url: pageUrl, store, pix_code: want });
     } catch (err) {
       return { ok: false, error: (err as Error).message };
     }
@@ -131,12 +138,13 @@ export const storeLoginFill = defineTool<{ ref: number; field: "email" | "passwo
     const value = args.field === "password" ? access?.password : access?.email;
     if (!value) return { ok: false, error: `A pessoa não salvou ${args.field === "password" ? "a senha" : "o e-mail"} dessa loja. Peça para ela entrar de novo em Compras no painel.` };
     try {
-      await on.b.fillSecret(Number(args.ref), value, args.field === "password" ? "a senha da loja" : "o e-mail da loja");
-    } catch {
-      return { ok: false, error: "Campo não encontrado. Veja a lista de novo." };
+      await on.b.fillSecret(Number(args.ref), value, args.field === "password" ? "a senha da loja" : "o e-mail da loja", args.field);
+    } catch (err) {
+      return { ok: false, error: `${(err as Error).message} Veja a lista de novo.` };
     }
     on.b.store = on.store;
     on.b.saveLogin = true;
+    on.b.lockedTo = (await storeDefFor(ctx.user.id, on.store))?.domains ?? null;
     return { ok: true, ...snapshotText(await on.b.snapshot()) };
   },
 });
@@ -171,12 +179,13 @@ export const storeLoginCode = defineTool<{ ref: number }>({
     }
     if (!code) return { ok: false, error: `Nenhum código de ${def?.name ?? "da loja"} chegou no Gmail dela. Confira se a loja mandou para o e-mail (e não por SMS); se for SMS, peça para ela entrar em Compras no painel.` };
     try {
-      await on.b.fillSecret(Number(args.ref), code, "o código do e-mail");
-    } catch {
-      return { ok: false, error: "Campo não encontrado. Veja a lista de novo." };
+      await on.b.fillSecret(Number(args.ref), code, "o código do e-mail", "code");
+    } catch (err) {
+      return { ok: false, error: `${(err as Error).message} Veja a lista de novo.` };
     }
     on.b.store = on.store;
     on.b.saveLogin = true;
+    on.b.lockedTo = (await storeDefFor(ctx.user.id, on.store))?.domains ?? null;
     return { ok: true, ...snapshotText(await on.b.snapshot()) };
   },
 });

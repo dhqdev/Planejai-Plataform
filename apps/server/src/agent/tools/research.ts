@@ -306,6 +306,7 @@ export const browserOpen = defineTool<{ url: string; record?: boolean; send_reco
     const b = await BrowserSession.open(Boolean(args.record || args.send_recording), { cookies: login.cookies });
     b.store = login.store;
     b.saveLogin = login.cookies.length > 0;
+    if (b.saveLogin && login.store) b.lockedTo = (await (await import("../../stores.js")).storeDefFor(ctx.user.id, login.store))?.domains ?? null;
     b.sendRecording = Boolean(args.send_recording);
     ctx.room.browser = b;
     await b.goto(args.url);

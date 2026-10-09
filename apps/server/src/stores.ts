@@ -15,7 +15,8 @@ export interface StoreDef {
 }
 
 export const STORES: Record<string, StoreDef> = {
-  mercadolivre: { name: "Mercado Livre", domains: ["mercadolivre.com.br", "mercadolivre.com", "mercadolibre.com", "mercadopago.com.br"], home: "https://www.mercadolivre.com.br/" },
+  // sem mercadopago.com.br: a carteira do Mercado Pago não entra logada junto com a loja
+  mercadolivre: { name: "Mercado Livre", domains: ["mercadolivre.com.br", "mercadolivre.com", "mercadolibre.com"], home: "https://www.mercadolivre.com.br/" },
   shopee: { name: "Shopee", domains: ["shopee.com.br"], home: "https://shopee.com.br/buyer/login" },
   amazon: { name: "Amazon", domains: ["amazon.com.br"], home: "https://www.amazon.com.br/" },
   magalu: { name: "Magalu", domains: ["magazineluiza.com.br", "magalu.com"], home: "https://www.magazineluiza.com.br/" },

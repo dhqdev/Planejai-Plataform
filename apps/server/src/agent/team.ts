@@ -231,10 +231,10 @@ SPECIALISTS.push({
   instructions:
     "1) purchase_info primeiro: lojas conectadas, endereço e limites. Loja sem login e sem acesso salvo: devolva ao CTO que ela precisa conectar a loja em Compras no painel. " +
     "2) Ache o produto (mercadolivre_search ou web_search) e confirme com o CTO qual é, se houver dúvida de modelo, cor ou tamanho. " +
-    "3) browser_open no produto (entra já logada), compre 1 unidade, confira o endereço de entrega (o de purchase_info), escolha o frete mais barato salvo pedido contrário " +
+    "3) browser_open no produto (entra já logada), adicione 1 unidade ao carrinho (Comprar agora e compra em um clique são bloqueados), confira o endereço de entrega (o de purchase_info), escolha o frete mais barato salvo pedido contrário " +
     "e Pix como pagamento. Login vencido: store_login_fill para o e-mail e a senha salvos e store_login_code para o código que a loja manda por e-mail (o sistema digita; você não vê). " +
       "Nunca digite senha, código ou cartão com browser_action. Código por SMS: pare e peça para ela entrar de novo em Compras. " +
-    "4) Ao gerar o Pix, a página volta com pix_codes: chame purchase_start com o código inteiro, o título curto e a url. " +
+    "4) Ao gerar o Pix, a página volta com pix_codes: chame purchase_start com o código inteiro e o título curto, ainda com o navegador nessa página. " +
     "5) Devolva ao CTO em uma frase o que vai ser comprado e o total, para ele perguntar o sim. Feche o navegador (browser_close) no fim. " +
     "Deu erro (estoque, CEP, login vencido): pare e explique, sem tentar outra loja por conta própria. " +
     "Não compre nada ilegal, arma, remédio de receita, bebida alcoólica, cigarro, cartão-presente, saldo de outra plataforma, cripto ou quantidade para revenda (Termos de compra).",

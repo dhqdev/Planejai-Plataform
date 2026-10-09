@@ -12,6 +12,8 @@ export interface PixCode {
   city: string | null;
   /** cobrança dinâmica (tem URL no campo 26/25) */
   dynamic: boolean;
+  /** endereço da cobrança no banco da loja (campo 26/25, sem https://) */
+  url: string | null;
 }
 
 function fields(s: string): Map<string, string> | null {
@@ -56,6 +58,7 @@ export function parsePixCode(raw: string): PixCode | null {
     receiver: top.get("59")?.trim() || null,
     city: top.get("60")?.trim() || null,
     dynamic: account.has("25"),
+    url: account.get("25") || null,
   };
 }
 
