@@ -12,6 +12,7 @@ import { integrationCallbackRoutes, integrationRoutes } from "./dashboard/integr
 import { inviteRoutes } from "./dashboard/invites.js";
 import { meRoutes } from "./dashboard/me.js";
 import { memoryRoutes } from "./dashboard/memories.js";
+import { purchaseAdminRoutes, purchaseRoutes } from "./dashboard/purchases.js";
 import { resourceRoutes } from "./dashboard/resources.js";
 import { settingsRoutes } from "./dashboard/settings.js";
 import { teamAdminRoutes, teamRoutes } from "./dashboard/team.js";
@@ -39,6 +40,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     memoryRoutes(base);
     teamRoutes(base);
     billingRoutes(base);
+    purchaseRoutes(base);
 
     // ================= Só super admin =================
     await base.register(async (api) => {
@@ -52,6 +54,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       settingsRoutes(api);
       whatsappRoutes(api);
       billingAdminRoutes(api);
+      purchaseAdminRoutes(api);
       resourceRoutes(api);
     });
   });

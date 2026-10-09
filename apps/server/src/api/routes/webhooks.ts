@@ -57,6 +57,20 @@ export async function registerWebhookRoutes(app: FastifyInstance) {
     }
   });
 
+  // Asaas, validação de saque: antes de cada saída de dinheiro da conta o Asaas pergunta aqui. Só aprova o Pix de loja
+  // que o servidor mandou pagar numa compra, com o valor exato (purchases.ts). Mesmo token do webhook de cobranças.
+  app.post("/webhooks/asaas/saque", async (req, reply) => {
+    const token = (await getCredentials("asaas"))?.webhook_token ?? "";
+    if (!sameSecret(req.headers["asaas-access-token"], token)) return reply.code(401).send({ error: "token inválido" });
+    try {
+      const { validateWithdrawal } = await import("../../purchases.js");
+      return await validateWithdrawal(req.body);
+    } catch (err) {
+      req.log.error({ err }, "falha na validação de saque do Asaas");
+      return { status: "REFUSED", refuseReason: "Erro ao conferir" };
+    }
+  });
+
   // Telegram: o setWebhook (ao salvar o token em Integrações) manda o segredo no cabeçalho
   app.post("/webhooks/telegram", async (req, reply) => {
     if (!telegramSecretOk(req.headers["x-telegram-bot-api-secret-token"])) return reply.code(401).send({ error: "segredo inválido" });

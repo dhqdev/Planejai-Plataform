@@ -15,6 +15,7 @@ import * as direct from "./tools/direct.js";
 import * as support from "./tools/support.js";
 import * as places from "./tools/places.js";
 import * as research from "./tools/research.js";
+import * as shop from "./tools/purchases.js";
 import * as social from "./tools/social.js";
 import { many } from "../db/pool.js";
 import type { Tool } from "./tools/types.js";
@@ -217,6 +218,37 @@ export const SPECIALISTS: AgentDef[] = [
     tools: [places.placesNearby, research.webSearch, research.fetchUrl, errands.errandStart, errands.errandList, errands.errandCancel, core.getDatetime],
   },
 ];
+
+SPECIALISTS.push({
+  id: "compras",
+  persona: "Nina",
+  face: { color: 5, eyes: "happy", mouth: "smile", extra: "none" },
+  name: "Compras",
+  icon: "shop",
+  role:
+    "Compra para a pessoa numa loja online (Mercado Livre, Shopee, Amazon, Magalu): acha o produto, entra na conta dela na loja, monta o carrinho com o endereço dela " +
+    "e vai até o Pix do checkout. O pagamento só sai depois do sim dela, conferido pelo sistema.",
+  instructions:
+    "1) purchase_info primeiro: jeitos de pagar ligados, lojas conectadas, endereço e limites. Loja sem conta conectada: não tente logar, devolva ao CTO que ela precisa conectar a loja em Compras no painel. " +
+    "2) Ache o produto (mercadolivre_search ou web_search) e confirme com o CTO qual é, se houver dúvida de modelo, cor ou tamanho. " +
+    "3) browser_open no produto (entra já logada), compre 1 unidade, confira o endereço de entrega (tem que ser o de purchase_info), escolha o frete mais barato salvo pedido contrário " +
+    "e Pix como pagamento na loja. Nunca digite senha, código de SMS ou dados de cartão em site nenhum. " +
+    "4) Ao gerar o Pix, a página volta com pix_codes: chame purchase_start com o código inteiro, o título curto, a url e o method que a pessoa escolheu (sem escolha: pix). " +
+    "5) Devolva ao CTO em uma frase o que vai ser comprado e o total, para ele perguntar o sim. Feche o navegador (browser_close) no fim. " +
+    "Deu erro (estoque, CEP, login vencido): pare e explique, sem tentar outra loja por conta própria.",
+  tools: [
+    shop.purchaseInfo,
+    research.mercadolivreSearch,
+    research.webSearch,
+    research.browserOpen,
+    research.browserAction,
+    research.browserScreenshot,
+    research.browserClose,
+    shop.purchaseStart,
+    shop.purchaseList,
+    shop.purchaseUpdate,
+  ],
+});
 
 /**
  * Ferramentas do CTO. Além do núcleo da conversa, ele tem atalhos para o que é simples e frequente

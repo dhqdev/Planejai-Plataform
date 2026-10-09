@@ -40,6 +40,26 @@ export interface AgentSettings {
   billingReferralMax: number;
   /** quantos dias antes do vencimento lembrar quem paga por Pix/boleto (também lembra no dia) */
   billingReminderDays: number;
+  /** Compras pelo assistente (o agente vai até o checkout da loja). Desligado, ninguém compra. */
+  purchasesEnabled: boolean;
+  /** jeito 1: o agente manda o Pix da loja e a pessoa paga do banco dela (dinheiro nunca passa por aqui) */
+  purchasePix: boolean;
+  /** jeito 2: cobra no cartão da pessoa pelo Asaas e paga o Pix da loja da sua conta Asaas */
+  purchaseCard: boolean;
+  /** jeito 3: saldo carregado por Pix, gasto nas compras */
+  purchaseWallet: boolean;
+  /** taxa de serviço (%) no cartão e no saldo; o Pix direto não tem taxa */
+  purchaseFeePercent: number;
+  /** taxa mínima por compra, em centavos */
+  purchaseFeeMinCents: number;
+  /** teto por compra (valor da loja), em centavos */
+  purchaseMaxCents: number;
+  /** teto por pessoa em 30 dias, em centavos */
+  purchaseMonthMaxCents: number;
+  /** cartão só para quem já pagou um plano (menos risco de contestação) */
+  purchaseCardNeedsPlan: boolean;
+  /** saldo máximo que uma pessoa pode ter, em centavos */
+  purchaseWalletMaxCents: number;
   /** Quem responde pelos dados (LGPD art. 9º e 41): aparece em /privacidade */
   legalName: string;
   /** CPF ou CNPJ do responsável */
@@ -132,6 +152,11 @@ export const GUARD_LIMITS: Record<string, [number, number]> = {
   billingReferralStep: [0, 50],
   billingReferralMax: [0, 90],
   billingReminderDays: [0, 10],
+  purchaseFeePercent: [0, 30],
+  purchaseFeeMinCents: [0, 10_000],
+  purchaseMaxCents: [500, 2_000_000],
+  purchaseMonthMaxCents: [500, 10_000_000],
+  purchaseWalletMaxCents: [500, 10_000_000],
 };
 
 const defaults = (): AgentSettings => ({
@@ -155,6 +180,16 @@ const defaults = (): AgentSettings => ({
   billingReferralStep: 5,
   billingReferralMax: 30,
   billingReminderDays: 3,
+  purchasesEnabled: false,
+  purchasePix: true,
+  purchaseCard: false,
+  purchaseWallet: false,
+  purchaseFeePercent: 5,
+  purchaseFeeMinCents: 290,
+  purchaseMaxCents: 30_000,
+  purchaseMonthMaxCents: 100_000,
+  purchaseCardNeedsPlan: true,
+  purchaseWalletMaxCents: 50_000,
   legalName: "",
   legalDocument: "",
   privacyEmail: "",
@@ -179,6 +214,9 @@ export async function saveSettings(patch: Partial<AgentSettings>, opts: { unchec
   if (rest.billingEnabled !== undefined) {
     rest.billingEnabled = rest.billingEnabled === true || (rest.billingEnabled as unknown) === "true";
     if (rest.billingEnabled && !(await getSettings()).billingStartedAt) (rest as Partial<AgentSettings>).billingStartedAt = new Date().toISOString();
+  }
+  for (const k of ["purchasesEnabled", "purchasePix", "purchaseCard", "purchaseWallet", "purchaseCardNeedsPlan"] as const) {
+    if (rest[k] !== undefined) rest[k] = rest[k] === true || (rest[k] as unknown) === "true";
   }
   if (rest.billingPlans !== undefined) rest.billingPlans = cleanPlans(rest.billingPlans);
   if (rest.billingPacks !== undefined) rest.billingPacks = cleanPacks(rest.billingPacks);

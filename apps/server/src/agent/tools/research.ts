@@ -214,6 +214,8 @@ export const mapRoute = defineTool<{ destination: string; origin?: string; mode?
 /** Travas do navegador por resposta: abrir e clicar é lento e pesa na máquina. */
 export const MAX_BROWSER_OPENS = 2;
 export const MAX_BROWSER_ACTIONS = 10;
+/** Comprar (produto, carrinho, endereço, frete, pagamento) leva mais cliques: o agente de compras tem mais folga. */
+export const MAX_SHOP_ACTIONS = 35;
 
 /** Google Maps no navegador é lento e pesado: para lugar perto e rota há ferramentas próprias. */
 export function isMapsUrl(raw: string) {
@@ -244,7 +246,13 @@ async function saveMediaFile(ctx: ToolContext, kind: string, mimetype: string, d
 }
 
 function snapshotText(s: Snapshot) {
-  return { url: s.url, title: s.title, page_text: s.text, clickable: s.elements || "(nenhum elemento clicável visível)" };
+  return {
+    url: s.url,
+    title: s.title,
+    page_text: s.text,
+    clickable: s.elements || "(nenhum elemento clicável visível)",
+    ...(s.pix?.length ? { pix_codes: s.pix } : {}),
+  };
 }
 
 /** Fecha o navegador da execução; se a gravação foi pedida, prepara o vídeo para enviar. */
@@ -253,6 +261,13 @@ export async function finishBrowser(ctx: ToolContext, opts: { send?: boolean; ca
   if (!b) return { ok: false, error: "Nenhum navegador aberto" };
   ctx.room.browser = undefined;
   const video = await b.stopRecording().catch(() => null);
+  // login da loja renovado durante a navegação: guarda os cookies novos
+  if (b.store) {
+    const { saveStoreCookies } = await import("../../storelogin.js");
+    const { STORES } = await import("../../purchases.js");
+    const fresh = await b.cookiesFor(STORES[b.store]?.domains ?? []).catch(() => []);
+    if (fresh.length) await saveStoreCookies(ctx.user.id, b.store, fresh).catch(() => {});
+  }
   await b.close();
   if (!video) return { ok: true, recording: null, actions: b.actions };
   const fileId = await saveMediaFile(ctx, "recording", "video/mp4", video, "gravacao.mp4");
@@ -285,7 +300,11 @@ export const browserOpen = defineTool<{ url: string; record?: boolean; send_reco
     }
     ctx.room.usage.browserOpens++;
     if (ctx.room.browser) await finishBrowser(ctx, { send: false });
-    const b = await BrowserSession.open(Boolean(args.record || args.send_recording));
+    // loja em que a pessoa conectou a conta (Compras no painel): o navegador já entra logado
+    const { cookiesForUrl } = await import("../../storelogin.js");
+    const login = await cookiesForUrl(ctx.user.id, args.url).catch(() => ({ store: null, cookies: [] }));
+    const b = await BrowserSession.open(Boolean(args.record || args.send_recording), { cookies: login.cookies });
+    if (login.cookies.length) b.store = login.store;
     b.sendRecording = Boolean(args.send_recording);
     ctx.room.browser = b;
     await b.goto(args.url);
@@ -296,11 +315,11 @@ export const browserOpen = defineTool<{ url: string; record?: boolean; send_reco
 export const browserAction = defineTool<{ action: string; ref?: number; text?: string; url?: string; key?: string; direction?: string }>({
   name: "browser_action",
   description:
-    "Age no navegador aberto: click (ref), type (ref + text), press (key, ex. Enter), scroll (direction up/down), back, goto (url), wait. " +
+    "Age no navegador aberto: click (ref), type (ref + text), select (ref + text da opção numa lista), press (key, ex. Enter), scroll (direction up/down), back, goto (url), wait. " +
     "Retorna a página atualizada com novos números de elementos.",
   parameters: obj(
     {
-      action: { type: "string", enum: ["click", "type", "press", "scroll", "back", "goto", "wait"] },
+      action: { type: "string", enum: ["click", "type", "select", "press", "scroll", "back", "goto", "wait"] },
       ref: { type: "number", description: "número do elemento na última lista" },
       text: { type: "string" },
       url: { type: "string" },
@@ -312,8 +331,9 @@ export const browserAction = defineTool<{ action: string; ref?: number; text?: s
   async run(args, ctx) {
     const b = ctx.room.browser;
     if (!b) return { error: "Abra o navegador primeiro com browser_open" };
-    if (ctx.room.usage.browserActions >= MAX_BROWSER_ACTIONS && !b.sendRecording) {
-      return { error: `Já foram ${MAX_BROWSER_ACTIONS} ações no navegador nesta tarefa. Feche (browser_close) e responda com o que já tem.` };
+    const max = ctx.agent === "compras" ? MAX_SHOP_ACTIONS : MAX_BROWSER_ACTIONS;
+    if (ctx.room.usage.browserActions >= max && !b.sendRecording) {
+      return { error: `Já foram ${max} ações no navegador nesta tarefa. Feche (browser_close) e responda com o que já tem.` };
     }
     ctx.room.usage.browserActions++;
     await b.act(args);

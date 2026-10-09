@@ -13,11 +13,25 @@ const MAX_FRAMES = 900;
 const SNAPSHOT_TEXT = 2500;
 const MAX_ELEMENTS = 40;
 
+/** Cookie guardado do login da pessoa numa loja (formato do Chrome DevTools). */
+export interface StoredCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path?: string;
+  expires?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: "Strict" | "Lax" | "None";
+}
+
 export interface Snapshot {
   url: string;
   title: string;
   text: string;
   elements: string;
+  /** códigos Pix copia e cola achados na página (texto ou campo), inteiros */
+  pix?: string[];
 }
 
 /**
@@ -33,10 +47,12 @@ export class BrowserSession {
   /** a pessoa pediu para receber a gravação */
   sendRecording = false;
   actions: string[] = [];
+  /** loja em que entrou com o login da pessoa (para guardar os cookies renovados no fim) */
+  store: string | null = null;
 
   private constructor(private browser: Browser, readonly page: Page) {}
 
-  static async open(record: boolean): Promise<BrowserSession> {
+  static async open(record: boolean, opts: { cookies?: StoredCookie[] } = {}): Promise<BrowserSession> {
     const puppeteer = (await import("puppeteer-core")).default;
     const b = await getCredentials("browserless");
     let browser: Browser;
@@ -56,6 +72,8 @@ export class BrowserSession {
       throw new Error("Navegador não configurado: conecte o Browserless (já vem na stack) ou defina CHROME_PATH.");
     }
     const page = await browser.newPage();
+    // login da pessoa numa loja (feito por ela no painel): entra já logada
+    if (opts.cookies?.length) await page.setCookie(...(opts.cookies as any[])).catch(() => {});
     await page.setExtraHTTPHeaders({ "Accept-Language": "pt-BR,pt;q=0.9" });
     // nenhum pedido da página (link, redirecionamento, script, imagem) pode ir para a rede interna da stack
     await page.setRequestInterception(true);
@@ -118,8 +136,13 @@ export class BrowserSession {
           el.setAttribute("data-pj-ref", String(n));
           out.push(`[${n}] ${type}: ${label || "(sem rótulo)"}`);
         }
-        const text = (document.body?.innerText ?? "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim().slice(0, maxText);
-        return { title: document.title, text, elements: out.join("\n") };
+        const raw = document.body?.innerText ?? "";
+        const text = raw.replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim().slice(0, maxText);
+        // Pix do checkout: o código passa do tamanho do texto e dos rótulos, então vem à parte e inteiro
+        const sources = [raw, ...Array.from(document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea")).map((el) => el.value || "")];
+        const pix = new Set<string>();
+        for (const src of sources) for (const m of src.matchAll(/000201\S{30,600}?6304[0-9A-Fa-f]{4}/g)) pix.add(m[0]);
+        return { title: document.title, text, elements: out.join("\n"), pix: [...pix].slice(0, 3) };
       },
       MAX_ELEMENTS,
       SNAPSHOT_TEXT,
@@ -183,11 +206,41 @@ export class BrowserSession {
         this.actions.push("voltar");
         await this.page.goBack({ waitUntil: "domcontentloaded", timeout: 15_000 }).catch(() => {});
         break;
+      case "select": {
+        if (!target) throw new Error("ref obrigatório");
+        this.actions.push(`escolher "${a.text ?? ""}" em [${a.ref}]`);
+        // aceita o valor ou o texto da opção
+        const value = await this.page.$eval(
+          target,
+          (el, want) => {
+            const opts = Array.from((el as HTMLSelectElement).options ?? []);
+            const w = String(want).toLowerCase();
+            return (opts.find((o) => o.value === want) ?? opts.find((o) => o.text.toLowerCase().includes(w)))?.value ?? null;
+          },
+          a.text ?? "",
+        );
+        if (value == null) throw new Error("opção não encontrada nessa lista");
+        await this.page.select(target, value);
+        break;
+      }
       case "wait":
         await new Promise((r) => setTimeout(r, Math.min(Number(a.text ?? 2000) || 2000, 10_000)));
         break;
       default:
         throw new Error(`ação desconhecida: ${a.action}`);
+    }
+  }
+
+  /** Cookies dos domínios pedidos (para guardar o login da loja). */
+  async cookiesFor(domains: string[]): Promise<StoredCookie[]> {
+    const cdp = await this.page.createCDPSession();
+    try {
+      const { cookies } = (await cdp.send("Network.getAllCookies")) as { cookies: any[] };
+      return cookies
+        .filter((c) => domains.some((d) => c.domain.replace(/^\./, "") === d || c.domain.endsWith(`.${d}`)))
+        .map((c) => ({ name: c.name, value: c.value, domain: c.domain, path: c.path, expires: c.expires, httpOnly: c.httpOnly, secure: c.secure, sameSite: c.sameSite }));
+    } finally {
+      await cdp.detach().catch(() => {});
     }
   }
 

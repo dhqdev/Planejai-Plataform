@@ -85,6 +85,15 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     maxTokens: 800,
   },
   {
+    task: "agent:compras",
+    label: "Compras",
+    why: "Navega na loja até o Pix do checkout: muitos passos curtos no navegador. O valor nunca sai dele (vem do Pix), então um modelo barato serve.",
+    model: "deepseek/deepseek-v4.1-flash",
+    fallbacks: ["xiaomi/mimo-v2.6-flash"],
+    temperature: 0.1,
+    maxTokens: 1200,
+  },
+  {
     task: "errand_check",
     label: "Trava dos recados",
     why: "Confere cada mensagem antes de ir para um estabelecimento (ofensa, trote, assunto nada a ver). Entrada curta e JSON de uma linha: o mais barato.",

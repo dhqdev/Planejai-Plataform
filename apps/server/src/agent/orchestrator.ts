@@ -10,6 +10,7 @@ import { delegationTool, TeamRoom } from "./collab.js";
 import { ctoSystemPrompt } from "./prompts.js";
 import { availableTools, OWNER_INTEGRATIONS, personOf, runToolLoop } from "./runner.js";
 import { asPerson } from "../integrations/person.js";
+import { purchaseRules } from "../purchases.js";
 import { clientAgents, CTO_TOOLS, SPECIALISTS, type AgentDef } from "./team.js";
 import { TEAM_TOOLS } from "./tools/team.js";
 import { finishBrowser } from "./tools/research.js";
@@ -324,7 +325,12 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     }
     // Só entra no time quem tem pelo menos uma ferramenta utilizável (menos token e nada de delegação inútil)
     const team: AgentDef[] = [];
-    for (const s of [...SPECIALISTS, ...(await clientAgents(user.id))]) if ((await availableTools(s.tools, user)).length) team.push(s);
+    const shopping = purchaseRules(await getSettings()).enabled;
+    for (const s of [...SPECIALISTS, ...(await clientAgents(user.id))]) {
+      // compras desligadas pelo dono: o agente de compras nem aparece para o CTO
+      if (s.id === "compras" && !shopping) continue;
+      if ((await availableTools(s.tools, user)).length) team.push(s);
+    }
     const lastText = fresh.map((e) => e.text).join(" ").slice(0, 500);
     const disconnected: string[] = [];
     // para convidados, as contas da stack do dono nem existem; as pessoais (Google, Notion...) contam só se forem dele

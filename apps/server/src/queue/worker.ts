@@ -109,6 +109,13 @@ async function startChannelJobs(log: WorkerLog) {
   });
   await boss.schedule(QUEUES.watch, "*/15 * * * *");
 
+  // compras pelo assistente: Pix de loja esperando confirmação e compras esquecidas no meio (sem IA)
+  await boss.work(QUEUES.purchases, { batchSize: 1, pollingIntervalSeconds: 30 }, async () => {
+    const { checkOpenPurchases } = await import("../purchases.js");
+    await checkOpenPurchases(log).catch((err) => log.error({ err }, "conferência de compras falhou"));
+  });
+  await boss.schedule(QUEUES.purchases, "*/2 * * * *");
+
   // melhoria diária dos agentes de cada cliente, às 19h
   await boss.work(QUEUES.improve, { batchSize: 1, pollingIntervalSeconds: 60 }, async () => {
     await dailyImprovement(log);
