@@ -3,6 +3,7 @@ import { api, brl, day } from "../api";
 import { CATEGORY_COLORS, Donut, Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
+import { useLongPress } from "../ios";
 import { haptic } from "../touch";
 
 const SOURCE: Record<string, string> = { conversa: "conversa", audio: "áudio", comprovante: "comprovante", documento: "documento", painel: "painel" };
@@ -84,6 +85,30 @@ export function FinancePage() {
   const readonly = Boolean(data?.readonly);
   // finanças de um contato: só para ver
   const openBudget = (b: { category: string | null; amount?: number }) => { if (!readonly) setBudget(b); };
+  const remove = async (t: any) => {
+    const what = `${t.kind === "income" ? "+" : "−"}${brl(t.amount)}${t.description ? ` · ${t.description}` : ""}`;
+    if (!(await confirmDialog({ title: "Apagar este lançamento?", body: `${what}. Ele sai dos totais do mês e não dá para recuperar.`, confirmLabel: "Apagar", danger: true }))) return;
+    try {
+      await api(`/api/finance/${t.id}`, { method: "DELETE" });
+      setDetail(null);
+      void reload();
+    } catch (e) {
+      void alertDialog("Não deu para apagar", (e as Error).message);
+    }
+  };
+  // segurar o lançamento: Editar ou Apagar sem abrir o detalhe
+  const find = (el: HTMLElement) => list.find((t: any) => String(t.id) === el.dataset.id);
+  const press = useLongPress(
+    (el) => {
+      const t = find(el);
+      if (!t || readonly) return [];
+      return [
+        { label: "Editar", icon: "edit", onSelect: () => setEditing(t) },
+        { label: "Apagar", icon: "trash", danger: true, onSelect: () => void remove(t) },
+      ];
+    },
+    (el) => { const t = find(el); return t ? `${t.kind === "income" ? "+" : "−"}${brl(t.amount)} · ${t.description ?? t.merchant ?? t.category}` : undefined; },
+  );
   const budgetOf = new Map(budgets.filter((b) => b.category).map((b) => [b.category!, b]));
   const go = (n: number) => { haptic(6); setCat(null); setMonth(shift(month, n)); };
 
@@ -315,7 +340,7 @@ export function FinancePage() {
                 <div key={k}>
                   <div className="fin-day"><span>{dayLabel(items[0].occurred_at)}</span>{total > 0 && <span>{brl(total)}</span>}</div>
                   {items.map((t: any) => (
-                    <button key={t.id} className="fin-tx" onClick={() => setDetail(t)}>
+                    <button key={t.id} className="fin-tx" data-id={t.id} onClick={() => setDetail(t)} {...press}>
                       <span className="fin-tx-ico" style={{ ["--c" as any]: CATEGORY_COLORS[Math.max(0, cats.findIndex((c: any) => c.label === t.category)) % CATEGORY_COLORS.length] }}><Icon name={t.kind === "income" ? "arrow-down" : CAT_ICON[t.category] ?? "hash"} size={16} /></span>
                       <span className="fin-tx-text">
                         <span className="ellipsis">{t.description ?? t.merchant ?? t.category}</span>
@@ -346,17 +371,7 @@ export function FinancePage() {
             <span className="spacer" />
             <button
               className="btn btn-danger"
-              onClick={async () => {
-                const what = `${detail.kind === "income" ? "+" : "−"}${brl(detail.amount)}${detail.description ? ` · ${detail.description}` : ""}`;
-                if (!(await confirmDialog({ title: "Apagar este lançamento?", body: `${what}. Ele sai dos totais do mês e não dá para recuperar.`, confirmLabel: "Apagar", danger: true }))) return;
-                try {
-                  await api(`/api/finance/${detail.id}`, { method: "DELETE" });
-                  setDetail(null);
-                  void reload();
-                } catch (e) {
-                  void alertDialog("Não deu para apagar", (e as Error).message);
-                }
-              }}
+              onClick={() => void remove(detail)}
             >
               <Icon name="trash" size={16} /> Apagar
             </button>

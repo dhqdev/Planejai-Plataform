@@ -3,6 +3,7 @@ import { api } from "../api";
 import { ErrorBox, Loading, PageHead, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
+import { useLongPress } from "../ios";
 
 interface Contact {
   id: string;
@@ -91,6 +92,22 @@ export function ContactsPage() {
     }
   };
 
+  const remove = async (id: string) => {
+    await api(`/api/contatos/${id}`, { method: "DELETE" });
+    reload();
+  };
+  // segurar o contato: copiar o número ou apagar
+  const press = useLongPress(
+    (el) => {
+      const c = data?.items.find((x) => String(x.id) === el.dataset.id);
+      if (!c) return [];
+      return [
+        { label: "Copiar número", icon: "copy", onSelect: () => void navigator.clipboard?.writeText(c.phone) },
+        { label: "Apagar", icon: "trash", danger: true, onSelect: () => void remove(c.id) },
+      ];
+    },
+    (el) => data?.items.find((x) => String(x.id) === el.dataset.id)?.name,
+  );
   if (error) return <div className="page"><ErrorBox error={error} /></div>;
   if (!data) return <Loading />;
 
@@ -138,7 +155,7 @@ export function ContactsPage() {
         ) : (
           <ul className="ct-list">
             {data.items.map((c) => (
-              <li key={c.id}>
+              <li key={c.id} data-id={c.id} {...press}>
                 <span>
                   <strong>{c.name}</strong>
                   <small>{showPhone(c.phone)}{c.label ? ` · ${c.label}` : ""}</small>
@@ -146,10 +163,7 @@ export function ContactsPage() {
                 <button
                   className="icon-btn sm"
                   aria-label={`Apagar ${c.name}`}
-                  onClick={async () => {
-                    await api(`/api/contatos/${c.id}`, { method: "DELETE" });
-                    reload();
-                  }}
+                  onClick={() => void remove(c.id)}
                 >
                   <Icon name="trash" size={15} />
                 </button>

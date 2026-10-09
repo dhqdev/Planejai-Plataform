@@ -254,7 +254,7 @@ export function SettingsPage() {
     data.channel.provider === "baileys" ? "Conexão própria (Baileys)" : data.channel.provider === "cloud" ? "WhatsApp Cloud API (Meta)" : data.channel.provider === "evolution" ? "Evolution API" : "nenhum";
 
   return (
-    <div className="page settings-page">
+    <div className="page settings-page ios-list">
       <PageHead title="Configurações" subtitle="Como o assistente se comporta, os limites de uso, a cobrança e os dados da plataforma. Só os donos veem esta tela." />
       <div className="set-layout">
         <nav className="set-nav" aria-label="Áreas das configurações">

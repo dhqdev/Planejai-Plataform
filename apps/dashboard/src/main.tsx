@@ -5,6 +5,7 @@ import { App } from "./App";
 import "./styles.css";
 import "./motion.css";
 import { installFieldLabels, installKeyboard } from "./a11y";
+import { installEdgeBack, installSegmented } from "./ios";
 import { installRipple } from "./motion";
 import { installTouchFeedback, registerServiceWorker } from "./touch";
 import { watchForUpdates } from "./update";
@@ -21,6 +22,8 @@ installRipple();
 registerServiceWorker();
 installFieldLabels();
 installKeyboard();
+installSegmented();
+installEdgeBack();
 watchForUpdates();
 
 try {

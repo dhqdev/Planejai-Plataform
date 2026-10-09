@@ -26,7 +26,7 @@ export function ProfilePage({ me }: { me: Me }) {
     }
   };
   return (
-    <div className="page" style={{ maxWidth: 1080 }}>
+    <div className="page ios-list" style={{ maxWidth: 1080 }}>
       <PageHead title="Minha conta" subtitle={me.owner ? "Dono da plataforma. Nome e senha vêm da stack." : me.email} />
       {msg && <div className="ok-box" role="status" style={{ marginBottom: 12 }}>{msg}</div>}
       <ErrorBox error={error} />

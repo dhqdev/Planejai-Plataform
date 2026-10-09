@@ -6,6 +6,7 @@ import { BlockLoader } from "./BlockLoader";
 import { Empty, Loading, Modal } from "./components";
 import { clearApiCache, prefetchApi, useApi } from "./hooks";
 import { Icon } from "./icons";
+import { useLargeTitle } from "./ios";
 import { openWardrobe } from "./mochi/state";
 import { UserMochi } from "./mochi/UserMochi";
 import { MochiButton, MochiIcon, WardrobeHost } from "./mochi/Wardrobe";
@@ -245,6 +246,8 @@ export function App() {
   const loc = useLocation();
   const mainRef = useRef<HTMLElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
+  // celular: o título grande da página some da barra de cima até ele sair da tela
+  useLargeTitle(mainRef, `${loc.pathname}|${!!me}`);
   // barra de baixo: a aba aberta desliza para o meio (dá para rolar para os lados)
   useEffect(() => {
     const el = tabsRef.current?.querySelector<HTMLElement>(".tab.active");
