@@ -1,9 +1,9 @@
 /**
  * Detalhes de app de iPhone que valem para o painel todo (CSS em styles/app-ios.css):
- * pastilha que desliza nos seletores segmentados, título grande que encolhe para a barra de cima,
+ * pastilha que desliza até o botão ativo das abas e filtros,
  * voltar arrastando da borda esquerda (app instalado) e o menu de toque longo.
  */
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { Icon } from "./icons";
 import { haptic, isStandalone } from "./touch";
@@ -23,6 +23,8 @@ function placeThumbs() {
     }
     box.style.setProperty("--seg-x", `${on.offsetLeft}px`);
     box.style.setProperty("--seg-w", `${on.offsetWidth}px`);
+    box.style.setProperty("--seg-t", `${on.offsetTop}px`);
+    box.style.setProperty("--seg-h", `${on.offsetHeight}px`);
     box.style.setProperty("--seg-o", "1");
     // primeira vez: aparece já no lugar; depois desliza
     if (!box.dataset.seg) {
@@ -46,36 +48,6 @@ export function installSegmented() {
   addEventListener("resize", schedule);
   document.fonts?.ready.then(schedule);
   schedule();
-}
-
-/* ---------- Título grande: some da barra enquanto o título da página está à vista ---------- */
-export function useLargeTitle(main: RefObject<HTMLElement | null>, key: string) {
-  useEffect(() => {
-    const bar = document.querySelector<HTMLElement>(".topbar");
-    const root = main.current;
-    if (!bar || !root) return;
-    let io: IntersectionObserver | null = null;
-    let seen: Element | null = null;
-    // a tela carrega sob demanda e pode trocar o título: observa o que estiver lá agora
-    const watch = () => {
-      const h1 = root.querySelector<HTMLElement>(".page-head h1");
-      if (h1 === seen) return;
-      seen = h1;
-      io?.disconnect();
-      io = null;
-      if (!h1) return void bar.classList.remove("large");
-      io = new IntersectionObserver(([e]) => bar.classList.toggle("large", !!e && e.isIntersecting && !!h1.offsetParent), { root, rootMargin: "-8px 0px 0px 0px" });
-      io.observe(h1);
-    };
-    const mo = new MutationObserver(watch);
-    watch();
-    mo.observe(root, { childList: true, subtree: true });
-    return () => {
-      mo.disconnect();
-      io?.disconnect();
-      bar.classList.remove("large");
-    };
-  }, [main, key]);
 }
 
 /* ---------- Voltar arrastando da borda esquerda ---------- */

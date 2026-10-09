@@ -1,5 +1,5 @@
-/* Cara de app (iOS): vidro líquido nas peças que flutuam, título grande que encolhe, seletor segmentado,
-   interruptor, listas no estilo Ajustes, menu de toque longo e voltar arrastando. Vidro só no que flutua
+/* Cara de app (iOS) no layout de sempre: vidro líquido nas peças que flutuam, pastilha que desliza nas abas,
+   menu de toque longo e voltar arrastando. Vidro só no que flutua
    sobre o conteúdo (barras, folhas, pílulas, menus); cartões de conteúdo continuam sólidos. */
 :root {
   --glass: rgba(255, 255, 255, .58);
@@ -62,75 +62,23 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), inset 0 0 0 1px rgba(255, 255, 255, .18), 0 12px 28px -8px rgba(101, 16, 224, .55);
 }
 
-/* ---------- Título grande que vira título pequeno na barra de cima (celular) ---------- */
-@media (max-width: 767px) {
-  .page-head h1 { font-size: 32px; line-height: 1.1; font-weight: 700; letter-spacing: -.022em; }
-  .topbar { border-bottom-color: transparent; transition: border-color .2s; }
-  .topbar-title { transition: opacity .2s, transform .25s var(--ios-spring); }
-  .topbar.large .topbar-title { opacity: 0; transform: translateY(6px); }
-  .topbar:not(.large) { border-bottom-color: var(--hairline); }
+/* ---------- Abas e filtros: o visual de antes, com uma pastilha de vidro que desliza até o botão ativo ---------- */
+.seg, .subtabs, .fin-tabs, .cal-pills { position: relative; isolation: isolate; }
+:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg] > button { position: relative; z-index: 1; }
+/* com a pastilha no lugar, o botão ativo fica transparente e só o texto muda de cor */
+:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg] > button.active { background: transparent; box-shadow: none; border-color: transparent; }
+:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg]::before {
+  content: ""; position: absolute; z-index: 0; top: var(--seg-t, 3px); left: 0; height: var(--seg-h, calc(100% - 6px));
+  width: var(--seg-w, 0); transform: translateX(var(--seg-x, 0)); opacity: var(--seg-o, 0);
+  border-radius: 9px; background: var(--glass-sheen), var(--ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), inset 0 0 0 .5px rgba(255, 255, 255, .12), 0 4px 12px -4px rgba(0, 0, 0, .35);
 }
-
-/* ---------- Seletor segmentado: trilho cinza e uma pastilha de vidro que desliza ---------- */
-.seg, .subtabs, .fin-tabs, .cal-pills {
-  position: relative; isolation: isolate;
-  background: var(--track); border: none; border-radius: 11px; padding: 2px; gap: 0;
-}
-.seg button, .subtabs button, .fin-tabs button, .cal-pills button {
-  position: relative; z-index: 1; background: none !important; border: none !important; box-shadow: none !important;
-  color: var(--text); font-weight: 500; border-radius: 9px; transition: color .2s, opacity .2s;
-}
-.seg button.active, .subtabs button.active, .fin-tabs button.active, .cal-pills button.active { color: var(--text); font-weight: 650; }
-.fin-tabs button.active .ico { color: var(--violet); }
-.cal-pills { display: flex; }
-.cal-pills button { padding: 7px 10px; }
-.seg[data-seg]::before, .subtabs[data-seg]::before, .fin-tabs[data-seg]::before, .cal-pills[data-seg]::before {
-  content: ""; position: absolute; z-index: 0; top: 2px; bottom: 2px; left: 0;
-  width: var(--seg-w, 0); transform: translateX(var(--seg-x, 0)); border-radius: 9px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .9), rgba(255, 255, 255, .7)), var(--panel);
-  box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .04), 0 3px 8px rgba(0, 0, 0, .12), 0 3px 1px rgba(0, 0, 0, .04);
-  opacity: var(--seg-o, 0);
-}
-:root[data-theme="dark"] :is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg]::before { background: #636366; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 3px 8px rgba(0, 0, 0, .3); }
-:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg="on"]::before { transition: transform .38s var(--ios-spring), width .38s var(--ios-spring); }
+.fin-tabs[data-seg]::before { border-radius: 10px; }
+.cal-pills[data-seg]::before { border-radius: 99px; }
+/* .seg já era branco sobre cinza: a pastilha segue branca */
+.seg[data-seg]::before { background: var(--glass-sheen), var(--panel); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 1px 2px rgba(0, 0, 0, .08), 0 3px 8px -2px rgba(0, 0, 0, .1); }
+:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg="on"]::before { transition: transform .38s var(--ios-spring), width .38s var(--ios-spring), top .38s var(--ios-spring), height .38s var(--ios-spring); }
 @media (prefers-reduced-motion: reduce) { :is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg]::before { transition: none !important; } }
-
-/* ---------- Interruptor de iOS ---------- */
-.set-switch input[type="checkbox"], .toggle-row input[type="checkbox"], input.ios-switch {
-  -webkit-appearance: none; appearance: none; flex-shrink: 0; position: relative; cursor: pointer;
-  width: 51px !important; height: 31px !important; margin: 0 !important; border-radius: 99px;
-  background: var(--track); transition: background-color .25s;
-}
-.set-switch input[type="checkbox"]::after, .toggle-row input[type="checkbox"]::after, input.ios-switch::after {
-  content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%;
-  background: #fff; box-shadow: 0 3px 8px rgba(0, 0, 0, .15), 0 3px 1px rgba(0, 0, 0, .06);
-  transition: transform .3s var(--ios-spring), width .2s var(--ios-spring);
-}
-.set-switch input[type="checkbox"]:active::after, .toggle-row input[type="checkbox"]:active::after, input.ios-switch:active::after { width: 33px; }
-:is(.set-switch, .toggle-row) input[type="checkbox"]:checked, input.ios-switch:checked { background: #34c759; }
-:is(.set-switch, .toggle-row) input[type="checkbox"]:checked::after, input.ios-switch:checked::after { transform: translateX(20px); }
-:is(.set-switch, .toggle-row) input[type="checkbox"]:checked:active::after, input.ios-switch:checked:active::after { transform: translateX(14px); }
-:is(.set-switch, .toggle-row) input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
-.set-switch { align-items: center; }
-/* o interruptor vai para a direita, como em Ajustes */
-.set-switch input[type="checkbox"] { order: 2; margin-left: auto !important; }
-.set-switch > span { flex: 1; min-width: 0; }
-
-/* ---------- Listas no estilo Ajustes (Configurações e Minha conta, no celular) ---------- */
-@media (max-width: 767px) {
-  .ios-list .card { border: none; border-radius: 14px; box-shadow: none; background: var(--panel); }
-  .ios-list .card h2, .ios-list .card h3 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin: 0 0 8px; }
-  .ios-list .field { display: flex; align-items: center; gap: 12px; margin: 0; padding: 11px 0; border-bottom: .5px solid var(--hairline); flex-wrap: wrap; }
-  .ios-list .field > label { flex: 0 0 auto; margin: 0; font-size: 16px; font-weight: 400; color: var(--text); }
-  .ios-list .field > .input, .ios-list .field > select, .ios-list .field > input {
-    flex: 1 1 120px; min-width: 0; text-align: right; border: none; background: transparent; box-shadow: none; padding: 0; height: auto; color: var(--muted);
-  }
-  .ios-list .field > .input:focus { color: var(--text); outline: none; }
-  .ios-list .field > .help { flex-basis: 100%; margin: 0; font-size: 12.5px; }
-  .ios-list .field + .btn, .ios-list .field + button { margin-top: 14px; }
-  .ios-list .set-switch { border: none; border-radius: 0; padding: 12px 0; margin: 0; border-bottom: .5px solid var(--hairline); }
-  .ios-list .set-switch:last-child { border-bottom: none; }
-}
 
 /* ---------- Menu de toque longo ---------- */
 .ctx-layer { position: fixed; inset: 0; z-index: 80; }
