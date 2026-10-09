@@ -27,6 +27,7 @@ const load = {
   dashboard: () => import("./pages/Dashboard"),
   documents: () => import("./pages/Documents"),
   errands: () => import("./pages/Errands"),
+  contacts: () => import("./pages/Contacts"),
   executions: () => import("./pages/Executions"),
   finance: () => import("./pages/Finance"),
   integrations: () => import("./pages/Integrations"),
@@ -88,6 +89,7 @@ const NotificationsPage = page(() => load.notifications().then((m) => m.Notifica
 const AlarmPage = page(() => load.alarm().then((m) => m.AlarmPage));
 const DocumentsPage = page(() => load.documents().then((m) => m.DocumentsPage));
 const ErrandsPage = page(() => load.errands().then((m) => m.ErrandsPage));
+const ContactsPage = page(() => load.contacts().then((m) => m.ContactsPage));
 const WhatsAppPage = page(() => load.whatsapp().then((m) => m.WhatsAppPage));
 
 /** Qual pedaço cada rota do menu abre: para baixar antes do toque (e deixar pronto para abrir sem internet). */
@@ -108,6 +110,7 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/agenda": load.calendar,
   "/watches": load.watches,
   "/recados": load.errands,
+  "/contatos": load.contacts,
   "/documentos": load.documents,
   "/memories": load.memories,
   "/settings": load.settings,
@@ -157,6 +160,7 @@ const MY_DAY: NavItem[] = [
   { to: "/finance", label: "Finanças", icon: "wallet" },
   { to: "/watches", label: "Acompanhamentos", icon: "eye", short: "De olho" },
   { to: "/recados", label: "Recados", icon: "send" },
+  { to: "/contatos", label: "Contatos", icon: "users" },
   { to: "/documentos", label: "Documentos", icon: "file" },
 ];
 
@@ -421,6 +425,7 @@ export function App() {
           ))}
           <Route path="/watches" element={<WatchesPage />} />
           <Route path="/recados" element={<ErrandsPage />} />
+          <Route path="/contatos" element={<ContactsPage />} />
           <Route path="/compras" element={<ComprasPage isSuper={isSuper} />} />
           <Route path="/finance" element={<FinancePage />} />
           <Route path="/agenda" element={<CalendarPage isSuper={isSuper} />} />

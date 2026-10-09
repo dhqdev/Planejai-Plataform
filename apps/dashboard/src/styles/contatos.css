@@ -1,0 +1,22 @@
+/* Contatos: agenda importada do celular */
+.ct-page { display: grid; gap: 20px; max-width: 980px; }
+.ct-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.ct-actions .btn { display: inline-flex; align-items: center; gap: 8px; }
+.ct-how { margin-top: 14px; font-size: 13.5px; line-height: 1.55; }
+.ct-how summary { cursor: pointer; color: var(--muted); }
+.ct-how p { margin: 8px 0 0; }
+.ct-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ct-head .input { max-width: 260px; }
+.ct-count { font-weight: 500; font-size: 13px; }
+.ct-add { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
+.ct-add .input { flex: 1 1 180px; }
+.ct-list { list-style: none; margin: 10px 0 0; padding: 0; }
+.ct-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid var(--border); }
+.ct-list li > span { display: grid; min-width: 0; }
+.ct-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-list small { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.ct-clear { margin-top: 12px; color: var(--err); }
+@media (max-width: 700px) {
+  .ct-head { flex-wrap: wrap; }
+  .ct-head .input { max-width: none; }
+}

@@ -78,6 +78,10 @@ export function PrivacyPage() {
             pelo prazo que a lei fiscal exigir.
           </li>
           <li>
+            <b>Contatos</b> (se você importar do celular ou pedir para salvar): só nome e número, para o assistente achar quem é na hora de mandar
+            uma mensagem que você pediu. Só você vê, ninguém recebe nada por estarem aí, e você apaga um ou todos em Contatos.
+          </li>
+          <li>
             <b>Compras pelo assistente</b> (se você usar): o endereço de entrega, se você cadastrar, fica criptografado e vai só para a loja. Você
             paga a loja direto do seu banco, então nenhum dado de pagamento passa por aqui. Da sua conta na loja guardamos o login (cookies)
             criptografado até você desconectar, e o e-mail e a senha da loja só se você ligar o login automático (criptografados, digitados só no

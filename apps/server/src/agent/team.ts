@@ -215,7 +215,7 @@ export const SPECIALISTS: AgentDef[] = [
       "allowed só com o que a pessoa liberou de forma concreta (ex.: 'se tiver banho às 18h de hoje, confirmar'). " +
       "errand_start não envia nada: o sistema guarda e pergunta à pessoa. Devolva ao CTO, em uma frase, para quem vai, o texto e o que fica liberado, para ele perguntar o sim. " +
       "Sem número com WhatsApp, devolva o telefone para a pessoa ligar.",
-    tools: [places.placesNearby, research.webSearch, research.fetchUrl, errands.errandStart, errands.errandList, errands.errandCancel, core.getDatetime],
+    tools: [places.placesNearby, direct.contactsSearch, research.webSearch, research.fetchUrl, errands.errandStart, errands.errandList, errands.errandCancel, core.getDatetime],
   },
 ];
 
@@ -285,6 +285,8 @@ export const CTO_TOOLS: Tool[] = [
   agenda.calendarCreateEvent,
   social.sendToContact,
   direct.sendWhatsapp,
+  direct.contactsSearch,
+  direct.contactSave,
   direct.directList,
   direct.directCancel,
   social.listContactsTool,

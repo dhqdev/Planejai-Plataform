@@ -69,6 +69,7 @@ apps/server/src/
                            lembretes, De olho, reunião noturna, recados, contas fixas, assinatura Asaas, alarme (push + Twilio)
   social.ts  onboarding.ts  tabs.ts  privacy.ts
                            convites/contatos, perguntas de boas-vindas, abas do cliente, LGPD (eraseUserData)
+  phonebook.ts             agenda de contatos da pessoa (tela Contatos: .vcf do celular ou seletor do Android; contacts_search/contact_save)
   documents.ts  storage.ts  notifications.ts  events.ts  telegram.ts  logincode.ts
                            documentos, sininho, eventos para o n8n, Telegram, código de login
   charts.ts  images.ts  pdf.ts

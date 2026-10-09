@@ -12,6 +12,7 @@ import { integrationCallbackRoutes, integrationRoutes } from "./dashboard/integr
 import { inviteRoutes } from "./dashboard/invites.js";
 import { meRoutes } from "./dashboard/me.js";
 import { memoryRoutes } from "./dashboard/memories.js";
+import { phonebookRoutes } from "./dashboard/phonebook.js";
 import { purchaseAdminRoutes, purchaseRoutes } from "./dashboard/purchases.js";
 import { resourceRoutes } from "./dashboard/resources.js";
 import { settingsRoutes } from "./dashboard/settings.js";
@@ -36,6 +37,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     inviteRoutes(base);
     agendaRoutes(base);
     errandRoutes(base);
+    phonebookRoutes(base);
     alarmRoutes(base);
     memoryRoutes(base);
     teamRoutes(base);

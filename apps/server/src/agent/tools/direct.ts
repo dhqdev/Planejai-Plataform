@@ -1,4 +1,5 @@
 import { cancelDirect, createDirect, describeDirect, listDirect } from "../../direct.js";
+import { saveContact, searchContacts } from "../../phonebook.js";
 import { formatLocal, parseLocalDateTime } from "../../time.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
@@ -59,5 +60,30 @@ export const directCancel = defineTool<{ id: string }>({
   parameters: obj({ id: { type: "string" } }, ["id"]),
   async run(args, ctx) {
     return cancelDirect(ctx.user.id, args.id);
+  },
+});
+
+export const contactsSearch = defineTool<{ query: string }>({
+  name: "contacts_search",
+  description:
+    "Procura na agenda de contatos da pessoa (importada do celular) pelo nome ou parte do número. Use antes de pedir o número a ela. " +
+    "Mais de um resultado com o mesmo nome: pergunte qual.",
+  parameters: obj({ query: { type: "string", description: "nome, apelido ou parte do número" } }, ["query"]),
+  async run(args, ctx) {
+    const found = await searchContacts(ctx.user.id, args.query, 5);
+    return found.length ? { contacts: found.map((c) => ({ name: c.name, phone: c.phone, ...(c.label ? { label: c.label } : {}) })) } : { contacts: [], note: "Ninguém com esse nome na agenda dela." };
+  },
+});
+
+export const contactSave = defineTool<{ name: string; phone: string }>({
+  name: "contact_save",
+  description: "Salva ou corrige um contato na agenda da pessoa (nome e WhatsApp com DDD), quando ela pede ou passa um número novo.",
+  parameters: obj({ name: { type: "string" }, phone: { type: "string" } }, ["name", "phone"]),
+  async run(args, ctx) {
+    try {
+      return { ok: true, ...(await saveContact(ctx.user.id, args.name, args.phone)) };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
   },
 });
