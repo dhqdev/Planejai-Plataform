@@ -132,8 +132,10 @@ export async function buyerProfile(userId: string) {
   };
 }
 
-export async function saveBuyerProfile(userId: string, raw: unknown, ip?: string | null) {
-  const d = cleanBuyerData(raw);
+export async function saveBuyerProfile(userId: string, raw: any, ip?: string | null) {
+  // CPF em branco na edição: mantém o que já estava (a tela mostra só o final)
+  const before = buyerData(await profileRow(userId));
+  const d = cleanBuyerData({ ...raw, cpf: String(raw?.cpf ?? "").replace(/\D/g, "") ? raw.cpf : before?.cpf });
   await query(
     `INSERT INTO buyer_profiles (user_id, data, cpf_end, city, remote_ip) VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (user_id) DO UPDATE SET data = $2, cpf_end = $3, city = $4, remote_ip = COALESCE($5, buyer_profiles.remote_ip), updated_at = now()`,

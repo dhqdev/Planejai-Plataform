@@ -493,7 +493,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
 
 /** Ferramentas que só leem ou calculam: rodar de novo numa nova tentativa não muda nada. */
 const NO_SIDE_EFFECT =
-  /^(ask_|consult_|share_with_team$|react_to_message$|web_search|fetch_url|browser_|screenshot_url|map_route|places_nearby|make_chart|make_image|make_pdf|make_audio|calculate|read_|list_|get_|search_)|(_list|_status|_search|_read|_summary|_events|_channels|_workflows|_executions|_catalog|_search_issues|_read_page|attach_image)$/;
+  /^(ask_|consult_|share_with_team$|react_to_message$|web_search|fetch_url|browser_|screenshot_url|map_route|places_nearby|make_chart|make_image|make_pdf|make_audio|calculate|read_|list_|get_|search_)|(_list|_status|_search|_read|_summary|_events|_channels|_workflows|_executions|_catalog|_search_issues|_read_page|_info|attach_image)$/;
 
 export function sideEffectsDone(done: Set<string>) {
   return [...done].filter((n) => !NO_SIDE_EFFECT.test(n));

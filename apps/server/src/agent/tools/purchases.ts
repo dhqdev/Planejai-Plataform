@@ -14,7 +14,7 @@ import {
 } from "../../purchases.js";
 import { getSettings } from "../../settings.js";
 import { connectedStores } from "../../storelogin.js";
-import { defineTool, obj, requireConfirmation } from "./types.js";
+import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 export const purchaseInfo = defineTool<Record<string, never>>({
   name: "purchase_info",
@@ -55,6 +55,7 @@ export const purchaseStart = defineTool<{ title: string; url?: string; store?: s
       store: { type: "string", description: "mercadolivre, shopee, amazon, magalu (se não tiver url)" },
       pix_code: { type: "string", description: "código Pix copia e cola gerado no checkout, inteiro" },
       method: { type: "string", enum: ["pix", "card", "wallet"] },
+      ...CONFIRM_PARAM,
     },
     ["title", "pix_code", "method"],
   ),

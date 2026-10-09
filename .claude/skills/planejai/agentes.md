@@ -12,6 +12,7 @@ Leia antes de mexer no orquestrador, no time (CTO, especialistas, agentes sob me
 | `comunicacao` | Telma | e-mail e Slack |
 | `produtividade` | Nivaldo | Notion, Linear, GitHub, n8n do dono |
 | `recados` | Zezinho | fala com estabelecimentos pela pessoa |
+| `compras` | Nina | compra numa loja online até o Pix do checkout (só com compras ligadas; ver `compras.md`) |
 | `c_<slug>` | da pessoa | agentes sob medida de cada cliente (rota `agent:cliente`) |
 
 A fonte é `SPECIALISTS`/`persona` em `agent/team.ts`; o painel repete os rótulos em `AGENT_LABEL` (`components.tsx`) e as carinhas em `CORE_FACES` (`faces.tsx`). No painel o agente fica vivo com `<AgentFace agent={id} live />`: os olhos alternam `ROLE_MOODS` e um objeto do papel dele trabalha ao lado (`agentProps.tsx` + `agents.css`: batuta, lupa, sino, moeda, carta, lista, balão; brilho para agente de cliente). O corpo do Mochi continua parado. Meu time mostra também o que cada um está fazendo (`ROLE_DOING`). O Mapa do time (`TeamMap.tsx` + `teammap.css`, no Início e em Agentes) é um quadro que arrasta e dá zoom (roda rola, Ctrl+roda ou pinça dá zoom, botões no canto); cada agente pode ser arrastado (lugar salvo no navegador, `pj-team-map`), tocado responde com uma frase e abre um cartão, e recados correm do Juvenal para quem ele chama (peso pelas chamadas de 7 dias). Renomeou? Troque nos três e nesta tabela, e procure o nome antigo em prompts, landing e testes (`rg -n "<Nome>" apps`).

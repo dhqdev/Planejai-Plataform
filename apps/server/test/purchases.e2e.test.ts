@@ -251,6 +251,9 @@ describe.skipIf(!enabled)("compras pelo assistente (e2e)", () => {
     const { buyerProfile } = shop;
     const prof = await buyerProfile(user.id);
     expect(prof).toMatchObject({ filled: true, cpf_end: "25", terms: { accepted: true }, card: { last4: "5555" } });
+    // editar sem redigitar o CPF mantém o que estava
+    await shop.saveBuyerProfile(user.id, { full_name: "Carla Dias", cpf: "", birth_date: "1990-05-10", address: { cep: "13010000", street: "Rua B", number: "20", district: "Centro", city: "Campinas", state: "SP" } });
+    expect(await buyerProfile(user.id)).toMatchObject({ cpf_end: "25", address: { street: "Rua B" } });
     // o banco não tem o CPF em texto
     const raw = await db.one("SELECT data FROM buyer_profiles WHERE user_id = $1", [user.id]);
     expect(raw.data).not.toContain("52998224725");

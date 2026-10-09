@@ -235,7 +235,8 @@ SPECIALISTS.push({
     "e Pix como pagamento na loja. Nunca digite senha, código de SMS ou dados de cartão em site nenhum. " +
     "4) Ao gerar o Pix, a página volta com pix_codes: chame purchase_start com o código inteiro, o título curto, a url e o method que a pessoa escolheu (sem escolha: pix). " +
     "5) Devolva ao CTO em uma frase o que vai ser comprado e o total, para ele perguntar o sim. Feche o navegador (browser_close) no fim. " +
-    "Deu erro (estoque, CEP, login vencido): pare e explique, sem tentar outra loja por conta própria.",
+    "Deu erro (estoque, CEP, login vencido): pare e explique, sem tentar outra loja por conta própria. " +
+    "Não compre nada ilegal, arma, remédio de receita, bebida alcoólica, cigarro, cartão-presente, saldo de outra plataforma, cripto ou quantidade para revenda (Termos de compra).",
   tools: [
     shop.purchaseInfo,
     research.mercadolivreSearch,
