@@ -137,6 +137,12 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     maxTokens: 8000,
   },
   {
+    task: "image",
+    label: "Imagens (gerar foto ou ilustração)",
+    why: "Pediu uma foto, desenho ou ilustração: um modelo de imagem barato gera direto, sem navegador. Foto de coisa real (produto, lugar) primeiro é buscada na Tavily/Brave e só gera se não achar.",
+    model: "google/gemini-2.5-flash-image",
+  },
+  {
     task: "summary",
     label: "Resumo de conversa",
     why: "Compacta conversas longas em memória; saída barata.",

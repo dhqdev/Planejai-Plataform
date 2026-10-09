@@ -77,7 +77,7 @@ export const SPECIALISTS: AgentDef[] = [
       "Prefira sites oficiais (ingresso.com, sites dos cinemas, lojas oficiais) e traga dados concretos (horários, preços, links). " +
       "Computador (browser_open/browser_action) é lento e pesa na máquina: último recurso, só quando busca e páginas não resolvem e o site exige interação (filtros, busca interna, formulário, vários cliques), nunca para mapa, " +
       "ou quando o CTO pedir para gravar/mostrar a navegação: nesse caso abra com record=true e send_recording=true e termine com browser_close. " +
-      "Print (screenshot_url/browser_screenshot) só quando o CTO pedir uma imagem; por padrão responda em texto. Diga o que não conseguiu confirmar.",
+      "Foto ou imagem de alguma coisa (produto, lugar, desenho): make_picture, nunca navegador nem print. Print (screenshot_url/browser_screenshot) só quando pedirem o print de uma página; por padrão responda em texto. Diga o que não conseguiu confirmar.",
     tools: [
       research.webSearch,
       research.fetchUrl,
@@ -92,6 +92,7 @@ export const SPECIALISTS: AgentDef[] = [
       core.attachImage,
       core.readDocument,
       images.makeImage,
+      images.getPicture,
       pdf.makePdf,
     ],
   },
@@ -270,6 +271,7 @@ export const CTO_TOOLS: Tool[] = [
   finance.makeChart,
   bills.billPay,
   images.makeImage,
+  images.getPicture,
   pdf.makePdf,
   audio.makeAudio,
   places.placesNearby,
@@ -355,6 +357,7 @@ export const CLIENT_AGENT_TOOLS: Record<string, Tool> = Object.fromEntries(
     core.attachImage,
     core.readDocument,
     images.makeImage,
+    images.getPicture,
     pdf.makePdf,
   ].map((t) => [t.name, t]),
 );

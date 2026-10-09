@@ -43,6 +43,7 @@ const TOOL_LABEL: Record<string, string> = {
   read_document: "Leu um documento",
   make_chart: "Gerou um gráfico",
   make_image: "Gerou uma imagem",
+  make_picture: "Buscou ou gerou uma foto",
   attach_image: "Anexou uma imagem",
   mercadolivre_search: "Buscou no Mercado Livre",
   places_nearby: "Achou lugares perto",

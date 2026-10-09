@@ -29,7 +29,8 @@ export async function chatCompletion(choice: ModelChoice, req: ChatRequest, atte
     body.parallel_tool_calls = true;
   }
   // raciocínio longo é saída cara: baixo em toda chamada, inclusive no último passo (sem ferramentas)
-  body.reasoning = { effort: "low", exclude: true };
+  if (req.modalities) body.modalities = req.modalities;
+  else body.reasoning = { effort: "low", exclude: true };
   const temperature = req.temperature ?? choice.temperature;
   if (temperature != null) body.temperature = temperature;
   const maxTokens = req.maxTokens ?? choice.maxTokens;
@@ -64,7 +65,11 @@ export async function chatCompletion(choice: ModelChoice, req: ChatRequest, atte
   const choice0 = json.choices?.[0];
   if (!choice0) throw new LlmError("OpenRouter retornou resposta sem choices");
   return {
-    message: { content: choice0.message?.content ?? null, tool_calls: choice0.message?.tool_calls },
+    message: {
+      content: choice0.message?.content ?? null,
+      tool_calls: choice0.message?.tool_calls,
+      ...(choice0.message?.images?.length ? { images: choice0.message.images.map((i: any) => String(i?.image_url?.url ?? "")).filter(Boolean) } : {}),
+    },
     model: json.model ?? choice.model,
     tokensIn: json.usage?.prompt_tokens ?? 0,
     tokensOut: json.usage?.completion_tokens ?? 0,

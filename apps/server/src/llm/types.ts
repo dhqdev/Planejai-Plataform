@@ -28,12 +28,14 @@ export interface ChatRequest {
   /** plugins do OpenRouter, ex.: [{ id: "web" }] para busca na web */
   plugins?: Record<string, unknown>[];
   responseFormat?: Record<string, unknown>;
+  /** saídas pedidas ao modelo, ex.: ["image", "text"] para gerar imagem (rota "image") */
+  modalities?: string[];
   /** cancela a chamada (prazo máximo da execução) */
   signal?: AbortSignal;
 }
 
 export interface ChatResult {
-  message: { content: string | null; tool_calls?: ToolCall[] };
+  message: { content: string | null; tool_calls?: ToolCall[]; images?: string[] };
   model: string;
   tokensIn: number;
   tokensOut: number;

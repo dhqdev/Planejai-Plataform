@@ -19,7 +19,7 @@ Subagentes começam sem contexto: o pedido leva o objetivo, os arquivos, as regr
 
 ## Agentes do app (OpenRouter)
 
-- A fonte da verdade é `ROUTE_DEFAULTS` em `apps/server/src/llm/router.ts`: cada rota (`agent:<id>`, `vision`, `transcription`, `summary`, `improve`, `proactive`, `web_search`...) tem `model`, `fallbacks`, `maxTokens` e o `why` da escolha. Para ver o que está valendo: `rg -n "task:|model:|maxTokens" apps/server/src/llm/router.ts`. Não copie a lista de modelos para cá: ela muda.
+- A fonte da verdade é `ROUTE_DEFAULTS` em `apps/server/src/llm/router.ts`: cada rota (`agent:<id>`, `vision`, `transcription`, `summary`, `improve`, `proactive`, `web_search`, `image`...) tem `model`, `fallbacks`, `maxTokens` e o `why` da escolha. Para ver o que está valendo: `rg -n "task:|model:|maxTokens" apps/server/src/llm/router.ts`. Não copie a lista de modelos para cá: ela muda.
 - Em produção o dono troca pela tela **Modelos** (grava em `model_routes`, sem redeploy). `resolveModel(task)` usa o que está no banco e cai no padrão.
 - Critério: o mais barato que dá conta. Entrada barata para quem lê muito histórico (CTO, Pesquisador), saída barata para quem escreve muito, modelo omni para áudio, tool-calling confiável para quem mexe em datas e dinheiro (Agenda, Financeiro), e sempre `fallbacks` de outro provedor.
 - Confira IDs e preços no catálogo ao vivo (`GET /api/models/catalog`, ou a tela Modelos). Do sandbox o OpenRouter é bloqueado; não invente id: use um que já está no `router.ts` ou peça ao dono para conferir no catálogo.
