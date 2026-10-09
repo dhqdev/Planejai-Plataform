@@ -1,0 +1,15 @@
+# Complemento para compilar a imagem na própria máquina (install.sh, origem "build"):
+# serve para qualquer arquitetura que o node:22-alpine tenha (amd64, arm64, arm/v7, arm/v6, s390x)
+# e para quem não quer puxar a imagem pronta do GitHub. O código fica em ./src (baixado pelo install.sh).
+
+services:
+  app:
+    image: planejai-local:${PLANEJAI_TAG:-latest}
+    build:
+      context: ./src
+      args:
+        APP_VERSION: ${PLANEJAI_BUILD_VERSION:-}
+  worker:
+    image: planejai-local:${PLANEJAI_TAG:-latest}
+    # a mesma imagem do app: o build acontece uma vez só
+    pull_policy: never

@@ -28,3 +28,11 @@ Sem WhatsApp, teste pelos e2e (canal playground) e veja os passos em **Execuçõ
 
 ## Banco
 Nova migração = novo arquivo `db/migrations/0NN_descricao.sql` (nunca edite uma já aplicada). Roda sozinha no boot. Número repetido por outra sessão: renomeie a sua antes do push (`paralelo.md`).
+
+## Instalar em VM (`install.sh`)
+
+- `install.sh` na raiz: `curl -fsSL .../main/install.sh | sudo bash`. Baixa o código (codeload, sem git) em `/opt/planejai/src`, copia `deploy/portainer-stack.yml` e os complementos de `deploy/vm/`, grava `/opt/planejai/.env` (chmod 600; nunca regera um `.env` existente, a `ENCRYPTION_KEY` precisa ficar) e vira o comando `planejai` (install, update, status, logs, backup, restart, uninstall).
+- Modos (`PLANEJAI_MODE`): `https` (Caddy do `deploy/vm/compose.vm.yml`, perfil `https`), `port`, `swarm` (renderiza `deploy/portainer-stack.yml` + `deploy/vm/compose.vm.yml` + `deploy/vm/compose.swarm.yml` com `docker compose config` e publica com `docker stack deploy`), `portainer` (só imprime as variáveis).
+- Origem (`PLANEJAI_SOURCE`): `ghcr` (imagem pronta, só amd64/arm64) ou `build` (`deploy/vm/compose.build.yml`, compila na máquina; obrigatório nas outras arquiteturas, sem o browserless). O CI continua publicando só amd64 e arm64 porque o browserless só existe nelas.
+- Mudou a stack (`deploy/portainer-stack.yml`)? Confira se os complementos em `deploy/vm/` ainda casam (nomes de serviço, redes) e o `docs/instalacao.md`.
+

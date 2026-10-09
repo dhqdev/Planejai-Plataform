@@ -46,9 +46,9 @@ describe("skill planejai (mapa do projeto)", () => {
   });
 
   it("toda CONSTANTE ou variável de ambiente citada existe no código", () => {
-    const tracked = execFileSync("git", ["ls-files", "apps", ".env.example", ".github", "deploy", "Dockerfile"], { cwd: repo, encoding: "utf8" })
+    const tracked = execFileSync("git", ["ls-files", "apps", ".env.example", ".github", "deploy", "Dockerfile", "install.sh"], { cwd: repo, encoding: "utf8" })
       .split("\n")
-      .filter((f) => f && /\.(ts|tsx|mjs|js|sql|yml|yaml|json|example|css)$|Dockerfile$/.test(f));
+      .filter((f) => f && /\.(ts|tsx|mjs|js|sql|yml|yaml|json|example|css|sh)$|Dockerfile$/.test(f));
     const corpus = tracked.map((f) => readFileSync(join(repo, f), "utf8")).join("\n");
     const missing = cited
       .filter(({ token }) => /^[A-Z][A-Z0-9_]{3,}$/.test(token) && !corpus.includes(token))

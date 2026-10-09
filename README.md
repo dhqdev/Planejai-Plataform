@@ -112,12 +112,20 @@ WhatsApp (Baileys / Evolution / Cloud)    Telegram    n8n (API interna)
 - **Memória curta no Redis.** A conversa fica 24h já interpretada e depois vira resumo. O chat não é guardado no Postgres, porque já está no WhatsApp.
 - **Conexão do WhatsApp** guardada no banco, com um "aluguel" que garante uma única conexão mesmo durante o redeploy.
 
+## Instalar numa VM (qualquer arquitetura)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dhqdev/Planejai-Plataform/main/install.sh | sudo bash
+```
+
+O script instala o Docker se faltar, pergunta o domínio e as chaves, gera os segredos e sobe tudo com HTTPS automático, só com porta, em Swarm + Traefik ou gera as variáveis para o Portainer. Roda em amd64 e arm64 com a imagem pronta e compila sozinho em armv7, armv6 e s390x. Depois vira o comando `planejai` (`status`, `logs`, `update`, `backup`). Todas as formas de instalar estão em [`docs/instalacao.md`](docs/instalacao.md).
+
 ## Deploy no Portainer (Swarm + Traefik)
 
 A stack segue o mesmo padrão do n8n do servidor: Traefik na rede externa `network_public`, entrypoint `websecure` e certificado `letsencryptresolver`. Postgres e Redis são **da própria stack**, nunca os que já existem no servidor.
 
 1. **Imagem.** Cada push na `main` roda o workflow `CI`. Se os testes passarem, ele publica `ghcr.io/dhqdev/planejai-plataform` com as tags `latest` e `sha-XXXXXXX`.
-   - A imagem é privada (como o repositório). O servidor puxa com login: crie um token **clássico** só com `read:packages` (*GitHub > Settings > Developer settings > Personal access tokens > Tokens (classic)*) e cadastre em *Portainer > Registries > Add registry > Custom registry* com URL `ghcr.io`, usuário `dhqdev` e o token como senha. Detalhes em [`docs/operacao.md`](docs/operacao.md#repositório-e-imagem-privados).
+   - Se a imagem estiver privada no GitHub, o servidor puxa com login: crie um token **clássico** só com `read:packages` (*GitHub > Settings > Developer settings > Personal access tokens > Tokens (classic)*) e cadastre em *Portainer > Registries > Add registry > Custom registry* com URL `ghcr.io`, usuário `dhqdev` e o token como senha. Detalhes em [`docs/operacao.md`](docs/operacao.md#repositório-e-imagem-privados).
 2. **Stack.** No Portainer, abra *Stacks > Add stack*, cole [`deploy/swarm-traefik-stack.yml`](deploy/swarm-traefik-stack.yml) e troque todos os valores marcados com `TROQUE`. Gere os segredos com `openssl rand -hex 32`.
    - Para outro domínio, troque `autoplanejai.tekvosoft.com` nas labels do Traefik e no `PUBLIC_URL`.
    - Sem Swarm/Traefik, use [`deploy/portainer-stack.yml`](deploy/portainer-stack.yml), que é um compose comum com porta exposta.

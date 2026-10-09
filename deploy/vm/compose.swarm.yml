@@ -1,0 +1,45 @@
+# Complemento da deploy/portainer-stack.yml para Docker Swarm com Traefik já rodando (rede externa network_public),
+# no mesmo padrão do n8n. O install.sh junta os dois com "docker compose config" e sobe com "docker stack deploy".
+# Precisa das variáveis PLANEJAI_DOMAIN e TRAEFIK_CERTRESOLVER (padrão letsencryptresolver) no .env.
+
+services:
+  app:
+    ports: !reset []
+    depends_on: !reset []
+    networks:
+      # o n8n chama a API interna por http://planejai-app:3000 (sem sair para a internet)
+      network_public:
+        aliases: [planejai-app]
+      planejai: {}
+      planejai_browser: {}
+    deploy:
+      replicas: 1
+      restart_policy: { condition: any, delay: 5s }
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=network_public
+        - traefik.http.routers.planejai.rule=Host(`${PLANEJAI_DOMAIN}`)
+        - traefik.http.routers.planejai.entrypoints=websecure
+        - traefik.http.routers.planejai.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencryptresolver}
+        - traefik.http.services.planejai.loadbalancer.server.port=3000
+
+  worker:
+    depends_on: !reset []
+    networks: [network_public, planejai, planejai_browser]
+    deploy:
+      replicas: 1
+      # para o antigo antes de subir o novo: só pode existir uma conexão do WhatsApp
+      update_config: { parallelism: 1, order: stop-first }
+      restart_policy: { condition: any, delay: 5s }
+
+  backup:
+    depends_on: !reset []
+
+networks:
+  network_public:
+    external: true
+    name: network_public
+  planejai:
+    driver: overlay
+  planejai_browser:
+    driver: overlay

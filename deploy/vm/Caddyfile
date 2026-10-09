@@ -1,0 +1,10 @@
+# HTTPS automático para o Planejai (install.sh, modo "https").
+# O domínio precisa apontar (registro A/AAAA) para o IP desta máquina, com as portas 80 e 443 abertas.
+{
+	email {$ACME_EMAIL}
+}
+
+{$PLANEJAI_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}

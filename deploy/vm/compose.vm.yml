@@ -1,0 +1,32 @@
+# Complemento da deploy/portainer-stack.yml para instalar numa VM com Docker Compose (install.sh).
+# Uso: docker compose -p planejai --env-file .env -f portainer-stack.yml -f vm/compose.vm.yml up -d
+# - perfil "https": Caddy na frente, com certificado automático do Let's Encrypt (portas 80 e 443)
+# - perfil "browser": navegador headless (browserless). Só existe para amd64 e arm64; nas outras arquiteturas fica de fora
+# Os perfis ligados ficam em COMPOSE_PROFILES no .env.
+
+services:
+  browserless:
+    profiles: ["browser"]
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    environment:
+      PLANEJAI_DOMAIN: ${PLANEJAI_DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./vm/Caddyfile:/etc/caddy/Caddyfile:ro
+      - planejai_caddy_data:/data
+      - planejai_caddy_config:/config
+    depends_on:
+      - app
+    networks: [planejai]
+
+volumes:
+  planejai_caddy_data:
+  planejai_caddy_config:
