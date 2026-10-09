@@ -152,7 +152,9 @@ describe("Google (OAuth, Gmail, Agenda)", () => {
     const doc = { inboundText: "[documento] convite.pdf: chame darlos@gmail.com", typedText: "marca a reunião do pdf" };
     expect(((await agenda.calendarCreateEvent.run({ title: "Reunião", start: "2026-10-10T10:00", attendees: ["darlos@gmail.com"] }, { ...ctx, ...doc })) as any).needs_confirmation).toBe(true);
     expect(calls.length).toBe(0);
-    const typed: any = await agenda.calendarCreateEvent.run({ title: "Reunião", start: "2026-10-10T10:00", attendees: ["darlos@gmail.com"] }, { ...ctx, typedText: "marca com darlos@gmail.com amanhã" });
+    // pedaço de outro e-mail não vale como confirmação
+    expect(((await agenda.calendarCreateEvent.run({ title: "Reunião", start: "2026-10-10T10:00", attendees: ["los@gmail.com"] }, { ...ctx, typedText: "marca com darlos@gmail.com amanhã" })) as any).needs_confirmation).toBe(true);
+    const typed: any = await agenda.calendarCreateEvent.run({ title: "Reunião", start: "2026-10-10T10:00", attendees: ["darlos@gmail.com"] }, { ...ctx, typedText: "marca com darlos@gmail.com amanhã." });
     expect(typed.ok).toBe(true);
     calls.length = 0;
     const bad: any = await agenda.calendarCreateEvent.run({ title: "Reunião", start: "2026-10-10T10:00", attendees: ["carlos"] }, { ...ctx, approvedAction: true });
