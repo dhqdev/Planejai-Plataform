@@ -201,4 +201,6 @@ Leia só o do assunto que você vai mexer:
 | `integracoes.md` | WhatsApp (Baileys), Telegram, API interna, eventos e n8n, automações, notificações, documentos, código de login |
 | `deploy.md` | rodar e testar local, CI, imagem, stacks, versões, migrações |
 
+Skills de terceiros da Replica (MIT, github.com/Jakeschincariol/replica-skill), só as 4 que servem a um app que já existe: `replica-recon` (mapear um concorrente por páginas públicas), `replica-diff` (nota de paridade e comparação de layout entre prints: `.claude/skills/replica-diff/imgdiff.py`), `replica-entrepreneur` (avaliações reais de concorrentes viram correções) e `replica-design` (contraste WCAG: `.claude/skills/replica-design/contrast.py`). Elas sugerem Next, Supabase, Stripe e Tailwind para um clone novo; aqui vale a stack e as regras do Planejai. As outras 7 do pacote ficaram de fora de propósito (David, 2026-10-09).
+
 Mudou um comportamento descrito aqui ou num desses arquivos? Atualize o texto no mesmo commit. Sem histórico ("antes era..."): o git guarda isso. O teste `apps/server/test/skills.test.ts` confere que todo arquivo citado entre crases nesta pasta ainda existe; se ele falhar, corrija o texto.
