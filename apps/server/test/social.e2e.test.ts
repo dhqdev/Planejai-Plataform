@@ -250,9 +250,12 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     expect(reg.json()).toMatchObject({ role: "admin", pending: false });
     expect((await app.inject({ method: "GET", url: "/api/invite/NAOEXISTE" })).statusCode).toBe(404);
 
+    // o avatar de cada cliente é o Mochi dele: a lista já traz a roupinha (null = nunca escolheu)
+    await db.query(`UPDATE accounts SET mascot = '{"outfit":{"head":"crown"}}' WHERE email = 'maria@x.com'`);
     const clients = (await app.inject({ method: "GET", url: "/api/clients", headers: { cookie: sup } })).json();
     const d = clients.find((c: any) => c.phone === "5519911110000");
-    expect(d).toMatchObject({ invites_sent: 1, invites_accepted: 1, contacts: 1 });
+    expect(d).toMatchObject({ invites_sent: 1, invites_accepted: 1, contacts: 1, outfit: null });
+    expect(clients.find((c: any) => c.email === "maria@x.com")?.outfit).toEqual({ head: "crown" });
     const invites = (await app.inject({ method: "GET", url: "/api/invites", headers: { cookie: sup } })).json();
     expect(invites.leaderboard[0]).toMatchObject({ name: "David Queiroz", accepted: 1 });
     await app.close();

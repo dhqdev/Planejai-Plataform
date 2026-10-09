@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { activeChannel } from "../../../channels/index.js";
 import { config } from "../../../config.js";
 import { many, one, query } from "../../../db/pool.js";
+import { outfitsOf } from "../../../mascot.js";
 import { queueOverview, retryJob } from "../../../queue/boss.js";
 import { cacheStats, redisInfo } from "../../../shortmem.js";
 import { SESSION_ID } from "../../../whatsapp/session.js";
@@ -149,7 +150,9 @@ export function executionRoutes(api: FastifyInstance) {
     const clientAgents = exec.user_id
       ? await many("SELECT 'c_' || slug AS id, name, persona, face FROM client_agents WHERE user_id = $1", [exec.user_id])
       : [];
-    return { ...exec, steps, client_agents: clientAgents };
+    // roupinha do Mochi da pessoa: é o avatar dela na linha do tempo
+    const outfit = exec.user_id ? ((await outfitsOf([exec.user_id])).get(exec.user_id) ?? null) : null;
+    return { ...exec, outfit, steps, client_agents: clientAgents };
   });
 
   api.delete<{ Querystring: { older_than_days?: string } }>("/api/executions", async (req) => {

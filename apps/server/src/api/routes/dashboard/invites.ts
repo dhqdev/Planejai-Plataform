@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { scopeUserId } from "../../../accounts.js";
 import { many, query } from "../../../db/pool.js";
+import { withOutfits } from "../../../mascot.js";
 import { myShares, selfUserId, setShare, sharedWithMe, type ShareScope } from "../../../sharing.js";
 import { createInvite, createInviteCode, inviteLink, inviteStats, listContacts } from "../../../social.js";
 
@@ -57,7 +58,7 @@ export function inviteRoutes(base: FastifyInstance) {
   });
   base.get("/api/contacts", async (req) => {
     const uid = await selfUserId(req.account);
-    return uid ? listContacts(uid) : [];
+    return uid ? withOutfits(await listContacts(uid)) : [];
   });
 
   // ---------- Compartilhar Finanças/Agenda com um contato (cada tela é particular até a pessoa liberar) ----------
