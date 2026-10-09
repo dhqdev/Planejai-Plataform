@@ -4,14 +4,16 @@ import "../landing-team.css";
 
 /**
  * Landing, seção do time: uma fila com os sete Mochis e um palco que mostra, em cena animada, o que o escolhido faz
- * (o Juvenal distribuindo o pedido, o Moacir lendo o comprovante, o Cotinha tocando na hora...). Troca sozinho
- * enquanto está na tela; tocar num agente fixa nele. Com movimento reduzido, cada cena aparece já pronta.
+ * (o CTO distribuindo o pedido, o financeiro lendo o comprovante, a agenda tocando na hora...). Os nomes vêm de
+ * CORE_FACES. Troca sozinho enquanto está na tela; tocar num agente fixa nele. Com movimento reduzido, cada cena
+ * aparece já pronta.
  */
 
 export interface StageAgent {
   id: keyof typeof CORE_FACES;
+  /** o que faz, em poucas palavras */
   role: string;
-  text: string;
+  /** um pedido de exemplo (vira balão) */
   asks: string[];
 }
 
@@ -364,6 +366,16 @@ export function TeamStage({ team }: { team: StageAgent[] }) {
     return () => clearTimeout(t);
   }, [auto, sel, team.length]);
 
+  // no celular a fila corre de lado: o escolhido sempre fica à vista (só rola a fila, nunca a página)
+  const line = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = line.current;
+    const btn = el?.children[sel] as HTMLElement | undefined;
+    if (!el || !btn || el.scrollWidth <= el.clientWidth) return;
+    const left = btn.offsetLeft - (el.clientWidth - btn.offsetWidth) / 2;
+    el.scrollTo({ left, behavior: reduced() ? "auto" : "smooth" });
+  }, [sel]);
+
   const pick = (i: number) => {
     setPinned(true);
     setSel(i);
@@ -375,7 +387,7 @@ export function TeamStage({ team }: { team: StageAgent[] }) {
 
   return (
     <div className="lp-stage" ref={stage}>
-      <div className="lp-lineup" role="tablist" aria-label="Escolha um agente">
+      <div className="lp-lineup" ref={line} role="tablist" aria-label="Escolha um agente">
         {team.map((m, i) => (
           <button
             key={m.id}
@@ -404,7 +416,6 @@ export function TeamStage({ team }: { team: StageAgent[] }) {
             {persona}
             <small>{a.role}</small>
           </h3>
-          <p>{a.text}</p>
           <ul className="lp-agent-asks" aria-label={`Exemplos de pedidos para ${persona}`}>
             {a.asks.map((q) => (
               <li key={q}>{q}</li>
