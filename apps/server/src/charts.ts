@@ -158,3 +158,30 @@ export async function htmlToPng(html: string, width: number): Promise<string> {
     await browser.close().catch(() => {});
   }
 }
+
+/** HTML -> PDF A4 (várias páginas, a paginação é do navegador), com rodapé repetido em toda página. */
+export async function htmlToPdf(html: string, footer: string): Promise<Buffer> {
+  const options = { format: "A4", printBackground: true, preferCSSPageSize: true, displayHeaderFooter: true, headerTemplate: "<span></span>", footerTemplate: footer };
+  const b = await getCredentials("browserless");
+  if (b?.url) {
+    const url = `${b.url.replace(/\/$/, "")}/chromium/pdf${b.token ? `?token=${encodeURIComponent(b.token)}` : ""}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ html, options }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!res.ok) throw new Error(`Browserless ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    return Buffer.from(await res.arrayBuffer());
+  }
+  if (!config.CHROME_PATH) throw new Error("Para gerar PDF preciso do navegador da stack (Browserless) ou de CHROME_PATH.");
+  const puppeteer = (await import("puppeteer-core")).default;
+  const browser = await puppeteer.launch({ executablePath: config.CHROME_PATH, headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "load" });
+    return Buffer.from(await page.pdf({ ...options, format: "a4" }));
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}

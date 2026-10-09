@@ -4,6 +4,7 @@ import * as core from "./tools/core.js";
 import * as finance from "./tools/finance.js";
 import * as bills from "./tools/bills.js";
 import * as images from "./tools/images.js";
+import * as pdf from "./tools/pdf.js";
 import * as audio from "./tools/audio.js";
 import * as automations from "./tools/automations.js";
 import * as documents from "./tools/documents.js";
@@ -90,6 +91,7 @@ export const SPECIALISTS: AgentDef[] = [
       core.attachImage,
       core.readDocument,
       images.makeImage,
+      pdf.makePdf,
     ],
   },
   {
@@ -232,6 +234,7 @@ export const CTO_TOOLS: Tool[] = [
   finance.makeChart,
   bills.billPay,
   images.makeImage,
+  pdf.makePdf,
   audio.makeAudio,
   places.placesNearby,
   research.mapRoute,
@@ -314,6 +317,7 @@ export const CLIENT_AGENT_TOOLS: Record<string, Tool> = Object.fromEntries(
     core.attachImage,
     core.readDocument,
     images.makeImage,
+    pdf.makePdf,
   ].map((t) => [t.name, t]),
 );
 

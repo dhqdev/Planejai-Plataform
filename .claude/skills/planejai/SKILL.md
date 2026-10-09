@@ -71,7 +71,8 @@ apps/server/src/
                            convites/contatos, perguntas de boas-vindas, abas do cliente, LGPD (eraseUserData)
   documents.ts  storage.ts  notifications.ts  events.ts  telegram.ts  logincode.ts
                            documentos, sininho, eventos para o n8n, Telegram, código de login
-  charts.ts  images.ts     gráficos e imagens simples (HTML -> PNG, sem LLM)
+  charts.ts  images.ts  pdf.ts
+                           gráficos e imagens simples (HTML -> PNG, sem LLM); PDF A4 de várias páginas (HTML -> PDF)
   resources.ts             tela Servidor/Armazenamento
   alive.ts  healthcheck.ts  version.ts
                            vida do worker, healthcheck da imagem, versão

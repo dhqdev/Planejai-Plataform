@@ -249,6 +249,23 @@ describe("imagens simples (make_image)", () => {
   });
 });
 
+describe("PDF de várias páginas (make_pdf)", () => {
+  it("monta capa, sumário e seções escapando HTML", async () => {
+    const { buildPdfHtml, pdfFileName } = await import("../src/pdf.js");
+    const secs = ["Um", "Dois", "Três", "Quatro"].map((t) => ({ title: t, text: "Primeiro <b>.\n\nSegundo **forte**." }));
+    const html = buildPdfHtml({ title: "Plano <x>", sections: [...secs, { title: "Tabela", table: { columns: ["A", "B"], rows: [["1", "2"]] }, highlight: "dica" }] });
+    expect(html).toContain("Plano &lt;x&gt;");
+    expect(html).toContain("Sumário");
+    expect(html.match(/<section/g)).toHaveLength(5);
+    expect(html).toContain("<p>Segundo <strong>forte</strong>.</p>");
+    expect(html).toContain("Primeiro &lt;b&gt;.");
+    expect(html).toContain("<th>A</th>");
+    expect(html).toContain('class="hl"');
+    expect(buildPdfHtml({ title: "Curto", sections: [{ title: "Só", text: "x" }] })).not.toContain("Sumário");
+    expect(pdfFileName('Relatório: "maio"/2026')).toBe("Relatório maio 2026.pdf");
+  });
+});
+
 describe("compactOldToolResults", () => {
   it("encurta resultados já lidos e mantém o lote atual inteiro", async () => {
     const { compactOldToolResults } = await import("../src/agent/runner.js");
