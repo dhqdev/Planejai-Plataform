@@ -60,9 +60,6 @@
   .agents-lists > * { flex-shrink: 0; }
 
   /* Configurações: três colunas, cada uma rola por dentro */
-  .settings-page.fit { max-width: 1400px; }
-  .settings-page.fit > .grid { flex: 1 1 auto; min-height: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
-  .settings-page.fit > .grid > .card { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 
   /* Agenda */
   .cal-page.fit { display: grid; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
