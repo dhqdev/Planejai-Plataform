@@ -1,5 +1,5 @@
 import { saveDocument } from "../../documents.js";
-import { PDF_LIMITS, type PdfSpec, pdfFileName, renderPdf } from "../../pdf.js";
+import { PDF_LIMITS, type PdfSpec, normalizePdfSpec, pdfFileName, renderPdf } from "../../pdf.js";
 import { defineTool, obj } from "./types.js";
 
 export const makePdf = defineTool<PdfSpec>({
@@ -30,10 +30,13 @@ export const makePdf = defineTool<PdfSpec>({
     },
     ["title", "sections"],
   ),
-  async run(args, ctx) {
-    for (const s of args.sections ?? []) if (s && !s.title && (s as { heading?: string }).heading) s.title = (s as { heading?: string }).heading!;
-    if (!args.sections?.some((s) => s?.title && (s.text || s.items?.length || s.table?.rows?.length || s.highlight)))
-      return { ok: false, error: "Mande sections com o conteúdo (text, items ou table)." };
+  async run(raw, ctx) {
+    const args = normalizePdfSpec(raw);
+    if (!args.sections.some((s) => s.text || s.items?.length || s.table?.rows?.length || s.highlight))
+      return {
+        ok: false,
+        error: 'Faltou o conteúdo. Formato: {"title":"...","sections":[{"title":"...","text":"parágrafos separados por linha em branco"}]}.',
+      };
     const data = await renderPdf(args);
     const fileName = pdfFileName(args.title);
     // guarda em Documentos para a pessoa achar depois; se não couber, o PDF vai do mesmo jeito

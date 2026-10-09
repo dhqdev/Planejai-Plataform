@@ -74,6 +74,44 @@ tr:nth-child(even) td{background:#FAFAF8}
 .hl p:last-child{margin:0}
 `;
 
+const str = (v: unknown) => (typeof v === "string" ? v : typeof v === "number" ? String(v) : "");
+const parseMaybe = (v: unknown) => {
+  if (typeof v !== "string") return v;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v;
+  }
+};
+
+/**
+ * O modelo nem sempre segue o formato: manda sections como texto JSON, chama o título de heading,
+ * o texto de content/body ou parágrafos em lista, ou uma seção como string solta. Tudo vira PdfSpec.
+ */
+export function normalizePdfSpec(raw: unknown): PdfSpec {
+  const a = (parseMaybe(raw) ?? {}) as Record<string, unknown>;
+  let list = parseMaybe(a.sections ?? a.secoes ?? a.chapters ?? a.capitulos);
+  if (!Array.isArray(list)) list = list && typeof list === "object" ? [list] : [];
+  const sections = (list as unknown[]).map((x, i): PdfSection => {
+    const v = parseMaybe(x);
+    if (typeof v === "string") return { title: `Parte ${i + 1}`, text: v };
+    const o = (v ?? {}) as Record<string, unknown>;
+    const body = o.text ?? o.content ?? o.body ?? o.texto ?? o.conteudo ?? o.paragraphs ?? o.paragrafos;
+    const items = parseMaybe(o.items ?? o.bullets ?? o.points ?? o.list ?? o.topicos);
+    const table = parseMaybe(o.table ?? o.tabela) as PdfSection["table"] | undefined;
+    return {
+      title: str(o.title ?? o.heading ?? o.titulo ?? o.name) || `Parte ${i + 1}`,
+      text: Array.isArray(body) ? body.map(str).filter(Boolean).join("\n\n") : str(body),
+      items: Array.isArray(items) ? items.map(str).filter(Boolean) : undefined,
+      table: table && Array.isArray(table.columns) && Array.isArray(table.rows) ? table : undefined,
+      highlight: str(o.highlight ?? o.destaque ?? o.tip ?? o.dica) || undefined,
+    };
+  });
+  // sem seções mas com texto solto: vira uma seção só
+  if (!sections.length && str(a.text ?? a.content)) sections.push({ title: str(a.title) || "Documento", text: str(a.text ?? a.content) });
+  return { title: str(a.title ?? a.titulo) || "Documento", subtitle: str(a.subtitle ?? a.subtitulo) || undefined, author: str(a.author) || undefined, sections };
+}
+
 /** Rodapé de cada página (o navegador numera): título à esquerda, "página X de Y" à direita. */
 export function pdfFooter(title: string) {
   return `<div style="width:100%;font-family:Inter,Arial,sans-serif;font-size:8px;color:#9A9A94;padding:0 18mm;display:flex;justify-content:space-between"><span>${esc(clip(title, 80))} · planejai</span><span><span class="pageNumber"></span> de <span class="totalPages"></span></span></div>`;

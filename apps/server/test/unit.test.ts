@@ -279,6 +279,14 @@ describe("PDF de várias páginas (make_pdf)", () => {
     expect(html).toContain('class="hl"');
     expect(buildPdfHtml({ title: "Curto", sections: [{ title: "Só", text: "x" }] })).not.toContain("Sumário");
     expect(buildPdfHtml({ title: "H", sections: [{ heading: "Com heading", text: "x" } as never] })).toContain("Com heading");
+    const { normalizePdfSpec } = await import("../src/pdf.js");
+    // sections como texto JSON, heading/content, parágrafos em lista e seção solta
+    const n = normalizePdfSpec({ title: "Pai Rico", sections: JSON.stringify([{ heading: "Lição 1", content: ["um", "dois"] }, "texto solto"]) });
+    expect(n.sections).toEqual([
+      { title: "Lição 1", text: "um\n\ndois", items: undefined, table: undefined, highlight: undefined },
+      { title: "Parte 2", text: "texto solto" },
+    ]);
+    expect(normalizePdfSpec('{"title":"T","content":"só texto"}').sections[0]).toEqual({ title: "T", text: "só texto" });
     expect(pdfFileName('Relatório: "maio"/2026')).toBe("Relatório maio 2026.pdf");
   });
 });
