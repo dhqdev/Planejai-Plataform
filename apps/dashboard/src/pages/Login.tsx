@@ -35,7 +35,9 @@ const FIELD_MOOD: Record<string, Mood> = { code: "searching", name: "happy", pho
 export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
   const [code, setCode] = useState<string | null>(inviteCode);
   const wantsSignup = Boolean(code) || new URLSearchParams(location.search).has("cadastro");
-  const [mode, setMode] = useState<"login" | "register">(wantsSignup ? "register" : "login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot">(wantsSignup ? "register" : "login");
+  // esqueci a senha: o código chega no WhatsApp da conta
+  const [reset, setReset] = useState<string | null>(null);
   const [step, setStep] = useState<Step>(code ? "you" : "code");
   const [signup, setSignup] = useState<string>("invite");
   const [invite, setInvite] = useState<Invite | null>(null);
@@ -116,7 +118,15 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
     }
     setBusy(true);
     try {
-      if (mode === "login" && challenge) {
+      if (mode === "forgot" && !reset) {
+        const r = await api<{ challenge: string }>("/api/auth/forgot", { method: "POST", json: { email: form.email } });
+        setReset(r.challenge);
+        setOtp("");
+        setForm((f) => ({ ...f, password: "" }));
+      } else if (mode === "forgot") {
+        const me = await api<Me>("/api/auth/reset", { method: "POST", json: { challenge: reset, code: otp, password: form.password } });
+        onLogin(me);
+      } else if (mode === "login" && challenge) {
         const me = await api<Me>("/api/auth/login/verify", { method: "POST", json: { challenge: challenge.id, code: otp } });
         if (code) history.replaceState(null, "", "/");
         onLogin(me);
@@ -151,7 +161,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
   // a cara do Mochi: erro e espera mandam, depois o campo em foco, depois a da fantasia
   const mood: Mood = error ? "error" : found ? "surprised" : busy ? "working" : done ? "finished" : (focus && FIELD_MOOD[focus]) || (register ? look.mood : "greeting");
   const stageKey = register ? step : mode;
-  const say = error ? "Opa, algo não bateu." : found ? "Achei seu convite!" : register ? SAY[step] : "Que bom te ver!";
+  const say = error ? "Opa, algo não bateu." : found ? "Achei seu convite!" : register ? SAY[step] : mode === "forgot" ? "Acontece com todo mundo." : "Que bom te ver!";
   const back = () => {
     setError(null);
     setStep(steps[Math.max(0, at - 1)]!);
@@ -206,6 +216,54 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
                 <button type="button" className="link" onClick={() => { setChallenge(null); setError(null); setOtp(""); }}>Voltar e entrar de novo</button>
               </p>
             </>
+          ) : mode === "forgot" ? (
+            reset ? (
+              <>
+                <h1>Senha nova</h1>
+                <p className="muted" style={{ marginTop: 0, marginBottom: 20 }}>Se esse e-mail tem conta, o código chegou agora no WhatsApp cadastrado. Ele vale 15 minutos.</p>
+                <div className="field">
+                  <label htmlFor="reset-code">Código</label>
+                  <input
+                    id="reset-code"
+                    className="input otp-input mono"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="000000"
+                    autoFocus
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="reset-pass">Senha nova</label>
+                  <input id="reset-pass" className="input" type="password" value={form.password} onChange={set("password")} {...focusProps("password")} minLength={8} autoComplete="new-password" required />
+                  <span className="help">Pelo menos 8 caracteres. Os outros aparelhos saem da conta.</span>
+                </div>
+                <ErrorBox error={error} />
+                <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12, padding: "10px 12px" }} disabled={busy || otp.length !== 6 || form.password.length < 8} onClick={() => haptic(10)}>
+                  {busy ? "Salvando…" : "Salvar e entrar"}
+                </button>
+                <p className="muted" style={{ textAlign: "center", marginBottom: 0, fontSize: 13 }}>
+                  Não chegou?{" "}
+                  <button type="button" className="link" onClick={() => { setReset(null); setError(null); }}>Pedir outro código</button>
+                </p>
+              </>
+            ) : (
+              <>
+                <h1>Esqueci a senha</h1>
+                <p className="muted" style={{ marginTop: 0, marginBottom: 20 }}>Digite o e-mail da sua conta. Mandamos um código no seu WhatsApp para você criar uma senha nova.</p>
+                <div className="field"><label htmlFor="forgot-email">E-mail</label><input id="forgot-email" className="input" type="email" value={form.email} onChange={set("email")} {...focusProps("email")} autoComplete="email" autoFocus required /></div>
+                <ErrorBox error={error} />
+                <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12, padding: "10px 12px" }} disabled={busy} onClick={() => haptic(10)}>
+                  {busy ? "Enviando…" : "Mandar código no WhatsApp"}
+                </button>
+                <p className="muted" style={{ textAlign: "center", marginBottom: 0, fontSize: 13 }}>
+                  Lembrou?{" "}
+                  <button type="button" className="link" onClick={() => { setMode("login"); setError(null); }}>Voltar e entrar</button>
+                </p>
+              </>
+            )
           ) : done ? (
             <>
               <h1>Quase lá</h1>
@@ -309,6 +367,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
               <div className="field">
                 <label>Senha</label>
                 <input className="input" type="password" value={form.password} onChange={set("password")} {...focusProps("password")} autoComplete="current-password" required />
+                <button type="button" className="link forgot-link" onClick={() => { setMode("forgot"); setReset(null); setError(null); }}>Esqueci a senha</button>
               </div>
               <ErrorBox error={error} />
               <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12, padding: "10px 12px" }} disabled={busy}>

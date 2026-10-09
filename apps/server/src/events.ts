@@ -18,7 +18,9 @@ export type PlanejaiEvent =
   | "payment.confirmed"
   | "payment.overdue"
   | "subscription.canceled"
-  | "referral.credited";
+  | "referral.credited"
+  | "password.reset_requested"
+  | "support.requested";
 
 /** Chave da API interna. Vazia = API interna desligada (nada derivado de outro segredo). */
 export function internalKey() {
@@ -61,21 +63,24 @@ async function toNotifications(event: PlanejaiEvent, data: Record<string, any>) 
   }
 }
 
-export async function emitEvent(event: PlanejaiEvent, data: Record<string, unknown>) {
+/** Devolve true quando o n8n recebeu (2xx): quem depende do fluxo para entregar algo sabe se precisa de plano B. */
+export async function emitEvent(event: PlanejaiEvent, data: Record<string, unknown>): Promise<boolean> {
   void toNotifications(event, data as Record<string, any>).catch(() => {});
   try {
     const url = (await getCredentials("n8n"))?.events_url;
     // sem chave não dá para assinar: o n8n não teria como saber que veio daqui
-    if (!url || !internalKey()) return;
+    if (!url || !internalKey()) return false;
     const body = JSON.stringify({ event, at: new Date().toISOString(), data });
-    await fetch(url, {
+    const res = await fetch(url, {
       method: "POST",
       // a chave vai junto para o n8n conferir com {{ $env.PLANEJAI_API_KEY }} (o nó Crypto não faz HMAC do corpo cru)
       headers: { "Content-Type": "application/json", "X-Planejai-Event": event, "X-Planejai-Key": internalKey(), "X-Planejai-Signature": createHmac("sha256", internalKey()).update(body).digest("hex") },
       body,
       signal: AbortSignal.timeout(10_000),
     });
+    return res.ok;
   } catch {
     /* evento é aviso, não pode derrubar o fluxo */
+    return false;
   }
 }

@@ -58,6 +58,39 @@ describe.skipIf(!enabled)("painel: notificações, documentos e login (e2e)", ()
     return { session: cookieOf(r), device: cookieOf(r, "pj_dev") };
   }
 
+  it("esqueci a senha: código no WhatsApp (plano B sem n8n), senha nova e os outros logins caem", async () => {
+    // conta própria deste teste: os outros seguem com a senha de sempre
+    const { upsertUser } = await import("../src/ingest.js");
+    const { hashPassword } = await import("../src/accounts.js");
+    const cris = await upsertUser("5519911110003", "Cris");
+    await db.query("INSERT INTO accounts (email, name, password_hash, role, status, user_id, phone) VALUES ('cris@x.com', 'Cris', $1, 'admin', 'active', $2, $3)", [hashPassword("senha-forte-1"), cris.id, cris.phone]);
+    const { session: old } = await loginWithCode("cris@x.com");
+    // e-mail sem conta responde igual (não revela quem tem cadastro) e não manda nada
+    const before = await db.one("SELECT count(*)::int AS n FROM pgboss.job WHERE name = 'outbound.send'");
+    const ghost = await app.inject({ method: "POST", url: "/api/auth/forgot", payload: { email: "ninguem@x.com" } });
+    expect(ghost.statusCode).toBe(200);
+    expect(ghost.json().challenge).toMatch(/^[0-9a-f-]{36}$/);
+    expect((await db.one("SELECT count(*)::int AS n FROM pgboss.job WHERE name = 'outbound.send'")).n).toBe(before.n);
+
+    const r = await app.inject({ method: "POST", url: "/api/auth/forgot", payload: { email: "cris@x.com" } });
+    expect(r.statusCode).toBe(200);
+    // sem n8n configurado, o código vai pela nossa fila para o WhatsApp da conta
+    const job = await db.one("SELECT data FROM pgboss.job WHERE name = 'outbound.send' ORDER BY created_on DESC LIMIT 1");
+    expect(job.data).toMatchObject({ type: "send", phone: "5519911110003" });
+    const code = job.data.text.match(/\d{6}/)[0];
+    // o código de senha não serve para o login de navegador novo
+    expect((await app.inject({ method: "POST", url: "/api/auth/login/verify", payload: { challenge: r.json().challenge, code } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: "/api/auth/reset", payload: { challenge: r.json().challenge, code, password: "curta" } })).statusCode).toBe(400);
+    const ok = await app.inject({ method: "POST", url: "/api/auth/reset", payload: { challenge: r.json().challenge, code, password: "senha-nova-22" } });
+    expect(ok.statusCode).toBe(200);
+    expect(cookieOf(ok)).toBeTruthy();
+    // código usado não vale de novo; sessão antiga caiu; senha nova entra
+    expect((await app.inject({ method: "POST", url: "/api/auth/reset", payload: { challenge: r.json().challenge, code, password: "outra-senha-33" } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "GET", url: "/api/notifications", headers: { cookie: old } })).statusCode).toBe(401);
+    const login = await app.inject({ method: "POST", url: "/api/auth/login", headers: { cookie: cookieOf(ok, "pj_dev") }, payload: { email: "cris@x.com", password: "senha-nova-22" } });
+    expect(login.statusCode).toBe(200);
+  });
+
   it("navegador novo recebe código no WhatsApp; errado não entra; depois o navegador fica conhecido", async () => {
     await db.query("UPDATE wa_sessions SET status = 'connected', heartbeat_at = now()").catch(() => {});
     const first = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "ana@x.com", password: "senha-forte-1" } });

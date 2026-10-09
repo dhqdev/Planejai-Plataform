@@ -18,7 +18,8 @@ import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { registerInternalRoutes } from "./routes/internal.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerSecurity, trustProxySetting } from "./security.js";
-import { DEVICE_COOKIE, isTrustedDevice, startChallenge, trustDevice, verifyChallenge } from "../logincode.js";
+import { DEVICE_COOKIE, isTrustedDevice, startChallenge, startReset, trustDevice, verifyChallenge, verifyReset } from "../logincode.js";
+import { emitEvent } from "../events.js";
 import { notify } from "../notifications.js";
 import { QUEUES, getBoss } from "../queue/boss.js";
 
@@ -145,6 +146,36 @@ export async function buildServer() {
     const account = await loadAccount(r.accountId);
     if (!account || account.status !== "active") return reply.code(403).send({ error: "Conta indisponível." });
     return completeLogin(req, reply, account, true);
+  });
+
+  // Esqueci a senha: código no WhatsApp (pelo fluxo do n8n, com plano B pela nossa fila) e senha nova
+  app.post<{ Body: { email?: string } }>("/api/auth/forgot", async (req, reply) => {
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    if ((await hit(`forgot:ip:${req.ip}`, LOGIN_WINDOW)) > 10) return tooMany(reply);
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return reply.code(400).send({ error: "Informe o e-mail da sua conta." });
+    if ((await hit(`forgot:mail:${email}`, 3600)) > 3) return tooMany(reply);
+    const row = await one("SELECT * FROM accounts WHERE email = $1", [email]);
+    const r = await startReset(row ? toAccount(row) : null, async (d) => {
+      const sent = await emitEvent("password.reset_requested", { user_id: d.userId, account_id: d.accountId, phone: d.phone, name: d.name, code: d.code, text: d.text, minutes: 15 });
+      if (!sent) await (await getBoss()).send(QUEUES.outbound, { type: "send", userId: null, phone: d.phone, channel: "whatsapp", text: d.text }, { retryLimit: 1 });
+    });
+    return { challenge: r.challenge };
+  });
+
+  app.post<{ Body: { challenge?: string; code?: string; password?: string } }>("/api/auth/reset", async (req, reply) => {
+    if ((await hit(`forgot:verify:${req.ip}`, LOGIN_WINDOW)) > LOGIN_IP_MAX) return tooMany(reply);
+    const password = String(req.body?.password ?? "");
+    if (password.length < 8) return reply.code(400).send({ error: "A senha precisa ter pelo menos 8 caracteres" });
+    const r = await verifyReset(String(req.body?.challenge ?? ""), String(req.body?.code ?? ""));
+    if (!r.ok) return reply.code(401).send({ error: r.error });
+    const account = await loadAccount(r.accountId);
+    if (!account || account.owner || account.status !== "active") return reply.code(403).send({ error: "Conta indisponível." });
+    await query("UPDATE accounts SET password_hash = $2 WHERE id = $1", [account.id, hashPassword(password)]);
+    // senha nova derruba os outros logins; quem provou o WhatsApp agora entra direto
+    await bumpSession(account.id);
+    await notify({ userId: account.userId, kind: "seguranca", title: "Senha trocada", body: "Sua senha foi trocada pelo código do WhatsApp. Os outros aparelhos saíram." });
+    const fresh = await loadAccount(account.id);
+    return completeLogin(req, reply, fresh!, true);
   });
 
   // Convite público: dados para a tela de cadastro (/convite/:code ou o código digitado na landing)

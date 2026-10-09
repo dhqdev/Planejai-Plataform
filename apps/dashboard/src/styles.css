@@ -1542,3 +1542,4 @@ button.chip { cursor: pointer; color: var(--text); }
   .stage-mochi-body, .stage-say, .float-mochi, .signup-step, .code-input.found, .invite-code, .welcome-stage .welcome-hello { animation: none !important; }
   .float-mochi { opacity: .9; }
 }
+.forgot-link { display: block; margin: 8px 0 0 auto; font-size: 13px; font-weight: 500; color: var(--muted); }

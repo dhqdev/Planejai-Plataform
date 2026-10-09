@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomInt } from "node:crypto";
+import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import type { Account } from "./accounts.js";
 import { normalizePhone } from "./accounts.js";
 import { config } from "./config.js";
@@ -73,13 +73,55 @@ export async function startChallenge(account: Account, sendCode: (phone: string,
 /** Confere o código. Devolve o id da conta se bateu. */
 export async function verifyChallenge(challenge: string, code: string): Promise<{ ok: true; accountId: string } | { ok: false; error: string }> {
   if (!/^[0-9a-f-]{36}$/i.test(challenge)) return { ok: false, error: "Código expirado. Entre de novo." };
-  const row = await one("SELECT * FROM login_codes WHERE id = $1 AND used_at IS NULL AND expires_at > now()", [challenge]);
+  const row = await one("SELECT * FROM login_codes WHERE id = $1 AND purpose = 'login' AND used_at IS NULL AND expires_at > now()", [challenge]);
   if (!row) return { ok: false, error: "Código expirado. Entre de novo." };
   if (row.attempts >= MAX_ATTEMPTS) return { ok: false, error: "Muitas tentativas. Entre de novo para receber outro código." };
   const clean = String(code ?? "").replace(/\D/g, "");
   if (clean.length !== 6 || !safeEqual(codeHash(row.id, clean), row.code_hash)) {
     await query("UPDATE login_codes SET attempts = attempts + 1 WHERE id = $1", [row.id]);
     return { ok: false, error: "Código errado." };
+  }
+  const used = await one("UPDATE login_codes SET used_at = now() WHERE id = $1 AND used_at IS NULL RETURNING account_id", [row.id]);
+  if (!used) return { ok: false, error: "Código já usado." };
+  return { ok: true, accountId: used.account_id };
+}
+
+/**
+ * Esqueci a senha: um código de 6 dígitos vai para o WhatsApp da conta. Quem entrega é o fluxo
+ * "[Sistema] Planejai · Esqueci a senha" do n8n (evento password.reset_requested); sem n8n ligado ou se ele
+ * não responder, o próprio app manda pela fila de envios, para ninguém ficar trancado fora.
+ * A resposta é sempre igual (com ou sem conta) para não revelar quem tem cadastro.
+ */
+const RESET_TTL_MIN = 15;
+
+export async function startReset(
+  account: Account | null,
+  deliver: (data: { phone: string; code: string; text: string; accountId: string; userId: string | null; name: string }) => Promise<unknown>,
+): Promise<{ challenge: string }> {
+  const phone = account && !account.owner && account.status === "active" ? await phoneFor(account) : null;
+  if (!account || !phone) return { challenge: randomUUID() };
+  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  const row = await one<{ id: string }>(
+    `INSERT INTO login_codes (account_id, code_hash, expires_at, purpose) VALUES ($1, 'x', now() + interval '${RESET_TTL_MIN} minutes', 'reset') RETURNING id`,
+    [account.id],
+  );
+  await query("UPDATE login_codes SET code_hash = $2 WHERE id = $1", [row!.id, codeHash(row!.id, code)]);
+  const text = `Seu código para criar uma senha nova no Planejai: ${code}\n\nVale por ${RESET_TTL_MIN} minutos. Se não foi você que pediu, pode ignorar: sua senha continua a mesma.`;
+  await deliver({ phone, code, text, accountId: account.id, userId: account.userId ?? null, name: account.name ?? "" });
+  return { challenge: row!.id };
+}
+
+/** Confere o código de "esqueci a senha". Mesma trava de tentativas do login. */
+export async function verifyReset(challenge: string, code: string): Promise<{ ok: true; accountId: string } | { ok: false; error: string }> {
+  const expired = { ok: false as const, error: "Código expirado. Peça outro." };
+  if (!/^[0-9a-f-]{36}$/i.test(challenge)) return expired;
+  const row = await one("SELECT * FROM login_codes WHERE id = $1 AND purpose = 'reset' AND used_at IS NULL AND expires_at > now()", [challenge]);
+  if (!row) return { ok: false, error: "Código errado ou expirado." };
+  if (row.attempts >= MAX_ATTEMPTS) return { ok: false, error: "Muitas tentativas. Peça outro código." };
+  const clean = String(code ?? "").replace(/\D/g, "");
+  if (clean.length !== 6 || !safeEqual(codeHash(row.id, clean), row.code_hash)) {
+    await query("UPDATE login_codes SET attempts = attempts + 1 WHERE id = $1", [row.id]);
+    return { ok: false, error: "Código errado ou expirado." };
   }
   const used = await one("UPDATE login_codes SET used_at = now() WHERE id = $1 AND used_at IS NULL RETURNING account_id", [row.id]);
   if (!used) return { ok: false, error: "Código já usado." };
