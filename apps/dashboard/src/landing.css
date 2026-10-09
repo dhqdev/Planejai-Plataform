@@ -162,7 +162,7 @@
 .lp-tx-row small { display: block; color: var(--lp-muted); font-size: 12.5px; }
 .lp-tx-row > b { font-variant-numeric: tabular-nums; font-weight: 600; }
 .lp-tx-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--lp-ink); }
-.lp-limit { margin-top: 12px; padding-top: 12px; border-top: 1px solid #f2f2f2; display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: 13px; color: var(--lp-muted); }
+.lp-limit { margin-top: 12px; padding-top: 12px; border-top: 1px solid #f2f2f2; display: grid; grid-template-columns: 1fr auto; gap: 8px; white-space: nowrap; font-size: 13px; color: var(--lp-muted); }
 .lp-limit b { color: var(--lp-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .lp-limit i { grid-column: 1 / -1; height: 8px; border-radius: 8px; background: #f2f2f2; overflow: hidden; }
 .lp-limit em { display: block; height: 100%; width: 76.55%; border-radius: inherit; background: var(--lp-violet); transform-origin: left; }

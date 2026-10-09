@@ -713,7 +713,7 @@ export function LandingPage() {
                     </div>
                   ))}
                   <div className="lp-limit">
-                    <span>Alimentação no mês</span>
+                    <span>Mercado no mês</span>
                     <b>
                       <CountUp from={0} to={612.4} duration={1.6} delay={0.6} format={brl} /> de R$ 800,00
                     </b>
