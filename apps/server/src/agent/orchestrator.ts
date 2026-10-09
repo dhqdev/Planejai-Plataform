@@ -28,7 +28,7 @@ import { Tracer } from "./trace.js";
 import { allShort, pushShort, recentShort, redisAlive, type ShortEntry } from "../shortmem.js";
 import { billingAccess, blockedMessage } from "../billing.js";
 import { config } from "../config.js";
-import { rememberInboundMedia } from "./tools/attach.js";
+import { rememberInboundMedia, rememberSentMedia } from "./tools/attach.js";
 import { Outbox, type ConversationRow, type ToolContext, type UserRow } from "./tools/types.js";
 
 /** Mensagens recentes que entram no contexto do CTO (o resto vira resumo): menos token por resposta. */
@@ -461,6 +461,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     progress.stop();
     const keepInDb = !(await redisAlive());
     await deliver(bubbles, { channel, conversation, outbox, tracer, keepInDb });
+    await rememberSentMedia(conversationId, outbox).catch(() => {});
     // A conversa já está no WhatsApp e na memória curta (Redis): com o Redis no ar, a mensagem sai do banco
     // só agora a rodada entra na memória curta: se der erro passageiro e a fila tentar de novo, nada fica duplicado
     await pushShort(conversationId, fresh);

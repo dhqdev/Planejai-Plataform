@@ -6,7 +6,8 @@ import type { ToolContext } from "./types.js";
 
 /**
  * Foto ou documento que vai junto numa mensagem para outra pessoa (send_to_contact, send_whatsapp), agora ou agendada.
- * - attach: o arquivo que ela mandou nesta rodada ou há pouco (a última mídia da conversa fica 30 min no Redis).
+ * - attach: o arquivo que ela mandou nesta rodada, o que o assistente acabou de fazer (imagem, PDF, gráfico) ou o
+ *   último dos dois na conversa (fica 30 min no Redis).
  * - document_id: um arquivo guardado em Documentos (inclusive os PDFs feitos pelo assistente).
  * O arquivo da conversa só existe na memória: até o "sim" ele fica no Redis e a pendência guarda só a chave (attach_key),
  * que o servidor escreve e confere pelo prefixo da conversa. O modelo não escolhe chave.
@@ -18,7 +19,7 @@ const TTL_S = 30 * 60;
 const MAX_CACHE = 12_000_000;
 
 export const ATTACH_PARAMS = {
-  attach: { type: "boolean", description: "Junta a foto/arquivo que ela mandou agora ou há pouco" },
+  attach: { type: "boolean", description: "Junta a foto/arquivo que ela mandou ou que você fez (imagem, PDF) agora ou há pouco" },
   document_id: { type: "string", description: "Junta um arquivo de Documentos (id de document_list)" },
 } as const;
 
@@ -40,6 +41,19 @@ const pendingPrefix = (conversationId: string) => `pending-attach:${conversation
 export async function rememberInboundMedia(conversationId: string, files: File[] | undefined) {
   const last = files?.at(-1);
   if (last) await cacheSet(recentKey(conversationId), last, TTL_S, MAX_CACHE);
+}
+
+/** Imagem, PDF ou gráfico que o próprio assistente fez (o que vai na resposta), sem áudio nem vídeo. */
+function lastMadeFile(outbox: ToolContext["outbox"] | undefined): File | null {
+  const made = [...(outbox?.media.values() ?? [])].filter((m) => m.base64 && (!m.kind || m.kind === "image" || m.kind === "document"));
+  const m = made.at(-1);
+  return m ? { base64: m.base64!, mimetype: m.mimetype ?? "image/png", fileName: m.fileName } : null;
+}
+
+/** Depois da resposta: o que o assistente mandou vira a mídia recente ("manda essa imagem pra Ana" na mensagem seguinte). */
+export async function rememberSentMedia(conversationId: string, outbox: ToolContext["outbox"]) {
+  const made = lastMadeFile(outbox);
+  if (made) await cacheSet(recentKey(conversationId), made, TTL_S, MAX_CACHE);
 }
 
 const toAttachment = (f: File): DirectAttachment => ({
@@ -87,7 +101,7 @@ export async function resolveAttachment(
     const r = await fromDocuments(args.document_id, ctx);
     return "error" in r ? r : { att: r.att, stored: clean, label: attachmentLabel({ kind: r.att.kind, name: r.att.fileName }) };
   }
-  const file = ctx.inboundFiles?.at(-1) ?? (await cacheGet<File>(recentKey(ctx.conversation.id)));
+  const file = ctx.inboundFiles?.at(-1) ?? lastMadeFile(ctx.outbox) ?? (await cacheGet<File>(recentKey(ctx.conversation.id)));
   if (!file) return { error: "Não achei foto nem arquivo recente nesta conversa. Peça para ela mandar o arquivo (ou use document_id de Documentos)." };
   const key = prefix + randomUUID();
   if (!(await cacheSet(key, file, TTL_S, MAX_CACHE))) return { error: "Não consegui guardar o arquivo agora (grande demais ou falha momentânea). Se for grande, guarde em Documentos e use document_id." };

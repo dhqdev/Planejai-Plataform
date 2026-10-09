@@ -139,20 +139,95 @@ export async function saveContact(userId: string, name: string, phone: string, s
   return { name: n, phone: p };
 }
 
-/** Busca pelo nome (sem acento, qualquer parte) ou pelo número. Primeiro quem começa com o que foi digitado. */
-export async function searchContacts(userId: string, q: string, limit = 5) {
+/** Grafia "pelo som", para achar mesmo escrito diferente: Thaís = Tais, Kauã = Caua, Luiz = Luis, Mayara = Maiara. */
+export function soundKey(s: string) {
+  return nameKey(s)
+    .replace(/ph/g, "f")
+    .replace(/th/g, "t")
+    .replace(/y/g, "i")
+    .replace(/k/g, "c")
+    .replace(/w/g, "v")
+    .replace(/z/g, "s")
+    .replace(/qu/g, "c")
+    .replace(/(^|[^cln])h/g, "$1")
+    .replace(/([a-z])\1+/g, "$1");
+}
+
+function lev(a: string, b: string) {
+  if (a === b) return 0;
+  if (!a.length || !b.length) return Math.max(a.length, b.length);
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length]!;
+}
+
+const sim = (a: string, b: string) => 1 - lev(a, b) / Math.max(a.length, b.length, 1);
+
+/**
+ * Quanto um nome parece com o que foi digitado (0 a 1), tolerando erro de digitação, acento, espaço a mais ou a menos
+ * e grafias que soam igual. Cada palavra digitada precisa achar uma parecida no nome (ou o começo dela).
+ */
+export function nameScore(query: string, name: string) {
+  const q = soundKey(query);
+  const n = soundKey(name);
+  if (!q || !n) return 0;
+  const qs = q.replace(/ /g, "");
+  const ns = n.replace(/ /g, "");
+  if (ns.includes(qs)) return 1;
+  const nameWords = n.split(" ");
+  const perWord = q.split(" ").map((w) =>
+    Math.max(
+      ...nameWords.map((nw) => Math.max(sim(w, nw), nw.length > w.length && w.length >= 3 ? sim(w, nw.slice(0, w.length)) - 0.05 : 0)),
+    ),
+  );
+  const words = perWord.reduce((a, b) => a + b, 0) / perWord.length;
+  // a palavra mais fraca não pode ser muito ruim: "ana souza" não acha "ana lima"
+  const weakest = Math.min(...perWord);
+  return Math.max(weakest < 0.5 ? 0 : words, sim(qs, ns));
+}
+
+/** Corte do "parecido": curto tolera 1 letra trocada, longo tolera mais. */
+export const fuzzyOk = (query: string, score: number) => score >= (soundKey(query).replace(/ /g, "").length <= 4 ? 0.74 : 0.62);
+
+type Found = { id: string; name: string; phone: string; label: string | null; approximate?: true };
+
+/**
+ * Busca pelo nome (sem acento, qualquer parte) ou pelo número. Primeiro quem começa com o que foi digitado.
+ * Sem achar assim, procura parecidos (erro de digitação, grafia diferente) e marca como approximate.
+ */
+export async function searchContacts(userId: string, q: string, limit = 5): Promise<Found[]> {
   const key = nameKey(q);
   const digits = q.replace(/\D/g, "");
   if (!key && !digits) return [];
   const words = key.split(" ").filter(Boolean);
-  return many<{ id: string; name: string; phone: string; label: string | null }>(
+  const byDigits = Boolean(digits) && !words.some((w) => /\D/.test(w));
+  const exact = await many<Found>(
     `SELECT id, name, phone, label FROM phonebook
       WHERE user_id = $1 AND (
         ($2::text[] <> '{}' AND (SELECT bool_and(name_key LIKE '%' || w || '%') FROM unnest($2::text[]) AS w))
         OR ($3 <> '' AND length($3) >= 4 AND phone LIKE '%' || $3 || '%'))
       ORDER BY (name_key LIKE $4 || '%') DESC, length(name), name LIMIT $5`,
-    [userId, digits && !words.some((w) => /\D/.test(w)) ? [] : words, digits, key, limit],
+    [userId, byDigits ? [] : words, digits, key, limit],
   );
+  if (exact.length || byDigits || key.replace(/ /g, "").length < 3) return exact;
+  // a agenda tem no máximo MAX_CONTACTS nomes: comparar aqui é rápido e não precisa de extensão no banco
+  const all = await many<Found>("SELECT id, name, phone, label FROM phonebook WHERE user_id = $1", [userId]);
+  return all
+    .map((c) => ({ c, score: nameScore(q, c.name) }))
+    .filter((x) => fuzzyOk(q, x.score))
+    .sort((a, b) => b.score - a.score || a.c.name.length - b.c.name.length)
+    .slice(0, limit)
+    .map((x) => ({ ...x.c, approximate: true as const }));
+}
+
+/** Já tem esse número na agenda? (para não trocar o nome que a pessoa deu) */
+export async function hasContactPhone(userId: string, phone: string) {
+  const p = cleanContactPhone(phone);
+  return p ? Boolean(await one("SELECT 1 FROM phonebook WHERE user_id = $1 AND phone = $2", [userId, p])) : false;
 }
 
 export async function listPhonebook(userId: string, q: string, limit = 100, offset = 0) {

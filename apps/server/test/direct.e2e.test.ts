@@ -23,6 +23,9 @@ function fakeOpenRouter(body: any) {
   const last = body.messages.at(-1);
   const userText = String(body.messages.findLast((m: any) => m.role === "user")?.content ?? "");
   if (last.role === "tool") return completion(String(last.content).includes("confirm") ? "Posso mandar para o Rafael?" : "Pronto!");
+  if (userText.includes("manda essa imagem pra Carla")) {
+    return completion(null, [call("send_whatsapp", { phone: "11 94444-3333", name: "Carla", message: "Oi Carla, aqui é o David! Olha que cavalo lindo.", attach: true })]);
+  }
   if (userText.includes("manda o contrato")) {
     return completion(null, [call("send_whatsapp", { phone: "11 95555-4444", name: "Bruna", message: "Oi Bruna, aqui é o David! Segue o contrato assinado.", document_id: docId, in_minutes: 120 })]);
   }
@@ -125,6 +128,24 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
       image: { kind: "document", fileName: "Contrato.pdf", mimetype: "application/pdf", base64: pdf.toString("base64"), caption: "Oi Bruna, aqui é o David! Segue o contrato assinado." },
     });
     expect(await db.one("SELECT media FROM direct_messages WHERE id = $1", [d.id])).toEqual({ media: null });
+  });
+
+  it("imagem que o assistente fez vai para o número sem gerar de novo, e o número novo vira contato", async () => {
+    const { Outbox } = await import("../src/agent/tools/types.js");
+    const { rememberSentMedia } = await import("../src/agent/tools/attach.js");
+    const outbox = new Outbox();
+    const horse = Buffer.from("png-do-cavalo").toString("base64");
+    outbox.addMedia({ base64: horse, mimetype: "image/png", fileName: "imagem.png" });
+    outbox.addMedia({ kind: "audio", base64: "YXVkaW8=", mimetype: "audio/ogg" });
+    await rememberSentMedia(conv, outbox);
+    await say("manda essa imagem pra Carla, 11 94444-3333");
+    const p = await db.one("SELECT summary FROM pending_actions WHERE conversation_id = $1 AND tool = 'send_whatsapp' AND status = 'pending'", [conv]);
+    expect(p.summary).toMatch(/com a foto$/);
+    const before = channels.playground.sent.length;
+    await say("sim");
+    expect(channels.playground.sent.slice(before).find((s) => s.type === "image")?.image).toMatchObject({ kind: "image", base64: horse });
+    const { searchContacts } = await import("../src/phonebook.js");
+    expect((await searchContacts(david.id, "carla"))[0]).toMatchObject({ name: "Carla", phone: "5511944443333" });
   });
 
   it("agenda para depois, avisa quando sai e dá para cancelar", async () => {

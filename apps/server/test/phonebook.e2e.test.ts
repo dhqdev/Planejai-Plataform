@@ -105,6 +105,16 @@ describe.skipIf(!enabled)("agenda de contatos (e2e)", () => {
     expect(await contactSave.run({ name: "Beto Encanador", phone: "(19) 98765-4321" }, ctx)).toMatchObject({ ok: true, phone: "5519987654321" });
     expect(await contactSave.run({ name: "X", phone: "123" }, ctx)).toMatchObject({ ok: false });
     expect(((await contactsSearch.run({ query: "encanador" }, ctx)) as any).contacts[0].phone).toBe("5519987654321");
+    // escrito errado ou de outro jeito: acha o parecido e avisa que é aproximado
+    await contactSave.run({ name: "Mãe Zera", phone: "19 98358-6166" }, ctx);
+    const mae: any = await contactsSearch.run({ query: "maezera" }, ctx);
+    expect(mae.contacts[0]).toMatchObject({ name: "Mãe Zera", phone: "5519983586166" });
+    const typo: any = await contactsSearch.run({ query: "Ana Sousa" }, ctx);
+    expect(typo).toMatchObject({ approximate: true });
+    expect(typo.contacts.map((c: any) => c.name)).toContain("Ana Souza");
+    expect((await pb.searchContacts(user.id, "jaoo"))[0]).toMatchObject({ name: expect.stringMatching(/^João/), approximate: true });
+    expect(await pb.searchContacts(user.id, "pedro")).toEqual([]);
+    await pb.deleteContact(user.id, (await pb.searchContacts(user.id, "mae zera"))[0]!.id);
   });
 
   it("apagar um e apagar tudo", async () => {

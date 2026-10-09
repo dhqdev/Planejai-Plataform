@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { fuzzyOk, nameScore } from "./phonebook.js";
 import { normalizePhone } from "./accounts.js";
 import { redactSecrets } from "./agent/guard.js";
 import { humanize } from "./agent/humanize.js";
@@ -314,7 +315,12 @@ export async function findContact(userId: string, name: string) {
   const q = strip(name);
   const exact = all.filter((c) => strip(c.name) === q || strip(c.name).split(" ")[0] === q);
   if (exact.length) return exact;
-  return all.filter((c) => strip(c.name).includes(q) || c.phone.endsWith(q.replace(/\D/g, "") || "#"));
+  const part = all.filter((c) => strip(c.name).includes(q) || c.phone.endsWith(q.replace(/\D/g, "") || "#"));
+  if (part.length) return part;
+  // escrito errado ou de outro jeito ("Jiovani", "Thais"): o mais parecido, se for parecido de verdade
+  const scored = all.map((c) => ({ c, s: nameScore(name, c.name) })).filter((x) => fuzzyOk(name, x.s));
+  const best = Math.max(0, ...scored.map((x) => x.s));
+  return scored.filter((x) => x.s >= best - 0.05).map((x) => x.c);
 }
 
 export async function inviteStats(userId: string | null) {
