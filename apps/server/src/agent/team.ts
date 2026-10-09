@@ -10,6 +10,7 @@ import * as documents from "./tools/documents.js";
 import * as n8n from "./tools/n8n.js";
 import * as prod from "./tools/productivity.js";
 import * as errands from "./tools/errands.js";
+import * as support from "./tools/support.js";
 import * as places from "./tools/places.js";
 import * as research from "./tools/research.js";
 import * as social from "./tools/social.js";
@@ -248,6 +249,7 @@ export const CTO_TOOLS: Tool[] = [
   errands.errandContinue,
   errands.errandList,
   errands.errandCancel,
+  support.contactOwner,
 ];
 
 export const CTO: Omit<AgentDef, "tools"> = {

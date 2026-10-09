@@ -53,6 +53,7 @@ const TOOL_LABEL: Record<string, string> = {
   errand_continue: "Mandou a decisão ao estabelecimento",
   errand_list: "Consultou os recados",
   errand_cancel: "Cancelou um recado",
+  contact_owner: "Avisou o responsável",
   map_route: "Montou a rota no mapa",
   watch_create: "Criou um acompanhamento",
   watch_list: "Consultou os acompanhamentos",

@@ -200,6 +200,25 @@ describe.skipIf(!enabled)("painel: notificações, documentos e login (e2e)", ()
     expect((await app.inject({ method: "GET", url: "/api/documents", headers: { cookie: a } })).json().items).toHaveLength(0);
   });
 
+  it("falar com o responsável: recado guardado, sino do dono e WhatsApp do dono; teto de 3 por dia", async () => {
+    const { contactOwner } = await import("../src/agent/tools/support.js");
+    const { config } = await import("../src/config.js");
+    const owner = config.OWNER_PHONES[0];
+    const ctx: any = { user: { id: bia.id, phone: bia.phone, name: "Bia" }, timezone: "America/Sao_Paulo" };
+    const r: any = await contactOwner.run({ topic: "cobranca", message: "Fui cobrada duas vezes este mês" }, ctx);
+    expect(r.ok).toBe(true);
+    expect(await db.one("SELECT topic, message, status FROM support_requests WHERE user_id = $1", [bia.id])).toMatchObject({ topic: "cobranca", status: "open" });
+    expect(await db.one("SELECT title FROM notifications WHERE user_id IS NULL AND kind = 'suporte' ORDER BY created_at DESC LIMIT 1")).toMatchObject({ title: "Cobrança de Bia" });
+    if (owner) {
+      const job = await db.one("SELECT data FROM pgboss.job WHERE name = 'outbound.send' ORDER BY created_on DESC LIMIT 1");
+      expect(job.data).toMatchObject({ phone: owner });
+      expect(job.data.text).toContain("duas vezes");
+    }
+    await contactOwner.run({ topic: "duvida", message: "Outra coisa" }, ctx);
+    await contactOwner.run({ topic: "duvida", message: "Mais uma" }, ctx);
+    expect(((await contactOwner.run({ topic: "duvida", message: "Quarta" }, ctx)) as any).ok).toBe(false);
+  });
+
   it("assistente guarda o arquivo recebido e manda de volta quando pedem", async () => {
     const docs = await import("../src/agent/tools/documents.js");
     const media: any[] = [];
