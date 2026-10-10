@@ -121,7 +121,7 @@ apps/dashboard/src/        React + Vite; App.tsx monta menu (SUPER_NAV / ADMIN_N
   faces.tsx  mochi/        carinhas dos agentes; mascote Mochi (Mochi.tsx, Wardrobe.tsx, Parade.tsx)
   touch.ts  update.ts  notify.ts  a11y.ts  motion.css  styles.css (só @import de styles/*.css)
 apps/dashboard/public/     manifest.webmanifest, sw.js (cache só de /assets e /icons; nunca /api) e icons/
-deploy/                    portainer-stack.yml, swarm-traefik-stack.yml (autoplanejai.tekvosoft.com), n8n-stack.yml
+deploy/                    portainer-stack.yml, swarm-traefik-stack.yml (planejai.tekvosoft.com), n8n-stack.yml
 docs/operacao.md           segredos, backup/restore, rollback, saúde
 ```
 

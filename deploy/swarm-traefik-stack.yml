@@ -7,7 +7,7 @@ x-env: &env
   # --- Banco próprio da stack ---
   DATABASE_URL: postgres://planejai:TROQUE_SENHA_DO_BANCO@db:5432/planejai
   # --- Endereço público ---
-  PUBLIC_URL: https://autoplanejai.tekvosoft.com
+  PUBLIC_URL: https://planejai.tekvosoft.com
   TZ: America/Sao_Paulo
   DEFAULT_TIMEZONE: America/Sao_Paulo
   # --- Segurança: um segredo para cada coisa ---
@@ -84,7 +84,7 @@ services:
       labels:
         - "traefik.enable=true"
         - "traefik.docker.network=network_public"
-        - "traefik.http.routers.autoplanejai.rule=Host(`autoplanejai.tekvosoft.com`)"
+        - "traefik.http.routers.autoplanejai.rule=Host(`planejai.tekvosoft.com`)"
         - "traefik.http.routers.autoplanejai.entrypoints=websecure"
         - "traefik.http.routers.autoplanejai.service=autoplanejai-service"
         - "traefik.http.routers.autoplanejai.tls.certresolver=letsencryptresolver"
