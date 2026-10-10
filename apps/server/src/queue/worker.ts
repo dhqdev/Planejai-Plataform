@@ -124,9 +124,11 @@ async function startChannelJobs(log: WorkerLog) {
   });
   await boss.schedule(QUEUES.improve, "0 19 * * *", undefined, { tz: config.DEFAULT_TIMEZONE });
 
-  // contas fixas e mensalidade: lembretes do dia, às 9h (sem IA)
+  // contas fixas, faturas de cartão e mensalidade: lembretes do dia, às 9h (sem IA)
   await boss.work(QUEUES.financeDaily, { batchSize: 1, pollingIntervalSeconds: 60 }, async () => {
     await remindBills(log).catch((err) => log.error({ err }, "lembretes de contas falharam"));
+    const { remindCards } = await import("../cards.js");
+    await remindCards(log).catch((err) => log.error({ err }, "lembretes de fatura falharam"));
     await billingReminders(log).catch((err) => log.error({ err }, "lembretes de assinatura falharam"));
   });
   await boss.schedule(QUEUES.financeDaily, "0 9 * * *", undefined, { tz: config.DEFAULT_TIMEZONE });

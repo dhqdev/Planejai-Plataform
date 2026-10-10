@@ -1,9 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { budgetStatus, CATEGORIES, guessCategory, parseAmount } from "../../../agent/tools/finance.js";
+import { budgetStatus, CATEGORIES, guessCategory, parseAmount, recordTransaction } from "../../../agent/tools/finance.js";
 import { config } from "../../../config.js";
 import { many, one, query } from "../../../db/pool.js";
 import { NOBODY, personalUser, selfUserId } from "../../../sharing.js";
 import { createBill, deleteBill, listBills, payBill, updateBill, type BillInput } from "../../../bills.js";
+import { createCard, deleteCard, getCard, invoiceItems, listCards, placeOnCard, payInvoice, unpayInvoice, updateCard, type CardInput } from "../../../cards.js";
 
 /**
  * Finanças: lançamentos do mês, categorias e limites de gastos. Cada pessoa vê só as dela (o dono também);
@@ -36,8 +37,9 @@ export function financeRoutes(base: FastifyInstance) {
       [uid, tz],
     );
     const transactions = await many(
-      `SELECT t.id, t.kind, t.amount, t.category, t.description, t.merchant, t.source, t.occurred_at, u.name AS user_name, u.phone
-         FROM transactions t JOIN users u ON u.id = t.user_id WHERE ${where} ORDER BY t.occurred_at DESC LIMIT 300`,
+      `SELECT t.id, t.kind, t.amount, t.category, t.description, t.merchant, t.source, t.occurred_at, u.name AS user_name, u.phone,
+              t.card_id, c.name AS card_name, c.color AS card_color, t.invoice_month, t.installment, t.installments
+         FROM transactions t JOIN users u ON u.id = t.user_id LEFT JOIN cards c ON c.id = t.card_id WHERE ${where} ORDER BY t.occurred_at DESC LIMIT 300`,
       [uid, tz, month],
     );
     const [py, pm] = month.split("-").map(Number) as [number, number];
@@ -50,7 +52,7 @@ export function financeRoutes(base: FastifyInstance) {
     return { month, totals, byCategory, prevByCategory, daily, months, transactions, budgets, readonly };
   });
 
-  base.post<{ Body: { kind: "expense" | "income"; amount: number | string; category: string; description?: string; date?: string } }>("/api/finance", async (req, reply) => {
+  base.post<{ Body: { kind: "expense" | "income"; amount: number | string; category: string; description?: string; date?: string; card_id?: string | null; installments?: number | string } }>("/api/finance", async (req, reply) => {
     const uid = await selfUserId(req.account);
     if (!uid) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil para lançar" });
     let amount: number;
@@ -60,11 +62,23 @@ export function financeRoutes(base: FastifyInstance) {
       return reply.code(400).send({ error: (err as Error).message });
     }
     if (amount <= 0) return reply.code(400).send({ error: "Valor precisa ser maior que zero" });
-    const when = req.body.date ? new Date(`${req.body.date}T12:00:00`) : new Date();
-    return one(
-      `INSERT INTO transactions (user_id, kind, amount, category, description, occurred_at, source) VALUES ($1,$2,$3,$4,$5,$6,'painel') RETURNING *`,
-      [uid, req.body.kind === "income" ? "income" : "expense", amount, CATEGORIES.includes(req.body.category) ? req.body.category : (guessCategory(req.body.description ?? "") ?? (req.body.kind === "income" ? "Salário" : "Outros")), req.body.description ?? null, when],
-    );
+    const when = req.body.date && /^\d{4}-\d{2}-\d{2}$/.test(req.body.date) ? new Date(`${req.body.date}T12:00:00`) : new Date();
+    const card = req.body.card_id ? await getCard(uid, req.body.card_id) : null;
+    if (req.body.card_id && !card) return reply.code(400).send({ error: "Cartão não encontrado" });
+    const kind = req.body.kind === "income" ? "income" : "expense";
+    const r = await recordTransaction({
+      userId: uid,
+      kind,
+      total: amount,
+      category: CATEGORIES.includes(req.body.category) ? req.body.category : (guessCategory(req.body.description ?? "") ?? (kind === "income" ? "Salário" : "Outros")),
+      description: req.body.description?.trim().slice(0, 200) || null,
+      first: when,
+      installments: Number(req.body.installments) || 1,
+      source: "painel",
+      card,
+      tz: config.DEFAULT_TIMEZONE,
+    });
+    return { ok: true, ids: r.ids, invoices: r.invoices };
   });
 
   // limites de gastos (category vazia = total do mês)
@@ -91,8 +105,11 @@ export function financeRoutes(base: FastifyInstance) {
   });
 
   // editar um lançamento próprio (valor, categoria, descrição, data, gasto/receita)
-  base.patch<{ Params: { id: string }; Body: { kind?: string; amount?: number | string; category?: string; description?: string | null; date?: string } }>("/api/finance/:id", async (req, reply) => {
+  base.patch<{ Params: { id: string }; Body: { kind?: string; amount?: number | string; category?: string; description?: string | null; date?: string; card_id?: string | null } }>("/api/finance/:id", async (req, reply) => {
     const b = req.body ?? {};
+    const me = (await selfUserId(req.account)) ?? NOBODY;
+    const card = b.card_id ? await getCard(me, b.card_id) : null;
+    if (b.card_id && !card) return reply.code(400).send({ error: "Cartão não encontrado" });
     let amount: number | null = null;
     if (b.amount != null && b.amount !== "") {
       try {
@@ -110,7 +127,7 @@ export function financeRoutes(base: FastifyInstance) {
         WHERE id = $1 AND user_id = $2 RETURNING *`,
       [
         req.params.id,
-        (await selfUserId(req.account)) ?? NOBODY,
+        me,
         b.kind === "income" || b.kind === "expense" ? b.kind : null,
         amount,
         b.category || null,
@@ -120,6 +137,14 @@ export function financeRoutes(base: FastifyInstance) {
       ],
     );
     if (!row) return reply.code(404).send({ error: "Lançamento não encontrado" });
+    // trocou de cartão (ou tirou do cartão) ou mudou a data: recalcula a fatura
+    if (b.card_id !== undefined && (b.card_id ?? null) !== (row.card_id ?? null)) {
+      await query("UPDATE transactions SET card_id = $2, invoice_month = NULL WHERE id = $1", [row.id, card?.id ?? null]);
+      if (card) await placeOnCard(me, card, [row.id]);
+    } else if (b.date && row.card_id) {
+      const current = await getCard(me, row.card_id);
+      if (current) await placeOnCard(me, current, [row.id]);
+    }
     return row;
   });
 
@@ -176,4 +201,66 @@ export function financeRoutes(base: FastifyInstance) {
   });
 
   base.delete<{ Params: { id: string } }>("/api/bills/:id", async (req) => ({ ok: await deleteBill((await selfUserId(req.account)) ?? NOBODY, req.params.id) }));
+
+  // ---------- Cartões de crédito e faturas ----------
+  base.get<{ Querystring: { user?: string } }>("/api/cards", async (req, reply) => {
+    const uid = await personalUser(req.account, req.query.user, "finance");
+    if (!uid) return reply.code(403).send({ error: "Essa pessoa não compartilhou as finanças com você" });
+    return { cards: await listCards(uid), readonly: uid !== ((await selfUserId(req.account)) ?? NOBODY) };
+  });
+
+  base.get<{ Params: { id: string }; Querystring: { user?: string; month?: string } }>("/api/cards/:id/invoice", async (req, reply) => {
+    const uid = await personalUser(req.account, req.query.user, "finance");
+    if (!uid) return reply.code(403).send({ error: "Essa pessoa não compartilhou as finanças com você" });
+    const card = await getCard(uid, req.params.id);
+    if (!card) return reply.code(404).send({ error: "Cartão não encontrado" });
+    if (!/^\d{4}-\d{2}$/.test(req.query.month ?? "")) return reply.code(400).send({ error: "Mês da fatura em AAAA-MM" });
+    return invoiceItems(uid, card, req.query.month!);
+  });
+
+  base.post<{ Body: CardInput }>("/api/cards", async (req, reply) => {
+    const uid = await mine(req, reply);
+    if (!uid) return;
+    try {
+      return await createCard(uid, req.body ?? {});
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  base.patch<{ Params: { id: string }; Body: CardInput }>("/api/cards/:id", async (req, reply) => {
+    const uid = await mine(req, reply);
+    if (!uid) return;
+    if (!(await getCard(uid, req.params.id))) return reply.code(404).send({ error: "Cartão não encontrado" });
+    try {
+      return await updateCard(uid, req.params.id, req.body ?? {});
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  base.delete<{ Params: { id: string } }>("/api/cards/:id", async (req) => {
+    const uid = (await selfUserId(req.account)) ?? NOBODY;
+    return { ok: (await getCard(uid, req.params.id)) ? await deleteCard(uid, req.params.id) : false };
+  });
+
+  // marcar fatura como paga (não lança gasto: as compras já estão nos lançamentos) e desfazer
+  base.post<{ Params: { id: string; month: string }; Body: { amount?: number | string | null } }>("/api/cards/:id/invoices/:month/pay", async (req, reply) => {
+    const uid = await mine(req, reply);
+    if (!uid) return;
+    const card = await getCard(uid, req.params.id);
+    if (!card) return reply.code(404).send({ error: "Cartão não encontrado" });
+    try {
+      return await payInvoice(uid, card, req.params.month, req.body?.amount ?? null);
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  base.delete<{ Params: { id: string; month: string } }>("/api/cards/:id/invoices/:month/pay", async (req, reply) => {
+    const uid = (await selfUserId(req.account)) ?? NOBODY;
+    const card = await getCard(uid, req.params.id);
+    if (!card) return reply.code(404).send({ error: "Cartão não encontrado" });
+    return { ok: await unpayInvoice(card, req.params.month) };
+  });
 }

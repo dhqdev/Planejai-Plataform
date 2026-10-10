@@ -13,22 +13,22 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; tools: string[] }[] 
     what: "corrigir lançamento",
     says: /\b(corrigi|alterei|atualizei|ajustei|recategorizei)\b/i,
     about: /R\$|\bvalor\b|\bcategoria\b|\blan[cç]amentos?\b|\bgastos?\b|\bdata\b/i,
-    tools: ["update_transaction", "add_transaction", "delete_transaction", "reschedule_reminder"],
+    tools: ["update_transaction", "add_transaction", "delete_transaction", "reschedule_reminder", "card_save"],
   },
   {
     what: "apagar ou cancelar",
     says: /\b(apaguei|removi|exclu[ií]|deletei|cancelei)\b/i,
-    tools: ["delete_transaction", "cancel_reminder", "alarm_cancel", "document_delete", "forget_memory", "watch_cancel", "watch_update", "direct_cancel", "automation_manage", "set_budget", "bill_delete", "bill_save"],
+    tools: ["delete_transaction", "card_delete", "card_save", "cancel_reminder", "alarm_cancel", "document_delete", "forget_memory", "watch_cancel", "watch_update", "direct_cancel", "automation_manage", "set_budget", "bill_delete", "bill_save"],
   },
   {
     what: "agendar lembrete ou evento",
     says: /\b(agendei|marquei|lembrete (criado|marcado|agendado)|vou te lembrar|te lembro|alarme (criado|marcado|agendado|ligado)|coloquei (o|um) alarme)\b/i,
-    tools: ["schedule_reminder", "set_alarm", "calendar_create_event", "reschedule_reminder", "watch_create", "watch_update", "automation_save", "bill_save", "errand_start", "errand_done", "send_whatsapp"],
+    tools: ["schedule_reminder", "set_alarm", "calendar_create_event", "reschedule_reminder", "watch_create", "watch_update", "automation_save", "bill_save", "card_save", "card_invoice_pay", "errand_start", "errand_done", "send_whatsapp"],
   },
   {
     what: "guardar documento ou nota",
     says: /\b(salvei|guardei)\b/i,
-    tools: ["document_save", "save_memory", "automation_save", "set_budget", "add_transaction", "bill_save", "bill_pay"],
+    tools: ["document_save", "save_memory", "automation_save", "set_budget", "add_transaction", "bill_save", "bill_pay", "card_save"],
   },
   {
     what: "enviar mensagem",

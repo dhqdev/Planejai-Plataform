@@ -8,6 +8,7 @@ import { findContact } from "../../social.js";
 import { parseLocalDateTime } from "../../time.js";
 import { barChart, budgetChart, donutChart, svgToPng } from "../../charts.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
+import { addMonths, invoiceDates, invoiceMonthFor, listCards, localDate, monthName, placeOnCard, resolveCard, shiftDate, type Card } from "../../cards.js";
 
 export const CATEGORIES = [
   "Alimentação",
@@ -359,6 +360,47 @@ async function financeOwner(ctx: { user: { id: string } }, ofContact?: string): 
 
 const OF_CONTACT = { of_contact: { type: "string", description: "Nome de um contato que compartilhou as finanças (só leitura). Vazio = da própria pessoa." } };
 
+/**
+ * Grava um gasto/receita (parcelado = uma linha por parcela, mês a mês, sem perder centavos). No cartão, cada parcela
+ * cai na fatura certa (`invoice_month`). Usado pelo agente e pelo painel. `ref(i)` evita duplicar o mesmo comprovante.
+ */
+export async function recordTransaction(p: {
+  userId: string;
+  kind: "expense" | "income";
+  total: number;
+  category: string;
+  description?: string | null;
+  merchant?: string | null;
+  first: Date;
+  installments?: number;
+  source: string;
+  ref?: (i: number) => string | null;
+  card?: Card | null;
+  tz: string;
+}) {
+  const n = Math.min(Math.max(1, Math.floor(p.installments ?? 1)), 48);
+  const parts = splitInstallments(p.total, n);
+  const firstInvoice = p.card ? invoiceMonthFor(p.card, localDate(p.first, p.tz)) : null;
+  const purchaseId = n > 1 || p.card ? randomUUID() : null;
+  const ids: string[] = [];
+  const invoices: string[] = [];
+  for (const [i, amount] of parts.entries()) {
+    const when = shiftDate(p.first, i);
+    const ref = p.ref?.(i) ?? null;
+    const desc = n > 1 ? `${p.description ?? p.merchant ?? p.category} (${i + 1}/${n})` : (p.description ?? null);
+    const invoice = firstInvoice ? addMonths(firstInvoice, i) : null;
+    const row = await one(
+      `INSERT INTO transactions (user_id, kind, amount, category, description, merchant, occurred_at, source, external_ref, card_id, invoice_month, purchase_id, installment, installments)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT (user_id, external_ref) WHERE external_ref IS NOT NULL DO NOTHING RETURNING id`,
+      [p.userId, p.kind, amount, p.category, desc, p.merchant ?? null, when, p.source, ref, p.card?.id ?? null, invoice, purchaseId, n > 1 ? i + 1 : null, n > 1 ? n : null],
+    );
+    if (!row) return { duplicate: true as const, ids, parts, invoices };
+    ids.push(row.id);
+    if (invoice) invoices.push(invoice);
+  }
+  return { duplicate: false as const, ids, parts, invoices };
+}
+
 export const addTransaction = defineTool<{
   kind: "expense" | "income";
   amount: number | string;
@@ -367,6 +409,7 @@ export const addTransaction = defineTool<{
   merchant?: string;
   date?: string;
   installments?: number;
+  card?: string;
   source?: string;
   message_id?: string;
   item?: number;
@@ -374,7 +417,7 @@ export const addTransaction = defineTool<{
 }>({
   name: "add_transaction",
   description:
-    "Registra gasto ou receita, sem pedir confirmação. Parcelado: valor TOTAL + installments. " +
+    "Registra gasto ou receita, sem pedir confirmação. Parcelado: valor TOTAL + installments. No cartão de crédito: card (apelido ou final); cada parcela cai na fatura certa. " +
     "message_id evita lançar o mesmo comprovante duas vezes; vários itens na mesma mensagem: uma chamada por item com item=1, 2, 3…",
   parameters: obj(
     {
@@ -385,6 +428,7 @@ export const addTransaction = defineTool<{
       merchant: { type: "string" },
       date: { type: "string", description: "AAAA-MM-DD[THH:MM]; padrão agora" },
       installments: { type: "number" },
+      card: { type: "string", description: "Cartão de crédito usado (ex.: Nubank, final 1234). Vazio = Pix/dinheiro/débito" },
       source: { type: "string", enum: ["conversa", "audio", "comprovante", "documento"] },
       message_id: { type: "string" },
       item: { type: "number" },
@@ -395,70 +439,100 @@ export const addTransaction = defineTool<{
   async run(args, ctx) {
     const total = parseAmount(args.amount);
     if (total <= 0) return { ok: false, error: "Valor precisa ser maior que zero" };
+    let card: Card | null = null;
+    if (args.card?.trim()) {
+      const found = await resolveCard(ctx.user.id, args.card);
+      if ("error" in found) return { ok: false, error: found.error };
+      card = found;
+    }
     const category = await autoCategory(ctx.user.id, args.kind, args.category, args.description, args.merchant);
     const first = args.date ? parseLocalDateTime(args.date, ctx.timezone) : new Date();
     const odd = suspiciousDate(first, args);
     if (odd) return odd;
-    const n = Math.min(Math.max(1, Math.floor(args.installments ?? 1)), 48);
-    const parts = splitInstallments(total, n);
-    const ids: string[] = [];
-    for (const [i, amount] of parts.entries()) {
-      const when = new Date(first);
-      when.setMonth(when.getMonth() + i);
-      // vários itens da mesma foto/lista não podem cair na mesma referência (o 2º virava "duplicado")
-      const ref = args.message_id ? `${args.message_id}${args.item ? `#${Math.floor(args.item)}` : ""}:${i}` : null;
-      const desc = n > 1 ? `${args.description ?? args.merchant ?? category} (${i + 1}/${n})` : (args.description ?? null);
-      const row = await one(
-        `INSERT INTO transactions (user_id, kind, amount, category, description, merchant, occurred_at, source, external_ref)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (user_id, external_ref) WHERE external_ref IS NOT NULL DO NOTHING RETURNING id`,
-        [ctx.user.id, args.kind, amount, category, desc, args.merchant ?? null, when, args.source ?? "conversa", ref],
-      );
-      if (!row)
-        return {
-          ok: true,
-          duplicate: true,
-          note: "Esse comprovante/mensagem já tinha sido lançado; nada foi duplicado. Se for outro item da mesma mensagem, chame de novo com item diferente.",
-        };
-      ids.push(row.id);
-    }
+    // vários itens da mesma foto/lista não podem cair na mesma referência (o 2º virava "duplicado")
+    const ref = args.message_id ? (i: number) => `${args.message_id}${args.item ? `#${Math.floor(args.item)}` : ""}:${i}` : undefined;
+    const r = await recordTransaction({
+      userId: ctx.user.id,
+      kind: args.kind,
+      total,
+      category,
+      description: args.description,
+      merchant: args.merchant,
+      first,
+      installments: args.installments,
+      source: args.source ?? "conversa",
+      ref,
+      card,
+      tz: ctx.timezone,
+    });
+    if (r.duplicate && !r.ids.length)
+      return {
+        ok: true,
+        duplicate: true,
+        note: "Esse comprovante/mensagem já tinha sido lançado; nada foi duplicado. Se for outro item da mesma mensagem, chame de novo com item diferente.",
+      };
+    const { ids, parts } = r;
+    const n = parts.length;
     const alerts = args.kind !== "expense" ? [] : await budgetAlerts(ctx.user.id, ctx.timezone, category, first);
     void emitEvent("transaction.created", { user_id: ctx.user.id, ids, kind: args.kind, amount: total, category, description: args.description ?? null, source: args.source ?? "conversa" });
     if (alerts.length) void emitEvent("budget.alert", { user_id: ctx.user.id, category, alerts });
+    let cardInfo: Record<string, unknown> = {};
+    if (card) {
+      const s = (await listCards(ctx.user.id, ctx.timezone)).find((c) => c.id === card!.id);
+      const firstInv = r.invoices[0]!;
+      cardInfo = {
+        card: card.name,
+        first_invoice: `${monthName(firstInv)} (vence ${invoiceDates(card, firstInv).due.split("-").reverse().join("/")})`,
+        ...(n > 1 ? { last_invoice: monthName(r.invoices[r.invoices.length - 1]!) } : {}),
+        ...(s ? { card_open_invoice: brl(s.open.total), ...(s.available != null ? { card_available_limit: brl(s.available) } : {}) } : {}),
+      };
+    }
     return {
       ok: true,
       ids,
       amount: brl(total),
-      ...(n > 1 ? { installments: n, installment_values: parts.map(brl) } : {}),
+      ...(n > 1 ? { installments: n, installment_values: n > 6 ? `${brl(parts[1]!)} por mês${parts[0] !== parts[1] ? ` (a 1ª ${brl(parts[0]!)})` : ""}` : parts.map(brl) } : {}),
       category,
+      ...cardInfo,
       ...(await monthTotals(ctx.user.id, ctx.timezone, first, category)),
       ...(alerts.length ? { budget_alert: alerts.join(" ") } : {}),
     };
   },
 });
 
-export const listTransactions = defineTool<{ from?: string; to?: string; category?: string; kind?: "expense" | "income"; search?: string; limit?: number; of_contact?: string }>({
+export const listTransactions = defineTool<{ from?: string; to?: string; category?: string; kind?: "expense" | "income"; search?: string; card?: string; limit?: number; of_contact?: string }>({
   name: "list_transactions",
-  description: "Lista lançamentos (com id, para editar ou apagar). Filtros por período, categoria, tipo e texto (descrição ou estabelecimento).",
+  description: "Lista lançamentos (com id, para editar ou apagar). Filtros por período, categoria, tipo, texto (descrição ou estabelecimento) e cartão.",
   parameters: obj({
     from: { type: "string", description: "AAAA-MM-DD; padrão 30 dias atrás" },
     to: { type: "string", description: "AAAA-MM-DD (inclusivo)" },
     category: { type: "string" },
     kind: { type: "string", enum: ["expense", "income"] },
     search: { type: "string", description: "Parte da descrição ou do estabelecimento (ex.: 'uber')" },
+    card: { type: "string", description: "Só as compras desse cartão" },
     limit: { type: "number" },
     ...OF_CONTACT,
   }),
   async run(args, ctx) {
     const who = await financeOwner(ctx, args.of_contact);
     if ("error" in who) return who;
+    let cardId: string | null = null;
+    if (args.card?.trim()) {
+      const found = await resolveCard(who.id, args.card);
+      if ("error" in found) return { ok: false, error: found.error };
+      cardId = found.id;
+    }
     const from = args.from ? parseLocalDateTime(args.from, ctx.timezone) : new Date(Date.now() - 30 * 86_400_000);
     const to = args.to ? new Date(parseLocalDateTime(args.to, ctx.timezone).getTime() + 86_400_000) : new Date(Date.now() + 86_400_000);
     const rows = await many(
-      `SELECT id, kind, amount, category, description, merchant, to_char(occurred_at AT TIME ZONE $6, 'DD/MM/YYYY HH24:MI') AS quando FROM transactions
-        WHERE user_id = $1 AND occurred_at >= $2 AND occurred_at < $3 AND ($4::text IS NULL OR category = $4)
-          AND ($7::text IS NULL OR kind = $7) AND ($8::text IS NULL OR description ILIKE $8 OR merchant ILIKE $8)
-        ORDER BY occurred_at DESC LIMIT $5`,
-      [who.id, from, to, args.category ?? null, Math.min(args.limit ?? 50, 200), ctx.timezone, args.kind ?? null, args.search?.trim() ? `%${args.search.trim()}%` : null],
+      `SELECT t.id, t.kind, t.amount, t.category, t.description, t.merchant, to_char(t.occurred_at AT TIME ZONE $6, 'DD/MM/YYYY HH24:MI') AS quando,
+              c.name AS card, t.invoice_month AS fatura
+         FROM transactions t LEFT JOIN cards c ON c.id = t.card_id
+        WHERE t.user_id = $1 AND t.occurred_at >= $2 AND t.occurred_at < $3 AND ($4::text IS NULL OR t.category = $4)
+          AND ($7::text IS NULL OR t.kind = $7) AND ($8::text IS NULL OR t.description ILIKE $8 OR t.merchant ILIKE $8)
+          AND ($9::uuid IS NULL OR t.card_id = $9)
+        ORDER BY t.occurred_at DESC LIMIT $5`,
+      [who.id, from, to, args.category ?? null, Math.min(args.limit ?? 50, 200), ctx.timezone, args.kind ?? null, args.search?.trim() ? `%${args.search.trim()}%` : null, cardId],
     );
     const sum = (k: string) => rows.reduce((acc, r) => acc + (r.kind === k ? Math.round(Number(r.amount) * 100) : 0), 0) / 100;
     return {
@@ -466,7 +540,7 @@ export const listTransactions = defineTool<{ from?: string; to?: string; categor
       count: rows.length,
       total_expenses_listed: brl(sum("expense")),
       total_income_listed: brl(sum("income")),
-      items: rows.map((r) => ({ ...r, amount: brl(cents(r.amount)) })),
+      items: rows.map(({ card, fatura, ...r }) => ({ ...r, amount: brl(cents(r.amount)), ...(card ? { card, fatura } : {}) })),
     };
   },
 });
@@ -495,8 +569,12 @@ export const financeSummary = defineTool<{ month?: string; of_contact?: string }
     );
     const expenses = cents(totals?.expenses);
     const income = cents(totals?.income);
+    const cards = await listCards(who.id, ctx.timezone);
     return {
       ...(who.name ? { of: who.name, read_only: true } : {}),
+      ...(cards.length
+        ? { card_invoices: cards.map((c) => `${c.name}: próxima fatura ${brl(c.next.total)}, vence ${c.next.due.split("-").reverse().join("/")} (${c.next.status})`) }
+        : {}),
       month,
       expenses: brl(expenses),
       income: brl(income),
@@ -537,11 +615,12 @@ export const updateTransaction = defineTool<{
   merchant?: string;
   date?: string;
   kind?: "expense" | "income";
+  card?: string;
   date_confirmed?: boolean;
 }>({
   name: "update_transaction",
   description:
-    "Corrige lançamentos (ids de list_transactions): valor, categoria, descrição, estabelecimento, data ou tipo. Vários ids = mesma mudança em todos. Sem confirmação.",
+    "Corrige lançamentos (ids de list_transactions): valor, categoria, descrição, estabelecimento, data, tipo ou cartão. Vários ids = mesma mudança em todos. Sem confirmação.",
   parameters: obj(
     {
       ids: { type: "array", items: { type: "string" } },
@@ -551,6 +630,7 @@ export const updateTransaction = defineTool<{
       merchant: { type: "string" },
       date: { type: "string", description: "AAAA-MM-DD[THH:MM]" },
       kind: { type: "string", enum: ["expense", "income"] },
+      card: { type: "string", description: "Muda para esse cartão; \"nenhum\" = não foi no cartão" },
       date_confirmed: { type: "boolean", description: "true só se a pessoa disse uma data de mais de um ano atrás" },
     },
     ["ids"],
@@ -563,6 +643,15 @@ export const updateTransaction = defineTool<{
     const when = args.date ? parseLocalDateTime(args.date, ctx.timezone) : null;
     const odd = when && suspiciousDate(when, args);
     if (odd) return odd;
+    let card: Card | null | undefined;
+    if (args.card?.trim()) {
+      if (/^(nenhum|sem cart[aã]o|pix|dinheiro|d[eé]bito)$/i.test(args.card.trim())) card = null;
+      else {
+        const found = await resolveCard(ctx.user.id, args.card);
+        if ("error" in found) return { ok: false, error: found.error };
+        card = found;
+      }
+    }
     const rows = await many(
       `UPDATE transactions SET amount = COALESCE($3, amount), category = COALESCE($4, category), description = COALESCE($5, description),
               merchant = COALESCE($6, merchant), occurred_at = COALESCE($7, occurred_at), kind = COALESCE($8, kind)
@@ -571,7 +660,16 @@ export const updateTransaction = defineTool<{
       [ctx.user.id, ids, amount, args.category && CATEGORIES.includes(args.category) ? args.category : null, args.description ?? null, args.merchant ?? null, when, args.kind ?? null, ctx.timezone],
     );
     if (!rows.length) return { ok: false, error: "Nenhum lançamento seu com esses ids" };
-    return { ok: true, updated: rows.length, items: rows.map((r) => ({ ...r, amount: brl(cents(r.amount)) })) };
+    if (card !== undefined) {
+      const changed = rows.map((r) => r.id as string);
+      await query("UPDATE transactions SET card_id = $2, invoice_month = NULL WHERE user_id = $1 AND id = ANY($3::uuid[])", [ctx.user.id, card?.id ?? null, changed]);
+      if (card) await placeOnCard(ctx.user.id, card, changed, ctx.timezone);
+    } else if (when) {
+      // mudou a data de compra no cartão: pode mudar de fatura
+      for (const c of await many<Card>("SELECT DISTINCT c.* FROM cards c JOIN transactions t ON t.card_id = c.id WHERE t.user_id = $1 AND t.id = ANY($2::uuid[])", [ctx.user.id, rows.map((r) => r.id)]))
+        await placeOnCard(ctx.user.id, c, rows.map((r) => r.id as string), ctx.timezone);
+    }
+    return { ok: true, updated: rows.length, ...(card !== undefined ? { card: card?.name ?? "nenhum" } : {}), items: rows.map((r) => ({ ...r, amount: brl(cents(r.amount)) })) };
   },
 });
 

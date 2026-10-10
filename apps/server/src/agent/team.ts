@@ -3,6 +3,7 @@ import * as comm from "./tools/communication.js";
 import * as core from "./tools/core.js";
 import * as finance from "./tools/finance.js";
 import * as bills from "./tools/bills.js";
+import * as cards from "./tools/cards.js";
 import * as images from "./tools/images.js";
 import * as pdf from "./tools/pdf.js";
 import * as audio from "./tools/audio.js";
@@ -125,7 +126,7 @@ export const SPECIALISTS: AgentDef[] = [
     icon: "wallet",
     role:
       "Finanças pessoais com controle total: anotar, corrigir, apagar e recategorizar gastos e receitas (inclusive de comprovantes, notas, faturas e extratos), " +
-      "parcelas, contas fixas com lembrete de vencimento, limites, gráficos, resumos e comparações do mês, contas, divisão de despesas e links de pagamento do Mercado Pago da pessoa.",
+      "parcelas, cartões de crédito (compras à vista e parceladas por cartão, faturas mês a mês, limite, marcar fatura paga), contas fixas com lembrete de vencimento, limites, gráficos, resumos e comparações do mês, contas, divisão de despesas e links de pagamento do Mercado Pago da pessoa.",
     instructions:
       "Valores em reais. Nunca faça conta de cabeça: use calculate para qualquer soma, divisão, parcela, juros ou porcentagem, e use os totais " +
       "que as ferramentas devolvem. Para extratos/faturas em documento, leia com read_document e lance cada item com message_id para não duplicar. " +
@@ -139,7 +140,11 @@ export const SPECIALISTS: AgentDef[] = [
       "Data sem ano (??-MM-DD, 'dia 6', 'terça 06 de outubro') é do ano atual; se assim cair no futuro, é do ano passado. Nunca chute outro ano. " +
       "Só diga que lançou, corrigiu ou apagou o que a ferramenta confirmou (ok e ids); se der erro, conte o erro. " +
       "Contas fixas (aluguel, internet, parcela, salário todo mês): bill_save cria com o dia do vencimento e o sistema lembra sozinho; " +
-      "'paguei o aluguel' é bill_pay (já lança nas finanças, não use add_transaction junto).",
+      "'paguei o aluguel' é bill_pay (já lança nas finanças, não use add_transaction junto). " +
+      "Cartão de crédito: compra no cartão é add_transaction com card (apelido ou final); parcelado no cartão = valor TOTAL + installments + card, e cada parcela cai na fatura do seu mês. " +
+      "Cartão novo: card_save com apelido, dia do fechamento e do vencimento (limite e final se ela disser); nunca peça número inteiro, CVV ou validade. " +
+      "Fatura, limite e parcelas: card_invoice / card_list. 'Paguei a fatura' é card_invoice_pay (não lance gasto de novo: as compras já estão lançadas). " +
+      "O sistema avisa sozinho no WhatsApp quando a fatura fecha, antes e no dia do vencimento.",
     tools: [
       finance.addTransaction,
       finance.listTransactions,
@@ -155,6 +160,11 @@ export const SPECIALISTS: AgentDef[] = [
       bills.billList,
       bills.billPay,
       bills.billDelete,
+      cards.cardSave,
+      cards.cardList,
+      cards.cardInvoice,
+      cards.cardInvoicePay,
+      cards.cardDelete,
       core.readDocument,
     ],
   },
@@ -270,6 +280,7 @@ export const CTO_TOOLS: Tool[] = [
   finance.setBudget,
   finance.makeChart,
   bills.billPay,
+  cards.cardInvoicePay,
   images.makeImage,
   images.getPicture,
   pdf.makePdf,
@@ -348,6 +359,8 @@ export const CLIENT_AGENT_TOOLS: Record<string, Tool> = Object.fromEntries(
     finance.calculate,
     finance.makeChart,
     bills.billList,
+    cards.cardList,
+    cards.cardInvoice,
     agenda.calendarListEvents,
     agenda.scheduleReminder,
     agenda.listRemindersTool,
