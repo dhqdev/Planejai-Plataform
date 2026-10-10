@@ -44,6 +44,12 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, .95), inset 0 0 0 .5px rgba(0, 0, 0, .06), 0 4px 12px -6px rgba(0, 0, 0, .2);
     transition: transform .5s cubic-bezier(.34, 1.3, .5, 1);
   }
+  /* a gota fica por cima dos ícones, como lente: o que passa embaixo aparece aumentado */
+  .tab-glider { z-index: 3; pointer-events: none; }
+  /* o dedo arrasta a lente, não a página nem o link */
+  .tabbar-pill, .tabbar-pill * { touch-action: none; -webkit-user-drag: none; user-drag: none; }
+  .tabbar .tab .tab-ico { scale: var(--lens, 1); }
+  .tabbar-pill.lens-drag .tab-glider { transition: scale .3s var(--ios-spring); scale: 1.12 1.18; animation: none; box-shadow: inset 0 1px 0 #fff, inset 0 0 0 .5px rgba(0, 0, 0, .05), 0 10px 24px -8px rgba(0, 0, 0, .28); }
   .tab-glider.moving { animation: glider-stretch .5s cubic-bezier(.3, .7, .3, 1); }
   @keyframes glider-stretch { 0% { scale: 1 1; } 35% { scale: 1.22 .86; } 70% { scale: .96 1.04; } 100% { scale: 1 1; } }
   :root[data-theme="dark"] .tab-glider { background: linear-gradient(180deg, rgba(255, 255, 255, .2), rgba(255, 255, 255, .06)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), inset 0 0 0 .5px rgba(255, 255, 255, .1), 0 6px 16px -6px rgba(0, 0, 0, .6); }
@@ -93,8 +99,11 @@
 .fin-tabs[data-seg]::before { border-radius: 10px; }
 .cal-pills[data-seg]::before { border-radius: 99px; }
 /* menu lateral (fundo branco): a pastilha é um cinza bem claro de vidro, sem roxo */
-.sidebar .nav[data-seg]::before { border-radius: 14px; background: linear-gradient(180deg, rgba(255, 255, 255, .9), rgba(255, 255, 255, .2)), #efeff1; box-shadow: inset 0 1px 0 #fff, inset 0 0 0 .5px rgba(0, 0, 0, .07), 0 6px 16px -8px rgba(0, 0, 0, .18); }
-:root[data-theme="dark"] .sidebar .nav[data-seg]::before { background: linear-gradient(180deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .02)), #2a2a2d; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), 0 6px 16px -8px rgba(0, 0, 0, .5); }
+/* fica por cima dos itens como uma lente (translúcida): segue o mouse e aumenta o que passa embaixo */
+.sidebar .nav[data-seg]::before { z-index: 2; border-radius: 14px; background: linear-gradient(180deg, rgba(255, 255, 255, .55), rgba(255, 255, 255, 0) 60%), rgba(120, 120, 128, .1); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .95), inset 0 0 0 .5px rgba(0, 0, 0, .07), 0 6px 16px -8px rgba(0, 0, 0, .18); }
+:root[data-theme="dark"] .sidebar .nav[data-seg]::before { background: linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, 0) 60%), rgba(255, 255, 255, .06); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 6px 16px -8px rgba(0, 0, 0, .5); }
+.sidebar .nav > a { scale: var(--lens, 1); transform-origin: 12px center; }
+.sidebar .nav.lens-hover > a:not(.active):hover { background: transparent; }
 .sidebar .nav a.active { color: var(--text); }
 .sidebar .nav a.active .ico { color: var(--text); }
 /* desliza com mola, como um vídeo passando de um item para o outro */

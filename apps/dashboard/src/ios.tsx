@@ -1,6 +1,6 @@
 /**
  * Detalhes de app de iPhone que valem para o painel todo (CSS em styles/app-ios.css):
- * pastilha que desliza até o botão ativo das abas e filtros,
+ * pastilha que desliza até o botão ativo das abas e filtros, lente de vidro líquido nos menus,
  * voltar arrastando da borda esquerda (app instalado) e o menu de toque longo.
  */
 import { useEffect, useRef } from "react";
@@ -17,6 +17,7 @@ const SEG = ".seg, .subtabs, .fin-tabs, .cal-pills, .sidebar .nav";
 function placeThumbs() {
   document.querySelectorAll<HTMLElement>(SEG).forEach((box) => {
     const on = box.querySelector<HTMLElement>(":scope > button.active, :scope > button[aria-selected='true'], :scope > a.active");
+    if (box.classList.contains("lens-hover")) return; // o mouse está levando a lente
     if (!on || !box.offsetParent) {
       box.style.setProperty("--seg-o", "0");
       return;
@@ -59,9 +60,154 @@ export function installSegmented() {
     g.classList.remove("moving");
     void g.offsetWidth;
     g.classList.add("moving");
-  }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["style"] });
+    dispatchEvent(new Event("pj:tab-move"));
+  }).observe(document.querySelector(".layout") ?? document.body, { subtree: true, attributes: true, attributeFilter: ["style"] });
   document.fonts?.ready.then(schedule);
   schedule();
+}
+
+/* ---------- Vidro líquido: lente que aumenta o que passa por baixo ---------- */
+/**
+ * Como no iOS 26: a pastilha do menu e a gota da barra do celular são lentes. O "aproximar" é o ícone ou
+ * o texto embaixo crescendo conforme a lente passa por cima (igual em todo navegador; filtro SVG no
+ * backdrop-filter saiu desalinhado no Chrome e não existe no Safari). A gota da barra segue o dedo
+ * (arrastar de aba em aba) e a pastilha do menu lateral segue o mouse.
+ */
+/** Aumenta cada item conforme a distância até o centro da lente (1 = em cima, 0 = longe). */
+function magnify(items: HTMLElement[], lens: DOMRect, axis: "x" | "y", max: number) {
+  const c = axis === "x" ? lens.left + lens.width / 2 : lens.top + lens.height / 2;
+  const reach = axis === "x" ? lens.width : lens.height;
+  for (const el of items) {
+    const r = el.getBoundingClientRect();
+    const d = Math.abs((axis === "x" ? r.left + r.width / 2 : r.top + r.height / 2) - c);
+    const k = Math.max(0, 1 - d / reach);
+    el.style.setProperty("--lens", (1 + max * k * k).toFixed(3));
+  }
+}
+
+/** Enquanto algo anima, recalcula o aumento a cada quadro (a lente está no meio do caminho). */
+function follow(items: () => HTMLElement[], lens: () => HTMLElement | null, axis: "x" | "y", max: number, ms: number) {
+  const until = performance.now() + ms;
+  const tick = () => {
+    const l = lens();
+    if (l) magnify(items(), l.getBoundingClientRect(), axis, max);
+    if (performance.now() < until) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+function tabbarLens() {
+  const pill = () => document.querySelector<HTMLElement>(".tabbar-pill");
+  const glider = () => pill()?.querySelector<HTMLElement>(".tab-glider") ?? null;
+  const icons = () => [...(pill()?.querySelectorAll<HTMLElement>(".tab .tab-ico") ?? [])];
+  const tabs = () => [...(pill()?.querySelectorAll<HTMLElement>(".tab") ?? [])];
+  let drag: { id: number; x0: number; on: boolean; base: number; w: number } | null = null;
+
+  // trocou de aba (toque ou rota): a lente viaja e vai aumentando o que cruza
+  addEventListener("pj:tab-move", () => follow(icons, glider, "x", 0.32, 700));
+
+  addEventListener("pointerdown", (e) => {
+    const p = pill();
+    const g = glider();
+    if (!p || !g || !p.contains(e.target as Node) || !isPhone()) return;
+    drag = { id: e.pointerId, x0: e.clientX, on: false, base: parseFloat(getComputedStyle(g).left) || 0, w: g.getBoundingClientRect().width };
+  }, { passive: true });
+
+  addEventListener("pointermove", (e) => {
+    const p = pill();
+    const g = glider();
+    if (!drag || e.pointerId !== drag.id || !p || !g) return;
+    const dx = e.clientX - drag.x0;
+    if (!drag.on) {
+      if (Math.abs(dx) < 8) return;
+      drag.on = true;
+      p.classList.add("lens-drag");
+      haptic(6);
+    }
+    const pr = p.getBoundingClientRect();
+    // a lente fica presa ao dedo (centro no dedo), sem passar das pontas
+    const x = Math.max(6, Math.min(pr.width - drag.w - 6, e.clientX - pr.left - drag.w / 2));
+    g.style.transform = `translateX(${x - drag.base}px)`;
+    magnify(icons(), g.getBoundingClientRect(), "x", 0.42);
+  }, { passive: true });
+
+  const end = (e: PointerEvent) => {
+    const p = pill();
+    const g = glider();
+    const d = drag;
+    drag = null;
+    if (!d?.on || !p || !g) return;
+    // solta: cai na aba mais perto do centro da lente e navega
+    const c = g.getBoundingClientRect();
+    const mid = c.left + c.width / 2;
+    let best: HTMLElement | null = null;
+    let dist = Infinity;
+    for (const t of tabs()) {
+      const r = t.getBoundingClientRect();
+      const dd = Math.abs(r.left + r.width / 2 - mid);
+      if (dd < dist) (dist = dd), (best = t);
+    }
+    p.classList.remove("lens-drag");
+    g.style.transform = "";
+    follow(icons, glider, "x", 0.32, 700);
+    // o clique que viria depois do arrasto não conta; quem navega é a aba escolhida
+    const swallow = (ev: Event) => { ev.stopPropagation(); ev.preventDefault(); };
+    addEventListener("click", swallow, { capture: true, once: true });
+    setTimeout(() => removeEventListener("click", swallow, { capture: true }), 50);
+    if (e.type !== "pointercancel" && best && !best.classList.contains("active")) setTimeout(() => best.click(), 0);
+  };
+  addEventListener("pointerup", end);
+  addEventListener("pointercancel", end);
+  addEventListener("dragstart", (e) => pill()?.contains(e.target as Node) && e.preventDefault());
+}
+
+function sidebarLens() {
+  const nav = () => document.querySelector<HTMLElement>(".sidebar .nav");
+  const links = () => [...(nav()?.querySelectorAll<HTMLElement>(":scope > a") ?? [])];
+  let over: HTMLElement | null = null;
+  const go = (a: HTMLElement | null) => {
+    const n = nav();
+    if (!n || a === over) return;
+    over = a;
+    if (a) {
+      n.classList.add("lens-hover");
+      n.style.setProperty("--seg-y", `${a.offsetTop}px`);
+      n.style.setProperty("--seg-h", `${a.offsetHeight}px`);
+      n.style.setProperty("--seg-x", `${a.offsetLeft}px`);
+      n.style.setProperty("--seg-w", `${a.offsetWidth}px`);
+    } else {
+      n.classList.remove("lens-hover");
+      placeThumbs();
+    }
+    // a pastilha leva ~0,45 s para chegar: o texto cresce enquanto ela passa por cima
+    const lensBox = () => {
+      const st = getComputedStyle(n, "::before");
+      const m = new DOMMatrixReadOnly(st.transform === "none" ? undefined : st.transform);
+      const r = n.getBoundingClientRect();
+      return new DOMRect(r.left + m.m41, r.top + m.m42, parseFloat(st.width), parseFloat(st.height));
+    };
+    const until = performance.now() + 600;
+    const tick = () => {
+      magnify(links(), lensBox(), "y", 0.07);
+      if (performance.now() < until) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+  addEventListener("pointermove", (e) => {
+    if (e.pointerType !== "mouse") return;
+    const n = nav();
+    if (!n) return;
+    const a = (e.target as Element | null)?.closest?.(".sidebar .nav > a") as HTMLElement | null;
+    if (a) go(a);
+    else if (over && !n.contains(e.target as Node)) go(null);
+  }, { passive: true });
+  document.documentElement.addEventListener("mouseleave", () => go(null));
+}
+
+export function installLiquidGlass() {
+  if (lessMotion()) return;
+  tabbarLens();
+  sidebarLens();
 }
 
 /* ---------- Voltar arrastando da borda esquerda ---------- */
