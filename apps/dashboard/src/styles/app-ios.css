@@ -251,3 +251,39 @@
   :root[data-theme="dark"] .more-sheet .more-section .more-tile.active { background: rgba(255, 255, 255, .14); }
   .modal-scrim { background: rgba(0, 0, 0, .4); }
 }
+
+/* ---------- Tema escuro: vidro preto (pedido do David, 2026-10-10) ----------
+   Pastilhas, trilhos e botões comuns viram vidro escuro translúcido: fundo quase preto que deixa passar um
+   pouco do que está atrás, brilho branco fraco em cima e borda fina clara pegando luz. Nada de cinza chapado. */
+:root[data-theme="dark"] {
+  --glass-black: linear-gradient(180deg, rgba(255, 255, 255, .13), rgba(255, 255, 255, .03) 45%, rgba(255, 255, 255, .06)), rgba(10, 10, 12, .55);
+  --glass-black-edge: inset 0 1px 0 rgba(255, 255, 255, .2), inset 0 -1px 0 rgba(255, 255, 255, .05), inset 0 0 0 .5px rgba(255, 255, 255, .12), 0 6px 18px -6px rgba(0, 0, 0, .85);
+}
+/* trilhos: preto fundo, com borda clara bem fina */
+:root[data-theme="dark"] :is(.seg, .subtabs, .fin-tabs, .cal-pills) {
+  background: rgba(0, 0, 0, .45); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .09), inset 0 1px 2px rgba(0, 0, 0, .5);
+}
+/* pastilha ativa e a do menu lateral: lente de vidro preto */
+:root[data-theme="dark"] :is(.seg, .subtabs, .fin-tabs, .cal-pills, .sidebar .nav)[data-seg]::before {
+  background: var(--glass-black); box-shadow: var(--glass-black-edge);
+  -webkit-backdrop-filter: blur(10px) saturate(1.6); backdrop-filter: blur(10px) saturate(1.6);
+}
+:root[data-theme="dark"] :is(.seg, .subtabs, .fin-tabs, .cal-pills) button.active { color: #fff; }
+/* botões comuns e de ícone */
+:root[data-theme="dark"] :is(.btn:not(.btn-primary):not(.btn-brand):not(.btn-danger-solid):not(.btn-ghost), .icon-btn) {
+  background: var(--glass-black); border-color: transparent; box-shadow: var(--glass-black-edge);
+}
+@media (hover: hover) and (pointer: fine) {
+  :root[data-theme="dark"] :is(.btn:not(.btn-primary):not(.btn-brand):not(.btn-danger-solid):not(.btn-ghost), .icon-btn):hover {
+    background: linear-gradient(180deg, rgba(255, 255, 255, .18), rgba(255, 255, 255, .05) 45%, rgba(255, 255, 255, .08)), rgba(10, 10, 12, .55);
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root[data-theme="dark"] :is(.seg, .subtabs, .fin-tabs, .cal-pills, .sidebar .nav)[data-seg]::before { -webkit-backdrop-filter: none; backdrop-filter: none; background: #2c2c2e; }
+}
+/* a pastilha do menu lateral fica por cima do item (lente): só brilho claro, sem fundo escuro nem desfoque, para o texto aparecer */
+:root[data-theme="dark"] .sidebar .nav[data-seg]::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .05) 50%, rgba(255, 255, 255, .08));
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+:root[data-theme="dark"] .sidebar .nav a.active, :root[data-theme="dark"] .sidebar .nav a.active .ico { color: #fff; }
