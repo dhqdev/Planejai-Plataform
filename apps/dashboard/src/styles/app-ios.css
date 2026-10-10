@@ -234,3 +234,20 @@
 }
 :is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg="on"]::before { transition: transform .45s var(--ios-spring), width .45s var(--ios-spring), height .45s var(--ios-spring), scale .3s var(--ios-spring), opacity .2s; }
 @media (prefers-reduced-motion: reduce) { .tabbar.min .tabbar-pill { transform: none; } }
+
+/* Folhas no celular: sólidas. No iPhone o backdrop-filter numa folha que está subindo vira um bloco preto,
+   então a folha não usa desfoque; o acabamento de vidro fica no brilho de cima e na borda. */
+@media (max-width: 767px) {
+  .modal-bg .modal, .modal.more-sheet, .modal::after, .modal-scrim {
+    -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  }
+  .modal-bg .modal, .modal.more-sheet { background: linear-gradient(180deg, rgba(255, 255, 255, .9), rgba(255, 255, 255, 0) 30%), var(--panel); }
+  .modal::after { background: var(--panel); }
+  :root[data-theme="dark"] .modal-bg .modal, :root[data-theme="dark"] .modal.more-sheet {
+    background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, 0) 30%), #0c0c0e;
+    box-shadow: inset 0 .5px 0 rgba(255, 255, 255, .22), 0 -10px 40px -12px rgba(0, 0, 0, .6);
+  }
+  :root[data-theme="dark"] .modal::after { background: #0c0c0e; }
+  :root[data-theme="dark"] .more-sheet .more-section .more-tile.active { background: rgba(255, 255, 255, .14); }
+  .modal-scrim { background: rgba(0, 0, 0, .4); }
+}
