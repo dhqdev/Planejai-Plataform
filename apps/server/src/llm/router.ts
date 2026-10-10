@@ -154,9 +154,9 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
   {
     task: "agent:cliente",
     label: "Agentes de cada cliente",
-    why: "Especialistas criados pela melhoria diária (ex.: Cinema, Celulares). Mesmo perfil do Pesquisador: barato e bom com texto.",
-    model: "xiaomi/mimo-v2.6-flash",
-    fallbacks: ["deepseek/deepseek-v4.1-flash"],
+    why: "Especialistas criados pela melhoria diária (ex.: Cinema, Celulares). Mesmo perfil do Pesquisador: DeepSeek Flash, que responde em ~6 s por passo (MiMo ~20 s).",
+    model: "deepseek/deepseek-v4.1-flash",
+    fallbacks: ["xiaomi/mimo-v2.6-flash"],
     temperature: 0.2,
     maxTokens: 1200,
   },
