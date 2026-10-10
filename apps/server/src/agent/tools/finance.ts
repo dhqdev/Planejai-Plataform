@@ -358,6 +358,19 @@ async function financeOwner(ctx: { user: { id: string } }, ofContact?: string): 
   return { id: c.id, name: c.name };
 }
 
+/** "no débito", "pix", "dinheiro": não é cartão de crédito. */
+const NO_CARD = /^(nenhum|sem cart[aã]o|n[aã]o|pix|dinheiro|esp[eé]cie|d[eé]bito|cart[aã]o de d[eé]bito|boleto|transfer[eê]ncia|ted|doc)$/i;
+
+/** Ids de lançamentos mais as outras parcelas da mesma compra (para corrigir ou apagar a compra inteira). */
+async function withInstallments(userId: string, ids: string[]) {
+  const rows = await many<{ id: string }>(
+    `SELECT t.id FROM transactions t WHERE t.user_id = $1 AND (t.id = ANY($2::uuid[]) OR t.purchase_id IN (
+       SELECT p.purchase_id FROM transactions p WHERE p.user_id = $1 AND p.id = ANY($2::uuid[]) AND p.purchase_id IS NOT NULL AND p.installments > 1))`,
+    [userId, ids],
+  );
+  return rows.map((r) => r.id);
+}
+
 const OF_CONTACT = { of_contact: { type: "string", description: "Nome de um contato que compartilhou as finanças (só leitura). Vazio = da própria pessoa." } };
 
 /**
@@ -440,10 +453,20 @@ export const addTransaction = defineTool<{
     const total = parseAmount(args.amount);
     if (total <= 0) return { ok: false, error: "Valor precisa ser maior que zero" };
     let card: Card | null = null;
-    if (args.card?.trim()) {
+    if (args.card?.trim() && !NO_CARD.test(args.card.trim())) {
       const found = await resolveCard(ctx.user.id, args.card);
       if ("error" in found) return { ok: false, error: found.error };
       card = found;
+    }
+    // parcelou sem dizer onde: com um cartão só, é nele; com vários, lança sem cartão e pede para perguntar
+    let cardNote: Record<string, string> = {};
+    if (!card && !args.card?.trim() && args.kind === "expense" && Math.floor(args.installments ?? 1) > 1) {
+      const mine = await many<Card>("SELECT * FROM cards WHERE user_id = $1 AND active ORDER BY created_at", [ctx.user.id]);
+      if (mine.length === 1) {
+        card = mine[0]!;
+        cardNote = { card_note: `Lancei no cartão ${card.name}, o único dela. Se não foi no cartão, corrija com update_transaction card="nenhum".` };
+      } else if (mine.length > 1)
+        cardNote = { card_note: `Ela tem os cartões ${mine.map((c) => c.name).join(", ")}: pergunte em qual parcelou e corrija com update_transaction card (as parcelas acompanham).` };
     }
     const category = await autoCategory(ctx.user.id, args.kind, args.category, args.description, args.merchant);
     const first = args.date ? parseLocalDateTime(args.date, ctx.timezone) : new Date();
@@ -494,6 +517,7 @@ export const addTransaction = defineTool<{
       ...(n > 1 ? { installments: n, installment_values: n > 6 ? `${brl(parts[1]!)} por mês${parts[0] !== parts[1] ? ` (a 1ª ${brl(parts[0]!)})` : ""}` : parts.map(brl) } : {}),
       category,
       ...cardInfo,
+      ...cardNote,
       ...(await monthTotals(ctx.user.id, ctx.timezone, first, category)),
       ...(alerts.length ? { budget_alert: alerts.join(" ") } : {}),
     };
@@ -526,7 +550,7 @@ export const listTransactions = defineTool<{ from?: string; to?: string; categor
     const to = args.to ? new Date(parseLocalDateTime(args.to, ctx.timezone).getTime() + 86_400_000) : new Date(Date.now() + 86_400_000);
     const rows = await many(
       `SELECT t.id, t.kind, t.amount, t.category, t.description, t.merchant, to_char(t.occurred_at AT TIME ZONE $6, 'DD/MM/YYYY HH24:MI') AS quando,
-              c.name AS card, t.invoice_month AS fatura
+              c.name AS card, t.invoice_month AS fatura, t.installment, t.installments
          FROM transactions t LEFT JOIN cards c ON c.id = t.card_id
         WHERE t.user_id = $1 AND t.occurred_at >= $2 AND t.occurred_at < $3 AND ($4::text IS NULL OR t.category = $4)
           AND ($7::text IS NULL OR t.kind = $7) AND ($8::text IS NULL OR t.description ILIKE $8 OR t.merchant ILIKE $8)
@@ -540,7 +564,13 @@ export const listTransactions = defineTool<{ from?: string; to?: string; categor
       count: rows.length,
       total_expenses_listed: brl(sum("expense")),
       total_income_listed: brl(sum("income")),
-      items: rows.map(({ card, fatura, ...r }) => ({ ...r, amount: brl(cents(r.amount)), ...(card ? { card, fatura } : {}) })),
+      items: rows.map(({ card, fatura, installment, installments, ...r }) => ({
+        ...r,
+        amount: brl(cents(r.amount)),
+        ...(card ? { card, fatura } : {}),
+        ...(installments > 1 ? { parcela: `${installment}/${installments}` } : {}),
+      })),
+      ...(rows.some((r) => r.installments > 1) ? { note: "Parcela de compra parcelada: para corrigir ou apagar a compra inteira (todas as parcelas, inclusive as futuras), use all_installments=true." } : {}),
     };
   },
 });
@@ -616,6 +646,7 @@ export const updateTransaction = defineTool<{
   date?: string;
   kind?: "expense" | "income";
   card?: string;
+  all_installments?: boolean;
   date_confirmed?: boolean;
 }>({
   name: "update_transaction",
@@ -630,14 +661,17 @@ export const updateTransaction = defineTool<{
       merchant: { type: "string" },
       date: { type: "string", description: "AAAA-MM-DD[THH:MM]" },
       kind: { type: "string", enum: ["expense", "income"] },
-      card: { type: "string", description: "Muda para esse cartão; \"nenhum\" = não foi no cartão" },
+      card: { type: "string", description: "Muda para esse cartão; \"nenhum\" = não foi no cartão (vale para todas as parcelas)" },
+      all_installments: { type: "boolean", description: "Aplica em todas as parcelas da mesma compra" },
       date_confirmed: { type: "boolean", description: "true só se a pessoa disse uma data de mais de um ano atrás" },
     },
     ["ids"],
   ),
   async run(args, ctx) {
-    const ids = (args.ids ?? []).filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 200);
+    let ids = (args.ids ?? []).filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 200);
     if (!ids.length) return { ok: false, error: "Passe os ids (use list_transactions)" };
+    // trocar de cartão é da compra inteira: as parcelas não podem ficar uma em cada cartão
+    if (args.all_installments || args.card?.trim()) ids = await withInstallments(ctx.user.id, ids);
     const amount = args.amount != null && args.amount !== "" ? parseAmount(args.amount) : null;
     if (amount !== null && amount <= 0) return { ok: false, error: "Valor precisa ser maior que zero" };
     const when = args.date ? parseLocalDateTime(args.date, ctx.timezone) : null;
@@ -645,7 +679,7 @@ export const updateTransaction = defineTool<{
     if (odd) return odd;
     let card: Card | null | undefined;
     if (args.card?.trim()) {
-      if (/^(nenhum|sem cart[aã]o|pix|dinheiro|d[eé]bito)$/i.test(args.card.trim())) card = null;
+      if (NO_CARD.test(args.card.trim())) card = null;
       else {
         const found = await resolveCard(ctx.user.id, args.card);
         if ("error" in found) return { ok: false, error: found.error };
@@ -673,12 +707,13 @@ export const updateTransaction = defineTool<{
   },
 });
 
-export const deleteTransaction = defineTool<{ ids?: string[]; id?: string; from?: string; to?: string; category?: string; search?: string; confirmed_by_user?: boolean }>({
+export const deleteTransaction = defineTool<{ ids?: string[]; id?: string; all_installments?: boolean; from?: string; to?: string; category?: string; search?: string; confirmed_by_user?: boolean }>({
   name: "delete_transaction",
   description:
-    "Apaga lançamentos: um id que ela apontou sai direto; 2 ou mais ids, ou por filtro (período, categoria, texto), só depois do \"sim\" dela.",
+    "Apaga lançamentos: um id que ela apontou sai direto; 2 ou mais ids, ou por filtro (período, categoria, texto), só depois do \"sim\" dela. Compra parcelada inteira: all_installments=true.",
   parameters: obj({
     ids: { type: "array", items: { type: "string" } },
+    all_installments: { type: "boolean", description: "Apaga também as outras parcelas (passadas e futuras) da mesma compra" },
     from: { type: "string", description: "AAAA-MM-DD" },
     to: { type: "string", description: "AAAA-MM-DD (inclusivo)" },
     category: { type: "string" },
@@ -686,7 +721,8 @@ export const deleteTransaction = defineTool<{ ids?: string[]; id?: string; from?
     ...CONFIRM_PARAM,
   }),
   async run(args, ctx) {
-    const ids = [...(args.ids ?? []), ...(args.id ? [args.id] : [])].filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 200);
+    let ids = [...(args.ids ?? []), ...(args.id ? [args.id] : [])].filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 200);
+    if (ids.length && args.all_installments) ids = await withInstallments(ctx.user.id, ids);
     if (ids.length) {
       if (ids.length > 1) {
         const preview = await one("SELECT COUNT(*)::int AS n, COALESCE(SUM(amount), 0) AS total FROM transactions WHERE user_id = $1 AND id = ANY($2::uuid[])", [ctx.user.id, ids]);

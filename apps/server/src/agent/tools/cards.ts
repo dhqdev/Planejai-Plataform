@@ -6,6 +6,7 @@ import {
   deleteCard,
   invoiceItems,
   listCards,
+  looksLikeInvoiceOf,
   monthName,
   payInvoice,
   resolveCard,
@@ -13,6 +14,7 @@ import {
   type CardSummary,
   type Invoice,
 } from "../../cards.js";
+import { listBills } from "../../bills.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 /** Ferramentas de cartão de crédito e fatura. O cartão guarda só apelido, banco, final, limite, fechamento e vencimento. */
@@ -73,7 +75,14 @@ export const cardSave = defineTool<{
       return { ok: true, updated: c.name, closes_day: c.closing_day, due_day: c.due_day, limit: c.limit_amount != null ? brl(c.limit_amount) : "sem limite informado" };
     }
     const c = await createCard(ctx.user.id, input);
+    // a fatura desse cartão já era uma conta fixa: avisa para não lembrar nem lançar duas vezes
+    const twins = (await listBills(ctx.user.id, ctx.timezone)).filter((b) => b.kind === "expense" && looksLikeInvoiceOf(c!, b.description));
     return {
+      ...(twins.length
+        ? {
+            bill_twin: `Ela já tem a conta fixa "${twins[0]!.description}", que parece ser a fatura desse cartão. Pergunte se quer apagar (bill_delete) para não receber lembrete duplicado. Enquanto o cartão tiver compras lançadas, "paguei" nessa conta só marca a fatura como paga.`,
+          }
+        : {}),
       ok: true,
       created: c!.name,
       closes_day: c!.closing_day,

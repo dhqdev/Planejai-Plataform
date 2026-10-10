@@ -85,6 +85,13 @@ export const billPay = defineTool<{ id?: string; name?: string; amount?: number 
     const id = await pick(ctx.user.id, args);
     const r = await payBill(ctx.user.id, id, { amount: args.amount, tz: ctx.timezone });
     if (r.already) return { ok: true, already_paid: true, name: r.bill.description };
+    if ("card_invoice" in r && r.card_invoice)
+      return {
+        ok: true,
+        name: r.bill.description,
+        card_invoice_paid: `${r.card} (fatura com vencimento ${r.card_invoice.due.split("-").reverse().join("/")}, ${brl(r.card_invoice.total)})`,
+        note: "Essa conta é a fatura de um cartão acompanhado: marquei a fatura como paga e não lancei gasto, porque as compras do cartão já estão lançadas. Conte isso em uma frase.",
+      };
     ctx.room?.done.add("add_transaction");
     return { ok: true, name: r.bill.description, launched: brl(Number(r.transaction?.amount ?? 0)), installments_left: r.installments_left ?? undefined, finished: r.bill.active === false };
   },

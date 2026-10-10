@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { addMonths, cardReminderLines, invoiceDates, invoiceMonthFor, invoiceStatus, nextDueMonth, shiftDate, type Card } from "../src/cards.js";
+import { addMonths, cardReminderLines, looksLikeInvoiceOf, invoiceDates, invoiceMonthFor, invoiceStatus, nextDueMonth, shiftDate, type Card } from "../src/cards.js";
 
 const card = (o: Partial<Card> = {}): Card => ({
   id: "c1",
@@ -66,6 +66,21 @@ describe("cartões: ciclo da fatura", () => {
     expect(cardReminderLines(c, "2026-10-10", t, new Set(["2026-10"]))).toEqual([]);
     expect(cardReminderLines(c, "2026-10-05", t, new Set())).toEqual([]);
     expect(cardReminderLines(card({ last_reminded_on: "2026-10-10" }), "2026-10-10", t, new Set())).toEqual([]);
+  });
+});
+
+describe("cartões: conta fixa ou comprovante que é a fatura", () => {
+  it("reconhece a fatura pelo nome, banco ou apelido do banco, sem casar com outra conta", () => {
+    const nu = { name: "Nubank", brand: null, last4: "1234" };
+    expect(looksLikeInvoiceOf(nu, "Cartão Nubank")).toBe(true);
+    expect(looksLikeInvoiceOf(nu, "Nubank")).toBe(true);
+    expect(looksLikeInvoiceOf(nu, "NU PAGAMENTOS S.A.")).toBe(true);
+    expect(looksLikeInvoiceOf(nu, "Fatura final 1234")).toBe(true);
+    expect(looksLikeInvoiceOf(nu, "Aluguel")).toBe(false);
+    expect(looksLikeInvoiceOf({ name: "Inter", brand: null, last4: null }, "Internet")).toBe(false);
+    expect(looksLikeInvoiceOf({ name: "Caixa", brand: null, last4: null }, "Financiamento Caixa")).toBe(false);
+    expect(looksLikeInvoiceOf({ name: "Itaú Click", brand: "Visa", last4: null }, "Fatura Itaú")).toBe(true);
+    expect(looksLikeInvoiceOf({ name: "Itaú Click", brand: "Visa", last4: null }, "Itaú Unibanco")).toBe(true);
   });
 });
 
@@ -160,5 +175,53 @@ describe.skipIf(!enabled)("cartões (e2e)", () => {
     const r: any = await cardDelete.run({ card: "Nubank" }, { ...ctx, agent: "financeiro", conversation: conv, toolCall: { name: "card_delete", args: { card: "Nubank" } } });
     expect(r.ok).not.toBe(true);
     expect((await db.one("SELECT active FROM cards WHERE user_id = $1", [user.id])).active).toBe(true);
+  });
+
+  it("parcelou sem dizer o cartão: com um cartão só vai nele; débito não é cartão", async () => {
+    const { addTransaction } = await import("../src/agent/tools/finance.js");
+    const r: any = await addTransaction.run({ kind: "expense", amount: 300, description: "Cadeira", installments: 3, date: "2026-10-08T10:00" }, ctx);
+    expect(r.card).toBe("Nubank");
+    expect(r.card_note).toContain("único");
+    const d: any = await addTransaction.run({ kind: "expense", amount: 12, description: "Pão", card: "débito" }, ctx);
+    expect(d.ok).toBe(true);
+    expect(d.card).toBeUndefined();
+  });
+
+  it("apagar a compra parcelada inteira pega as parcelas futuras (com o sim)", async () => {
+    const { deleteTransaction, listTransactions } = await import("../src/agent/tools/finance.js");
+    const l: any = await listTransactions.run({ search: "Cadeira" }, ctx);
+    expect(l.items[0].parcela).toBe("1/3");
+    expect(l.note).toContain("all_installments");
+    const r: any = await deleteTransaction.run({ ids: [l.items[0].id], all_installments: true }, { ...ctx, approvedAction: true });
+    expect(r.deleted).toBe(3);
+  });
+
+  it("'paguei' na conta fixa que é a fatura marca a fatura, sem lançar o total de novo", async () => {
+    const { createBill } = await import("../src/bills.js");
+    const { billPay } = await import("../src/agent/tools/bills.js");
+    await createBill(user.id, { description: "Cartão Nubank", amount: 500, due_day: 13 });
+    const before = await db.one("SELECT COUNT(*)::int AS n FROM transactions WHERE user_id = $1", [user.id]);
+    const r: any = await billPay.run({ name: "Cartão Nubank" }, ctx);
+    expect(r.card_invoice_paid).toContain("Nubank");
+    const after = await db.one("SELECT COUNT(*)::int AS n FROM transactions WHERE user_id = $1", [user.id]);
+    expect(after.n).toBe(before.n);
+    // e a conta "Internet" continua lançando normal
+    await createBill(user.id, { description: "Internet", amount: 100, due_day: 20 });
+    const net: any = await billPay.run({ name: "Internet" }, ctx);
+    expect(net.launched).toBe("R$ 100,00");
+  });
+
+  it("comprovante de pagamento da fatura não vira gasto", async () => {
+    const { autoLaunchReceipts } = await import("../src/agent/receipts.js");
+    const step = { id: null, ok: async () => {}, fail: async () => {} };
+    const c2: any = { ...ctx, tracer: { step: async () => step }, room: { done: new Set() } };
+    const before = await db.one("SELECT COUNT(*)::int AS n FROM transactions WHERE user_id = $1", [user.id]);
+    const notes = await autoLaunchReceipts(
+      [{ id: 991, role: "user", content: "", meta: { kind: "image", image_description: "FINANCEIRO: tipo=comprovante; valor_total=333.33; data=2026-10-12; estabelecimento=Nu Pagamentos S.A.; pago=sim; direcao=saida\nPix de pagamento de fatura." } }],
+      c2,
+    );
+    expect(String(notes[0]?.content)).toContain("card_invoice_pay");
+    const after = await db.one("SELECT COUNT(*)::int AS n FROM transactions WHERE user_id = $1", [user.id]);
+    expect(after.n).toBe(before.n);
   });
 });

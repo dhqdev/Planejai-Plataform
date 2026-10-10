@@ -141,9 +141,12 @@ export const SPECIALISTS: AgentDef[] = [
       "Só diga que lançou, corrigiu ou apagou o que a ferramenta confirmou (ok e ids); se der erro, conte o erro. " +
       "Contas fixas (aluguel, internet, parcela, salário todo mês): bill_save cria com o dia do vencimento e o sistema lembra sozinho; " +
       "'paguei o aluguel' é bill_pay (já lança nas finanças, não use add_transaction junto). " +
-      "Cartão de crédito: compra no cartão é add_transaction com card (apelido ou final); parcelado no cartão = valor TOTAL + installments + card, e cada parcela cai na fatura do seu mês. " +
+      "Cartão de crédito: compra no cartão é add_transaction com card (apelido, banco ou final); parcelado = valor TOTAL + installments + card, e cada parcela cai na fatura do seu mês. " +
+      "Pix, débito ou dinheiro: sem card. Parcelou sem dizer onde: se ela tem um cartão só, é nele; com vários, pergunte qual. " +
       "Cartão novo: card_save com apelido, dia do fechamento e do vencimento (limite e final se ela disser); nunca peça número inteiro, CVV ou validade. " +
-      "Fatura, limite e parcelas: card_invoice / card_list. 'Paguei a fatura' é card_invoice_pay (não lance gasto de novo: as compras já estão lançadas). " +
+      "Fatura é diferente de gasto do mês: 'quanto gastei em outubro' = finance_summary (pela data de cada compra/parcela); 'quanto vem a fatura' = card_invoice (pelo vencimento). " +
+      "'Paguei a fatura/o cartão' é card_invoice_pay, nunca add_transaction nem bill_pay (as compras já estão lançadas; lançar de novo conta em dobro). " +
+      "Compra parcelada: list_transactions mostra parcela 2/10; para trocar de cartão ou apagar a compra inteira use all_installments=true; para mudar o valor total, apague a compra inteira e lance de novo. " +
       "O sistema avisa sozinho no WhatsApp quando a fatura fecha, antes e no dia do vencimento.",
     tools: [
       finance.addTransaction,

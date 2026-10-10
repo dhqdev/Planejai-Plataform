@@ -185,6 +185,76 @@ export async function findCard(userId: string, q: string) {
   return all.filter((c) => strip(c.name).includes(s) || s.includes(strip(c.name)) || (c.brand && (strip(c.brand).includes(s) || s.includes(strip(c.brand)))));
 }
 
+/** Nome do banco do jeito que aparece em fatura, Pix e conta fixa ("Nu Pagamentos" = Nubank). */
+const BANKS: [RegExp, string][] = [
+  [/\bnu ?(pagamentos|financeira|bank|invest)\b|\bnubank\b|\broxinho\b/, "nubank"],
+  [/\bita[uú]|itaucard|unibanco|\biti\b/, "itau"],
+  [/bradesco|bradescard/, "bradesco"],
+  [/santander/, "santander"],
+  [/banco inter\b|\binter\b/, "inter"],
+  [/\bc6\b/, "c6"],
+  [/\bcaixa\b/, "caixa"],
+  [/banco do brasil|ourocard|\bbb\b/, "bb"],
+  [/mercado ?pago/, "mercadopago"],
+  [/picpay/, "picpay"],
+  [/\bneon\b/, "neon"],
+  [/\bwill ?bank\b/, "will"],
+  [/\bxp\b/, "xp"],
+  [/\bbtg\b/, "btg"],
+  [/porto ?(seguro|bank)/, "porto"],
+  [/sicredi/, "sicredi"],
+  [/sicoob/, "sicoob"],
+  [/banco pan\b|\bpan\b/, "pan"],
+];
+const bankOf = (s: string) => BANKS.find(([re]) => re.test(s))?.[1] ?? null;
+
+const CUE = /\b(fatura|cartao|credito)\b/;
+const STOP = new Set(["o", "a", "do", "da", "de", "meu", "minha", "conta", "pagamento", "pagamentos", "banco", "sa", "s", "ltda", "ip", "instituicao", "me", "ao"]);
+const onlyName = (rest: string) => rest.split(/[^a-z0-9]+/).filter((w) => w && !STOP.has(w)).length === 0;
+const esc = (k: string) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * O texto (conta fixa, comprovante) é a fatura desse cartão? Precisa do nome/banco do cartão em palavra inteira
+ * ("Inter" não casa com "Internet") e falar em fatura/cartão, ou não ter mais nada além do nome
+ * ("Financiamento Caixa" não é a fatura do cartão Caixa; "Nu Pagamentos SA" é a do Nubank).
+ */
+export function looksLikeInvoiceOf(c: Pick<Card, "name" | "brand" | "last4">, text: string) {
+  const s = strip(text ?? "");
+  if (!s) return false;
+  const cue = CUE.test(s);
+  const keys = [c.name, c.brand].filter(Boolean).map((k) => strip(k!));
+  for (const k of keys) {
+    const re = new RegExp(`(^|[^a-z0-9])${esc(k)}($|[^a-z0-9])`);
+    if (k.length >= 2 && re.test(s) && (cue || onlyName(s.replace(re, " ")))) return true;
+  }
+  if (c.last4 && s.includes(c.last4) && cue) return true;
+  const bank = bankOf(s);
+  if (bank && keys.some((k) => bankOf(k) === bank)) {
+    const re = BANKS.find(([, b]) => b === bank)![0];
+    return cue || onlyName(s.replace(new RegExp(re.source, "g"), " "));
+  }
+  return false;
+}
+
+/**
+ * Cartões (com compras lançadas) cuja fatura um texto parece ser: "Fatura Nubank", conta fixa "Cartão Itaú",
+ * Pix para "Nu Pagamentos". Serve para não lançar de novo como gasto o que já está nas compras do cartão.
+ * Texto genérico ("fatura do cartão") só vale quando ela tem um cartão só.
+ */
+export async function cardsPaidBy(userId: string, text: string) {
+  const cards = await many<Card>(
+    "SELECT c.* FROM cards c WHERE c.user_id = $1 AND c.active AND EXISTS (SELECT 1 FROM transactions t WHERE t.card_id = c.id) ORDER BY c.created_at",
+    [userId],
+  );
+  if (!cards.length) return [];
+  const s = strip(text ?? "");
+  if (!s) return [];
+  const hits = cards.filter((c) => looksLikeInvoiceOf(c, s));
+  if (hits.length) return hits;
+  // genérico ("fatura do cartão") só com um cartão; "fatura da internet" não
+  return cards.length === 1 && CUE.test(s) && onlyName(s.replace(/\b(fatura|cartao|credito)\b/g, " ")) ? cards : [];
+}
+
 /** Resolve o cartão para uma ferramenta: devolve o cartão ou um erro pronto para o modelo. */
 export async function resolveCard(userId: string, q: string): Promise<Card | { error: string }> {
   const found = await findCard(userId, q);

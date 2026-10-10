@@ -77,6 +77,19 @@ export async function autoLaunchReceipts(pending: any[], ctx: ToolContext): Prom
       notes.push({ role: "system", content: `O comprovante da msg_id=${m.id} parece o mesmo comprovante de ${when} e não foi lançado; pergunte se é outro.` });
       continue;
     }
+    // pagamento da fatura de um cartão acompanhado: as compras já estão lançadas, então não vira gasto de novo
+    const invoiceCard = await invoicePayment(ctx.user.id, r, desc ?? "", ctx.timezone);
+    if (invoiceCard) {
+      const step = await ctx.tracer.step({ agent: "cto", type: "info", name: "comprovante de fatura", input: { message_id: String(m.id), ...r } });
+      await step.ok({ lancado: false, cartao: invoiceCard });
+      notes.push({
+        role: "system",
+        content:
+          `O comprovante da msg_id=${m.id} (${r.valor.toFixed(2)}) parece o pagamento da fatura do cartão ${invoiceCard}, e NÃO foi lançado como gasto: as compras desse cartão já estão lançadas. ` +
+          `Se for isso, chame card_invoice_pay (card="${invoiceCard}", amount=${r.valor}) e conte em uma frase. Se não for pagamento de fatura, lance com add_transaction e message_id=${m.id}.`,
+      });
+      continue;
+    }
     const step = await ctx.tracer.step({ agent: "cto", type: "tool", name: "add_transaction", input: { automatico: "comprovante na foto", message_id: String(m.id), ...r } });
     try {
       const out: any = await addTransaction.run(
@@ -110,4 +123,20 @@ export async function autoLaunchReceipts(pending: any[], ctx: ToolContext): Prom
     }
   }
   return notes;
+}
+
+/**
+ * Nome do cartão se o comprovante parece pagar a fatura dele: tipo fatura, texto falando em fatura/cartão,
+ * ou valor batendo (até R$ 1) com uma fatura fechada e não paga. Só cartões com compras lançadas.
+ */
+async function invoicePayment(userId: string, r: Receipt, text: string, tz: string): Promise<string | null> {
+  if (/^entrada|receb/.test(r.direcao)) return null;
+  const { cardsPaidBy, listCards } = await import("../cards.js");
+  const cards = await cardsPaidBy(userId, `${r.tipo === "fatura" ? "fatura " : ""}${r.estabelecimento ?? ""} ${/fatura|cart[aã]o de cr[eé]dito/i.test(text) ? "fatura" : ""}`);
+  if (cards.length !== 1) return null;
+  const c = cards[0]!;
+  if (r.tipo === "fatura" || /fatura|cart[aã]o de cr[eé]dito/i.test(text)) return c.name;
+  const s = (await listCards(userId, tz)).find((x) => x.id === c.id);
+  const open = (s?.invoices ?? []).filter((i) => i.status === "fechada" || i.status === "atrasada" || i.month === s?.next.month);
+  return open.some((i) => Math.abs(i.total - r.valor) <= 1) ? c.name : null;
 }

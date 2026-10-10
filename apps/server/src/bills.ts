@@ -128,6 +128,16 @@ export async function payBill(userId: string, id: string, opts: { amount?: numbe
   const tz = opts.tz ?? config.DEFAULT_TIMEZONE;
   const month = todayIn(tz).slice(0, 7);
   if (b.last_paid_month === month) return { already: true, bill: b, transaction: null };
+  // conta fixa que é a fatura de um cartão com compras lançadas: marca a fatura como paga em vez de lançar o total de novo
+  if (b.kind === "expense") {
+    const { cardsPaidBy, defaultPayMonth, payInvoice } = await import("./cards.js");
+    const cards = await cardsPaidBy(userId, b.description);
+    if (cards.length === 1) {
+      const r = await payInvoice(userId, cards[0]!, await defaultPayMonth(cards[0]!, tz), opts.amount ?? null);
+      const updated = await one<Bill>("UPDATE bills SET last_paid_month = $2 WHERE id = $1 RETURNING *", [b.id, month]);
+      return { already: false, bill: updated!, transaction: null, card: cards[0]!.name, card_invoice: r.invoice };
+    }
+  }
   const amount = opts.amount != null && opts.amount !== "" ? parseAmount(opts.amount) : b.amount != null ? Number(b.amount) : null;
   if (!amount) throw new Error(`Qual foi o valor de ${b.description} este mês?`);
   const tx = await one(
@@ -183,8 +193,13 @@ export async function remindBills(log?: { info: (...a: any[]) => void; error: (.
   const byUser = new Map<string, (Bill & { timezone: string | null })[]>();
   for (const r of rows) byUser.set(r.user_id, [...(byUser.get(r.user_id) ?? []), r]);
   const { notifyUser } = await import("./social.js");
+  const { cardsPaidBy } = await import("./cards.js");
   let sent = 0;
-  for (const [userId, bills] of byUser) {
+  for (const [userId, all] of byUser) {
+    // a fatura de um cartão acompanhado já tem lembrete próprio (remindCards): não lembra duas vezes
+    const bills: typeof all = [];
+    for (const b of all) if (b.kind !== "expense" || !(await cardsPaidBy(userId, b.description)).length) bills.push(b);
+    if (!bills.length) continue;
     const today = todayIn(bills[0]!.timezone ?? config.DEFAULT_TIMEZONE);
     const msg = reminderText(bills, today);
     if (!msg) continue;
