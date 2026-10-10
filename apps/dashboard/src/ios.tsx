@@ -12,18 +12,18 @@ const lessMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const isPhone = () => matchMedia("(max-width: 767px)").matches;
 
 /* ---------- Seletor segmentado: a pastilha segue o botão ativo ---------- */
-const SEG = ".seg, .subtabs, .fin-tabs, .cal-pills";
+const SEG = ".seg, .subtabs, .fin-tabs, .cal-pills, .sidebar .nav";
 
 function placeThumbs() {
   document.querySelectorAll<HTMLElement>(SEG).forEach((box) => {
-    const on = box.querySelector<HTMLElement>(":scope > button.active, :scope > button[aria-selected='true']");
+    const on = box.querySelector<HTMLElement>(":scope > button.active, :scope > button[aria-selected='true'], :scope > a.active");
     if (!on || !box.offsetParent) {
       box.style.setProperty("--seg-o", "0");
       return;
     }
     box.style.setProperty("--seg-x", `${on.offsetLeft}px`);
     box.style.setProperty("--seg-w", `${on.offsetWidth}px`);
-    box.style.setProperty("--seg-t", `${on.offsetTop}px`);
+    box.style.setProperty("--seg-y", `${on.offsetTop}px`);
     box.style.setProperty("--seg-h", `${on.offsetHeight}px`);
     box.style.setProperty("--seg-o", "1");
     // primeira vez: aparece já no lugar; depois desliza
@@ -46,6 +46,20 @@ export function installSegmented() {
   };
   new MutationObserver(schedule).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "aria-selected"] });
   addEventListener("resize", schedule);
+  // barra do celular: a gota estica enquanto viaja para a aba nova
+  let lastI = "";
+  new MutationObserver(() => {
+    const pill = document.querySelector<HTMLElement>(".tabbar-pill");
+    const i = pill?.style.getPropertyValue("--i") ?? "";
+    if (!pill || i === lastI) return;
+    const first = lastI === "";
+    lastI = i;
+    const g = pill.querySelector<HTMLElement>(".tab-glider");
+    if (!g || first) return;
+    g.classList.remove("moving");
+    void g.offsetWidth;
+    g.classList.add("moving");
+  }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["style"] });
   document.fonts?.ready.then(schedule);
   schedule();
 }

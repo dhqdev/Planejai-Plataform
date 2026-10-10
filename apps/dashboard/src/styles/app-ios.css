@@ -32,20 +32,30 @@
 }
 .update-pill { background: var(--glass-sheen), var(--glass-strong); }
 @media (max-width: 767px) {
+  /* barra de baixo: vidro de verdade (desfoca e realça o que passa por baixo), com borda que pega luz */
   .tabbar-pill {
     background: var(--glass-sheen), var(--glass);
-    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
-    box-shadow: var(--glass-edge), var(--glass-shadow);
+    -webkit-backdrop-filter: blur(24px) saturate(2) brightness(1.04); backdrop-filter: blur(24px) saturate(2) brightness(1.04);
+    box-shadow: var(--glass-edge), 0 18px 40px -16px rgba(0, 0, 0, .28), 0 2px 8px rgba(0, 0, 0, .06);
   }
-  /* a "gota" que desliza para a aba tocada: vidro mais claro, como uma lente */
+  /* a gota que desliza: lente branca; estica no caminho e volta ao chegar */
   .tab-glider {
-    background: linear-gradient(180deg, rgba(255, 255, 255, .7), rgba(255, 255, 255, .25)), var(--violet-soft);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), inset 0 0 0 1px rgba(255, 255, 255, .5), 0 2px 8px -2px rgba(101, 16, 224, .18);
+    background: linear-gradient(180deg, rgba(255, 255, 255, .7), rgba(255, 255, 255, 0) 70%), rgba(120, 120, 128, .14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .95), inset 0 0 0 .5px rgba(0, 0, 0, .06), 0 4px 12px -6px rgba(0, 0, 0, .2);
+    transition: transform .5s cubic-bezier(.34, 1.3, .5, 1);
   }
-  :root[data-theme="dark"] .tab-glider { background: linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .04)), rgba(101, 16, 224, .22); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), inset 0 0 0 1px rgba(255, 255, 255, .08); }
-  .tabbar .tab.active .tab-ico { color: var(--violet); }
-  :root[data-theme="dark"] .tabbar .tab.active .tab-ico { color: #c9a8ff; }
+  .tab-glider.moving { animation: glider-stretch .5s cubic-bezier(.3, .7, .3, 1); }
+  @keyframes glider-stretch { 0% { scale: 1 1; } 35% { scale: 1.22 .86; } 70% { scale: .96 1.04; } 100% { scale: 1 1; } }
+  :root[data-theme="dark"] .tab-glider { background: linear-gradient(180deg, rgba(255, 255, 255, .2), rgba(255, 255, 255, .06)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), inset 0 0 0 .5px rgba(255, 255, 255, .1), 0 6px 16px -6px rgba(0, 0, 0, .6); }
+  .tabbar .tab .tab-ico { color: var(--muted); transition: color .25s, transform .3s cubic-bezier(.34, 1.56, .5, 1); }
+  .tabbar .tab.active .tab-ico { color: var(--text); animation: tab-jump .55s cubic-bezier(.34, 1.56, .5, 1); }
+  .tabbar .tab.active .tab-ico svg { stroke-width: 2.3; }
+  @keyframes tab-jump { 0% { transform: scale(.72) translateY(3px) rotate(-8deg); } 45% { transform: scale(1.18) translateY(-4px) rotate(4deg); } 75% { transform: scale(.97) translateY(0) rotate(-1deg); } 100% { transform: none; } }
+  /* passar o dedo/mouse por cima: o ícone dá uma inclinada */
+  @media (hover: hover) { .tabbar .tab:not(.active):hover .tab-ico { transform: translateY(-2px) scale(1.08); color: var(--text); } }
+  .tabbar .tab:active .tab-ico { transform: scale(.82); }
   .tabbar .tab-dot { box-shadow: 0 0 0 2px var(--panel); }
+  @media (prefers-reduced-motion: reduce) { .tab-glider.moving, .tabbar .tab.active .tab-ico { animation: none; } }
 
   /* folhas (modais no celular) e o "Mais": vidro grosso, quase sólido, para o texto ler bem */
   .modal-bg .modal, .modal.more-sheet {
@@ -62,23 +72,34 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), inset 0 0 0 1px rgba(255, 255, 255, .18), 0 12px 28px -8px rgba(101, 16, 224, .55);
 }
 
-/* ---------- Abas e filtros: o visual de antes, com uma pastilha de vidro que desliza até o botão ativo ---------- */
-.seg, .subtabs, .fin-tabs, .cal-pills { position: relative; isolation: isolate; }
-:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg] > button { position: relative; z-index: 1; }
-/* com a pastilha no lugar, o botão ativo fica transparente e só o texto muda de cor */
-:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg] > button.active { background: transparent; box-shadow: none; border-color: transparent; }
-:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg]::before {
-  content: ""; position: absolute; z-index: 0; top: var(--seg-t, 3px); left: 0; height: var(--seg-h, calc(100% - 6px));
-  width: var(--seg-w, 0); transform: translateX(var(--seg-x, 0)); opacity: var(--seg-o, 0);
-  border-radius: 9px; background: var(--glass-sheen), var(--ink);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), inset 0 0 0 .5px rgba(255, 255, 255, .12), 0 4px 12px -4px rgba(0, 0, 0, .35);
+/* ---------- Abas, filtros e menu lateral: pastilha quase branca (como Todas/Não lidas) que desliza até o ativo ---------- */
+:root { --pill: linear-gradient(180deg, #ffffff, #f7f7f8); --pill-shadow: inset 0 1px 0 #fff, inset 0 0 0 .5px rgba(0, 0, 0, .06), 0 1px 2px rgba(0, 0, 0, .06), 0 4px 12px -4px rgba(0, 0, 0, .12); }
+:root[data-theme="dark"] { --pill: linear-gradient(180deg, #3a3a3d, #2e2e31); --pill-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), inset 0 0 0 .5px rgba(255, 255, 255, .06), 0 4px 12px -4px rgba(0, 0, 0, .5); }
+.seg, .subtabs, .fin-tabs, .cal-pills, .sidebar .nav { position: relative; isolation: isolate; }
+/* trilho cinza claro em todos */
+.subtabs, .fin-tabs, .cal-pills { background: var(--panel-2); border: none; border-radius: 12px; padding: 3px; gap: 2px; }
+.cal-pills { border-radius: 99px; }
+.subtabs button, .fin-tabs button, .cal-pills button { border: none; background: none; color: var(--muted); font-weight: 550; }
+:is(.subtabs, .fin-tabs, .cal-pills, .seg) button.active { color: var(--text); font-weight: 650; }
+.fin-tabs button.active .ico { color: var(--text); }
+:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg] > button, .sidebar .nav[data-seg] > a { position: relative; z-index: 1; }
+/* a pastilha desenha o fundo do ativo; o botão em si fica transparente */
+:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg] > button.active, .sidebar .nav[data-seg] > a.active { background: transparent; box-shadow: none; border-color: transparent; }
+:is(.seg, .subtabs, .fin-tabs, .cal-pills, .sidebar .nav)[data-seg]::before {
+  content: ""; position: absolute; z-index: 0; top: 0; left: 0; pointer-events: none;
+  width: var(--seg-w, 0); height: var(--seg-h, 0); transform: translate(var(--seg-x, 0), var(--seg-y, 0)); opacity: var(--seg-o, 0);
+  border-radius: 9px; background: var(--pill); box-shadow: var(--pill-shadow);
 }
 .fin-tabs[data-seg]::before { border-radius: 10px; }
 .cal-pills[data-seg]::before { border-radius: 99px; }
-/* .seg já era branco sobre cinza: a pastilha segue branca */
-.seg[data-seg]::before { background: var(--glass-sheen), var(--panel); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 1px 2px rgba(0, 0, 0, .08), 0 3px 8px -2px rgba(0, 0, 0, .1); }
-:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg="on"]::before { transition: transform .38s var(--ios-spring), width .38s var(--ios-spring), top .38s var(--ios-spring), height .38s var(--ios-spring); }
-@media (prefers-reduced-motion: reduce) { :is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg]::before { transition: none !important; } }
+/* menu lateral (fundo branco): a pastilha é um cinza bem claro de vidro, sem roxo */
+.sidebar .nav[data-seg]::before { border-radius: 14px; background: linear-gradient(180deg, rgba(255, 255, 255, .9), rgba(255, 255, 255, .2)), #efeff1; box-shadow: inset 0 1px 0 #fff, inset 0 0 0 .5px rgba(0, 0, 0, .07), 0 6px 16px -8px rgba(0, 0, 0, .18); }
+:root[data-theme="dark"] .sidebar .nav[data-seg]::before { background: linear-gradient(180deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .02)), #2a2a2d; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), 0 6px 16px -8px rgba(0, 0, 0, .5); }
+.sidebar .nav a.active { color: var(--text); }
+.sidebar .nav a.active .ico { color: var(--text); }
+/* desliza com mola, como um vídeo passando de um item para o outro */
+:is(.seg, .subtabs, .fin-tabs, .cal-pills, .sidebar .nav)[data-seg="on"]::before { transition: transform .45s var(--ios-spring), width .45s var(--ios-spring), height .45s var(--ios-spring), opacity .2s; }
+@media (prefers-reduced-motion: reduce) { :is(.seg, .subtabs, .fin-tabs, .cal-pills, .sidebar .nav)[data-seg]::before { transition: none !important; } }
 
 /* ---------- Menu de toque longo ---------- */
 .ctx-layer { position: fixed; inset: 0; z-index: 80; }
