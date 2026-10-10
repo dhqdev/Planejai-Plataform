@@ -1,22 +1,20 @@
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
-import { CORE_FACES } from "../faces";
+import { AgentFace, CORE_FACES } from "../faces";
 import { Mochi, type Mood } from "../mochi/Mochi";
 import { ClickSpark } from "../reactbits/ClickSpark";
 import { CountUp } from "../reactbits/CountUp";
 import { GlareHover } from "../reactbits/GlareHover";
-import { LogoLoop } from "../reactbits/LogoLoop";
 import { ShinyText } from "../reactbits/ShinyText";
 import { Spotlight } from "../reactbits/Spotlight";
 import "../landing.css";
 import { HeroChat, HeroTitle } from "./LandingHero";
-import { TeamStage, type StageAgent } from "./TeamStage";
 
 /**
- * Landing pública (quem abre "/" sem estar logado). Pouco texto e muita coisa acontecendo: a conversa do topo,
- * pedidos correndo numa faixa, cartões que se animam, o time em cena, um "sim" que dá para tocar, os apps
- * correndo na noite do Mochi e os planos. Tudo aqui é verdade do produto: só cita o que um cliente comum já usa.
+ * Landing pública (quem abre "/" sem estar logado). Curta e minimalista (pedido do David): a conversa do topo,
+ * três cartões do que ele faz, a fila do time, um "sim" que dá para tocar com os apps embaixo, planos, perguntas e
+ * o convite final. O movimento vem da rolagem: títulos palavra por palavra, blocos subindo, itens em cascata. Tudo aqui é verdade do produto: só cita o que um cliente comum já usa.
  * Efeitos do React Bits em ../reactbits (aviso de licença lá).
  */
 
@@ -134,7 +132,6 @@ const BUDDY: Record<string, { mood: Mood; say: string }> = {
   "como-funciona": { mood: "curious", say: "Olha só." },
   time: { mood: "happy", say: "Esse é o meu time!" },
   seguranca: { mood: "wink", say: "Toca no sim." },
-  integracoes: { mood: "wink", say: "Me dou bem com todo mundo." },
   planos: { mood: "finished", say: "Cabe no bolso." },
   perguntas: { mood: "thinking", say: "Ficou dúvida?" },
 };
@@ -222,63 +219,32 @@ function useTap() {
   return { go };
 }
 
-/** Pedidos de verdade, correndo numa faixa logo abaixo do topo. */
-const ASKS = [
-  "gastei 30 no uber",
-  "me lembra de ligar pra minha mãe às 19h",
-  "qual a farmácia aberta mais perto?",
-  "quanto gastei com mercado esse mês?",
-  "avisa se a air fryer baixar de 400",
-  "toda segunda às 7h, academia",
-  "resume meus e-mails de hoje",
-  "o que eu tenho amanhã?",
-];
-/** Segunda faixa, correndo ao contrário. */
-const ASKS_2 = [
-  "pergunta no petshop se tem banho às 18h",
-  "divide a conta do jantar em 4",
-  "manda um bom dia pro Gio às 7h",
-  "tem Duna hoje no Iguatemi?",
-  "anota: 1.200 de aluguel todo dia 5",
-  "me manda isso em áudio",
-  "faz um PDF com o resumo do livro",
-  "qual o melhor horário pra academia amanhã?",
-];
-
-/** O que cada um faz, em poucas palavras (a cena do TeamStage mostra o resto). O nome vem de CORE_FACES. */
-const TEAM: StageAgent[] = [
-  { id: "cto", role: "Conversa com você", asks: ["qual a farmácia mais perto?"] },
-  { id: "financeiro", role: "Cuida do dinheiro", asks: ["gastei 42 no almoço"] },
-  { id: "agenda", role: "Cuida do seu tempo", asks: ["toda segunda às 7h, academia"] },
-  { id: "pesquisador", role: "Procura por você", asks: ["avisa se o iPhone baixar de 4 mil"] },
-  { id: "recados", role: "Fala com quem precisa", asks: ["vê se o petshop tem banho às 18h"] },
-  { id: "comunicacao", role: "E-mail e Slack", asks: ["resume meus e-mails de hoje"] },
-  { id: "produtividade", role: "Automatiza o resto", asks: ["todo dia às 8h, a previsão"] },
+/** O time, um por um: o nome vem de CORE_FACES. */
+const TEAM: { id: keyof typeof CORE_FACES; role: string }[] = [
+  { id: "cto", role: "Conversa com você" },
+  { id: "financeiro", role: "Cuida do dinheiro" },
+  { id: "agenda", role: "Cuida do seu tempo" },
+  { id: "pesquisador", role: "Procura por você" },
+  { id: "recados", role: "Fala com quem precisa" },
+  { id: "comunicacao", role: "E-mail e Slack" },
+  { id: "produtividade", role: "Automatiza o resto" },
 ];
 
 /**
  * Apps que ele usa por você. Só o que existe de verdade: as contas pessoais que o cliente conecta em Minha conta
  * (PERSONAL_INTEGRATIONS no servidor) e o que já vem pronto para todo mundo. O n8n é do dono e não entra aqui.
  */
-interface App {
-  id: string;
-  name: string;
-  ask: string;
-  reply: string;
-  ready?: boolean;
-}
-
-const APPS: App[] = [
-  { id: "agenda", name: "Google Agenda", ask: "marca dentista quinta às 15h", reply: "Marquei no seu Google Agenda: Dentista, quinta, 15h." },
-  { id: "gmail", name: "Gmail", ask: "resume meus e-mails de hoje", reply: "Chegaram 7. Dois pedem resposta: o boleto do condomínio e a Carla." },
-  { id: "notion", name: "Notion", ask: "anota no Notion as ideias da reunião", reply: "Criei a página Ideias da reunião com os 4 pontos." },
-  { id: "slack", name: "Slack", ask: "avisa no #obra que a entrega ficou pra segunda", reply: "Vou mandar no #obra: “A entrega ficou para segunda.” Posso?" },
-  { id: "github", name: "GitHub", ask: "abre uma issue: o botão de pagar sumiu", reply: "Abri a issue #128: Botão de pagar some no celular." },
-  { id: "linear", name: "Linear", ask: "cria tarefa: revisar o contrato até sexta", reply: "Criei a ENG-42: Revisar o contrato até sexta." },
-  { id: "mpago", name: "Mercado Pago", ask: "gera um link de 150 reais da aula", reply: "Link de R$ 150,00 para Aula de violão. Posso gerar?" },
-  { id: "mlivre", name: "Mercado Livre", ask: "acha uma air fryer até 400 reais", reply: "Achei 3 com frete grátis. A mais barata: R$ 389,90.", ready: true },
-  { id: "maps", name: "Google Maps", ask: "qual ônibus eu pego pro centro?", reply: "Pega o 332 na esquina, uns 25 minutos. Te mandei o mapa.", ready: true },
-  { id: "telegram", name: "Telegram", ask: "oi, agora tô por aqui", reply: "Oi, Ana! Seus gastos e lembretes estão todos comigo.", ready: true },
+const APPS = [
+  { id: "agenda", name: "Google Agenda" },
+  { id: "gmail", name: "Gmail" },
+  { id: "notion", name: "Notion" },
+  { id: "slack", name: "Slack" },
+  { id: "github", name: "GitHub" },
+  { id: "linear", name: "Linear" },
+  { id: "mpago", name: "Mercado Pago" },
+  { id: "mlivre", name: "Mercado Livre" },
+  { id: "maps", name: "Google Maps" },
+  { id: "telegram", name: "Telegram" },
 ];
 
 /** Marcas simples, de traço, desenhadas aqui (nada de logotipo copiado): sugerem o app sem imitar a marca. */
@@ -356,85 +322,6 @@ const reply = (typing: boolean, text: string) =>
     <div className="lp-bubble bot">{text}</div>
   );
 
-/**
- * Apps: a faixa corre (LogoLoop) e cada app nela é um botão; embaixo, o pedido e a resposta do escolhido.
- * Troca sozinho enquanto aparece, até a pessoa tocar num app.
- */
-function Connects() {
-  const [sel, setSel] = useState(0);
-  const [typing, setTyping] = useState(false);
-  const [pinned, setPinned] = useState(false);
-  const [ref, inView] = useInView<HTMLDivElement>();
-  const first = useRef(true);
-  const app = APPS[sel]!;
-
-  useEffect(() => {
-    if (pinned || !inView || reduced()) return;
-    const t = setTimeout(() => setSel((i) => (i + 1) % APPS.length), 4200);
-    return () => clearTimeout(t);
-  }, [sel, pinned, inView]);
-
-  // a cada troca a resposta passa pelo "digitando", como na conversa do topo
-  useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      return;
-    }
-    if (reduced()) return;
-    setTyping(true);
-    const t = setTimeout(() => setTyping(false), 750);
-    return () => clearTimeout(t);
-  }, [sel]);
-
-  return (
-    <div ref={ref}>
-      <LogoLoop
-        className="lv-loop"
-        items={APPS}
-        itemKey={(a) => a.id}
-        speed={34}
-        gap={10}
-        ariaLabel="Apps que ele usa: toque num para ver"
-        renderItem={(a, copy) => (
-          <button
-            type="button"
-            className="lv-app"
-            aria-pressed={a.id === app.id}
-            tabIndex={copy > 0 ? -1 : 0}
-            onClick={() => {
-              setPinned(true);
-              setSel(APPS.indexOf(a));
-            }}
-          >
-            <span className="lv-glyph">
-              <Glyph id={a.id} />
-            </span>
-            <b>{a.name}</b>
-          </button>
-        )}
-      />
-      <div className="lp-wrap">
-        <div className="lv-talk" aria-live="polite" data-reveal>
-          <div className="lv-talk-top">
-            <span className="lp-phone-avatar">
-              <Mochi size={30} still mood="happy" />
-            </span>
-            <span>
-              <strong>Planejai</strong>
-              <small>{typing ? "digitando…" : `usando o ${app.name}`}</small>
-            </span>
-            <span className="lv-talk-tag">{app.ready ? "já vem pronto" : "sua conta"}</span>
-          </div>
-          <div className="lv-talk-chat" key={app.id}>
-            <div className="lp-bubble me">{app.ask}</div>
-            {reply(typing, app.reply)}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /** "Nada sai sem o seu sim": um pedido de confirmação de verdade, com Sim e Não que dá para tocar. */
 function Confirm() {
   const [answer, setAnswer] = useState<"sim" | "não" | null>(null);
@@ -475,11 +362,30 @@ function Confirm() {
   );
 }
 
+/**
+ * Título que entra palavra por palavra quando aparece na tela: cada palavra sobe de dentro de uma máscara,
+ * com 60ms entre uma e outra. Leitor de tela lê a frase inteira.
+ */
+function Words({ text, className }: { text: string; className?: string }) {
+  return (
+    <h2 className={`${className ?? ""} lp-words`} data-reveal aria-label={text}>
+      {text.split(" ").map((w, i) => (
+        <Fragment key={`${w}${i}`}>
+          {i > 0 && " "}
+          <span aria-hidden="true">
+            <span style={{ ["--w" as string]: i }}>{w}</span>
+          </span>
+        </Fragment>
+      ))}
+    </h2>
+  );
+}
+
 /** Um recurso: a cena animada em cima e o nome embaixo. A cena roda só enquanto aparece. */
-function Feature({ title, label, children, wide, d = 0 }: { title: string; label: string; children: ReactNode; wide?: boolean; d?: number }) {
+function Feature({ title, label, children, d = 0 }: { title: string; label: string; children: ReactNode; d?: number }) {
   const [ref, inView] = useInView<HTMLDivElement>("-10% 0px");
   return (
-    <div ref={ref} className={`lp-feat ${wide ? "wide" : ""}`} data-reveal style={{ ["--d" as string]: d }}>
+    <div ref={ref} className="lp-feat" data-reveal style={{ ["--d" as string]: d }}>
       <GlareHover className="lp-feat-in" glareColor="#ffffff" glareOpacity={0.55} glareSize={260} transitionDuration={800} playOnce>
         <div className={`lp-clip ${inView ? "play" : ""}`} role="img" aria-label={label}>
           {children}
@@ -625,7 +531,6 @@ export function LandingPage() {
           <nav className="lp-links" aria-label="Seções">
             <a href="#como-funciona">Como funciona</a>
             <a href="#time">O time</a>
-            <a href="#integracoes">Integrações</a>
             {pricing && <a href="#planos">Planos</a>}
             <a href="#perguntas">Perguntas</a>
           </nav>
@@ -669,33 +574,12 @@ export function LandingPage() {
           </Spotlight>
         </section>
 
-        <section className="lp-asks" aria-label="Exemplos de pedidos">
-          <LogoLoop
-            items={ASKS}
-            itemKey={(a) => a}
-            speed={30}
-            gap={10}
-            ariaLabel="Exemplos de pedidos"
-            renderItem={(a) => <span className="lp-ask">{a}</span>}
-          />
-          <LogoLoop
-            items={ASKS_2}
-            itemKey={(a) => a}
-            speed={-24}
-            gap={10}
-            ariaLabel="Mais exemplos de pedidos"
-            renderItem={(a) => <span className="lp-ask alt">{a}</span>}
-          />
-        </section>
-
         <section id="como-funciona" className="lp-section">
           <div className="lp-wrap">
-            <h2 className="lp-h2" data-reveal>
-              Fala do seu jeito. Ele organiza.
-            </h2>
+            <Words className="lp-h2" text="Fala do seu jeito. Ele organiza." />
 
             <div className="lp-feats">
-              <Feature title="Gastos que se anotam sozinhos" label="Lançamentos aparecendo um a um, separados por categoria" wide>
+              <Feature title="Gastos que se anotam sozinhos" label="Lançamentos aparecendo um a um, separados por categoria">
                 <div className="lp-card lp-tx">
                   {[
                     ["Mercado", "Alimentação", "R$ 42,90"],
@@ -711,15 +595,6 @@ export function LandingPage() {
                       <b>{v}</b>
                     </div>
                   ))}
-                  <div className="lp-limit">
-                    <span>Mercado no mês</span>
-                    <b>
-                      <CountUp from={0} to={612.4} duration={1.6} delay={0.6} format={brl} /> de R$ 800,00
-                    </b>
-                    <i>
-                      <em />
-                    </i>
-                  </div>
                 </div>
               </Feature>
 
@@ -740,17 +615,7 @@ export function LandingPage() {
                 </div>
               </Feature>
 
-              <Feature title="Ele lembra de você" label="Memórias do assistente aparecendo" d={0}>
-                <div className="lp-chips">
-                  {["Mora em Campinas", "Recebe dia 5", "Cachorro: Thor", "Quer viajar", "Academia às 7h"].map((c, i) => (
-                    <span key={c} style={{ ["--i" as string]: i }}>
-                      {c}
-                    </span>
-                  ))}
-                </div>
-              </Feature>
-
-              <Feature title="De olho no preço" label="Aviso de queda de preço de um produto" wide d={1}>
+              <Feature title="De olho no preço" label="Aviso de queda de preço de um produto" d={2}>
                 <div className="lp-card lp-watch">
                   <div className="lp-watch-item">
                     <span className="lp-watch-img" />
@@ -769,70 +634,47 @@ export function LandingPage() {
                 </div>
               </Feature>
             </div>
-
-            <ul className="lp-stats" data-reveal>
-              <li>
-                <b>
-                  <CountUp to={7} duration={1} />
-                </b>
-                <span>Mochis no time</span>
-              </li>
-              <li>
-                <b>
-                  <CountUp from={9} to={0} duration={1.2} />
-                </b>
-                <span>apps para instalar</span>
-              </li>
-              <li>
-                <b>
-                  <CountUp to={24} duration={1.2} />h
-                </b>
-                <span>por dia, todo dia</span>
-              </li>
-            </ul>
           </div>
         </section>
 
-        <section id="time" className="lp-section lp-team">
+        <section id="time" className="lp-section">
           <div className="lp-wrap">
-            <h2 className="lp-h2" data-reveal>
-              Um time de Mochis por trás.
-            </h2>
-            <p className="lp-sub" data-reveal style={{ ["--d" as string]: 1 }}>
-              O {cto} chama quem precisa. Toque num deles.
+            <Words className="lp-h2" text="Um time de Mochis por trás." />
+            <p className="lp-sub" data-reveal style={{ ["--d" as string]: 2 }}>
+              Você fala com o {cto}. Ele chama quem precisa.
             </p>
-            <div data-reveal>
-              <TeamStage team={TEAM} />
-            </div>
+            <ul className="lp-crew" data-reveal>
+              {TEAM.map((m, i) => (
+                <li key={m.id} style={{ ["--i" as string]: i }}>
+                  <AgentFace face={CORE_FACES[m.id]?.face} size={64} agent={m.id} title={CORE_FACES[m.id]?.persona} />
+                  <b>{CORE_FACES[m.id]?.persona ?? m.id}</b>
+                  <small>{m.role}</small>
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
 
         <section id="seguranca" className="lp-section">
           <div className="lp-wrap lp-safe">
             <div>
-              <h2 className="lp-h2" data-reveal>
-                Nada sai sem o seu sim.
-              </h2>
-              <ul className="lp-safe-list" data-reveal style={{ ["--d" as string]: 1 }}>
+              <Words className="lp-h2" text="Nada sai sem o seu sim." />
+              <ul className="lp-safe-list" data-reveal style={{ ["--d" as string]: 2 }}>
                 <li>Seus dados são só seus</li>
                 <li>Apague tudo quando quiser</li>
-                <li>Conexões com criptografia</li>
+                <li>Conecta com o que você já usa</li>
+              </ul>
+              <ul className="lp-apps" data-reveal style={{ ["--d" as string]: 3 }} aria-label="Apps que ele usa">
+                {APPS.map((a, i) => (
+                  <li key={a.id} style={{ ["--i" as string]: i }}>
+                    <Glyph id={a.id} />
+                    {a.name}
+                  </li>
+                ))}
               </ul>
             </div>
             <Confirm />
           </div>
-        </section>
-
-        <section id="integracoes" className="lv-night">
-          <div className="lp-wrap">
-            <h2 className="lp-h2" data-reveal>
-              Conecta com o que você já usa.
-            </h2>
-            <p className="lp-sub" data-reveal style={{ ["--d" as string]: 1 }}>
-              Toque num app.
-            </p>
-          </div>
-          <Connects />
         </section>
 
         {pricing && <Plans pricing={pricing} closed={closed} go={go} cta={(p) => (invite ? cta : `Começar no ${p.name}`)} />}
