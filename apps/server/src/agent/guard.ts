@@ -25,6 +25,8 @@ export class Guard {
   private counter: { n: number };
   private controller = new AbortController();
   private timer: NodeJS.Timeout;
+  /** duração desta trava (a execução inteira ou o prazo de um especialista) */
+  private windowMs: number;
 
   constructor(opts: { maxExecutionMinutes: number; maxToolCalls: number; deadline?: number; counter?: { n: number }; reason?: string }) {
     this.minutes = opts.maxExecutionMinutes;
@@ -32,6 +34,7 @@ export class Guard {
     this.counter = opts.counter ?? { n: 0 };
     const ms = Math.max(1000, opts.deadline != null ? opts.deadline - Date.now() : opts.maxExecutionMinutes * 60_000);
     this.deadline = Date.now() + ms;
+    this.windowMs = ms;
     this.timer = setTimeout(() => this.controller.abort(new GuardTimeout(this.minutes, opts.reason)), ms);
     this.timer.unref();
   }
@@ -49,11 +52,11 @@ export class Guard {
 
   /**
    * Prazo de um especialista: termina `reserveMs` antes do prazo da execução, para quem chamou ainda ter tempo
-   * de ler o relatório e responder. Cai junto se a execução inteira cair.
+   * de ler o relatório e responder, e nunca dura mais que `maxMs`. Cai junto se a execução inteira cair.
    */
-  sub(reserveMs: number) {
+  sub(reserveMs: number, maxMs = Infinity) {
     const left = this.remainingMs;
-    const deadline = Date.now() + Math.max(Math.min(left, 15_000), left - reserveMs);
+    const deadline = Date.now() + Math.min(maxMs, Math.max(Math.min(left, 15_000), left - reserveMs));
     const child = new Guard({
       maxExecutionMinutes: this.minutes,
       maxToolCalls: this.maxToolCalls,
@@ -78,8 +81,8 @@ export class Guard {
   }
   /** hora de parar de chamar ferramentas e responder */
   get wrapUp() {
-    const total = this.minutes * 60_000;
-    return this.remainingMs < Math.min(WRAP_UP_MS, total * 0.25) || this.toolCalls >= this.maxToolCalls;
+    // relativo à própria janela: um especialista com 80 s fecha nos últimos ~25 s, não nos últimos 45
+    return this.remainingMs < Math.min(WRAP_UP_MS, this.windowMs * 0.3) || this.toolCalls >= this.maxToolCalls;
   }
 
   /** Roda algo que termina sozinho no prazo (a promessa original segue, mas ninguém espera por ela). */

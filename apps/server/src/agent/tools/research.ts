@@ -42,7 +42,7 @@ async function browserless(path: string, body: unknown): Promise<Response | null
 
 export const webSearch = defineTool<{ query: string; max_results?: number }>({
   name: "web_search",
-  description: "Pesquisa na web informações atuais (sessões de cinema, preços, notícias, horários, endereços, lojas).",
+  description: "Pesquisa na web informações atuais (sessões de cinema, preços, notícias, horários, endereços, lojas). Traz resposta pronta e links.",
   parameters: obj(
     {
       query: { type: "string", description: "Consulta em linguagem natural, com cidade/data quando fizer sentido" },
@@ -59,7 +59,7 @@ export const webSearch = defineTool<{ query: string; max_results?: number }>({
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${tavily.api_key}` },
         // a resposta pronta da Tavily (answer) costuma bastar; sem imagens (nenhuma ferramenta usa as URLs delas)
-        body: JSON.stringify({ query: args.query, max_results: max, include_answer: true }),
+        body: JSON.stringify({ query: args.query, max_results: max, include_answer: true, country: "brazil" }),
         signal: AbortSignal.timeout(20_000),
       });
       const j: any = await res.json().catch(() => ({}));
@@ -95,35 +95,87 @@ export const webSearch = defineTool<{ query: string; max_results?: number }>({
   },
 });
 
-const BLOCKED_PAGE = /Hubo un error accediendo|Access Denied|Just a moment|Attention Required|verify you are (a )?human|captcha/i;
+const BLOCKED_PAGE = /Hubo un error accediendo|Access Denied|Just a moment|Attention Required|verify you are (a )?human|captcha|Request blocked|you have been blocked|403 Forbidden|403 ERROR|automated queries/i;
+/** Menos que isso de texto depois de limpo: página montada por JavaScript (o HTML cru vem quase vazio). */
+const THIN_PAGE = 500;
+/** Navegador de verdade de cabeçalho: alguns sites recusam robô declarado. */
+const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36";
+
+/** Menu, cabeçalho, rodapé e formulários: só ruído (e token) para quem quer o conteúdo da página. */
+export function mainText(html: string) {
+  const body = html.replace(/<(nav|header|footer|aside|form)\b[\s\S]*?<\/\1>/gi, " ");
+  const text = htmlToText(body);
+  // página que é só casca (tudo dentro de <header>/<nav>): fica com o texto inteiro
+  return text.length < THIN_PAGE ? htmlToText(html) : text;
+}
+
+const usable = (text: string | null) => Boolean(text && text.length >= THIN_PAGE && !(text.length < 2_000 && BLOCKED_PAGE.test(text)));
+
+/** HTTP direto, sem navegador: resolve a maioria das páginas em 1 ou 2 segundos. */
+async function plainPage(url: string): Promise<string | null> {
+  try {
+    const res = await safeFetch(url, {
+      headers: { "User-Agent": BROWSER_UA, "Accept-Language": "pt-BR,pt;q=0.9", Accept: "text/html,application/xhtml+xml,*/*;q=0.8" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    const type = res.headers.get("content-type") ?? "";
+    if (type && !/html|text|xml|json/i.test(type)) return null;
+    return mainText(await res.text());
+  } catch {
+    return null;
+  }
+}
+
+/** Tavily Extract: lê páginas de JavaScript e de sites que barram servidor, sem abrir Chrome aqui. */
+async function tavilyExtract(url: string): Promise<string | null> {
+  const tavily = await getCredentials("tavily");
+  if (!tavily?.api_key) return null;
+  try {
+    const res = await fetch("https://api.tavily.com/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${tavily.api_key}` },
+      body: JSON.stringify({ urls: [url], extract_depth: "basic", format: "text" }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return null;
+    const j: any = await res.json().catch(() => ({}));
+    const raw = j.results?.[0]?.raw_content;
+    return typeof raw === "string" ? raw.replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim() : null;
+  } catch {
+    return null;
+  }
+}
 
 export const fetchUrl = defineTool<{ url: string; max_chars?: number }>({
   name: "fetch_url",
-  description: "Abre uma página e retorna o texto dela (com links). Usa navegador headless quando disponível, para sites com JavaScript.",
-  parameters: obj({ url: { type: "string" }, max_chars: { type: "number" } }, ["url"]),
+  description: "Lê o texto de uma página (com links), sem abrir navegador. Use só quando a busca não trouxe o dado.",
+  parameters: obj({ url: { type: "string" }, max_chars: { type: "number", description: "padrão 4000" } }, ["url"]),
   async run(args) {
-    const max = Math.min(args.max_chars ?? 8_000, 30_000);
+    // pouco texto por página: tudo que volta daqui é reenviado ao modelo a cada passo (e deixa o passo lento)
+    const max = Math.min(args.max_chars ?? 4_000, 12_000);
     const url = await checkedUrl(args.url);
-    let html: string | null = null;
-    try {
-      const res = await browserless("/chromium/content", { url, gotoOptions: { waitUntil: "networkidle2", timeout: 30_000 } });
-      if (res) html = await res.text();
-    } catch {
-      html = null;
+    // 1) HTTP direto; 2) Tavily Extract (JavaScript e sites que barram servidor); 3) Chrome só se não houver Tavily
+    let text = await plainPage(url);
+    let via = "http";
+    if (!usable(text)) {
+      const extracted = await tavilyExtract(url);
+      if (usable(extracted)) (text = extracted), (via = "tavily");
+      else if (!(await getCredentials("tavily"))?.api_key) {
+        try {
+          const res = await browserless("/chromium/content", { url, gotoOptions: { waitUntil: "domcontentloaded", timeout: 20_000 } });
+          if (res) (text = mainText(await res.text())), (via = "navegador");
+        } catch {
+          /* fica com o que o HTTP trouxe */
+        }
+      }
     }
-    if (html == null) {
-      const res = await safeFetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; PlanejaiBot/1.0)", "Accept-Language": "pt-BR,pt;q=0.9" },
-        signal: AbortSignal.timeout(20_000),
-      });
-      html = await res.text();
+    text ??= "";
+    // página de bloqueio (Mercado Livre em espanhol, Akamai, Cloudflare, CloudFront): ler de novo não adianta
+    if (text.length < 2_000 && BLOCKED_PAGE.test(text)) {
+      return { url, blocked: true, error: "O site bloqueou a leitura. Não insista nele: use o que a busca trouxe (trechos e links) e mande o link para a pessoa abrir." };
     }
-    const text = htmlToText(html);
-    // página de bloqueio (Mercado Livre em espanhol, Akamai, Cloudflare): ler de novo não adianta
-    if (text.length < 600 && BLOCKED_PAGE.test(text)) {
-      return { url, blocked: true, error: "O site bloqueou a leitura direta. Abra com browser_open (entra como uma pessoa, já logado se ela conectou a loja)." };
-    }
-    return { url, text: text.slice(0, max), truncated: text.length > max };
+    if (!text.trim()) return { url, error: "A página veio vazia. Use o que a busca trouxe e mande o link para a pessoa abrir." };
+    return { url, text: text.slice(0, max), truncated: text.length > max, via };
   },
 });
 

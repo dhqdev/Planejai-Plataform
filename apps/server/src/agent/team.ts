@@ -75,8 +75,8 @@ export const SPECIALISTS: AgentDef[] = [
       "(pediu o mais perto, devolva 1, com endereço, distância e telefone). map_route só se pedirem rota, e para um lugar só. " +
       "Cada busca custa: no máximo 2 web_search por tarefa, sem repetir a mesma busca com outras palavras, e responda assim que tiver o dado. " +
       "Prefira sites oficiais (ingresso.com, sites dos cinemas, lojas oficiais) e traga dados concretos (horários, preços, links). " +
-      "Computador (browser_open/browser_action) é lento e pesa na máquina: último recurso, só quando busca e páginas não resolvem e o site exige interação (filtros, busca interna, formulário, vários cliques), nunca para mapa, " +
-      "ou quando o CTO pedir para gravar/mostrar a navegação: nesse caso abra com record=true e send_recording=true e termine com browser_close. " +
+      "No máximo 3 páginas por tarefa; site que bloqueou ou veio vazio não se tenta de novo: entregue os links que a busca trouxe para a pessoa abrir. Link de anúncio vale mais que texto. " +
+      "Navegador (browser_open/browser_action) só aparece quando pediram para ver, printar ou gravar: aí abra com record=true e send_recording=true se for gravação e termine com browser_close. " +
       "Foto ou imagem de alguma coisa (produto, lugar, desenho): make_picture, nunca navegador nem print. Print (screenshot_url/browser_screenshot) só quando pedirem o print de uma página; por padrão responda em texto. Diga o que não conseguiu confirmar.",
     tools: [
       research.webSearch,
@@ -276,6 +276,7 @@ export const CTO_TOOLS: Tool[] = [
   audio.makeAudio,
   places.placesNearby,
   research.mapRoute,
+  research.webSearch,
   documents.documentSave,
   documents.documentList,
   documents.documentSend,

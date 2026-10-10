@@ -50,7 +50,7 @@ export function isPrivateIp(ip: string): boolean {
 
 export class BlockedUrlError extends Error {}
 
-const hostCache = new Map<string, { at: number; ok: boolean }>();
+const hostCache = new Map<string, { at: number; ok: boolean; missing?: boolean }>();
 
 /** O host resolve só para IPs públicos? (cache de 1 min, para o navegador não fazer DNS a cada arquivo) */
 export async function isPublicHost(hostname: string): Promise<boolean> {
@@ -61,13 +61,15 @@ export async function isPublicHost(hostname: string): Promise<boolean> {
   const hit = hostCache.get(host);
   if (hit && Date.now() - hit.at < 60_000) return hit.ok;
   let ok = false;
+  let missing = false;
   try {
     const addrs = await lookup(host, { all: true, verbatim: true });
     ok = addrs.length > 0 && addrs.every((a) => !isPrivateIp(a.address));
   } catch {
     ok = false;
+    missing = true;
   }
-  hostCache.set(host, { at: Date.now(), ok });
+  hostCache.set(host, { at: Date.now(), ok, missing });
   if (hostCache.size > 2000) hostCache.clear();
   return ok;
 }
@@ -82,7 +84,11 @@ export async function assertPublicUrl(raw: string): Promise<URL> {
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new BlockedUrlError("Só endereços http(s) são permitidos");
   if (url.username || url.password) throw new BlockedUrlError("URL com usuário/senha não é permitida");
-  if (!(await isPublicHost(url.hostname))) throw new BlockedUrlError(`Endereço interno ou privado bloqueado: ${url.hostname}`);
+  if (!(await isPublicHost(url.hostname))) {
+    // DNS sem resposta não é endereço interno: o site não existe (ou saiu do ar), e o agente precisa saber a diferença
+    if (hostCache.get(url.hostname.toLowerCase())?.missing) throw new BlockedUrlError(`Site não encontrado: ${url.hostname} (o endereço não existe ou está fora do ar)`);
+    throw new BlockedUrlError(`Endereço interno ou privado bloqueado: ${url.hostname}`);
+  }
   return url;
 }
 

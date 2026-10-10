@@ -10,7 +10,7 @@ vi.mock("../src/integrations/registry.js", () => ({
 const { distanceKm, nearbyPlaces } = await import("../src/agent/tools/places.js");
 const { isMapsUrl, browserOpen, mapRoute, MAX_MAP_PRINTS } = await import("../src/agent/tools/research.js");
 const { Guard } = await import("../src/agent/guard.js");
-const { partialReport } = await import("../src/agent/collab.js");
+const { partialReport, needsChrome, ASK_BUDGET_MS } = await import("../src/agent/collab.js");
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -117,6 +117,25 @@ describe("prazo do especialista", () => {
     expect(g.toolCalls).toBe(1);
     g.dispose();
     sub.dispose();
+  });
+
+  it("cada pedido tem teto próprio (pesquisa não leva 4 minutos)", () => {
+    const g = new Guard({ maxExecutionMinutes: 8, maxToolCalls: 10 });
+    const sub = g.sub(90_000, ASK_BUDGET_MS.pesquisador);
+    expect(sub.deadline - Date.now()).toBeLessThanOrEqual(ASK_BUDGET_MS.pesquisador! + 5);
+    // fecha a resposta perto do fim da janela dele, não 45 s antes
+    expect(sub.wrapUp).toBe(false);
+    g.dispose();
+    sub.dispose();
+  });
+
+  it("navegador só quando pediram para ver, printar ou gravar (compras sempre)", () => {
+    const pesq = { id: "pesquisador" };
+    expect(needsChrome(pesq, "me manda uns links do Fastback barato")).toBe(false);
+    expect(needsChrome(pesq, "quais filmes passam amanhã às 20h?")).toBe(false);
+    expect(needsChrome(pesq, "tira um print da programação")).toBe(true);
+    expect(needsChrome(pesq, undefined, "grava a tela entrando no site")).toBe(true);
+    expect(needsChrome({ id: "compras" }, "compra o tênis")).toBe(true);
   });
 
   it("cai junto quando a execução cai", async () => {
