@@ -15,6 +15,7 @@ import { clientAgents, CTO_TOOLS, SPECIALISTS, type AgentDef } from "./team.js";
 import { TEAM_TOOLS } from "./tools/team.js";
 import { finishBrowser } from "./tools/research.js";
 import { Guard, GuardTimeout, redactSecrets } from "./guard.js";
+import { watchStop } from "./stop.js";
 import { autoLaunchReceipts } from "./receipts.js";
 import { errandsContext, openErrands } from "../errands.js";
 import { isOwner } from "../ingest.js";
@@ -39,6 +40,13 @@ const SUMMARY_TRIGGER = 40;
 const REDIS_SUMMARY_TRIGGER = 36;
 /** Numa enxurrada de mensagens, só as últimas entram numa resposta */
 const MAX_BATCH = 20;
+/**
+ * Respostas ao mesmo tempo na mesma conversa: pergunta nova que chega enquanto a anterior ainda trabalha
+ * (uma pesquisa longa) é respondida em paralelo, em outra rodada, em vez de esperar na fila.
+ */
+export const PARALLEL_RUNS = 3;
+/** Resposta quando alguém pediu para parar (painel ou "para" no WhatsApp): serve para a pessoa e para o dono. */
+export const STOPPED_TEXT = "Parei por aqui 👍 Se ainda precisar disso, é só me pedir de novo.";
 
 /** Formata texto de LLM para WhatsApp (markdown -> estilo WhatsApp) */
 export function toWhatsApp(text: string) {
@@ -99,22 +107,24 @@ export async function processConversation(
   conversationId: string,
   opts: ProcessOpts = { trigger: "message" },
 ): Promise<ProcessResult> {
-  // Um processamento por conversa por vez
+  // Até PARALLEL_RUNS rodadas por conversa ao mesmo tempo: cada uma segura uma "vaga" (trava de 2 chaves)
+  // e reserva as mensagens que vai responder; a mesma mensagem nunca entra em duas rodadas.
   const lock = await pool.connect();
   const restore = await waitLonger(lock).catch(() => null);
-  let locked = false;
+  let lane = -1;
   try {
-    if (opts.wait === false) {
-      // a fila não espera: com a conversa ocupada, devolve "busy" e o job volta para a fila em vez de prender uma vaga do worker
-      locked = (await lock.query("SELECT pg_try_advisory_lock(hashtext($1)) AS ok", [conversationId])).rows[0].ok;
-      if (!locked) return { busy: true, executionId: null, bubbles: [], outbox: new Outbox() };
-    } else {
-      await lock.query("SELECT pg_advisory_lock(hashtext($1))", [conversationId]);
-      locked = true;
+    for (let i = 0; i < PARALLEL_RUNS && lane < 0; i++) {
+      if ((await lock.query("SELECT pg_try_advisory_lock(hashtext($1), $2) AS ok", [conversationId, i])).rows[0].ok) lane = i;
+    }
+    if (lane < 0) {
+      // todas as vagas ocupadas: a fila não espera (devolve busy e o job volta em 5 s); quem pode esperar espera a primeira vaga
+      if (opts.wait === false) return { busy: true, executionId: null, bubbles: [], outbox: new Outbox() };
+      await lock.query("SELECT pg_advisory_lock(hashtext($1), 0)", [conversationId]);
+      lane = 0;
     }
     return await processLocked(conversationId, opts);
   } finally {
-    if (locked) await lock.query("SELECT pg_advisory_unlock(hashtext($1))", [conversationId]).catch(() => {});
+    if (lane >= 0) await lock.query("SELECT pg_advisory_unlock(hashtext($1), $2)", [conversationId, lane]).catch(() => {});
     await restore?.();
     lock.release();
   }
@@ -153,14 +163,29 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
   // lembrete e recado: a pessoa não perguntou nada agora (sem reação, sem "já vou ver")
   const proactive = opts.trigger === "reminder" || opts.trigger === "errand";
   // proativo só pega os eventos: mensagem da pessoa que chegou junto fica para o job dela (reação, limites e o "sim")
-  let pending = await many(
-    `SELECT * FROM messages WHERE conversation_id = $1 AND processed = false ${proactive ? "AND role = 'event'" : ""} ORDER BY id`,
-    [conversationId],
-  );
+  const settings = await getSettings();
+  // reserva as mensagens desta rodada (outra rodada em paralelo pega só as que chegarem depois)
+  let pending = (
+    await many(
+      `UPDATE messages SET claimed_at = now() WHERE id IN (
+         SELECT id FROM messages WHERE conversation_id = $1 AND processed = false ${proactive ? "AND role = 'event'" : ""}
+            AND (claimed_at IS NULL OR claimed_at < now() - make_interval(mins => $2))
+          ORDER BY id FOR UPDATE SKIP LOCKED)
+       RETURNING *`,
+      [conversationId, Math.ceil(settings.maxExecutionMinutes) + 5],
+    )
+  ).sort((a, b) => Number(a.id) - Number(b.id));
   if (!pending.length) return { executionId: null, bubbles: [], outbox: new Outbox() };
+  // pedidos que outra rodada desta conversa ainda está respondendo (o CTO não refaz e não ignora)
+  const inFlight = (
+    await many(
+      `SELECT content, meta FROM messages WHERE conversation_id = $1 AND processed = false AND claimed_at IS NOT NULL
+          AND NOT (id = ANY($2)) AND role = 'user' ORDER BY id LIMIT 5`,
+      [conversationId, pending.map((m) => m.id)],
+    )
+  ).map((m) => describeMessage(m).slice(0, 300));
 
   const channel = opts.channel ?? getChannel(conversation.channel);
-  const settings = await getSettings();
 
   // Enxurrada: as mais antigas ficam registradas, mas só as últimas MAX_BATCH vão para o agente
   if (pending.length > MAX_BATCH) {
@@ -246,6 +271,8 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
   });
   const outbox = new Outbox();
   const guard = Guard.fromSettings(settings);
+  // botão Parar (Execuções) ou "para" no WhatsApp: o pedido chega pelo banco, de qualquer processo
+  const unwatch = watchStop(tracer.executionId, guard);
   const progress = new Progress({ channel, jid: conversation.remote_jid, tracer });
   // mensagens desta rodada já interpretadas (vão para a memória curta no fim, ou no erro definitivo)
   let fresh: ShortEntry[] = [];
@@ -326,6 +353,14 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
         messages.push({ role: "user", content: `${prefix}${m.text}` });
       }
       afterEvent = m.role === "event";
+    }
+    if (inFlight.length) {
+      messages.push({
+        role: "system",
+        content:
+          `Em paralelo você já está respondendo, em outra mensagem, a: ${inFlight.map((t) => `"${t}"`).join("; ")}. ` +
+          "Não refaça isso aqui: responda só ao que chegou agora (msg_id acima). Se for sobre aquilo, diga que já está vendo.",
+      });
     }
     // Só entra no time quem tem pelo menos uma ferramenta utilizável (menos token e nada de delegação inútil)
     const team: AgentDef[] = [];
@@ -437,7 +472,12 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
         ctx.room.partial = "O modelo não escreveu resposta";
       }
     }
-    if (result.timedOut || (guard.expired && !result.text)) {
+    if (guard.stopped) {
+      const step = await tracer.step({ agent: "cto", type: "info", name: "parada a pedido", input: { acoes: guard.toolCalls } });
+      await step.ok({ stopped: true });
+      ctx.room.partial = "Parada a pedido";
+      result.text = STOPPED_TEXT;
+    } else if (result.timedOut || (guard.expired && !result.text)) {
       const step = await tracer.step({ agent: "cto", type: "info", name: "trava: tempo máximo", input: { minutos: guard.minutes, acoes: guard.toolCalls } });
       await step.ok({ stopped: true });
       ctx.room.partial = `Parou no tempo máximo (${fmtMinutes(guard.minutes)}), com ${guard.toolCalls} ações`;
@@ -478,6 +518,15 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     await tracer.finish(silent ? "[[silencio]]" : result.text, ctx.room.partial);
     return { executionId: tracer.executionId, bubbles, outbox };
   } catch (err) {
+    if (guard.stopped) {
+      // parada no meio de algo que não sabia parar (mídia, entrega): fecha como parcial, sem "problema técnico"
+      progress.stop();
+      await pushShort(conversationId, fresh).catch(() => {});
+      await channel.sendText(conversation.remote_jid, STOPPED_TEXT).catch(() => {});
+      await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
+      await tracer.finish(STOPPED_TEXT, "Parada a pedido");
+      return { executionId: tracer.executionId, bubbles: [], outbox };
+    }
     await tracer.error(err);
     if (err instanceof GuardTimeout || guard.expired) {
       await pushShort(conversationId, fresh).catch(() => {});
@@ -490,7 +539,11 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     // Erro passageiro com nova tentativa na fila: as mensagens ficam pendentes e a próxima rodada responde tudo
     // ...mas só se nada com efeito já rodou: refazer a rodada repetiria lembrete criado, mensagem enviada, conta paga
     const acted = room ? sideEffectsDone(room.done) : [];
-    if (opts.retryable && isTransientError(err) && !acted.length) throw err;
+    if (opts.retryable && isTransientError(err) && !acted.length) {
+      // devolve a reserva: a nova tentativa da fila pega as mesmas mensagens
+      await query("UPDATE messages SET claimed_at = NULL WHERE id = ANY($1)", [pending.map((m) => m.id)]).catch(() => {});
+      throw err;
+    }
     await pushShort(conversationId, fresh).catch(() => {});
     // Não deixa a pessoa no vácuo
     const sorry = acted.length
@@ -500,6 +553,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
     throw err;
   } finally {
+    unwatch();
     progress.stop();
     guard.dispose();
   }

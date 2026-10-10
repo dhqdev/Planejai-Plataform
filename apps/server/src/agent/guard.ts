@@ -12,6 +12,13 @@ export class GuardTimeout extends Error {
   }
 }
 
+/** Alguém pediu para parar (botão Parar em Execuções ou "para" no WhatsApp). */
+export class GuardStopped extends Error {
+  constructor() {
+    super("Parada a pedido");
+  }
+}
+
 /**
  * Travas de uma execução, compartilhadas pelo CTO e por todo o time: prazo máximo e número de ações.
  * Perto do fim do prazo o time é avisado para responder com o que já tem; no prazo, tudo que
@@ -72,6 +79,14 @@ export class Guard {
 
   get signal() {
     return this.controller.signal;
+  }
+  /** parou porque pediram, não por tempo */
+  get stopped() {
+    return this.signal.reason instanceof GuardStopped;
+  }
+  /** Cancela tudo agora (LLM, ferramentas, especialistas: os prazos filhos caem junto). */
+  stop() {
+    if (!this.expired) this.controller.abort(new GuardStopped());
   }
   get expired() {
     return this.signal.aborted;

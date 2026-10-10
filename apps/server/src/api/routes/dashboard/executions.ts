@@ -130,6 +130,14 @@ export function executionRoutes(api: FastifyInstance) {
     return { hours, ...kpis, tokens: Number(kpis?.tokens ?? 0), people, agents };
   });
 
+  // Botão Parar: o worker que roda a execução vê o pedido em até 2 s, cancela o que estiver em andamento e avisa a pessoa
+  api.post<{ Params: { id: string } }>("/api/executions/:id/stop", async (req, reply) => {
+    if (!isUuid(req.params.id)) return reply.code(404).send({ error: "não encontrada" });
+    const { requestStop } = await import("../../../agent/stop.js");
+    if (!(await requestStop(req.params.id))) return reply.code(409).send({ error: "Essa execução já terminou." });
+    return { ok: true };
+  });
+
   api.get<{ Params: { id: string } }>("/api/executions/:id", async (req, reply) => {
     if (!isUuid(req.params.id)) return reply.code(404).send({ error: "não encontrada" });
     const exec = await one(

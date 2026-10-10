@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ErrorBox, Status } from "../../components";
+import { api } from "../../api";
 import { useApi } from "../../hooks";
 import { Icon } from "../../icons";
 import { haptic } from "../../touch";
@@ -75,6 +76,33 @@ function CopyAll({ data, steps }: { data: any; steps: Step[] }) {
   );
 }
 
+/** Para uma execução que está rodando: o worker vê em até 2 s, cancela o que está em andamento e avisa a pessoa. */
+function StopButton({ id, onDone }: { id: string; onDone: () => void }) {
+  const [state, setState] = useState<"idle" | "busy" | "fail">("idle");
+  return (
+    <button
+      type="button"
+      className="btn btn-danger exd-copy"
+      title="Para o time agora; a pessoa recebe um aviso curto"
+      disabled={state === "busy"}
+      onClick={async () => {
+        haptic(10);
+        setState("busy");
+        try {
+          await api(`/api/executions/${id}/stop`, { method: "POST" });
+          onDone();
+        } catch {
+          setState("fail");
+          setTimeout(() => setState("idle"), 1600);
+        }
+      }}
+    >
+      <Icon name="stop" size={14} />
+      <span className="label">{state === "busy" ? "Parando…" : state === "fail" ? "Não parou" : "Parar"}</span>
+    </button>
+  );
+}
+
 type View = "story" | "canvas";
 
 /** História ou Canvas: a escolha fica guardada no aparelho. */
@@ -100,7 +128,7 @@ function useViewChoice() {
 
 export function ExecutionDetailPage() {
   const { id } = useParams();
-  const { data, error } = useApi<any>(`/api/executions/${id}`, { poll: 3000 });
+  const { data, error, reload } = useApi<any>(`/api/executions/${id}`, { poll: 3000 });
   const [view, pick] = useViewChoice();
   const [selected, setSelected] = useState<number | null>(null);
   const nav = useNavigate();
@@ -125,6 +153,7 @@ export function ExecutionDetailPage() {
           <h1 className={data.content_purged ? "purged" : ""}>{executionTitle(data, 12)}</h1>
         </div>
         <Status status={data.status} />
+        {data.status === "running" && <StopButton id={data.id} onDone={reload} />}
         <CopyAll data={data} steps={steps} />
         <div className="ex-pills exd-toggle" role="tablist" aria-label="Visualização">
           <button role="tab" aria-selected={view === "story"} className={view === "story" ? "active" : ""} onClick={() => pick("story")}><Icon name="list" size={14} /> História</button>

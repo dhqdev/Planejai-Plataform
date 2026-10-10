@@ -69,6 +69,7 @@ const P: Record<string, string> = {
   hash: "M5 9h14M5 15h14M10 4 8 20M16 4l-2 16",
   circle: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18",
   play: "M7 5v14l11-7z",
+  stop: "M7 7h10v10H7z",
   pause: "M8 5v14M16 5v14",
   arrow: "M5 12h14M13 6l6 6-6 6",
 };

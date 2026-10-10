@@ -76,6 +76,15 @@ export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; re
     if (await handleEraseRequest({ user, text: msg.text, channel: getChannel(msg.channel), remoteJid: msg.remoteJid })) return { queued: false, reason: "exclusão de dados" };
   }
 
+  // "para" / "cancela" enquanto o assistente ainda trabalha: para a execução na hora (não espera a fila)
+  if (msg.kind === "text") {
+    const { isStopCommand, stopConversationRuns } = await import("./agent/stop.js");
+    if (isStopCommand(msg.text) && (await stopConversationRuns(conv.id)) > 0) {
+      if (msg.externalId) getChannel(msg.channel).react(msg.remoteJid, msg.externalId, "👍").catch(() => {});
+      return { queued: false, reason: "parar execução" };
+    }
+  }
+
   const inserted = await one(
     `INSERT INTO messages (conversation_id, role, content, external_id, media, meta, created_at)
      VALUES ($1, 'user', $2, $3, $4, $5, $6)

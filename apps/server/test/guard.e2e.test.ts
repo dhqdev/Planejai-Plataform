@@ -15,6 +15,7 @@ const completion = (content: string | null, tool_calls?: unknown[]) => ({
 
 async function fakeOpenRouter(body: any) {
   const userText = String(body.messages.findLast((m: any) => m.role === "user")?.content ?? "");
+  if (body.messages.some((m: any) => m.role === "system" && String(m.content).startsWith("Em paralelo"))) return completion("paralelo ok");
   if (userText.includes("DEMORA")) {
     await new Promise((r) => setTimeout(r, 4000));
     return completion("demorei");
@@ -122,21 +123,62 @@ describe.skipIf(!enabled)("travas de segurança (e2e)", () => {
     await settings.saveSettings({ maxToolCalls: 40 });
   });
 
-  it("conversa ocupada não prende a vaga do worker: devolve busy na hora", async () => {
+  it("conversa com todas as vagas ocupadas não prende a vaga do worker: devolve busy na hora", async () => {
     const { convId } = await newConversation("5511900000109");
     await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'oi', $2)", [convId, `e${++seq}`]);
     const holder = await db.pool.connect();
     try {
-      await holder.query("SELECT pg_advisory_lock(hashtext($1))", [convId]);
+      for (let i = 0; i < mod.PARALLEL_RUNS; i++) await holder.query("SELECT pg_advisory_lock(hashtext($1), $2)", [convId, i]);
       const r = await mod.processConversation(convId, { trigger: "message", channel: new channels.PlaygroundChannel(), wait: false });
       expect(r.busy).toBe(true);
     } finally {
-      await holder.query("SELECT pg_advisory_unlock(hashtext($1))", [convId]);
+      for (let i = 0; i < mod.PARALLEL_RUNS; i++) await holder.query("SELECT pg_advisory_unlock(hashtext($1), $2)", [convId, i]);
       holder.release();
     }
     const r = await mod.processConversation(convId, { trigger: "message", channel: new channels.PlaygroundChannel(), wait: false });
     expect(r.busy).toBeFalsy();
     expect(r.bubbles.length).toBeGreaterThan(0);
+  });
+
+  it("pergunta nova é respondida enquanto a anterior ainda trabalha, sem repetir a mesma mensagem", async () => {
+    const { convId } = await newConversation("5511900000110");
+    await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'DEMORA pesquisa longa', $2)", [convId, `e${++seq}`]);
+    const slowChannel = new channels.PlaygroundChannel();
+    const slow = mod.processConversation(convId, { trigger: "message", channel: slowChannel, wait: false });
+    await new Promise((r) => setTimeout(r, 600));
+    await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'e outra coisa?', $2)", [convId, `e${++seq}`]);
+    const fastChannel = new channels.PlaygroundChannel();
+    const t0 = Date.now();
+    const fast = await mod.processConversation(convId, { trigger: "message", channel: fastChannel, wait: false });
+    expect(fast.busy).toBeFalsy();
+    expect(Date.now() - t0).toBeLessThan(2500);
+    // a segunda rodada sabe que a primeira ainda está respondendo (e não refaz)
+    expect(fastChannel.sent.filter((s) => s.type === "text").map((s) => s.text)).toEqual(["paralelo ok"]);
+    await slow;
+    expect(slowChannel.sent.filter((s) => s.type === "text").map((s) => s.text)).toEqual(["demorei"]);
+    expect((await db.one("SELECT COUNT(*)::int AS n FROM messages WHERE conversation_id = $1 AND processed = false", [convId])).n).toBe(0);
+  });
+
+  it("botão Parar: a execução para em segundos e a pessoa recebe um aviso curto", async () => {
+    const { convId } = await newConversation("5511900000111");
+    await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'DEMORA muito', $2)", [convId, `e${++seq}`]);
+    const channel = new channels.PlaygroundChannel();
+    const t0 = Date.now();
+    const run = mod.processConversation(convId, { trigger: "message", channel, wait: false });
+    await new Promise((r) => setTimeout(r, 400));
+    const exec = await db.one("SELECT id FROM executions WHERE conversation_id = $1 AND status = 'running'", [convId]);
+    const { requestStop, stopConversationRuns, isStopCommand } = await import("../src/agent/stop.js");
+    expect(await requestStop(exec.id)).toBe(true);
+    const r = await run;
+    expect(Date.now() - t0).toBeLessThan(3800);
+    expect(channel.sent.filter((s) => s.type === "text").map((s) => s.text)).toEqual([mod.STOPPED_TEXT]);
+    expect(await db.one("SELECT status, error FROM executions WHERE id = $1", [r.executionId])).toMatchObject({ status: "partial", error: "Parada a pedido" });
+    // já terminou: não tem o que parar
+    expect(await requestStop(exec.id)).toBe(false);
+    expect(await stopConversationRuns(convId)).toBe(0);
+    expect(isStopCommand("para")).toBe(true);
+    expect(isStopCommand("Cancela isso!")).toBe(true);
+    expect(isStopCommand("para amanhã às 9h")).toBe(false);
   });
 
   it("chave de API nunca sai numa mensagem", async () => {
