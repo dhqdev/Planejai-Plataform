@@ -17,7 +17,6 @@ const SEG = ".seg, .subtabs, .fin-tabs, .cal-pills, .sidebar .nav";
 function placeThumbs() {
   document.querySelectorAll<HTMLElement>(SEG).forEach((box) => {
     const on = box.querySelector<HTMLElement>(":scope > button.active, :scope > button[aria-selected='true'], :scope > a.active");
-    if (box.classList.contains("lens-hover")) return; // o mouse está levando a lente
     if (!on || !box.offsetParent) {
       box.style.setProperty("--seg-o", "0");
       return;
@@ -71,7 +70,7 @@ export function installSegmented() {
  * Como no iOS 26: a pastilha do menu e a gota da barra do celular são lentes. O "aproximar" é o ícone ou
  * o texto embaixo crescendo conforme a lente passa por cima (igual em todo navegador; filtro SVG no
  * backdrop-filter saiu desalinhado no Chrome e não existe no Safari). A gota da barra segue o dedo
- * (arrastar de aba em aba) e a pastilha do menu lateral segue o mouse.
+ * (arrastar de aba em aba); a pastilha do menu lateral só anda no clique.
  */
 /** Aumenta cada item conforme a distância até o centro da lente (1 = em cima, 0 = longe). */
 function magnify(items: HTMLElement[], lens: DOMRect, axis: "x" | "y", max: number) {
@@ -161,47 +160,27 @@ function tabbarLens() {
   addEventListener("dragstart", (e) => pill()?.contains(e.target as Node) && e.preventDefault());
 }
 
+/** Menu lateral: a pastilha só anda quando o item é clicado; enquanto ela viaja, o texto embaixo cresce. */
 function sidebarLens() {
   const nav = () => document.querySelector<HTMLElement>(".sidebar .nav");
   const links = () => [...(nav()?.querySelectorAll<HTMLElement>(":scope > a") ?? [])];
-  let over: HTMLElement | null = null;
-  const go = (a: HTMLElement | null) => {
+  const lensBox = (n: HTMLElement) => {
+    const st = getComputedStyle(n, "::before");
+    const m = new DOMMatrixReadOnly(st.transform === "none" ? undefined : st.transform);
+    const r = n.getBoundingClientRect();
+    return new DOMRect(r.left + m.m41, r.top + m.m42, parseFloat(st.width), parseFloat(st.height));
+  };
+  document.addEventListener("click", (e) => {
     const n = nav();
-    if (!n || a === over) return;
-    over = a;
-    if (a) {
-      n.classList.add("lens-hover");
-      n.style.setProperty("--seg-y", `${a.offsetTop}px`);
-      n.style.setProperty("--seg-h", `${a.offsetHeight}px`);
-      n.style.setProperty("--seg-x", `${a.offsetLeft}px`);
-      n.style.setProperty("--seg-w", `${a.offsetWidth}px`);
-    } else {
-      n.classList.remove("lens-hover");
-      placeThumbs();
-    }
-    // a pastilha leva ~0,45 s para chegar: o texto cresce enquanto ela passa por cima
-    const lensBox = () => {
-      const st = getComputedStyle(n, "::before");
-      const m = new DOMMatrixReadOnly(st.transform === "none" ? undefined : st.transform);
-      const r = n.getBoundingClientRect();
-      return new DOMRect(r.left + m.m41, r.top + m.m42, parseFloat(st.width), parseFloat(st.height));
-    };
-    const until = performance.now() + 600;
+    if (!n || !(e.target as Element | null)?.closest?.(".sidebar .nav > a")) return;
+    const until = performance.now() + 650;
     const tick = () => {
-      magnify(links(), lensBox(), "y", 0.07);
+      magnify(links(), lensBox(n), "y", 0.07);
       if (performance.now() < until) requestAnimationFrame(tick);
+      else links().forEach((a) => a.style.removeProperty("--lens"));
     };
     requestAnimationFrame(tick);
-  };
-  addEventListener("pointermove", (e) => {
-    if (e.pointerType !== "mouse") return;
-    const n = nav();
-    if (!n) return;
-    const a = (e.target as Element | null)?.closest?.(".sidebar .nav > a") as HTMLElement | null;
-    if (a) go(a);
-    else if (over && !n.contains(e.target as Node)) go(null);
-  }, { passive: true });
-  document.documentElement.addEventListener("mouseleave", () => go(null));
+  });
 }
 
 /** Como o tabBarMinimizeBehavior(.onScrollDown) do iOS: rolou para baixo, a barra encolhe; para cima, volta. */
