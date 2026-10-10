@@ -5,6 +5,7 @@ import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { useLongPress } from "../ios";
 import { haptic } from "../touch";
+import { CardsTab, InvoicesCard, invoiceMonthFor, invoiceMonthLabel, useCards, type CreditCard } from "./FinanceCards";
 
 const SOURCE: Record<string, string> = { conversa: "conversa", audio: "áudio", comprovante: "comprovante", documento: "documento", painel: "painel" };
 
@@ -112,7 +113,9 @@ export function FinancePage() {
   const budgetOf = new Map(budgets.filter((b) => b.category).map((b) => [b.category!, b]));
   const go = (n: number) => { haptic(6); setCat(null); setMonth(shift(month, n)); };
 
-  const [tab, setTab] = useState<"overview" | "list">("overview");
+  const [tab, setTab] = useState<"overview" | "list" | "cards">("overview");
+  const [focusCard, setFocusCard] = useState<string | null>(null);
+  const openCards = (id?: string) => { haptic(5); setFocusCard(id ?? null); setTab("cards"); };
   const totalBudget = budgets.find((b) => !b.category);
   const today = new Date();
   const elapsed = isCurrent ? today.getDate() : daysIn;
@@ -137,13 +140,16 @@ export function FinancePage() {
         <div className="fin-tabs">
           <button className={tab === "overview" ? "active" : ""} onClick={() => { haptic(5); setTab("overview"); }}><Icon name="layout" size={16} /> Visão geral</button>
           <button className={tab === "list" ? "active" : ""} onClick={() => { haptic(5); setTab("list"); }}><Icon name="receipt" size={16} /> Lançamentos</button>
+          <button className={tab === "cards" ? "active" : ""} onClick={() => { haptic(5); setTab("cards"); }}><Icon name="card" size={16} /> Cartões</button>
         </div>
         <span className="spacer" />
+        {tab !== "cards" && (
         <div className="fin-period">
           <button className="icon-btn round" aria-label="Mês anterior" onClick={() => go(-1)}><Icon name="chevron-left" size={16} /></button>
           <span className="fin-range"><Icon name="calendar" size={15} /> {periodLabel}</span>
           <button className="icon-btn round" aria-label="Próximo mês" disabled={isCurrent} onClick={() => go(1)}><Icon name="chevron-right" size={16} /></button>
         </div>
+        )}
         {owners.length > 0 && (
           <div className="fin-people">
             <button className={!user ? "active" : ""} onClick={() => { haptic(5); setUser(""); }}>Minhas</button>
@@ -152,14 +158,16 @@ export function FinancePage() {
             ))}
           </div>
         )}
-        {!readonly && (
+        {!readonly && tab !== "cards" && (
           <button className="btn btn-brand fin-add phone-only" aria-label="Novo lançamento" onClick={() => setAdding(true)}>
             <Icon name="plus" size={18} />
           </button>
         )}
       </div>
       <ErrorBox error={error} />
-      {!data ? <Loading /> : tab === "overview" ? (
+      {tab === "cards" ? (
+        <CardsTab user={user} readonly={readonly} focus={focusCard} onChanged={() => void reload()} />
+      ) : !data ? <Loading /> : tab === "overview" ? (
         <>
           <div className="card fin-kpis">
             <div><small>Entradas</small><strong className={`pos${longMoney(income)}`}>{brl(income)}</strong><span>no período</span></div>
@@ -248,6 +256,7 @@ export function FinancePage() {
             </div>
 
             <div className="fin-col">
+              <InvoicesCard user={user} readonly={readonly} onOpen={openCards} />
               <BillsCard user={user} readonly={readonly} onPaid={() => void reload()} />
               <div className="card fin-side-card">
                 <div className="fin-card-head">
@@ -344,7 +353,10 @@ export function FinancePage() {
                       <span className="fin-tx-ico" style={{ ["--c" as any]: CATEGORY_COLORS[Math.max(0, cats.findIndex((c: any) => c.label === t.category)) % CATEGORY_COLORS.length] }}><Icon name={t.kind === "income" ? "arrow-down" : CAT_ICON[t.category] ?? "hash"} size={16} /></span>
                       <span className="fin-tx-text">
                         <span className="ellipsis">{t.description ?? t.merchant ?? t.category}</span>
-                        <small className="muted ellipsis">{t.category}{t.merchant && t.description ? ` · ${t.merchant}` : ""}</small>
+                        <small className="muted ellipsis">
+                          {t.card_name && <span className="fin-tx-card"><span className={`cc-mini c-${t.card_color ?? "preto"}`} aria-hidden />{t.card_name}{t.installments ? ` ${t.installment}/${t.installments}` : ""} · </span>}
+                          {t.category}{t.merchant && t.description ? ` · ${t.merchant}` : ""}
+                        </small>
                       </span>
                       <strong className={t.kind === "income" ? "amount-in" : ""}>{t.kind === "income" ? "+" : "−"}{brl(t.amount)}</strong>
                     </button>
@@ -384,6 +396,8 @@ export function FinancePage() {
             {detail.merchant && (<><dt>Onde</dt><dd>{detail.merchant}</dd></>)}
             <dt>Categoria</dt><dd>{detail.category}</dd>
             <dt>Quando</dt><dd>{day(detail.occurred_at)}</dd>
+            {detail.card_name && (<><dt>Cartão</dt><dd>{detail.card_name}{detail.installments ? ` · parcela ${detail.installment} de ${detail.installments}` : ""}</dd></>)}
+            {detail.invoice_month && (<><dt>Fatura</dt><dd>{cap(invoiceMonthLabel(detail.invoice_month))} de {detail.invoice_month.slice(0, 4)}</dd></>)}
             <dt>Origem</dt><dd>{SOURCE[detail.source] ?? detail.source}</dd>
           </dl>
         </Modal>
@@ -418,14 +432,21 @@ function shift(month: string, delta: number) {
 /** Novo lançamento ou edição de um existente (valor, tipo, categoria, descrição e data). */
 function TransactionForm({ initial, onClose }: { initial?: any; onClose: () => void }) {
   const cats = useApi<string[]>("/api/finance/categories");
+  const cards: CreditCard[] = useCards("").data?.cards ?? [];
   const [f, setF] = useState({
     kind: initial?.kind ?? "expense",
     amount: initial ? String(initial.amount).replace(".", ",") : "",
     category: initial?.category ?? "",
     description: initial?.description ?? "",
     date: (initial ? new Date(initial.occurred_at) : new Date()).toISOString().slice(0, 10),
+    card_id: (initial?.card_id as string | null) ?? "",
+    installments: 1,
   });
   const [error, setError] = useState<string | null>(null);
+  const card = cards.find((c) => c.id === f.card_id);
+  const total = Number(f.amount.replace(/\./g, "").replace(",", ".")) || 0;
+  // parcela e fatura em que cai: só para mostrar (o servidor faz a conta exata, em centavos)
+  const firstInvoice = card ? invoiceMonthFor(card, f.date) : null;
   return (
     <Modal
       title={initial ? "Editar lançamento" : "Novo lançamento"}
@@ -433,7 +454,9 @@ function TransactionForm({ initial, onClose }: { initial?: any; onClose: () => v
       footer={
         <button className="btn btn-primary" onClick={async () => {
           try {
-            await api(initial ? `/api/finance/${initial.id}` : "/api/finance", { method: initial ? "PATCH" : "POST", json: f });
+            const { installments, card_id, ...rest } = f;
+            const json = initial ? { ...rest, card_id: card_id || null } : { ...rest, card_id: card_id || null, installments: card_id ? installments : 1 };
+            await api(initial ? `/api/finance/${initial.id}` : "/api/finance", { method: initial ? "PATCH" : "POST", json });
             haptic(8);
             onClose();
           } catch (e) {
@@ -454,6 +477,31 @@ function TransactionForm({ initial, onClose }: { initial?: any; onClose: () => v
         </select>
       </div>
       <div className="field"><label htmlFor="tx-desc">Descrição</label><input id="tx-desc" name="description" className="input" autoComplete="off" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
+      {cards.length > 0 && !(initial?.installments > 1) && (
+        <div className="grid grid-2" style={{ gap: 10 }}>
+          <div className="field"><label htmlFor="tx-card">{f.kind === "income" ? "Estorno no cartão" : "Como pagou"}</label>
+            <select id="tx-card" className="select" value={f.card_id} onChange={(e) => setF({ ...f, card_id: e.target.value, installments: e.target.value ? f.installments : 1 })}>
+              <option value="">{f.kind === "income" ? "Não" : "Pix, dinheiro ou débito"}</option>
+              {cards.map((c) => <option key={c.id} value={c.id}>Cartão {c.name}{c.last4 ? ` ·${c.last4}` : ""}</option>)}
+            </select>
+          </div>
+          {card && !initial && f.kind === "expense" && (
+            <div className="field"><label htmlFor="tx-inst">Parcelas</label>
+              <select id="tx-inst" className="select" value={f.installments} onChange={(e) => setF({ ...f, installments: Number(e.target.value) })}>
+                <option value={1}>À vista</option>
+                {Array.from({ length: 23 }, (_, i) => i + 2).map((n) => <option key={n} value={n}>{n}x</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+      {card && firstInvoice && (
+        <p className="muted pay-hint">
+          <Icon name="card" size={13} />
+          {f.installments > 1 && total ? `${f.installments}x de ${brl(Math.floor((total * 100) / f.installments) / 100)} · ` : ""}
+          {f.installments > 1 ? "1ª parcela na" : "Cai na"} fatura de {invoiceMonthLabel(firstInvoice)}
+        </p>
+      )}
       <div className="field"><label htmlFor="tx-date">Data</label><input id="tx-date" name="date" className="input" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></div>
       <ErrorBox error={error} />
     </Modal>
