@@ -13,3 +13,7 @@
 
 /* no fundo claro (menu branco, tema claro) um anel fininho separa a bolinha do papel */
 :root[data-theme="light"] .user-mochi, .sidebar .user-mochi, .more-sheet .user-mochi { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06), 0 0 0 1px rgba(0, 0, 0, .06); }
+
+/* o Mochi de quem está logado (canto de baixo do menu e folha "Mais" no celular) fica solto, sem a bolinha,
+   igual ao Mochi lá de cima */
+.sidebar-foot .me .user-mochi, .more-sheet .more-me .user-mochi { background: none; box-shadow: none; border-radius: 0; overflow: visible; }
