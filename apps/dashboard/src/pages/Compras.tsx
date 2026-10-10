@@ -194,6 +194,8 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
         </section>
       </div>
 
+      {isSuper && <StoreTest />}
+
       {access && <AccessModal store={access} onClose={(ok) => { setAccess(null); if (ok) reload(); }} />}
       {adding && (
         <AddStoreModal
@@ -216,6 +218,74 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
         />
       )}
     </div>
+  );
+}
+
+interface StoreCheck {
+  store: string;
+  name: string;
+  guard: string | null;
+  http: { state: string; status: number | null; ms: number };
+  browser: { state: string; detail: string; ms: number } | null;
+}
+const CHECK: Record<string, [string, string]> = { ok: ["Entra", "ok"], desafio: ["Pede verificação", "warn"], bloqueado: ["Bloqueia", "err"], erro: ["Não abriu", "err"] };
+
+/** Dono: abre a página inicial de cada loja a partir do servidor (HTTP e Chrome) e mostra quem barra robô. */
+function StoreTest() {
+  const [rows, setRows] = useState<Record<string, StoreCheck | "testando">>({});
+  const [running, setRunning] = useState(false);
+  const run = async () => {
+    setRunning(true);
+    setRows({});
+    try {
+      const stores = await api<{ id: string; name: string }[]>("/api/compras/admin/teste");
+      const queue = [...stores];
+      // 3 lojas por vez: cada uma abre um Chrome no servidor
+      await Promise.all(
+        [0, 1, 2].map(async () => {
+          for (let s = queue.shift(); s; s = queue.shift()) {
+            const id = s.id;
+            setRows((r) => ({ ...r, [id]: "testando" }));
+            const out = await api<StoreCheck>(`/api/compras/admin/teste/${id}`).catch(() => ({ store: id, name: s.name, guard: null, http: { state: "erro", status: null, ms: 0 }, browser: null }));
+            setRows((r) => ({ ...r, [id]: out }));
+          }
+        }),
+      );
+    } finally {
+      setRunning(false);
+    }
+  };
+  const list = Object.entries(rows);
+  return (
+    <section className="card card-pad" style={{ marginTop: 16 }}>
+      <h3 className="cp-h"><Icon name="shield" size={16} /> Testar lojas a partir do servidor</h3>
+      <p className="muted cp-small">Abre a página inicial de cada loja do catálogo como a Nina abriria (HTTP direto e o Chrome do servidor). "Pede verificação" ou "Bloqueia" no Chrome: a pessoa vai precisar colar os cookies da loja ("Já estou logado").</p>
+      <button className="btn btn-sm" disabled={running} onClick={run} style={{ marginTop: 10 }}>
+        <Icon name="refresh" size={14} /> {running ? "Testando…" : list.length ? "Testar de novo" : "Testar as lojas"}
+      </button>
+      {list.length > 0 && (
+        <ul className="cp-list">
+          {list.map(([id, r]) => {
+            if (r === "testando") return <li key={id}><div className="cp-list-main"><strong>{id}</strong><small>testando…</small></div></li>;
+            const shown = r.browser ?? { state: r.http.state, detail: "", ms: r.http.ms };
+            const [label, tone] = CHECK[shown.state] ?? [shown.state, ""];
+            return (
+              <li key={id}>
+                <div className="cp-list-main">
+                  <strong>{r.name}</strong>
+                  <small>
+                    HTTP {r.http.status ?? "sem resposta"} ({CHECK[r.http.state]?.[0] ?? r.http.state}){r.guard ? ` · proteção ${r.guard}` : ""}
+                    {r.browser ? ` · Chrome ${(r.browser.ms / 1000).toFixed(1).replace(".", ",")} s` : " · sem Chrome configurado"}
+                  </small>
+                  {shown.detail && shown.state !== "ok" && <small className="cp-err">{shown.detail}</small>}
+                </div>
+                <div className="cp-list-side"><span className={`badge badge-${tone}`}>{label}</span></div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 

@@ -162,4 +162,14 @@ export function purchaseRoutes(base: FastifyInstance) {
 /** Visão do dono: quantas compras o assistente fechou no mês (só números). */
 export function purchaseAdminRoutes(api: FastifyInstance) {
   api.get("/api/compras/admin", async () => ({ month: await purchasesOverview(), rules: purchaseRules(await getSettings()) }));
+  api.get("/api/compras/admin/teste", async () => {
+    const { STORES } = await import("../../../stores.js");
+    return Object.entries(STORES).map(([id, s]) => ({ id, name: s.name }));
+  });
+  // Testar lojas: uma por vez (o painel chama 3 em paralelo), a partir do IP do servidor, como a Nina entraria
+  api.get<{ Params: { store: string } }>("/api/compras/admin/teste/:store", async (req, reply) => {
+    const { checkStore } = await import("../../../storecheck.js");
+    const r = await checkStore(req.params.store);
+    return r ?? reply.code(404).send({ error: "loja desconhecida" });
+  });
 }

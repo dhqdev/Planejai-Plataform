@@ -29,5 +29,8 @@ A pessoa entra na conta dela numa janela ao vivo do painel: o servidor abre o na
 - Termos em `/termos-de-compra` (`pages/PurchaseTerms.tsx`). Mudou algo importante: suba `TERMS_VERSION` e todo mundo aceita de novo. Privacidade (`pages/Privacy.tsx`) cita o endereço, os cookies e o acesso salvo da loja, a leitura do código no Gmail e a do Pix no Asaas.
 - Migrações `db/migrations/034_compras.sql`, `db/migrations/035_compras_so_pix.sql` e `db/migrations/036_lojas_da_pessoa.sql`. Testes em `test/purchases.e2e.test.ts`.
 
+## Testar lojas (dono)
+Card "Testar lojas a partir do servidor" no fim de Compras (só super admin): o painel pega o catálogo (`GET /api/compras/admin/teste`) e testa 3 lojas por vez (`GET /api/compras/admin/teste/:store`, `storecheck.ts`). Cada teste abre a página inicial por HTTP direto (status e proteção anti-robô pelos cabeçalhos: `guardOf`) e pelo Chrome do browserless (`pageState`: entra, pede verificação, bloqueia). É o IP do servidor que conta. Loja que pede verificação ou bloqueia no Chrome precisa dos cookies colados ("Já estou logado").
+
 ## Não testado de verdade
 O decode do Asaas real, o login nas lojas pelo Browserless e o login automático (e-mail, senha e código) em loja de verdade: o sandbox de desenvolvimento não alcança essas URLs. Teste primeiro com uma conta sua no Mercado Livre.

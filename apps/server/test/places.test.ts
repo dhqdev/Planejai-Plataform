@@ -161,3 +161,16 @@ describe("prazo do especialista", () => {
     expect(text).not.toContain('"error"');
   });
 });
+
+describe("teste das lojas (Compras > Testar lojas)", () => {
+  it("reconhece a proteção pelos cabeçalhos e o que a página mostrou", async () => {
+    const { guardOf, pageState } = await import("../src/storecheck.js");
+    expect(guardOf(new Headers({ "set-cookie": "_abck=1; bm_sz=2" }))).toBe("Akamai");
+    expect(guardOf(new Headers({ "cf-ray": "x", server: "cloudflare" }))).toBe("Cloudflare");
+    expect(guardOf(new Headers({ "x-datadome": "protected" }))).toBe("DataDome");
+    expect(guardOf(new Headers({ server: "nginx" }))).toBeNull();
+    expect(pageState("Olá! Para continuar, acesse sua conta", "https://www.mercadolivre.com.br/gz/account-verification?go=x")).toBe("desafio");
+    expect(pageState("Sorry, you have been blocked! Cybersecurity Policy Violation")).toBe("bloqueado");
+    expect(pageState("Ofertas do dia ".repeat(40))).toBe("ok");
+  });
+});
