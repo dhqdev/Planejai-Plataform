@@ -204,7 +204,23 @@ function sidebarLens() {
   document.documentElement.addEventListener("mouseleave", () => go(null));
 }
 
+/** Como o tabBarMinimizeBehavior(.onScrollDown) do iOS: rolou para baixo, a barra encolhe; para cima, volta. */
+function tabbarMinimize() {
+  let last = 0;
+  document.addEventListener("scroll", (e) => {
+    const el = e.target as HTMLElement;
+    if (!isPhone() || !el.classList?.contains("main")) return;
+    const y = el.scrollTop;
+    const bar = document.querySelector(".tabbar");
+    if (!bar) return;
+    if (y < 40 || y < last - 6) bar.classList.remove("min");
+    else if (y > last + 6) bar.classList.add("min");
+    if (Math.abs(y - last) > 6) last = y;
+  }, { capture: true, passive: true });
+}
+
 export function installLiquidGlass() {
+  tabbarMinimize();
   if (lessMotion()) return;
   tabbarLens();
   sidebarLens();

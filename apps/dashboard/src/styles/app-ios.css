@@ -183,3 +183,48 @@
 .sidebar .nav a { border-radius: 99px; }
 .sidebar .nav[data-seg]::before { background: rgba(118, 118, 128, .14); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), inset 0 0 0 .5px rgba(0, 0, 0, .04); }
 :root[data-theme="dark"] .sidebar .nav[data-seg]::before { background: rgba(255, 255, 255, .12); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1); }
+
+/* ---------- Composição do Liquid Glass (developer.apple.com, "Adopting Liquid Glass") ----------
+   - O vidro é neutro (branco/preto translúcido) porque ele não tem cor própria: pega a luz e a cor do
+     conteúdo que passa embaixo. Cor só em ação importante (aqui, o roxo do botão principal).
+   - Vidro só na camada de navegação e controles, nunca vidro sobre vidro.
+   - "Scroll edge effect": o conteúdo que rola por baixo das barras some num degradê com desfoque,
+     em vez de uma linha dura, para os ícones continuarem legíveis.
+   - Cantos concêntricos: raio de dentro = raio de fora menos o respiro.
+   - Folhas mais redondas e soltas das bordas da tela; a barra de abas encolhe ao rolar para baixo. */
+@media (max-width: 767px) {
+  /* degradê com desfoque atrás da barra de baixo */
+  .tabbar::before {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: calc(120px + env(safe-area-inset-bottom)); z-index: -1; pointer-events: none;
+    background: linear-gradient(to top, color-mix(in srgb, var(--bg) 85%, transparent) 30%, transparent);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    -webkit-mask-image: linear-gradient(to top, #000 45%, transparent); mask-image: linear-gradient(to top, #000 45%, transparent);
+  }
+  /* topo: sem linha dura, o conteúdo some no desfoque */
+  .topbar { border-bottom: none !important; }
+  /* concêntrico: cápsula 34 com respiro 5 → gota 29 */
+  .tabbar-pill { border-radius: 34px; }
+  .tabbar-scroll .tab, .tab-more, .tab-glider { border-radius: 29px; }
+  /* rolou para baixo: a barra encolhe e esconde os nomes; rolou para cima, volta */
+  .tabbar-pill { transform-origin: 50% 100%; transition: transform .45s var(--ios-spring); }
+  .tabbar-scroll .tab, .tab-more { transition: height .4s var(--ios-spring), color .25s; }
+  .tabbar .tab-label { transition: opacity .2s, max-height .35s var(--ios-spring); max-height: 14px; }
+  .tabbar.min .tabbar-pill { transform: scale(.9) translateY(4px); }
+  .tabbar.min .tabbar-scroll .tab, .tabbar.min .tab-more { height: 44px; }
+  .tabbar.min .tab-label { opacity: 0; max-height: 0; }
+
+  /* folhas: soltas das bordas e mais redondas; o que está atrás aparece em volta */
+  .modal-bg { padding: 0 8px max(8px, env(safe-area-inset-bottom)); }
+  .modal, .modal.wide, .modal.more-sheet { border-radius: 34px; padding-bottom: 0; }
+  .modal::after, .modal.more-sheet::after { display: none; }
+  .modal-bg:has(.more-sheet) { padding: 0 8px max(8px, env(safe-area-inset-bottom)); }
+}
+
+/* controles: ao segurar, a pastilha vira vidro (cresce e fica translúcida), como no seletor do iOS 26 */
+:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg]:has(> button.active:active)::before {
+  scale: 1.08 1.14; background: rgba(255, 255, 255, .45);
+  box-shadow: inset 0 1px 0 #fff, inset 0 0 0 .5px rgba(0, 0, 0, .08), 0 8px 20px -8px rgba(0, 0, 0, .3);
+  -webkit-backdrop-filter: blur(2px) saturate(1.6); backdrop-filter: blur(2px) saturate(1.6);
+}
+:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg="on"]::before { transition: transform .45s var(--ios-spring), width .45s var(--ios-spring), height .45s var(--ios-spring), scale .3s var(--ios-spring), opacity .2s; }
+@media (prefers-reduced-motion: reduce) { .tabbar.min .tabbar-pill { transform: none; } }
