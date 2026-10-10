@@ -32,6 +32,8 @@ export async function createReminder(opts: {
   eventAt?: Date | null;
   tag?: string | null;
   color?: string | null;
+  /** texto curto que a ligação do Twilio fala na hora (só quando a pessoa pediu ligação) */
+  callText?: string | null;
 }) {
   if (!opts.dueAt && !opts.cron) throw new Error("Informe due_at ou cron");
   if (opts.cron) {
@@ -44,8 +46,8 @@ export async function createReminder(opts: {
   const active = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM reminders WHERE user_id = $1 AND status = 'scheduled'", [opts.userId]);
   if ((active?.n ?? 0) >= MAX_ACTIVE_REMINDERS) throw new Error(`Já são ${MAX_ACTIVE_REMINDERS} lembretes ativos. Peça para cancelar algum antes de criar outro.`);
   const row = await one<{ id: string }>(
-    `INSERT INTO reminders (user_id, conversation_id, intent, due_at, cron, timezone, title, event_at, tag, color)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+    `INSERT INTO reminders (user_id, conversation_id, intent, due_at, cron, timezone, title, event_at, tag, color, call_text)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
     [
       opts.userId,
       opts.conversationId,
@@ -57,6 +59,7 @@ export async function createReminder(opts: {
       opts.cron ? null : opts.eventAt ?? null,
       opts.tag ?? null,
       opts.color ?? null,
+      opts.callText?.trim().replace(/\s+/g, " ").slice(0, 200) || null,
     ],
   );
   await enqueue(row!.id, first);

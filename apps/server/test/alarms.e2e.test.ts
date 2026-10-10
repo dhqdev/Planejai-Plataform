@@ -168,6 +168,41 @@ describe.skipIf(!enabled)("alarme (e2e)", () => {
     await expect(setAlarm.run({ label: "Reunião", at: "2099-01-01T08:00" }, ctx)).rejects.toThrow(/um ano/);
   });
 
+  it("ligação pedida no alarme ou no lembrete liga mesmo com a escolha geral em notificação, uma vez só", async () => {
+    expect((await app.inject({ method: "PUT", url: "/api/alarms/settings", headers: { cookie }, payload: { mode: "push" } })).statusCode).toBe(200);
+    const { setAlarm, scheduleReminder } = await import("../src/agent/tools/agenda.js");
+    const ctx: any = { user, conversation: { id: convId }, timezone: "America/Sao_Paulo" };
+    twilioCalls.length = 0;
+
+    const plain: any = await setAlarm.run({ label: "Sem ligação", in_minutes: 5 }, ctx);
+    await db.query("UPDATE alarms SET ring_at = now() WHERE id = $1", [plain.id]);
+    expect((await alarms.ringAlarm(plain.id))!.call).toBeUndefined();
+
+    const called: any = await setAlarm.run({ label: "Buscar o Thor", in_minutes: 5, call: true }, ctx);
+    expect(called).toMatchObject({ ok: true, call: true });
+    await db.query("UPDATE alarms SET ring_at = now() WHERE id = $1", [called.id]);
+    expect((await alarms.ringAlarm(called.id))!.call).toMatchObject({ ok: true });
+    expect(twilioCalls).toHaveLength(1);
+
+    const rem: any = await scheduleReminder.run({ intent: "David pediu para lembrar do remédio", in_minutes: 30, call_text: "hora de tomar o <remédio>" }, ctx);
+    expect(rem).toMatchObject({ ok: true, call: true });
+    const row = await db.one("SELECT id, user_id, conversation_id, call_text FROM reminders WHERE id = $1", [rem.id]);
+    expect(await alarms.callForReminder(row)).toMatchObject({ ok: true });
+    expect(twilioCalls[1]!.body.get("To")).toBe("+5519933333333");
+    expect(twilioCalls[1]!.body.get("Twiml")).toContain("Lembrete do Planejai: hora de tomar o &lt;remédio&gt;");
+    // o job repetiu (erro do LLM): não liga de novo
+    expect(await alarms.callForReminder(row)).toMatchObject({ ok: false, skipped: "já ligou" });
+    expect(twilioCalls).toHaveLength(2);
+    const steps = await db.many("SELECT s.name FROM execution_steps s JOIN executions e ON e.id = s.execution_id WHERE e.trigger = 'reminder' AND e.user_id = $1", [user.id]);
+    expect(steps.map((s) => s.name)).toContain("lembrete: ligação");
+
+    // lembrete sem pedir ligação não guarda texto de ligação
+    const quiet: any = await scheduleReminder.run({ intent: "regar as plantas", in_minutes: 40 }, ctx);
+    expect(quiet.call).toBeUndefined();
+    const quietRow = await db.one("SELECT id, user_id, conversation_id, call_text FROM reminders WHERE id = $1", [quiet.id]);
+    expect(await alarms.callForReminder(quietRow!)).toBeNull();
+  });
+
   it("cancelar, horário que passou e limite de ligações por dia", async () => {
     const { setAlarm, alarmCancel } = await import("../src/agent/tools/agenda.js");
     const ctx: any = { user, conversation: { id: convId }, timezone: "America/Sao_Paulo" };

@@ -3,7 +3,7 @@ import { googleApi } from "../../integrations/google.js";
 import { resolveTag } from "../../agenda-tags.js";
 import { cancelReminder, createReminder, listReminders, reminderOccurrences, rescheduleReminder } from "../../reminders.js";
 import { formatLocal, parseLocalDateTime } from "../../time.js";
-import { cancelAlarm, createAlarm, listAlarms } from "../../alarms.js";
+import { cancelAlarm, createAlarm, listAlarms, twilioReady } from "../../alarms.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 const hm = (d: Date, tz: string) => new Intl.DateTimeFormat("pt-BR", { timeZone: tz, hour: "2-digit", minute: "2-digit" }).format(d);
@@ -17,6 +17,7 @@ export const scheduleReminder = defineTool<{
   title?: string;
   event_at?: string;
   tag?: string;
+  call_text?: string;
 }>({
   name: "schedule_reminder",
   description:
@@ -34,6 +35,7 @@ export const scheduleReminder = defineTool<{
       title: { type: "string", description: "Nome na agenda, 2 a 5 palavras (ex.: Veterinário do Thor)" },
       event_at: { type: "string", description: "Hora do compromisso, se diferente do aviso" },
       tag: { type: "string", description: "Assunto em 1 palavra (Saúde, Trabalho, Pet...); reaproveita as da pessoa" },
+      call_text: { type: "string", description: "Só se ela pediu ligação: o que a ligação fala, curto, para ela (ex.: hora de tomar o remédio)" },
     },
     ["intent"],
   ),
@@ -44,6 +46,8 @@ export const scheduleReminder = defineTool<{
     const eventAt = args.event_at && !args.cron ? parseLocalDateTime(args.event_at, ctx.timezone) : null;
     if (!dueAt && eventAt) dueAt = eventAt;
     const tag = await resolveTag(ctx.user.id, args.tag, `${args.title ?? ""} ${args.intent}`).catch(() => null);
+    // ligação só com o Twilio do dono configurado; sem ele o aviso sai só no WhatsApp
+    const callText = args.call_text?.trim() && (await twilioReady()) ? args.call_text.trim() : null;
     const r = await createReminder({
       userId: ctx.user.id,
       conversationId: ctx.conversation.id,
@@ -55,6 +59,7 @@ export const scheduleReminder = defineTool<{
       eventAt,
       tag: tag?.name,
       color: tag?.color,
+      callText,
     });
     // o que já está no dia, para avisar de choque de horário sem outra chamada
     const at = eventAt ?? r.dueAt;
@@ -74,6 +79,7 @@ export const scheduleReminder = defineTool<{
       tag: tag ? `${tag.name}${tag.created ? " (nova)" : ""}` : null,
       ...(others.length ? { same_day: others.map((o) => `${hm(new Date(o.start), ctx.timezone)} ${o.title.slice(0, 40)}`) } : {}),
       ...(clash ? { clash: `Choca com ${clash.title.slice(0, 40)}` } : {}),
+      ...(callText ? { call: true } : args.call_text ? { note: "Ligação ainda não está disponível: o aviso chega só no WhatsApp." } : {}),
     };
   },
 });
@@ -124,27 +130,30 @@ export const rescheduleReminderTool = defineTool<{ id: string; at: string }>({
   },
 });
 
-export const setAlarm = defineTool<{ label: string; in_minutes?: number; at?: string }>({
+export const setAlarm = defineTool<{ label: string; in_minutes?: number; at?: string; call?: boolean }>({
   name: "set_alarm",
-  description: "Alarme que toca no celular como ligação (e liga, se ela escolheu). in_minutes ou at.",
+  description: "Alarme que toca no celular como ligação (e liga, se ela escolheu ou com call). in_minutes ou at.",
   parameters: obj(
     {
       label: { type: "string", description: "O que aparece na tela, curto (ex.: Tirar o bolo do forno)" },
       in_minutes: { type: "number" },
       at: { type: "string", description: "AAAA-MM-DDTHH:MM local" },
+      call: { type: "boolean", description: "true se ela pediu para ligar de verdade" },
     },
     ["label"],
   ),
   async run(args, ctx) {
     const at = args.in_minutes != null ? new Date(Date.now() + args.in_minutes * 60_000) : args.at ? parseLocalDateTime(args.at, ctx.timezone) : null;
     if (!at) return { ok: false, error: "Informe in_minutes ou at" };
-    const r = await createAlarm({ userId: ctx.user.id, conversationId: ctx.conversation.id, label: args.label, at });
+    const call = Boolean(args.call) && (await twilioReady());
+    const r = await createAlarm({ userId: ctx.user.id, conversationId: ctx.conversation.id, label: args.label, at, call });
     return {
       ok: true,
       id: r.id,
       ring_local: formatLocal(r.ringAt, ctx.timezone),
+      ...(call ? { call: true } : args.call ? { call: false, call_note: "Ligação ainda não está disponível: toca no celular e chega no WhatsApp." } : {}),
       // sem aparelho com notificação ligada, toca só no WhatsApp: vale avisar uma vez
-      ...(r.devices ? {} : { note: "Nenhum celular com alarme ligado: chega no WhatsApp. Para tocar como ligação, ative em Minha conta > Alarmes no painel." }),
+      ...(r.devices || call ? {} : { note: "Nenhum celular com alarme ligado: chega no WhatsApp. Para tocar como ligação, ative em Minha conta > Alarmes no painel." }),
     };
   },
 });

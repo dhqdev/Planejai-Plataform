@@ -142,10 +142,13 @@ export async function sendPush(userId: string, payload: Record<string, unknown>,
 
 const xml = (s: string) => s.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[c]!);
 
-export function alarmTwiml(label: string) {
-  const say = `<Say language="pt-BR" voice="Polly.Camila">Alarme do Planejai: ${xml(label.slice(0, 200))}</Say>`;
+/** Fala o texto duas vezes, com pausa (quem atende no susto perde a primeira). */
+export function callTwiml(prefix: string, text: string) {
+  const say = `<Say language="pt-BR" voice="Polly.Camila">${prefix}: ${xml(text.slice(0, 200))}</Say>`;
   return `<Response>${say}<Pause length="1"/>${say}</Response>`;
 }
+
+export const alarmTwiml = (label: string) => callTwiml("Alarme do Planejai", label);
 
 export async function twilioReady() {
   const c = await getCredentials("twilio");
@@ -157,8 +160,17 @@ async function callsToday(userId: string) {
   return r?.n ?? 0;
 }
 
-/** Liga para o WhatsApp da pessoa (o mesmo número) e fala o alarme. Conta no limite diário mesmo se falhar. */
-export async function placeAlarmCall(userId: string, phone: string, label: string, alarmId: string | null) {
+/**
+ * Liga para o WhatsApp da pessoa (o mesmo número) e fala o alarme ou o lembrete. Conta no limite diário mesmo se falhar.
+ * Só liga para o número da própria pessoa: nunca para terceiros.
+ */
+export async function placeAlarmCall(
+  userId: string,
+  phone: string,
+  label: string,
+  alarmId: string | null,
+  opts: { reminderId?: string; prefix?: string } = {},
+) {
   const c = await getCredentials("twilio");
   if (!c?.account_sid || !c.auth_token || !c.from_number) return { ok: false, skipped: "Twilio não configurado" };
   const digits = String(phone).replace(/\D/g, "");
@@ -172,11 +184,17 @@ export async function placeAlarmCall(userId: string, phone: string, label: strin
       Authorization: `Basic ${Buffer.from(`${c.account_sid}:${c.auth_token}`).toString("base64")}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: new URLSearchParams({ To: `+${digits}`, From: c.from_number, Twiml: alarmTwiml(label), Timeout: "30" }),
+    body: new URLSearchParams({ To: `+${digits}`, From: c.from_number, Twiml: callTwiml(opts.prefix ?? "Alarme do Planejai", label), Timeout: "30" }),
     signal: AbortSignal.timeout(15_000),
   });
   const j: any = await res.json().catch(() => ({}));
-  await query("INSERT INTO alarm_calls (user_id, alarm_id, sid, status) VALUES ($1, $2, $3, $4)", [userId, alarmId, j.sid ?? null, res.ok ? String(j.status ?? "queued") : `erro ${res.status}`]);
+  await query("INSERT INTO alarm_calls (user_id, alarm_id, reminder_id, sid, status) VALUES ($1, $2, $3, $4, $5)", [
+    userId,
+    alarmId,
+    opts.reminderId ?? null,
+    j.sid ?? null,
+    res.ok ? String(j.status ?? "queued") : `erro ${res.status}`,
+  ]);
   if (!res.ok) throw new Error(`Twilio respondeu ${res.status}: ${String(j.message ?? "").slice(0, 160)}`);
   return { ok: true, sid: j.sid ?? null, status: j.status ?? null, calls_24h: used + 1 };
 }
@@ -210,7 +228,7 @@ async function enqueue(id: string, at: Date) {
   await query("UPDATE alarms SET job_id = $2, ring_at = $3 WHERE id = $1", [id, jobId, at]);
 }
 
-export async function createAlarm(opts: { userId: string; conversationId?: string | null; label: string; at: Date }) {
+export async function createAlarm(opts: { userId: string; conversationId?: string | null; label: string; at: Date; call?: boolean }) {
   const label = opts.label.trim().replace(/\s+/g, " ").slice(0, 120) || "Alarme";
   if (Number.isNaN(opts.at.getTime())) throw new Error("Horário inválido");
   if (opts.at.getTime() < Date.now() - 60_000) throw new Error("Esse horário já passou");
@@ -218,11 +236,12 @@ export async function createAlarm(opts: { userId: string; conversationId?: strin
   const active = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM alarms WHERE user_id = $1 AND status = 'scheduled'", [opts.userId]);
   if ((active?.n ?? 0) >= MAX_ACTIVE_ALARMS) throw new Error(`Já são ${MAX_ACTIVE_ALARMS} alarmes ativos. Cancele algum antes.`);
   const at = new Date(Math.max(opts.at.getTime(), Date.now() + 1000));
-  const row = await one<{ id: string }>("INSERT INTO alarms (user_id, conversation_id, label, ring_at) VALUES ($1, $2, $3, $4) RETURNING id", [
+  const row = await one<{ id: string }>("INSERT INTO alarms (user_id, conversation_id, label, ring_at, call) VALUES ($1, $2, $3, $4, $5) RETURNING id", [
     opts.userId,
     opts.conversationId ?? null,
     label,
     at,
+    Boolean(opts.call),
   ]);
   await enqueue(row!.id, at);
   const devices = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM push_subscriptions WHERE user_id = $1", [opts.userId]);
@@ -273,7 +292,7 @@ export async function snoozeAlarm(id: string, userId?: string, minutes = 5) {
 export async function ringAlarm(id: string) {
   const a = await one(
     `UPDATE alarms SET status = 'rang', fired_at = now() WHERE id = $1 AND status = 'scheduled' AND ring_at <= now() + interval '10 seconds'
-     RETURNING id, user_id, conversation_id, label, ring_at, snoozes`,
+     RETURNING id, user_id, conversation_id, label, ring_at, snoozes, call`,
     [id],
   );
   if (!a) return null;
@@ -289,7 +308,8 @@ export async function ringAlarm(id: string) {
     } catch (err) {
       await push.fail(err);
     }
-    if (mode !== "push" && user && (await twilioReady())) {
+    // liga se a pessoa escolheu ligação para todos os alarmes ou pediu ligação neste
+    if ((a.call || mode !== "push") && user && (await twilioReady())) {
       // custo da ligação não vem na resposta do Twilio: fica 0 aqui e o registro mostra o sid para conferir
       const call = await tracer.step({ agent: "agenda", type: "tool", name: "alarme: ligação", input: { label: a.label, custo_estimado: "desconhecido" } });
       try {
@@ -339,6 +359,30 @@ export async function testAlarm(userId: string, opts: { call?: boolean } = {}) {
     }
   }
   return { push, call };
+}
+
+/**
+ * Lembrete com ligação: na hora liga e fala o texto curto que a pessoa pediu, além da mensagem no WhatsApp.
+ * O job do lembrete pode repetir (erro do LLM): uma ligação por lembrete a cada 10 min.
+ */
+export async function callForReminder(r: { id: string; user_id: string; conversation_id: string | null; call_text: string | null }) {
+  if (!r.call_text || !(await twilioReady())) return null;
+  const done = await one("SELECT 1 FROM alarm_calls WHERE reminder_id = $1 AND created_at > now() - interval '10 minutes'", [r.id]);
+  if (done) return { ok: false, skipped: "já ligou" };
+  const user = await one("SELECT phone FROM users WHERE id = $1", [r.user_id]);
+  if (!user) return null;
+  const tracer = await Tracer.start({ trigger: "reminder", userId: r.user_id, conversationId: r.conversation_id, input: `Ligação: ${r.call_text}` });
+  const step = await tracer.step({ agent: "agenda", type: "tool", name: "lembrete: ligação", input: { texto: r.call_text, custo_estimado: "desconhecido" } });
+  try {
+    const out = await placeAlarmCall(r.user_id, user.phone, r.call_text, null, { reminderId: r.id, prefix: "Lembrete do Planejai" });
+    await step.ok(out, { costUsd: 0 });
+    await tracer.finish(`Ligação: ${r.call_text}`);
+    return out;
+  } catch (err) {
+    await step.fail(err);
+    await tracer.error(err);
+    return { ok: false, error: (err as Error).message };
+  }
 }
 
 export async function startAlarmWorker(boss: PgBoss) {
