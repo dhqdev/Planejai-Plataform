@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from "react";
-import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { CORE_FACES } from "../faces";
@@ -203,14 +202,9 @@ function Buddy({ root }: { root: RefObject<HTMLDivElement | null> }) {
   );
 }
 
-/**
- * Clique em Entrar/Criar conta: onda no botão, a tela se cobre de roxo a partir do dedo com o Mochi
- * pulando no meio, troca para o login e o roxo se desfaz por cima dele.
- */
-function useCurtain() {
+/** Clique em Entrar/Criar conta: uma onda pequena só dentro do botão e já troca para o login. */
+function useTap() {
   const nav = useNavigate();
-  const [veil, setVeil] = useState<{ x: number; y: number } | null>(null);
-  const node = useRef<HTMLDivElement>(null);
   const go = (e: MouseEvent<HTMLAnchorElement>) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     e.preventDefault();
@@ -218,37 +212,14 @@ function useCurtain() {
     const href = a.getAttribute("href") ?? "/login";
     if (reduced()) return nav(href);
     const r = a.getBoundingClientRect();
-    const x = e.clientX || r.left + r.width / 2;
-    const y = e.clientY || r.top + r.height / 2;
-    a.style.setProperty("--rx", `${x - r.left}px`);
-    a.style.setProperty("--ry", `${y - r.top}px`);
+    a.style.setProperty("--rx", `${(e.clientX || r.left + r.width / 2) - r.left}px`);
+    a.style.setProperty("--ry", `${(e.clientY || r.top + r.height / 2) - r.top}px`);
     a.classList.remove("lp-ripple");
     void a.offsetWidth;
     a.classList.add("lp-ripple");
-    setVeil({ x, y });
-    setTimeout(() => {
-      // a cortina vive fora da landing para continuar na tela depois da troca de rota
-      const keep = node.current?.cloneNode(true) as HTMLElement | undefined;
-      if (keep) {
-        document.body.appendChild(keep);
-        keep.classList.add("out");
-        setTimeout(() => keep.remove(), 800);
-      }
-      nav(href);
-    }, 700);
+    setTimeout(() => nav(href), 220);
   };
-  const curtain = veil
-    ? createPortal(
-        <div ref={node} className="lp-veil" style={{ ["--x" as string]: `${veil.x}px`, ["--y" as string]: `${veil.y}px` }} aria-hidden="true">
-          <span className="lp-veil-wave a" />
-          <span className="lp-veil-wave b" />
-          <span className="lp-veil-wave c" />
-          <span className="lp-veil-glow" />
-        </div>,
-        document.body,
-      )
-    : null;
-  return { go, curtain };
+  return { go };
 }
 
 /** Pedidos de verdade, correndo numa faixa logo abaixo do topo. */
@@ -603,7 +574,7 @@ export function LandingPage() {
   const [scene, setScene] = useState(0);
   const [open, setOpen] = useState<number | null>(0);
   const root = useRef<HTMLDivElement>(null);
-  const { go, curtain } = useCurtain();
+  const { go } = useTap();
   useScrollVars(root);
   useReveal(root);
 
@@ -643,7 +614,6 @@ export function LandingPage() {
 
   return (
     <div className="lp" ref={root}>
-      {curtain}
       <Buddy root={root} />
       <header className="lp-nav">
         <span className="lp-progress" aria-hidden="true" />
