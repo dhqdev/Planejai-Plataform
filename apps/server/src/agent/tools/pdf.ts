@@ -1,5 +1,5 @@
 import { saveDocument } from "../../documents.js";
-import { PDF_LIMITS, type PdfSpec, normalizePdfSpec, pdfFileName, renderPdf } from "../../pdf.js";
+import { PDF_LIMITS, type PdfSection, type PdfSpec, normalizePdfSpec, pdfFileName, renderPdf } from "../../pdf.js";
 import { parseJsonObject, writeLong } from "../writer.js";
 import { type ToolContext, defineTool, obj } from "./types.js";
 
@@ -7,14 +7,66 @@ type PdfArgs = PdfSpec & { brief?: string };
 
 const hasContent = (spec: PdfSpec) => spec.sections.some((s) => s.text || s.items?.length || s.table?.rows?.length || s.highlight);
 
-const WRITER = `Você escreve o conteúdo de um PDF A4 em português do Brasil, a partir do pedido. Responda só JSON:
-{"subtitle":"...","sections":[{"title":"...","text":"parágrafos separados por linha em branco, **negrito** quando ajuda","items":["..."],"highlight":"dica ou resumo"}]}
-Texto de verdade, completo e organizado (uma seção por assunto, 4 a 10 seções), sem inventar números ou citações. items, table ({"columns":[],"rows":[[]]}) e highlight só quando ajudam.`;
+// Texto simples em vez de JSON: no JSON uma aspa sem escape ou um corte no fim perdia o documento inteiro
+// ("Expected ',' or ']'..."). Aqui cada linha vale sozinha e um corte só perde o fim.
+const WRITER = `Você escreve o conteúdo de um PDF A4 em português do Brasil, a partir do pedido. Responda só o texto, neste formato:
+SUBTÍTULO: uma linha
+## Título da seção
+Parágrafos separados por linha em branco, **negrito** quando ajuda.
+- item de lista
+> dica ou resumo em destaque
+| coluna | coluna |
+| valor | valor |
+Texto de verdade, completo e organizado (uma seção por assunto, 4 a 10 seções, no máximo umas 2500 palavras), sem inventar números ou citações. Listas, tabela e destaque só quando ajudam.`;
+
+/** Lê o texto do redator (## seções, - itens, > destaque, | tabela |). Tolera corte no fim e JSON antigo. */
+export function parseWriterText(text: string): PdfSpec {
+  const t = text.replace(/^```\w*\n?|```\s*$/g, "").trim();
+  if (t.startsWith("{")) {
+    try {
+      return normalizePdfSpec(parseJsonObject(t));
+    } catch {
+      /* segue como texto */
+    }
+  }
+  let subtitle: string | undefined;
+  const sections: PdfSection[] = [];
+  let cur: { title: string; text: string[]; items: string[]; highlight: string[]; rows: string[][] } | null = null;
+  const flush = () => {
+    if (!cur) return;
+    const rows = cur.rows.filter((r) => !r.every((c) => /^:?-{2,}:?$/.test(c)));
+    const [columns, ...body] = rows;
+    sections.push({
+      title: cur.title,
+      text: cur.text.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
+      items: cur.items.length ? cur.items : undefined,
+      highlight: cur.highlight.join(" ").trim() || undefined,
+      table: columns && body.length ? { columns, rows: body } : undefined,
+    });
+  };
+  for (const raw of t.split("\n")) {
+    const line = raw.trim();
+    const sub = /^SUBT[IÍ]TULO:\s*(.+)/i.exec(line);
+    if (sub && !cur) subtitle = sub[1]!.trim();
+    else if (/^#{1,3}\s+/.test(line)) {
+      flush();
+      cur = { title: line.replace(/^#+\s+/, "").replace(/\*\*/g, ""), text: [], items: [], highlight: [], rows: [] };
+    } else {
+      cur ??= { title: "Introdução", text: [], items: [], highlight: [], rows: [] };
+      if (/^[-*•]\s+/.test(line)) cur.items.push(line.replace(/^[-*•]\s+/, ""));
+      else if (line.startsWith(">")) cur.highlight.push(line.replace(/^>\s*/, ""));
+      else if (/^\|.*\|$/.test(line)) cur.rows.push(line.slice(1, -1).split("|").map((c) => c.trim()));
+      else cur.text.push(line);
+    }
+  }
+  flush();
+  return normalizePdfSpec({ subtitle, sections: sections.filter((s) => s.text || s.items || s.table || s.highlight) });
+}
 
 /** Escreve as seções numa chamada própria (writeLong): o agente manda só título e brief. */
 async function writeSections(args: PdfArgs, ctx: ToolContext): Promise<PdfSpec> {
   const ask = [`Título: ${args.title}`, args.subtitle && `Subtítulo: ${args.subtitle}`, args.brief && `Pedido: ${args.brief}`].filter(Boolean).join("\n");
-  const spec = normalizePdfSpec({ ...(parseJsonObject(await writeLong(ctx, { name: "texto do PDF", system: WRITER, ask, json: true })) as object), title: args.title });
+  const spec = { ...parseWriterText(await writeLong(ctx, { name: "texto do PDF", system: WRITER, ask, maxTokens: 6000 })), title: args.title };
   return { ...spec, subtitle: args.subtitle || spec.subtitle, author: args.author };
 }
 
@@ -53,7 +105,12 @@ export const makePdf = defineTool<PdfArgs>({
       const brief = typeof (raw as PdfArgs)?.brief === "string" ? (raw as PdfArgs).brief : undefined;
       // seções só com título viram roteiro para o redator
       const outline = args.sections.map((s) => s.title).filter((t) => !/^Parte \d+$/.test(t));
-      args = await writeSections({ ...args, brief: [brief, outline.length ? `Seções: ${outline.join("; ")}` : ""].filter(Boolean).join("\n") }, ctx);
+      try {
+        args = await writeSections({ ...args, brief: [brief, outline.length ? `Seções: ${outline.join("; ")}` : ""].filter(Boolean).join("\n") }, ctx);
+      } catch (err) {
+        const slow = /timeout|abort/i.test(String(err));
+        return { ok: false, error: `${slow ? "O redator demorou demais" : "O redator falhou"}. Não tente de novo nesta resposta: avise a pessoa e ofereça um PDF mais curto ou tentar mais tarde.` };
+      }
       if (!hasContent(args)) return { ok: false, error: "Não consegui escrever o conteúdo agora. Avise a pessoa e ofereça tentar de novo." };
     }
     const data = await renderPdf(args);

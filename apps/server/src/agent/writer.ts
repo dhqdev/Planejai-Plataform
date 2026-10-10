@@ -8,11 +8,12 @@ import type { ToolContext } from "./tools/types.js";
  * ferramenta, e o modelo acabava mandando só o título e repetindo a chamada. Com isso o agente manda o pedido
  * (brief) e a ferramenta escreve.
  */
-export async function writeLong(ctx: ToolContext, opts: { name: string; system: string; ask: string; json?: boolean }): Promise<string> {
+export async function writeLong(ctx: ToolContext, opts: { name: string; system: string; ask: string; json?: boolean; maxTokens?: number }): Promise<string> {
   const step = await ctx.tracer.step({ agent: "redator", type: "llm", name: opts.name, parentId: ctx.parentStepId, input: { ask: opts.ask } });
   try {
     const r = await chatCompletion(await resolveModel("writer"), {
       ...(opts.json ? { responseFormat: { type: "json_object" } } : {}),
+      ...(opts.maxTokens ? { maxTokens: opts.maxTokens } : {}),
       messages: [
         { role: "system", content: opts.system },
         { role: "user", content: opts.ask.slice(0, 6000) },

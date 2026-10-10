@@ -122,6 +122,8 @@ export async function runToolLoop(opts: {
   let warned = false;
   // chamadas que deram erro: repetir igual não muda o resultado (o CTO chegou a chamar make_pdf 10 vezes iguais)
   const failed = new Map<string, string>();
+  // e mudar só o texto do pedido também não: a mesma ferramenta que já falhou 2 vezes fica bloqueada nesta resposta
+  const failsByTool = new Map<string, number>();
   let repeated = false;
 
   for (let step = 1; step <= maxSteps; step++) {
@@ -207,7 +209,7 @@ export async function runToolLoop(opts: {
         } catch {
           return { id: call.id, content: JSON.stringify({ error: "Argumentos JSON inválidos" }) };
         }
-        const before = failed.get(callKey(call));
+        const before = failed.get(callKey(call)) ?? ((failsByTool.get(call.function.name) ?? 0) >= 2 ? "já falhou 2 vezes nesta resposta" : undefined);
         if (before) {
           repeated = true;
           return {
@@ -273,11 +275,17 @@ export async function runToolLoop(opts: {
     for (const [i, r] of results.entries()) {
       messages.push({ role: "tool", tool_call_id: r.id, content: r.content.slice(0, 12_000) });
       // pedido de confirmação não é erro: a mesma chamada com o sim tem que passar
-      if (failedResult(r.content) && !r.content.includes('"needs_confirmation"')) failed.set(callKey(calls[i]!), r.content);
+      if (failedResult(r.content) && !r.content.includes('"needs_confirmation"')) {
+        failed.set(callKey(calls[i]!), r.content);
+        failsByTool.set(calls[i]!.function.name, (failsByTool.get(calls[i]!.function.name) ?? 0) + 1);
+      }
     }
     // fez algo novo (imagem, PDF, áudio...): a chamada que falhou por falta disso pode dar certo agora
     // ("manda a foto pra mãe" -> attach falhou -> make_picture -> attach de novo, igual, e agora acha a imagem)
-    if (results.some((r, i) => MAKER.test(calls[i]!.function.name) && !failedResult(r.content))) failed.clear();
+    if (results.some((r, i) => MAKER.test(calls[i]!.function.name) && !failedResult(r.content))) {
+      failed.clear();
+      failsByTool.clear();
+    }
     if (guard?.expired) return { text: "", steps: step, messages, timedOut: true };
     if (quickOnly && results.every((r) => !failedResult(r.content))) {
       messages.push({ role: "assistant", content: said });
