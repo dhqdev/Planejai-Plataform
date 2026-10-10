@@ -58,7 +58,7 @@ Por dentro, quem trabalha é um **time de agentes de IA que conversam entre si**
 | Agente | O que faz | Modelo padrão (OpenRouter) |
 | --- | --- | --- |
 | CTO (Juvenal) | Conversa, reage, guarda memórias, delega e escreve a resposta | `deepseek/deepseek-v4.1-flash` |
-| Pesquisador | Busca na web, lê páginas, tira prints, usa o navegador gravado | `xiaomi/mimo-v2.6-flash` |
+| Pesquisador | Busca na web e lê páginas sem navegador (Chrome só para print ou gravação pedida) | `deepseek/deepseek-v4.1-flash` |
 | Agenda | Lembretes e Google Agenda | `deepseek/deepseek-v4.1-flash` |
 | Financeiro | Gastos, receitas, limites, gráficos e links de pagamento | `deepseek/deepseek-v4.1-flash` |
 | Comunicação | Gmail e Slack | `deepseek/deepseek-v4.1-flash` |

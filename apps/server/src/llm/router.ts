@@ -33,9 +33,9 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
   {
     task: "agent:pesquisador",
     label: "Pesquisador",
-    why: "Busca na web, lê páginas e tira prints. Muito texto de entrada: MiMo Flash.",
-    model: "xiaomi/mimo-v2.6-flash",
-    fallbacks: ["deepseek/deepseek-v4.1-flash"],
+    why: "Busca na web e lê páginas. DeepSeek Flash: ~6 s por passo contra ~20 s do MiMo Flash (medido em Execuções, out/2026), preço parecido.",
+    model: "deepseek/deepseek-v4.1-flash",
+    fallbacks: ["xiaomi/mimo-v2.6-flash"],
     temperature: 0.2,
     maxTokens: 1500,
   },
