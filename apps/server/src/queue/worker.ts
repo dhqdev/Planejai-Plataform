@@ -73,7 +73,7 @@ async function startConversations(log: WorkerLog, concurrency: number) {
     }
   });
 
-  // alarme: notificação no celular, ligação (Twilio) e WhatsApp, sem IA
+  // alarme: notificação no celular, ligação (central própria) e WhatsApp, sem IA
   await startAlarmWorker(boss);
 
   // recados: o estabelecimento respondeu, o agente de recados decide o próximo passo

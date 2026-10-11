@@ -56,6 +56,9 @@ const schema = z.object({
   TAVILY_API_KEY: z.string().default(""),
   /** Google Places (lugares perto, com telefone) pela stack; sem ela a busca de lugares usa o OpenStreetMap */
   GOOGLE_MAPS_API_KEY: z.string().default(""),
+  /** Central de ligações própria (imagem voz: Asterisk + gateway GSM com chip). Vazias = ligação desligada */
+  VOZ_URL: z.string().default(""),
+  VOZ_TOKEN: z.string().default(""),
   /** Web Push do alarme (PWA). Vazias = o servidor gera um par na primeira vez e guarda cifrado em settings */
   VAPID_PUBLIC_KEY: z.string().default(""),
   VAPID_PRIVATE_KEY: z.string().default(""),

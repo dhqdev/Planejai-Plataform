@@ -11,7 +11,7 @@ import {
   stopAlarm,
   subscribePush,
   testAlarm,
-  twilioReady,
+  callReady,
   unsubscribePush,
 } from "../../../alarms.js";
 import { one } from "../../../db/pool.js";
@@ -32,19 +32,19 @@ export function alarmRoutes(base: FastifyInstance) {
   base.get("/api/alarms", async (req, reply) => {
     const uid = await me(req, reply);
     if (!uid) return;
-    const [alarms, devices, mode, twilio, vapid, user] = await Promise.all([
+    const [alarms, devices, mode, callOn, vapid, user] = await Promise.all([
       listAlarms(uid),
       listDevices(uid),
       getAlarmMode(uid),
-      twilioReady(),
+      callReady(),
       getVapid(),
       one<{ phone: string; timezone: string | null }>("SELECT phone, timezone FROM users WHERE id = $1", [uid]),
     ]);
     return {
       alarms,
       devices: devices.map((d) => ({ endpoint: d.endpoint, userAgent: d.user_agent, createdAt: d.created_at, lastUsedAt: d.last_used_at })),
-      mode: twilio ? mode : "push",
-      callAvailable: twilio,
+      mode: callOn ? mode : "push",
+      callAvailable: callOn,
       phone: user?.phone ?? null,
       vapidPublicKey: vapid.publicKey,
     };
@@ -54,7 +54,7 @@ export function alarmRoutes(base: FastifyInstance) {
     const uid = await me(req, reply);
     if (!uid) return;
     const mode = String(req.body?.mode ?? "");
-    if (mode !== "push" && !(await twilioReady())) return reply.code(400).send({ error: "Ligação ainda não está disponível na plataforma" });
+    if (mode !== "push" && !(await callReady())) return reply.code(400).send({ error: "Ligação ainda não está disponível na plataforma" });
     try {
       await setAlarmMode(uid, mode);
     } catch (err) {
@@ -83,7 +83,7 @@ export function alarmRoutes(base: FastifyInstance) {
   base.post<{ Body: { call?: boolean } }>("/api/alarms/test", async (req, reply) => {
     const uid = await me(req, reply);
     if (!uid) return;
-    if (req.body?.call && !(await twilioReady())) return reply.code(400).send({ error: "Ligação ainda não está disponível na plataforma" });
+    if (req.body?.call && !(await callReady())) return reply.code(400).send({ error: "Ligação ainda não está disponível na plataforma" });
     return testAlarm(uid, { call: Boolean(req.body?.call) });
   });
 

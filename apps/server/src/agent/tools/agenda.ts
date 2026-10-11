@@ -3,7 +3,7 @@ import { googleApi } from "../../integrations/google.js";
 import { resolveTag } from "../../agenda-tags.js";
 import { cancelReminder, createReminder, listReminders, reminderOccurrences, rescheduleReminder } from "../../reminders.js";
 import { formatLocal, parseLocalDateTime } from "../../time.js";
-import { cancelAlarm, createAlarm, listAlarms, twilioReady } from "../../alarms.js";
+import { cancelAlarm, createAlarm, listAlarms, callReady } from "../../alarms.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 const hm = (d: Date, tz: string) => new Intl.DateTimeFormat("pt-BR", { timeZone: tz, hour: "2-digit", minute: "2-digit" }).format(d);
@@ -46,8 +46,8 @@ export const scheduleReminder = defineTool<{
     const eventAt = args.event_at && !args.cron ? parseLocalDateTime(args.event_at, ctx.timezone) : null;
     if (!dueAt && eventAt) dueAt = eventAt;
     const tag = await resolveTag(ctx.user.id, args.tag, `${args.title ?? ""} ${args.intent}`).catch(() => null);
-    // ligação só com o Twilio do dono configurado; sem ele o aviso sai só no WhatsApp
-    const callText = args.call_text?.trim() && (await twilioReady()) ? args.call_text.trim() : null;
+    // ligação só com a central de ligações configurada; sem ele o aviso sai só no WhatsApp
+    const callText = args.call_text?.trim() && (await callReady()) ? args.call_text.trim() : null;
     const r = await createReminder({
       userId: ctx.user.id,
       conversationId: ctx.conversation.id,
@@ -145,7 +145,7 @@ export const setAlarm = defineTool<{ label: string; in_minutes?: number; at?: st
   async run(args, ctx) {
     const at = args.in_minutes != null ? new Date(Date.now() + args.in_minutes * 60_000) : args.at ? parseLocalDateTime(args.at, ctx.timezone) : null;
     if (!at) return { ok: false, error: "Informe in_minutes ou at" };
-    const call = Boolean(args.call) && (await twilioReady());
+    const call = Boolean(args.call) && (await callReady());
     const r = await createAlarm({ userId: ctx.user.id, conversationId: ctx.conversation.id, label: args.label, at, call });
     return {
       ok: true,

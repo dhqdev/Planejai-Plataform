@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 /**
  * Alarme ponta a ponta (Postgres real): rotas do painel (inscrição de push, modo, teste, cancelar),
- * ferramenta set_alarm, disparo (push + ligação do Twilio + WhatsApp), soneca/parar pelo token da notificação
- * e limpeza de inscrição que sumiu (410). web-push e a API do Twilio são simulados.
+ * ferramenta set_alarm, disparo (push + ligação pela central própria + WhatsApp), soneca/parar pelo token da notificação
+ * e limpeza de inscrição que sumiu (410). web-push e a central de ligações (imagem voz) são simulados.
  */
 const enabled = Boolean(process.env.TEST_DATABASE_URL);
 process.env.OWNER_PHONES = "5519933333333";
@@ -24,13 +24,14 @@ vi.mock("web-push", async (orig) => {
   };
 });
 
-const twilioCalls: { url: string; body: URLSearchParams; auth: string | null }[] = [];
+const VOZ = "http://voz-teste:8080";
+const vozCalls: { url: string; body: any; auth: string | null }[] = [];
 const realFetch = globalThis.fetch;
 vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any, init?: any) => {
   const url = String(input instanceof Request ? input.url : input);
-  if (url.startsWith("https://api.twilio.com/")) {
-    twilioCalls.push({ url, body: new URLSearchParams(String(init?.body ?? "")), auth: new Headers(init?.headers).get("authorization") });
-    return new Response(JSON.stringify({ sid: `CA${twilioCalls.length}`, status: "queued" }), { status: 201, headers: { "content-type": "application/json" } });
+  if (url.startsWith(VOZ)) {
+    vozCalls.push({ url, body: JSON.parse(String(init?.body ?? "{}")), auth: new Headers(init?.headers).get("authorization") });
+    return new Response(JSON.stringify({ ok: true, id: `id-${vozCalls.length}`, status: "na fila" }), { status: 202, headers: { "content-type": "application/json" } });
   }
   return realFetch(input, init);
 });
@@ -90,7 +91,7 @@ describe.skipIf(!enabled)("alarme (e2e)", () => {
     expect((await app.inject({ method: "GET", url: "/api/alarms" })).statusCode).toBe(401);
   });
 
-  it("testar manda a notificação para os aparelhos; ligação só com Twilio configurado", async () => {
+  it("testar manda a notificação para os aparelhos; ligação só com a central configurada", async () => {
     pushes.length = 0;
     const r = (await post("/api/alarms/test")).json();
     expect(r.push).toMatchObject({ devices: 2, sent: 2 });
@@ -100,9 +101,9 @@ describe.skipIf(!enabled)("alarme (e2e)", () => {
     expect((await app.inject({ method: "PUT", url: "/api/alarms/settings", headers: { cookie }, payload: { mode: "both" } })).statusCode).toBe(400);
   });
 
-  it("set_alarm agenda, o disparo toca no celular, liga pelo Twilio e manda no WhatsApp; soneca e parar pela notificação", async () => {
-    const { saveCredentials } = await import("../src/integrations/registry.js");
-    await saveCredentials("twilio", { account_sid: `AC${"a".repeat(32)}`, auth_token: "tok", from_number: "+5511900000000" });
+  it("set_alarm agenda, o disparo toca no celular, liga pela central e manda no WhatsApp; soneca e parar pela notificação", async () => {
+    const { config } = await import("../src/config.js");
+    Object.assign(config, { VOZ_URL: `${VOZ}/`, VOZ_TOKEN: "segredo-voz" });
     const set = await app.inject({ method: "PUT", url: "/api/alarms/settings", headers: { cookie }, payload: { mode: "both" } });
     expect(set.statusCode).toBe(200);
 
@@ -128,12 +129,10 @@ describe.skipIf(!enabled)("alarme (e2e)", () => {
     expect(payload).toMatchObject({ type: "alarm", id: created.id, label: "Tirar o bolo do forno" });
     expect((await get("/api/alarms")).json().devices).toHaveLength(1);
 
-    expect(out.call).toMatchObject({ ok: true, sid: "CA1" });
-    expect(twilioCalls[0]!.url).toBe(`https://api.twilio.com/2010-04-01/Accounts/AC${"a".repeat(32)}/Calls.json`);
-    expect(twilioCalls[0]!.body.get("To")).toBe("+5519933333333");
-    expect(twilioCalls[0]!.body.get("From")).toBe("+5511900000000");
-    expect(twilioCalls[0]!.body.get("Twiml")).toContain('<Say language="pt-BR" voice="Polly.Camila">Alarme do Planejai: Tirar o bolo do forno</Say>');
-    expect(twilioCalls[0]!.auth).toMatch(/^Basic /);
+    expect(out.call).toMatchObject({ ok: true, sid: "id-1" });
+    expect(vozCalls[0]!.url).toBe(`${VOZ}/call`);
+    expect(vozCalls[0]!.body).toEqual({ to: "5519933333333", text: "Alarme do Planejai: Tirar o bolo do forno" });
+    expect(vozCalls[0]!.auth).toBe("Bearer segredo-voz");
 
     // Execuções: um passo por canal
     const steps = await db.many(
@@ -172,7 +171,7 @@ describe.skipIf(!enabled)("alarme (e2e)", () => {
     expect((await app.inject({ method: "PUT", url: "/api/alarms/settings", headers: { cookie }, payload: { mode: "push" } })).statusCode).toBe(200);
     const { setAlarm, scheduleReminder } = await import("../src/agent/tools/agenda.js");
     const ctx: any = { user, conversation: { id: convId }, timezone: "America/Sao_Paulo" };
-    twilioCalls.length = 0;
+    vozCalls.length = 0;
 
     const plain: any = await setAlarm.run({ label: "Sem ligação", in_minutes: 5 }, ctx);
     await db.query("UPDATE alarms SET ring_at = now() WHERE id = $1", [plain.id]);
@@ -182,17 +181,16 @@ describe.skipIf(!enabled)("alarme (e2e)", () => {
     expect(called).toMatchObject({ ok: true, call: true });
     await db.query("UPDATE alarms SET ring_at = now() WHERE id = $1", [called.id]);
     expect((await alarms.ringAlarm(called.id))!.call).toMatchObject({ ok: true });
-    expect(twilioCalls).toHaveLength(1);
+    expect(vozCalls).toHaveLength(1);
 
     const rem: any = await scheduleReminder.run({ intent: "David pediu para lembrar do remédio", in_minutes: 30, call_text: "hora de tomar o <remédio>" }, ctx);
     expect(rem).toMatchObject({ ok: true, call: true });
     const row = await db.one("SELECT id, user_id, conversation_id, call_text FROM reminders WHERE id = $1", [rem.id]);
     expect(await alarms.callForReminder(row)).toMatchObject({ ok: true });
-    expect(twilioCalls[1]!.body.get("To")).toBe("+5519933333333");
-    expect(twilioCalls[1]!.body.get("Twiml")).toContain("Lembrete do Planejai: hora de tomar o &lt;remédio&gt;");
+    expect(vozCalls[1]!.body).toEqual({ to: "5519933333333", text: "Lembrete do Planejai: hora de tomar o <remédio>" });
     // o job repetiu (erro do LLM): não liga de novo
     expect(await alarms.callForReminder(row)).toMatchObject({ ok: false, skipped: "já ligou" });
-    expect(twilioCalls).toHaveLength(2);
+    expect(vozCalls).toHaveLength(2);
     const steps = await db.many("SELECT s.name FROM execution_steps s JOIN executions e ON e.id = s.execution_id WHERE e.trigger = 'reminder' AND e.user_id = $1", [user.id]);
     expect(steps.map((s) => s.name)).toContain("lembrete: ligação");
 

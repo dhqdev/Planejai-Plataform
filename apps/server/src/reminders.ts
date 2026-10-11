@@ -32,7 +32,7 @@ export async function createReminder(opts: {
   eventAt?: Date | null;
   tag?: string | null;
   color?: string | null;
-  /** texto curto que a ligação do Twilio fala na hora (só quando a pessoa pediu ligação) */
+  /** texto curto que a ligação fala na hora (só quando a pessoa pediu ligação) */
   callText?: string | null;
 }) {
   if (!opts.dueAt && !opts.cron) throw new Error("Informe due_at ou cron");

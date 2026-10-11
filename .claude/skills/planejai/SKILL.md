@@ -66,7 +66,7 @@ apps/server/src/
   ratelimit.ts             limites por IP/e-mail (login, cadastro, convite)
   time.ts                  fuso e datas locais
   reminders.ts  watches.ts  improve.ts  errands.ts  bills.ts  billing.ts  alarms.ts
-                           lembretes, De olho, reunião noturna, recados, contas fixas, assinatura Asaas, alarme (push + Twilio)
+                           lembretes, De olho, reunião noturna, recados, contas fixas, assinatura Asaas, alarme (push + ligação pela central)
   social.ts  onboarding.ts  tabs.ts  privacy.ts
                            convites/contatos, perguntas de boas-vindas, abas do cliente, LGPD (eraseUserData)
   phonebook.ts             agenda de contatos da pessoa (tela Contatos: .vcf do celular ou seletor do Android; contacts_search/contact_save)

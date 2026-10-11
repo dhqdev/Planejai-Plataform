@@ -3,19 +3,18 @@ import type PgBoss from "pg-boss";
 import { config } from "./config.js";
 import { decryptJsonWithInfo, encryptJson, signSession, verifySession } from "./crypto.js";
 import { many, one, query } from "./db/pool.js";
-import { getCredentials } from "./integrations/registry.js";
 import { assertPublicUrl } from "./net.js";
 import { QUEUES, getBoss } from "./queue/boss.js";
 import { Tracer } from "./agent/trace.js";
 
 /**
  * Alarme: na hora toca no celular como uma ligação (Web Push do PWA, para todo mundo), liga de verdade pelo
- * Twilio da plataforma quando o dono configurou e a pessoa escolheu, e manda "Alarme: ..." no WhatsApp.
+ * central de ligações da stack (Asterisk + chip) quando o dono configurou e a pessoa escolheu, e manda "Alarme: ..." no WhatsApp.
  * Sem IA: o disparo é texto pronto. Cada disparo vira uma execução "alarm" em Execuções.
  */
 
 export const MAX_ACTIVE_ALARMS = 20;
-/** ligações por pessoa em 24h (custo do Twilio sem teto é o risco) */
+/** ligações por pessoa em 24h (um chip faz uma ligação por vez e a operadora bloqueia abuso) */
 export const MAX_ALARM_CALLS_PER_DAY = 10;
 export const MAX_SNOOZES = 6;
 export type AlarmMode = "push" | "call" | "both";
@@ -138,21 +137,14 @@ export async function sendPush(userId: string, payload: Record<string, unknown>,
   return { devices: subs.length, sent, removed, errors };
 }
 
-// ---------------------------------------------------------------- Ligação (Twilio da plataforma)
+// ---------------------------------------------------------------- Ligação (central própria: imagem voz)
 
-const xml = (s: string) => s.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[c]!);
-
-/** Fala o texto duas vezes, com pausa (quem atende no susto perde a primeira). */
-export function callTwiml(prefix: string, text: string) {
-  const say = `<Say language="pt-BR" voice="Polly.Camila">${prefix}: ${xml(text.slice(0, 200))}</Say>`;
-  return `<Response>${say}<Pause length="1"/>${say}</Response>`;
-}
-
-export const alarmTwiml = (label: string) => callTwiml("Alarme do Planejai", label);
-
-export async function twilioReady() {
-  const c = await getCredentials("twilio");
-  return Boolean(c?.account_sid && c.auth_token && c.from_number);
+/**
+ * Ligação pela central da stack (deploy/voz: Asterisk + Piper + gateway GSM com o chip). O endereço vem da env
+ * do dono (rede interna da stack, como o N8N_URL), nunca de pessoa ou modelo.
+ */
+export async function callReady() {
+  return Boolean(config.VOZ_URL && config.VOZ_TOKEN);
 }
 
 async function callsToday(userId: string) {
@@ -161,8 +153,8 @@ async function callsToday(userId: string) {
 }
 
 /**
- * Liga para o WhatsApp da pessoa (o mesmo número) e fala o alarme ou o lembrete. Conta no limite diário mesmo se falhar.
- * Só liga para o número da própria pessoa: nunca para terceiros.
+ * Liga para o WhatsApp da pessoa (o mesmo número) e fala o alarme ou o lembrete (a central repete duas vezes).
+ * Conta no limite diário mesmo se falhar. Só liga para o número da própria pessoa: nunca para terceiros.
  */
 export async function placeAlarmCall(
   userId: string,
@@ -171,32 +163,34 @@ export async function placeAlarmCall(
   alarmId: string | null,
   opts: { reminderId?: string; prefix?: string } = {},
 ) {
-  const c = await getCredentials("twilio");
-  if (!c?.account_sid || !c.auth_token || !c.from_number) return { ok: false, skipped: "Twilio não configurado" };
+  if (!(await callReady())) return { ok: false, skipped: "Ligação não configurada" };
   const digits = String(phone).replace(/\D/g, "");
   if (!/^\d{10,15}$/.test(digits)) return { ok: false, skipped: "número sem formato de telefone" };
-  if (!/^AC[0-9a-f]{32}$/i.test(c.account_sid)) return { ok: false, skipped: "Account SID do Twilio inválido" };
   const used = await callsToday(userId);
   if (used >= MAX_ALARM_CALLS_PER_DAY) return { ok: false, skipped: `limite de ${MAX_ALARM_CALLS_PER_DAY} ligações em 24h` };
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${c.account_sid}/Calls.json`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${c.account_sid}:${c.auth_token}`).toString("base64")}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({ To: `+${digits}`, From: c.from_number, Twiml: callTwiml(opts.prefix ?? "Alarme do Planejai", label), Timeout: "30" }),
-    signal: AbortSignal.timeout(15_000),
-  });
+  const text = `${opts.prefix ?? "Alarme do Planejai"}: ${label.replace(/\s+/g, " ").slice(0, 200)}`;
+  let res: Response;
+  try {
+    res = await fetch(`${config.VOZ_URL.replace(/\/$/, "")}/call`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${config.VOZ_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ to: digits, text }),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err) {
+    await query("INSERT INTO alarm_calls (user_id, alarm_id, reminder_id, status) VALUES ($1, $2, $3, 'erro: central fora do ar')", [userId, alarmId, opts.reminderId ?? null]);
+    throw new Error(`Central de ligações não respondeu: ${(err as Error).message.slice(0, 120)}`);
+  }
   const j: any = await res.json().catch(() => ({}));
   await query("INSERT INTO alarm_calls (user_id, alarm_id, reminder_id, sid, status) VALUES ($1, $2, $3, $4, $5)", [
     userId,
     alarmId,
     opts.reminderId ?? null,
-    j.sid ?? null,
-    res.ok ? String(j.status ?? "queued") : `erro ${res.status}`,
+    j.id ?? null,
+    res.ok ? String(j.status ?? "na fila") : `erro ${res.status}`,
   ]);
-  if (!res.ok) throw new Error(`Twilio respondeu ${res.status}: ${String(j.message ?? "").slice(0, 160)}`);
-  return { ok: true, sid: j.sid ?? null, status: j.status ?? null, calls_24h: used + 1 };
+  if (!res.ok) throw new Error(String(j.error ?? `Central de ligações respondeu ${res.status}`).slice(0, 200));
+  return { ok: true, sid: j.id ?? null, status: j.status ?? null, calls_24h: used + 1 };
 }
 
 // ---------------------------------------------------------------- Preferência da pessoa
@@ -309,9 +303,9 @@ export async function ringAlarm(id: string) {
       await push.fail(err);
     }
     // liga se a pessoa escolheu ligação para todos os alarmes ou pediu ligação neste
-    if ((a.call || mode !== "push") && user && (await twilioReady())) {
-      // custo da ligação não vem na resposta do Twilio: fica 0 aqui e o registro mostra o sid para conferir
-      const call = await tracer.step({ agent: "agenda", type: "tool", name: "alarme: ligação", input: { label: a.label, custo_estimado: "desconhecido" } });
+    if ((a.call || mode !== "push") && user && (await callReady())) {
+      // ligação pelo chip: sem custo por minuto aqui; o registro guarda o id da central
+      const call = await tracer.step({ agent: "agenda", type: "tool", name: "alarme: ligação", input: { label: a.label } });
       try {
         out.call = await placeAlarmCall(a.user_id, user.phone, a.label, a.id);
         await call.ok(out.call, { costUsd: 0 });
@@ -347,7 +341,7 @@ export async function testAlarm(userId: string, opts: { call?: boolean } = {}) {
   if (opts.call) {
     const u = await one("SELECT phone FROM users WHERE id = $1", [userId]);
     const tracer = await Tracer.start({ trigger: "alarm", userId, input: label });
-    const step = await tracer.step({ agent: "agenda", type: "tool", name: "alarme: ligação (teste)", input: { custo_estimado: "desconhecido" } });
+    const step = await tracer.step({ agent: "agenda", type: "tool", name: "alarme: ligação (teste)", input: {} });
     try {
       call = await placeAlarmCall(userId, u?.phone ?? "", label, null);
       await step.ok(call, { costUsd: 0 });
@@ -366,13 +360,13 @@ export async function testAlarm(userId: string, opts: { call?: boolean } = {}) {
  * O job do lembrete pode repetir (erro do LLM): uma ligação por lembrete a cada 10 min.
  */
 export async function callForReminder(r: { id: string; user_id: string; conversation_id: string | null; call_text: string | null }) {
-  if (!r.call_text || !(await twilioReady())) return null;
+  if (!r.call_text || !(await callReady())) return null;
   const done = await one("SELECT 1 FROM alarm_calls WHERE reminder_id = $1 AND created_at > now() - interval '10 minutes'", [r.id]);
   if (done) return { ok: false, skipped: "já ligou" };
   const user = await one("SELECT phone FROM users WHERE id = $1", [r.user_id]);
   if (!user) return null;
   const tracer = await Tracer.start({ trigger: "reminder", userId: r.user_id, conversationId: r.conversation_id, input: `Ligação: ${r.call_text}` });
-  const step = await tracer.step({ agent: "agenda", type: "tool", name: "lembrete: ligação", input: { texto: r.call_text, custo_estimado: "desconhecido" } });
+  const step = await tracer.step({ agent: "agenda", type: "tool", name: "lembrete: ligação", input: { texto: r.call_text } });
   try {
     const out = await placeAlarmCall(r.user_id, user.phone, r.call_text, null, { reminderId: r.id, prefix: "Lembrete do Planejai" });
     await step.ok(out, { costUsd: 0 });
