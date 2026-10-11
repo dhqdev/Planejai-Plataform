@@ -144,3 +144,19 @@
   }
   .tabbar-pill.lensing .tab-glider > * { opacity: 0; scale: 1; }
 }
+
+/* ---------- Tema escuro: abas e filtros no estilo da barra de baixo (pedido do David, 2026-10-11) ----------
+   O trilho preto com a pastilha de vidro preto e sombra ficava pesado e quadrado. Agora o trilho é um
+   cinza translúcido bem fraco e a pastilha que desliza é a mesma cápsula clara translúcida da aba
+   escolhida na barra do celular, redonda e sem sombra. */
+:root[data-theme="dark"] :is(.seg, .subtabs, .fin-tabs, .cal-pills) {
+  background: rgba(255, 255, 255, .06); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .07);
+}
+:root[data-theme="dark"] :is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg]::before {
+  border-radius: 99px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, 0) 60%), rgba(255, 255, 255, .13);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), inset 0 0 0 .5px rgba(255, 255, 255, .06);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+:root[data-theme="dark"] :is(.seg, .subtabs, .fin-tabs, .cal-pills) button { color: rgba(255, 255, 255, .6); }
+:root[data-theme="dark"] :is(.seg, .subtabs, .fin-tabs, .cal-pills) button.active { color: #fff; }
