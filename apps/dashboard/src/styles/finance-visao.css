@@ -92,3 +92,12 @@
 /* ---------- Botões e destaques com degradê: versão escura, sem cortar a cor na borda ---------- */
 .fab.ink, .cal-fab, .cal-mini-grid button.sel, .cal-cell.today .cal-num, .cal-week-day.today strong, .cal-list-date.today strong, .avatar { background: var(--grad-strong); background-origin: border-box; }
 
+
+/* Sem limite do mês: só Entradas, Saídas e Saldo (a média por dia saiu a pedido do David) */
+.fin-kpis.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (min-width: 1024px) and (min-height: 680px) { .fin-page.fit .fin-kpis.three { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.fin-kpis.three > div:nth-child(3) { border-left: 1px solid var(--border); border-top: none; }
+@media (max-width: 767px) {
+  .fin-kpis.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fin-kpis.three > div:nth-child(3) { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--border); }
+}

@@ -4,7 +4,6 @@ import { config } from "../../../config.js";
 import { many, one, query } from "../../../db/pool.js";
 import { NOBODY, personalUser, selfUserId } from "../../../sharing.js";
 import { createBill, deleteBill, listBills, payBill, updateBill, type BillInput } from "../../../bills.js";
-import { financeInsights } from "../../../finance-insights.js";
 import { createCard, deleteCard, getCard, invoiceItems, listCards, placeOnCard, payInvoice, unpayInvoice, updateCard, type CardInput } from "../../../cards.js";
 
 /**
@@ -28,6 +27,15 @@ export function financeRoutes(base: FastifyInstance) {
       `SELECT category, SUM(amount) AS total, COUNT(*) AS count FROM transactions t WHERE ${where} AND kind = 'expense' GROUP BY category ORDER BY total DESC`,
       [uid, tz, month],
     );
+    const daily = await many(
+      `SELECT to_char(t.occurred_at AT TIME ZONE $2, 'DD') AS day, SUM(amount) FILTER (WHERE kind='expense') AS expenses FROM transactions t WHERE ${where} GROUP BY 1 ORDER BY 1`,
+      [uid, tz, month],
+    );
+    const months = await many(
+      `SELECT to_char(t.occurred_at AT TIME ZONE $2, 'YYYY-MM') AS month, COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses, COALESCE(SUM(amount) FILTER (WHERE kind='income'),0) AS income
+         FROM transactions t WHERE t.user_id = $1 AND t.occurred_at > now() - interval '6 months' GROUP BY 1 ORDER BY 1`,
+      [uid, tz],
+    );
     const transactions = await many(
       `SELECT t.id, t.kind, t.amount, t.category, t.description, t.merchant, t.source, t.occurred_at, u.name AS user_name, u.phone,
               t.card_id, c.name AS card_name, c.color AS card_color, t.invoice_month, t.installment, t.installments
@@ -41,8 +49,7 @@ export function financeRoutes(base: FastifyInstance) {
       [uid, tz, prevMonth],
     );
     const budgets = await budgetStatus(uid, tz, month);
-    const analysis = await financeInsights(uid, month, tz);
-    return { month, totals, byCategory, prevByCategory, transactions, budgets, analysis, readonly };
+    return { month, totals, byCategory, prevByCategory, daily, months, transactions, budgets, readonly };
   });
 
   base.post<{ Body: { kind: "expense" | "income"; amount: number | string; category: string; description?: string; date?: string; card_id?: string | null; installments?: number | string } }>("/api/finance", async (req, reply) => {
