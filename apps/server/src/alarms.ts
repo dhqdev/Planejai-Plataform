@@ -8,16 +8,12 @@ import { QUEUES, getBoss } from "./queue/boss.js";
 import { Tracer } from "./agent/trace.js";
 
 /**
- * Alarme: na hora toca no celular como uma ligação (Web Push do PWA, para todo mundo), liga de verdade pelo
- * central de ligações da stack (Asterisk + chip) quando o dono configurou e a pessoa escolheu, e manda "Alarme: ..." no WhatsApp.
+ * Alarme: na hora toca no celular como uma ligação (Web Push do PWA, para todo mundo) e manda "Alarme: ..." no WhatsApp.
  * Sem IA: o disparo é texto pronto. Cada disparo vira uma execução "alarm" em Execuções.
  */
 
 export const MAX_ACTIVE_ALARMS = 20;
-/** ligações por pessoa em 24h (um chip faz uma ligação por vez e a operadora bloqueia abuso) */
-export const MAX_ALARM_CALLS_PER_DAY = 10;
 export const MAX_SNOOZES = 6;
-export type AlarmMode = "push" | "call" | "both";
 
 // ---------------------------------------------------------------- VAPID (chaves do Web Push)
 
@@ -137,74 +133,6 @@ export async function sendPush(userId: string, payload: Record<string, unknown>,
   return { devices: subs.length, sent, removed, errors };
 }
 
-// ---------------------------------------------------------------- Ligação (central própria: imagem voz)
-
-/**
- * Ligação pela central da stack (deploy/voz: Asterisk + Piper + gateway GSM com o chip). O endereço vem da env
- * do dono (rede interna da stack, como o N8N_URL), nunca de pessoa ou modelo.
- */
-export async function callReady() {
-  return Boolean(config.VOZ_URL && config.VOZ_TOKEN);
-}
-
-async function callsToday(userId: string) {
-  const r = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM alarm_calls WHERE user_id = $1 AND created_at > now() - interval '24 hours'", [userId]);
-  return r?.n ?? 0;
-}
-
-/**
- * Liga para o WhatsApp da pessoa (o mesmo número) e fala o alarme ou o lembrete (a central repete duas vezes).
- * Conta no limite diário mesmo se falhar. Só liga para o número da própria pessoa: nunca para terceiros.
- */
-export async function placeAlarmCall(
-  userId: string,
-  phone: string,
-  label: string,
-  alarmId: string | null,
-  opts: { reminderId?: string; prefix?: string } = {},
-) {
-  if (!(await callReady())) return { ok: false, skipped: "Ligação não configurada" };
-  const digits = String(phone).replace(/\D/g, "");
-  if (!/^\d{10,15}$/.test(digits)) return { ok: false, skipped: "número sem formato de telefone" };
-  const used = await callsToday(userId);
-  if (used >= MAX_ALARM_CALLS_PER_DAY) return { ok: false, skipped: `limite de ${MAX_ALARM_CALLS_PER_DAY} ligações em 24h` };
-  const text = `${opts.prefix ?? "Alarme do Planejai"}: ${label.replace(/\s+/g, " ").slice(0, 200)}`;
-  let res: Response;
-  try {
-    res = await fetch(`${config.VOZ_URL.replace(/\/$/, "")}/call`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${config.VOZ_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ to: digits, text }),
-      signal: AbortSignal.timeout(15_000),
-    });
-  } catch (err) {
-    await query("INSERT INTO alarm_calls (user_id, alarm_id, reminder_id, status) VALUES ($1, $2, $3, 'erro: central fora do ar')", [userId, alarmId, opts.reminderId ?? null]);
-    throw new Error(`Central de ligações não respondeu: ${(err as Error).message.slice(0, 120)}`);
-  }
-  const j: any = await res.json().catch(() => ({}));
-  await query("INSERT INTO alarm_calls (user_id, alarm_id, reminder_id, sid, status) VALUES ($1, $2, $3, $4, $5)", [
-    userId,
-    alarmId,
-    opts.reminderId ?? null,
-    j.id ?? null,
-    res.ok ? String(j.status ?? "na fila") : `erro ${res.status}`,
-  ]);
-  if (!res.ok) throw new Error(String(j.error ?? `Central de ligações respondeu ${res.status}`).slice(0, 200));
-  return { ok: true, sid: j.id ?? null, status: j.status ?? null, calls_24h: used + 1 };
-}
-
-// ---------------------------------------------------------------- Preferência da pessoa
-
-export async function getAlarmMode(userId: string): Promise<AlarmMode> {
-  const r = await one<{ m: string | null }>("SELECT profile->>'alarm_mode' AS m FROM users WHERE id = $1", [userId]);
-  return r?.m === "call" || r?.m === "both" ? r.m : "push";
-}
-
-export async function setAlarmMode(userId: string, mode: string) {
-  if (!["push", "call", "both"].includes(mode)) throw new Error("Escolha notificação, ligação ou os dois");
-  await query("UPDATE users SET profile = profile || jsonb_build_object('alarm_mode', $2::text) WHERE id = $1", [userId, mode]);
-}
-
 // ---------------------------------------------------------------- Alarmes
 
 /** Token assinado que vai na notificação: "Parar" e "Soneca" funcionam direto da notificação, sem login. */
@@ -222,7 +150,7 @@ async function enqueue(id: string, at: Date) {
   await query("UPDATE alarms SET job_id = $2, ring_at = $3 WHERE id = $1", [id, jobId, at]);
 }
 
-export async function createAlarm(opts: { userId: string; conversationId?: string | null; label: string; at: Date; call?: boolean }) {
+export async function createAlarm(opts: { userId: string; conversationId?: string | null; label: string; at: Date }) {
   const label = opts.label.trim().replace(/\s+/g, " ").slice(0, 120) || "Alarme";
   if (Number.isNaN(opts.at.getTime())) throw new Error("Horário inválido");
   if (opts.at.getTime() < Date.now() - 60_000) throw new Error("Esse horário já passou");
@@ -230,12 +158,11 @@ export async function createAlarm(opts: { userId: string; conversationId?: strin
   const active = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM alarms WHERE user_id = $1 AND status = 'scheduled'", [opts.userId]);
   if ((active?.n ?? 0) >= MAX_ACTIVE_ALARMS) throw new Error(`Já são ${MAX_ACTIVE_ALARMS} alarmes ativos. Cancele algum antes.`);
   const at = new Date(Math.max(opts.at.getTime(), Date.now() + 1000));
-  const row = await one<{ id: string }>("INSERT INTO alarms (user_id, conversation_id, label, ring_at, call) VALUES ($1, $2, $3, $4, $5) RETURNING id", [
+  const row = await one<{ id: string }>("INSERT INTO alarms (user_id, conversation_id, label, ring_at) VALUES ($1, $2, $3, $4) RETURNING id", [
     opts.userId,
     opts.conversationId ?? null,
     label,
     at,
-    Boolean(opts.call),
   ]);
   await enqueue(row!.id, at);
   const devices = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM push_subscriptions WHERE user_id = $1", [opts.userId]);
@@ -282,11 +209,11 @@ export async function snoozeAlarm(id: string, userId?: string, minutes = 5) {
   return at;
 }
 
-/** Na hora: notificação em todos os aparelhos, ligação se for o caso e "Alarme: ..." no WhatsApp (só no primeiro toque). */
+/** Na hora: notificação em todos os aparelhos e "Alarme: ..." no WhatsApp (só no primeiro toque). */
 export async function ringAlarm(id: string) {
   const a = await one(
     `UPDATE alarms SET status = 'rang', fired_at = now() WHERE id = $1 AND status = 'scheduled' AND ring_at <= now() + interval '10 seconds'
-     RETURNING id, user_id, conversation_id, label, ring_at, snoozes, call`,
+     RETURNING id, user_id, conversation_id, label, ring_at, snoozes`,
     [id],
   );
   if (!a) return null;
@@ -294,25 +221,12 @@ export async function ringAlarm(id: string) {
   const tracer = await Tracer.start({ trigger: "alarm", userId: a.user_id, conversationId: a.conversation_id, input: `Alarme: ${a.label}` });
   const out: Record<string, unknown> = {};
   try {
-    const mode = await getAlarmMode(a.user_id);
     const push = await tracer.step({ agent: "agenda", type: "tool", name: "alarme: notificação", input: { label: a.label, soneca: a.snoozes } });
     try {
       out.push = await sendPush(a.user_id, { type: "alarm", id: a.id, label: a.label, at: new Date(a.ring_at).toISOString(), token: alarmActionToken(a.id), snoozes: a.snoozes });
       await push.ok(out.push);
     } catch (err) {
       await push.fail(err);
-    }
-    // liga se a pessoa escolheu ligação para todos os alarmes ou pediu ligação neste
-    if ((a.call || mode !== "push") && user && (await callReady())) {
-      // ligação pelo chip: sem custo por minuto aqui; o registro guarda o id da central
-      const call = await tracer.step({ agent: "agenda", type: "tool", name: "alarme: ligação", input: { label: a.label } });
-      try {
-        out.call = await placeAlarmCall(a.user_id, user.phone, a.label, a.id);
-        await call.ok(out.call, { costUsd: 0 });
-      } catch (err) {
-        out.call = { ok: false, error: (err as Error).message };
-        await call.fail(err);
-      }
     }
     if (a.snoozes === 0 && user) {
       const wa = await tracer.step({ agent: "agenda", type: "channel", name: "alarme: whatsapp", input: { text: `Alarme: ${a.label}` } });
@@ -333,50 +247,11 @@ export async function ringAlarm(id: string) {
   return out;
 }
 
-/** Teste pela tela: notificação agora (e ligação se pedida), sem criar alarme nem mandar WhatsApp. */
-export async function testAlarm(userId: string, opts: { call?: boolean } = {}) {
+/** Teste pela tela: notificação agora, sem criar alarme nem mandar WhatsApp. */
+export async function testAlarm(userId: string) {
   const label = "Teste de alarme";
   const push = await sendPush(userId, { type: "alarm", id: null, label, at: new Date().toISOString(), test: true }, { ttl: 120 });
-  let call: unknown = null;
-  if (opts.call) {
-    const u = await one("SELECT phone FROM users WHERE id = $1", [userId]);
-    const tracer = await Tracer.start({ trigger: "alarm", userId, input: label });
-    const step = await tracer.step({ agent: "agenda", type: "tool", name: "alarme: ligação (teste)", input: {} });
-    try {
-      call = await placeAlarmCall(userId, u?.phone ?? "", label, null);
-      await step.ok(call, { costUsd: 0 });
-      await tracer.finish(label);
-    } catch (err) {
-      call = { ok: false, error: (err as Error).message };
-      await step.fail(err);
-      await tracer.error(err);
-    }
-  }
-  return { push, call };
-}
-
-/**
- * Lembrete com ligação: na hora liga e fala o texto curto que a pessoa pediu, além da mensagem no WhatsApp.
- * O job do lembrete pode repetir (erro do LLM): uma ligação por lembrete a cada 10 min.
- */
-export async function callForReminder(r: { id: string; user_id: string; conversation_id: string | null; call_text: string | null }) {
-  if (!r.call_text || !(await callReady())) return null;
-  const done = await one("SELECT 1 FROM alarm_calls WHERE reminder_id = $1 AND created_at > now() - interval '10 minutes'", [r.id]);
-  if (done) return { ok: false, skipped: "já ligou" };
-  const user = await one("SELECT phone FROM users WHERE id = $1", [r.user_id]);
-  if (!user) return null;
-  const tracer = await Tracer.start({ trigger: "reminder", userId: r.user_id, conversationId: r.conversation_id, input: `Ligação: ${r.call_text}` });
-  const step = await tracer.step({ agent: "agenda", type: "tool", name: "lembrete: ligação", input: { texto: r.call_text } });
-  try {
-    const out = await placeAlarmCall(r.user_id, user.phone, r.call_text, null, { reminderId: r.id, prefix: "Lembrete do Planejai" });
-    await step.ok(out, { costUsd: 0 });
-    await tracer.finish(`Ligação: ${r.call_text}`);
-    return out;
-  } catch (err) {
-    await step.fail(err);
-    await tracer.error(err);
-    return { ok: false, error: (err as Error).message };
-  }
+  return { push };
 }
 
 export async function startAlarmWorker(boss: PgBoss) {

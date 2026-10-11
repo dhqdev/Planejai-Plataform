@@ -12,7 +12,7 @@ import { billingReminders } from "../billing.js";
 import { remindBills } from "../bills.js";
 import { config } from "../config.js";
 import { afterFire } from "../reminders.js";
-import { callForReminder, startAlarmWorker } from "../alarms.js";
+import { startAlarmWorker } from "../alarms.js";
 import { runsChannel, runsConversations } from "../roles.js";
 import { QUEUES, getBoss } from "./boss.js";
 
@@ -55,8 +55,6 @@ async function startConversations(log: WorkerLog, concurrency: number) {
     const reminder = await one("SELECT * FROM reminders WHERE id = $1", [job.data.reminderId]);
     if (!reminder || reminder.status !== "scheduled") return;
     let ok = false;
-    // pediu ligação: liga na hora, sem esperar o CTO escrever a mensagem
-    if (reminder.call_text) await callForReminder(reminder).catch((err) => log.warn({ err, reminderId: reminder.id }, "ligação do lembrete falhou"));
     try {
       await processConversation(reminder.conversation_id, {
         trigger: "reminder",
@@ -73,7 +71,7 @@ async function startConversations(log: WorkerLog, concurrency: number) {
     }
   });
 
-  // alarme: notificação no celular, ligação (central própria) e WhatsApp, sem IA
+  // alarme: notificação no celular e WhatsApp, sem IA
   await startAlarmWorker(boss);
 
   // recados: o estabelecimento respondeu, o agente de recados decide o próximo passo

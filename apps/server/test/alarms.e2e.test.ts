@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 /**
- * Alarme ponta a ponta (Postgres real): rotas do painel (inscrição de push, modo, teste, cancelar),
- * ferramenta set_alarm, disparo (push + ligação pela central própria + WhatsApp), soneca/parar pelo token da notificação
- * e limpeza de inscrição que sumiu (410). web-push e a central de ligações (imagem voz) são simulados.
+ * Alarme ponta a ponta (Postgres real): rotas do painel (inscrição de push, teste, cancelar),
+ * ferramenta set_alarm, disparo (push + WhatsApp), soneca/parar pelo token da notificação
+ * e limpeza de inscrição que sumiu (410). web-push é simulado.
  */
 const enabled = Boolean(process.env.TEST_DATABASE_URL);
 process.env.OWNER_PHONES = "5519933333333";
@@ -22,18 +22,6 @@ vi.mock("web-push", async (orig) => {
       }),
     },
   };
-});
-
-const VOZ = "http://voz-teste:8080";
-const vozCalls: { url: string; body: any; auth: string | null }[] = [];
-const realFetch = globalThis.fetch;
-vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any, init?: any) => {
-  const url = String(input instanceof Request ? input.url : input);
-  if (url.startsWith(VOZ)) {
-    vozCalls.push({ url, body: JSON.parse(String(init?.body ?? "{}")), auth: new Headers(init?.headers).get("authorization") });
-    return new Response(JSON.stringify({ ok: true, id: `id-${vozCalls.length}`, status: "na fila" }), { status: 202, headers: { "content-type": "application/json" } });
-  }
-  return realFetch(input, init);
 });
 
 const SUB = (n: number) => ({
@@ -76,7 +64,7 @@ describe.skipIf(!enabled)("alarme (e2e)", () => {
   it("liga a notificação no aparelho, gera as chaves VAPID uma vez e recusa serviço de push desconhecido", async () => {
     const first = (await get("/api/alarms")).json();
     expect(first.vapidPublicKey).toMatch(/^[\w-]{80,}$/);
-    expect(first).toMatchObject({ alarms: [], devices: [], mode: "push", callAvailable: false });
+    expect(first).toMatchObject({ alarms: [], devices: [] });
     // guardada cifrada no banco, não em texto
     const stored = await db.one("SELECT value FROM settings WHERE key = 'vapid_keys'");
     expect(JSON.stringify(stored.value)).not.toContain(first.vapidPublicKey);
@@ -91,22 +79,15 @@ describe.skipIf(!enabled)("alarme (e2e)", () => {
     expect((await app.inject({ method: "GET", url: "/api/alarms" })).statusCode).toBe(401);
   });
 
-  it("testar manda a notificação para os aparelhos; ligação só com a central configurada", async () => {
+  it("testar manda a notificação para os aparelhos", async () => {
     pushes.length = 0;
     const r = (await post("/api/alarms/test")).json();
     expect(r.push).toMatchObject({ devices: 2, sent: 2 });
     expect(pushes[0]!.payload).toMatchObject({ type: "alarm", label: "Teste de alarme", test: true });
     expect(pushes[0]!.opts).toMatchObject({ urgency: "high" });
-    expect((await post("/api/alarms/test", { call: true })).statusCode).toBe(400);
-    expect((await app.inject({ method: "PUT", url: "/api/alarms/settings", headers: { cookie }, payload: { mode: "both" } })).statusCode).toBe(400);
   });
 
-  it("set_alarm agenda, o disparo toca no celular, liga pela central e manda no WhatsApp; soneca e parar pela notificação", async () => {
-    const { config } = await import("../src/config.js");
-    Object.assign(config, { VOZ_URL: `${VOZ}/`, VOZ_TOKEN: "segredo-voz" });
-    const set = await app.inject({ method: "PUT", url: "/api/alarms/settings", headers: { cookie }, payload: { mode: "both" } });
-    expect(set.statusCode).toBe(200);
-
+  it("set_alarm agenda, o disparo toca no celular e manda no WhatsApp; soneca e parar pela notificação", async () => {
     const { setAlarm, alarmList } = await import("../src/agent/tools/agenda.js");
     const ctx: any = { user, conversation: { id: convId }, timezone: "America/Sao_Paulo" };
     const created: any = await setAlarm.run({ label: "Tirar o bolo do forno", in_minutes: 15 }, ctx);
@@ -129,17 +110,12 @@ describe.skipIf(!enabled)("alarme (e2e)", () => {
     expect(payload).toMatchObject({ type: "alarm", id: created.id, label: "Tirar o bolo do forno" });
     expect((await get("/api/alarms")).json().devices).toHaveLength(1);
 
-    expect(out.call).toMatchObject({ ok: true, sid: "id-1" });
-    expect(vozCalls[0]!.url).toBe(`${VOZ}/call`);
-    expect(vozCalls[0]!.body).toEqual({ to: "5519933333333", text: "Alarme do Planejai: Tirar o bolo do forno" });
-    expect(vozCalls[0]!.auth).toBe("Bearer segredo-voz");
-
     // Execuções: um passo por canal
     const steps = await db.many(
       "SELECT s.name, s.status FROM execution_steps s JOIN executions e ON e.id = s.execution_id WHERE e.trigger = 'alarm' AND e.user_id = $1 ORDER BY s.id",
       [user.id],
     );
-    expect(steps.map((s) => s.name)).toEqual(["alarme: notificação", "alarme: ligação", "alarme: whatsapp"]);
+    expect(steps.map((s) => s.name)).toEqual(["alarme: notificação", "alarme: whatsapp"]);
     expect(steps.every((s) => s.status === "success")).toBe(true);
     const { playground } = await import("../src/channels/index.js");
     expect(playground.sent.some((m: any) => m.type === "text" && m.text === "Alarme: Tirar o bolo do forno")).toBe(true);
@@ -167,41 +143,7 @@ describe.skipIf(!enabled)("alarme (e2e)", () => {
     await expect(setAlarm.run({ label: "Reunião", at: "2099-01-01T08:00" }, ctx)).rejects.toThrow(/um ano/);
   });
 
-  it("ligação pedida no alarme ou no lembrete liga mesmo com a escolha geral em notificação, uma vez só", async () => {
-    expect((await app.inject({ method: "PUT", url: "/api/alarms/settings", headers: { cookie }, payload: { mode: "push" } })).statusCode).toBe(200);
-    const { setAlarm, scheduleReminder } = await import("../src/agent/tools/agenda.js");
-    const ctx: any = { user, conversation: { id: convId }, timezone: "America/Sao_Paulo" };
-    vozCalls.length = 0;
-
-    const plain: any = await setAlarm.run({ label: "Sem ligação", in_minutes: 5 }, ctx);
-    await db.query("UPDATE alarms SET ring_at = now() WHERE id = $1", [plain.id]);
-    expect((await alarms.ringAlarm(plain.id))!.call).toBeUndefined();
-
-    const called: any = await setAlarm.run({ label: "Buscar o Thor", in_minutes: 5, call: true }, ctx);
-    expect(called).toMatchObject({ ok: true, call: true });
-    await db.query("UPDATE alarms SET ring_at = now() WHERE id = $1", [called.id]);
-    expect((await alarms.ringAlarm(called.id))!.call).toMatchObject({ ok: true });
-    expect(vozCalls).toHaveLength(1);
-
-    const rem: any = await scheduleReminder.run({ intent: "David pediu para lembrar do remédio", in_minutes: 30, call_text: "hora de tomar o <remédio>" }, ctx);
-    expect(rem).toMatchObject({ ok: true, call: true });
-    const row = await db.one("SELECT id, user_id, conversation_id, call_text FROM reminders WHERE id = $1", [rem.id]);
-    expect(await alarms.callForReminder(row)).toMatchObject({ ok: true });
-    expect(vozCalls[1]!.body).toEqual({ to: "5519933333333", text: "Lembrete do Planejai: hora de tomar o <remédio>" });
-    // o job repetiu (erro do LLM): não liga de novo
-    expect(await alarms.callForReminder(row)).toMatchObject({ ok: false, skipped: "já ligou" });
-    expect(vozCalls).toHaveLength(2);
-    const steps = await db.many("SELECT s.name FROM execution_steps s JOIN executions e ON e.id = s.execution_id WHERE e.trigger = 'reminder' AND e.user_id = $1", [user.id]);
-    expect(steps.map((s) => s.name)).toContain("lembrete: ligação");
-
-    // lembrete sem pedir ligação não guarda texto de ligação
-    const quiet: any = await scheduleReminder.run({ intent: "regar as plantas", in_minutes: 40 }, ctx);
-    expect(quiet.call).toBeUndefined();
-    const quietRow = await db.one("SELECT id, user_id, conversation_id, call_text FROM reminders WHERE id = $1", [quiet.id]);
-    expect(await alarms.callForReminder(quietRow!)).toBeNull();
-  });
-
-  it("cancelar, horário que passou e limite de ligações por dia", async () => {
+  it("cancelar e horário que passou", async () => {
     const { setAlarm, alarmCancel } = await import("../src/agent/tools/agenda.js");
     const ctx: any = { user, conversation: { id: convId }, timezone: "America/Sao_Paulo" };
     await expect(setAlarm.run({ label: "Ontem", at: "2020-01-01T08:00" }, ctx)).rejects.toThrow(/passou/);
@@ -209,10 +151,5 @@ describe.skipIf(!enabled)("alarme (e2e)", () => {
     const del = await app.inject({ method: "DELETE", url: `/api/alarms/${a.id}`, headers: { cookie } });
     expect(del.json()).toEqual({ ok: true });
     expect(await alarmCancel.run({ id: a.id }, ctx)).toEqual({ ok: false });
-
-    await db.query("INSERT INTO alarm_calls (user_id, status) SELECT $1, 'queued' FROM generate_series(1, 10)", [user.id]);
-    const r: any = await alarms.placeAlarmCall(user.id, user.phone, "x", null);
-    expect(r).toMatchObject({ ok: false });
-    expect(r.skipped).toMatch(/limite/);
   });
 });

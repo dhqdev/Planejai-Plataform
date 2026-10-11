@@ -160,26 +160,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Central de ligações (deploy/voz: Asterisk + Piper), imagem separada com as mesmas tags
-      - id: meta-voz
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE }}-voz
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
-            type=sha,prefix=sha-,format=short
-            type=raw,value=${{ steps.ver.outputs.version }},enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
-
-      - uses: docker/build-push-action@v6
-        with:
-          context: deploy/voz
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-voz.outputs.tags }}
-          labels: ${{ steps.meta-voz.outputs.labels }}
-          cache-from: type=gha,scope=voz
-          cache-to: type=gha,mode=max,scope=voz
-
       # Opcional: redeploy automático no Portainer. Crie um webhook na stack/serviço
       # (Portainer > Stack > Webhook) e salve a URL no secret PORTAINER_WEBHOOK_URL.
       # Cada build ganha a tag sha-XXXXXXX e a da versão (X.Y.Z e X.Y; cada push na main é uma patch nova):

@@ -5,20 +5,11 @@ import { useApi } from "./hooks";
 import { haptic } from "./touch";
 
 export type Alarm = { id: string; label: string; ring_at: string; status: string; snoozes: number; fired_at: string | null };
-type Mode = "push" | "call" | "both";
 type AlarmsData = {
   alarms: Alarm[];
   devices: { endpoint: string }[];
-  mode: Mode;
-  callAvailable: boolean;
   vapidPublicKey: string;
 };
-
-const MODES: { id: Mode; label: string }[] = [
-  { id: "push", label: "Notificação" },
-  { id: "call", label: "Ligação" },
-  { id: "both", label: "Os dois" },
-];
 
 const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const isStandalone = () => window.matchMedia?.("(display-mode: standalone)").matches || (navigator as any).standalone === true;
@@ -44,8 +35,7 @@ export const alarmTime = (iso: string) => {
 };
 
 /**
- * Alarmes (Minha conta e tela /alarme): ligar o alarme neste aparelho, escolher como ele avisa,
- * testar e ver/cancelar os próximos. Os alarmes são criados pelo WhatsApp ("cria um alarme daqui a 15 minutos").
+ * Alarmes (Minha conta e tela /alarme): ligar o alarme neste aparelho, testar e ver/cancelar os próximos. Os alarmes são criados pelo WhatsApp ("cria um alarme daqui a 15 minutos").
  */
 export function AlarmSettings() {
   const { data, reload, error: loadError } = useApi<AlarmsData>("/api/alarms");
@@ -99,17 +89,10 @@ export function AlarmSettings() {
       await reload();
     });
 
-  const test = (call: boolean) =>
+  const test = () =>
     run(async () => {
-      const r = await api<{ push: { sent: number }; call: { ok: boolean; skipped?: string; error?: string } | null }>("/api/alarms/test", { method: "POST", json: { call } });
-      if (call) return r.call?.ok ? "Ligando para o seu número." : `A ligação não saiu: ${r.call?.skipped ?? r.call?.error ?? "erro"}`;
+      const r = await api<{ push: { sent: number } }>("/api/alarms/test", { method: "POST", json: {} });
       return r.push.sent ? "Teste enviado. Deve tocar em alguns segundos." : "Nenhum aparelho com o alarme ligado.";
-    });
-
-  const setMode = (mode: Mode) =>
-    run(async () => {
-      await api("/api/alarms/settings", { method: "PUT", json: { mode } });
-      await reload();
     });
 
   const cancel = (id: string) =>
@@ -140,29 +123,12 @@ export function AlarmSettings() {
           {here ? (
             <>
               <span className="muted" style={{ fontSize: 13, alignSelf: "center" }}>Ligado neste aparelho.</span>
-              <button className="btn btn-sm" disabled={busy} onClick={() => test(false)}>Testar</button>
+              <button className="btn btn-sm" disabled={busy} onClick={test}>Testar</button>
               <button className="btn btn-sm btn-ghost" disabled={busy} onClick={disable}>Desligar aqui</button>
             </>
           ) : (
             <button className="btn btn-primary" disabled={busy || !data} onClick={enable}>Ligar alarme neste aparelho</button>
           )}
-        </div>
-      )}
-
-      {data?.callAvailable && (
-        <div className="field">
-          <label id="alarm-mode">Como avisar</label>
-          <div className="row row-wrap" role="group" aria-labelledby="alarm-mode" style={{ gap: 6 }}>
-            {MODES.map((m) => (
-              <button key={m.id} className={`chip ${data.mode === m.id ? "active" : ""}`} aria-pressed={data.mode === m.id} disabled={busy} onClick={() => setMode(m.id)}>
-                {m.label}
-              </button>
-            ))}
-            {data.mode !== "push" && (
-              <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => test(true)}>Testar ligação</button>
-            )}
-          </div>
-          <span className="help">Ligação é para o seu número do WhatsApp, no máximo 10 por dia.</span>
         </div>
       )}
 

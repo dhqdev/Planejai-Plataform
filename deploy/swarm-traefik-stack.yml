@@ -34,10 +34,6 @@ x-env: &env
   TAVILY_API_KEY: ""
   # Lugares perto com telefone (Google Places API New). Sem ela usa o OpenStreetMap, grátis.
   GOOGLE_MAPS_API_KEY: ""
-  # Ligações de lembrete e alarme pela central própria (serviço "voz" abaixo: Asterisk + gateway GSM com o chip).
-  # Vazias = ligação desligada. O mesmo token vai no serviço voz. Passo a passo em docs/ligacoes.md
-  VOZ_URL: http://voz:8080
-  VOZ_TOKEN: TROQUE_VOZ_TOKEN
   # Alarme no celular (Web Push). Vazias = o app gera as chaves sozinho e guarda cifradas no banco.
   VAPID_PUBLIC_KEY: ""
   VAPID_PRIVATE_KEY: ""
@@ -267,59 +263,6 @@ services:
           memory: 1536M
       restart_policy:
         condition: any
-
-  # Central de ligações: Asterisk + voz em português (Piper) + o gateway GSM com o chip, que se conecta aqui.
-  # Precisa de portas UDP abertas no firewall do servidor: 5070 (o gateway entra) e 10000-10019 (áudio).
-  # A API (8080) fica só na rede interna. Ninguém disca pela central: as ligações só saem quando o Planejai pede.
-  voz:
-    image: ghcr.io/dhqdev/planejai-plataform-voz:latest
-    environment:
-      VOZ_TOKEN: TROQUE_VOZ_TOKEN                 # o mesmo do bloco de cima
-      VOZ_SENHA_GATEWAY: TROQUE_SENHA_DO_GATEWAY  # 16+ caracteres; vai na tela do gateway GSM
-      VOZ_IP_PUBLICO: TROQUE_IP_DO_SERVIDOR       # IP público da VPS (o áudio volta para ele)
-      VOZ_DDD: "19"                               # DDD do chip: mesmo DDD disca só o número, outro DDD disca 0 + 21 (Claro) + DDD
-      VOZ_CSP: "21"
-      VOZ_SIP_PORTA: "5070"
-      TZ: America/Sao_Paulo
-    ports:
-      # modo host: o áudio (RTP) não passa bem pela malha do Swarm
-      - { target: 5070, published: 5070, protocol: udp, mode: host }
-      - { target: 10000, published: 10000, protocol: udp, mode: host }
-      - { target: 10001, published: 10001, protocol: udp, mode: host }
-      - { target: 10002, published: 10002, protocol: udp, mode: host }
-      - { target: 10003, published: 10003, protocol: udp, mode: host }
-      - { target: 10004, published: 10004, protocol: udp, mode: host }
-      - { target: 10005, published: 10005, protocol: udp, mode: host }
-      - { target: 10006, published: 10006, protocol: udp, mode: host }
-      - { target: 10007, published: 10007, protocol: udp, mode: host }
-      - { target: 10008, published: 10008, protocol: udp, mode: host }
-      - { target: 10009, published: 10009, protocol: udp, mode: host }
-      - { target: 10010, published: 10010, protocol: udp, mode: host }
-      - { target: 10011, published: 10011, protocol: udp, mode: host }
-      - { target: 10012, published: 10012, protocol: udp, mode: host }
-      - { target: 10013, published: 10013, protocol: udp, mode: host }
-      - { target: 10014, published: 10014, protocol: udp, mode: host }
-      - { target: 10015, published: 10015, protocol: udp, mode: host }
-      - { target: 10016, published: 10016, protocol: udp, mode: host }
-      - { target: 10017, published: 10017, protocol: udp, mode: host }
-      - { target: 10018, published: 10018, protocol: udp, mode: host }
-      - { target: 10019, published: 10019, protocol: udp, mode: host }
-    networks:
-      - planejai_internal
-    deploy:
-      mode: replicated
-      replicas: 1
-      placement:
-        constraints:
-          - node.role == manager
-      update_config:
-        order: stop-first
-      resources:
-        limits:
-          memory: 768M
-      restart_policy:
-        condition: any
-        delay: 5s
 
 volumes:
   planejai_db:
