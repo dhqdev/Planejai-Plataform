@@ -83,7 +83,7 @@
      Parada: cápsula cinza translúcida na aba escolhida. Andando: cresce além da barra, fica transparente,
      mostra embaixo a barra aumentada, com arco-íris nas pontas e brilho de vidro na borda. */
   /* quem cresce são as camadas de dentro (o `scale` na própria cápsula multiplicaria também o deslocamento) */
-  .tab-glider { transition: transform .5s cubic-bezier(.34, 1.3, .5, 1), background-color .2s, box-shadow .2s; }
+  .tab-glider { transition: transform .42s cubic-bezier(.32, .72, 0, 1), background-color .2s, box-shadow .2s; animation: none !important; }
   /* arrastando: a lente segue o dedo sem atraso */
   .tabbar-pill.lens-drag .tab-glider { transition: background-color .2s, box-shadow .2s; }
   .tab-glider > * {
@@ -160,3 +160,15 @@
 }
 :root[data-theme="dark"] :is(.seg, .subtabs, .fin-tabs, .cal-pills) button { color: rgba(255, 255, 255, .6); }
 :root[data-theme="dark"] :is(.seg, .subtabs, .fin-tabs, .cal-pills) button.active { color: #fff; }
+
+/* ---------- Menos efeito (pedido do David, 2026-10-11) ----------
+   No toque, a cápsula da barra e a pastilha das abas só deslizam até a opção, lisas e sem passar do ponto:
+   nada de crescer, esticar ou quicar. A lente só aparece enquanto o dedo arrasta a barra. */
+@media (max-width: 767px) {
+  .tabbar .tab.active .tab-ico, .tabbar .tab:active .tab-ico { animation: none; transform: none; }
+}
+:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg]:has(> button.active:active)::before { scale: 1; }
+:is(.seg, .subtabs, .fin-tabs, .cal-pills) button:active { transform: none; }
+:is(.seg, .subtabs, .fin-tabs, .cal-pills, .sidebar .nav)[data-seg="on"]::before {
+  transition: transform .42s cubic-bezier(.32, .72, 0, 1), width .42s cubic-bezier(.32, .72, 0, 1), height .42s cubic-bezier(.32, .72, 0, 1), opacity .2s;
+}

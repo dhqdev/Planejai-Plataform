@@ -21,14 +21,11 @@ function placeThumbs() {
       box.style.setProperty("--seg-o", "0");
       return;
     }
-    const moved = box.dataset.seg === "on" && box.style.getPropertyValue("--seg-o") === "1" &&
-      (box.style.getPropertyValue("--seg-x") !== `${on.offsetLeft}px` || box.style.getPropertyValue("--seg-y") !== `${on.offsetTop}px`);
     box.style.setProperty("--seg-x", `${on.offsetLeft}px`);
     box.style.setProperty("--seg-w", `${on.offsetWidth}px`);
     box.style.setProperty("--seg-y", `${on.offsetTop}px`);
     box.style.setProperty("--seg-h", `${on.offsetHeight}px`);
     box.style.setProperty("--seg-o", "1");
-    if (moved && !lessMotion()) segLens(box);
     // primeira vez: aparece já no lugar; depois desliza
     if (!box.dataset.seg) {
       box.dataset.seg = "ready";
@@ -49,21 +46,6 @@ export function installSegmented() {
   };
   new MutationObserver(schedule).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "aria-selected"] });
   addEventListener("resize", schedule);
-  // barra do celular: a gota estica enquanto viaja para a aba nova
-  let lastI = "";
-  new MutationObserver(() => {
-    const pill = document.querySelector<HTMLElement>(".tabbar-pill");
-    const i = pill?.style.getPropertyValue("--i") ?? "";
-    if (!pill || i === lastI) return;
-    const first = lastI === "";
-    lastI = i;
-    const g = pill.querySelector<HTMLElement>(".tab-glider");
-    if (!g || first) return;
-    g.classList.remove("moving");
-    void g.offsetWidth;
-    g.classList.add("moving");
-    dispatchEvent(new Event("pj:tab-move"));
-  }).observe(document.querySelector(".layout") ?? document.body, { subtree: true, attributes: true, attributeFilter: ["style"] });
   document.fonts?.ready.then(schedule);
   schedule();
 }
@@ -78,45 +60,11 @@ export function installSegmented() {
  * o fundo: ela leva dentro uma cópia da própria barra, posicionada para casar com a de verdade e aumentada
  * a partir do centro da lente. Funciona igual em todo navegador, inclusive no iPhone. Uma segunda cópia,
  * um pouco maior e com sombras vermelha e azul, aparece só nas pontas: é a luz "dobrando" na borda do vidro.
- * CSS em styles/vidro.css. Abas, filtros e o menu lateral usam a mesma ideia mais leve (segLens).
+ * CSS em styles/vidro.css. Só aparece enquanto o dedo arrasta: no toque, a cápsula só desliza, lisa
+ * (David pediu menos efeito, 2026-10-11).
  */
 const LENS_SCALE = 1.3; // a lente fica maior que a cápsula parada (passa um pouco da barra, como no WhatsApp)
 const LENS_ZOOM = 1.16; // quanto o conteúdo embaixo aparece aumentado
-
-/** Aumenta cada item conforme a distância até o centro da lente (1 = em cima, 0 = longe). */
-function magnify(items: HTMLElement[], lens: DOMRect, axis: "x" | "y", max: number) {
-  const c = axis === "x" ? lens.left + lens.width / 2 : lens.top + lens.height / 2;
-  const reach = axis === "x" ? lens.width : lens.height;
-  for (const el of items) {
-    const r = el.getBoundingClientRect();
-    const d = Math.abs((axis === "x" ? r.left + r.width / 2 : r.top + r.height / 2) - c);
-    const k = Math.max(0, 1 - d / reach);
-    el.style.setProperty("--lens", (1 + max * k * k).toFixed(3));
-  }
-}
-
-/** Onde a pastilha (::before) está agora, no meio da animação. */
-function thumbBox(box: HTMLElement) {
-  const st = getComputedStyle(box, "::before");
-  const m = new DOMMatrixReadOnly(st.transform === "none" ? undefined : st.transform);
-  const r = box.getBoundingClientRect();
-  return new DOMRect(r.left + m.m41, r.top + m.m42, parseFloat(st.width), parseFloat(st.height));
-}
-
-/** Abas, filtros e menu lateral: enquanto a pastilha viaja, ela vira lente (CSS [data-lens]) e o texto embaixo cresce. */
-function segLens(box: HTMLElement) {
-  const side = box.matches(".sidebar .nav");
-  const items = () => [...box.querySelectorAll<HTMLElement>(side ? ":scope > a" : ":scope > button")];
-  box.dataset.lens = "";
-  const until = performance.now() + 460;
-  const tick = () => {
-    magnify(items(), thumbBox(box), side ? "y" : "x", side ? 0.07 : 0.1);
-    if (performance.now() < until) return void requestAnimationFrame(tick);
-    delete box.dataset.lens;
-    items().forEach((el) => el.style.removeProperty("--lens"));
-  };
-  requestAnimationFrame(tick);
-}
 
 function tabbarLens() {
   const pill = () => document.querySelector<HTMLElement>(".tabbar-pill");
@@ -192,8 +140,6 @@ function tabbarLens() {
     if (!raf) raf = requestAnimationFrame(loop);
   };
 
-  // trocou de aba (toque ou rota): a lente viaja da aba antiga até a nova e volta a ser cápsula
-  addEventListener("pj:tab-move", () => lens(560));
 
   addEventListener("pointerdown", (e) => {
     const p = pill();
@@ -238,7 +184,8 @@ function tabbarLens() {
     }
     p.classList.remove("lens-drag");
     g.style.transform = "";
-    lens(560);
+    // soltou: a lente volta a ser a cápsula enquanto desliza para a aba (sem crescer de novo)
+    until = 0;
     // o clique que viria depois do arrasto não conta; quem navega é a aba escolhida
     const swallow = (ev: Event) => { ev.stopPropagation(); ev.preventDefault(); };
     addEventListener("click", swallow, { capture: true, once: true });
