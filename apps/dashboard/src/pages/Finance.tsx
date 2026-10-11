@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { api, brl, day } from "../api";
-import { CATEGORY_COLORS, Donut, Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
+import { CATEGORY_COLORS, Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { useLongPress } from "../ios";
 import { haptic } from "../touch";
+import { ChangesChart, PaceChart, RecurringCard, SavingsKpis, SavingsTips, SavingsTrend, SpendingShape, type Analysis } from "./FinanceInsights";
 import { CardsTab, InvoicesCard, invoiceMonthFor, invoiceMonthLabel, useCards, type CreditCard } from "./FinanceCards";
 
 const SOURCE: Record<string, string> = { conversa: "conversa", audio: "áudio", comprovante: "comprovante", documento: "documento", painel: "painel" };
@@ -30,8 +31,6 @@ const CAT_ICON: Record<string, string> = {
   Investimentos: "trend",
   Outros: "hash",
 };
-/** Valor curto para onde o espaço é fixo (miolo da rosca): R$ 1,2 mi em vez de R$ 1.234.567,89. */
-const brlShort = (v: number) => (Math.abs(v) < 100000 ? brl(v) : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", notation: "compact", maximumFractionDigits: 1 }).format(v));
 /** Valor que nunca é cortado: acima de R$ 99.999,99 ganha a classe "long" (fonte menor). */
 const longMoney = (v: number) => (brl(v).length > 12 ? " long" : "");
 const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
@@ -61,18 +60,10 @@ export function FinancePage() {
   const owners = (shared.data?.withMe ?? []).filter((p) => p.scopes.includes("finance"));
   const { data, error, reload } = useApi<any>(`/api/finance?month=${month}${user ? `&user=${user}` : ""}`, { poll: 20000 });
 
-  const months = data?.months ?? [];
   const expenses = Number(data?.totals?.expenses ?? 0);
-  const income = Number(data?.totals?.income ?? 0);
-  const prevTotal = Number(months.find((m: any) => m.month === shift(month, -1))?.expenses ?? NaN);
-  const diff = Number.isFinite(prevTotal) ? expenses - prevTotal : null;
   const prevCat = new Map<string, number>((data?.prevByCategory ?? []).map((c: any) => [c.category, Number(c.total)]));
   const cats = (data?.byCategory ?? []).map((c: any) => ({ label: c.category as string, value: Number(c.total), count: Number(c.count) }));
-  const maxMonth = Math.max(1, ...months.map((m: any) => Number(m.expenses)));
   const daysIn = new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0).getDate();
-  const byDay = new Map<number, number>((data?.daily ?? []).map((d: any) => [Number(d.day), Number(d.expenses ?? 0)]));
-  const days = Array.from({ length: daysIn }, (_, i) => ({ day: i + 1, expenses: byDay.get(i + 1) ?? 0 }));
-  const maxDay = Math.max(1, ...days.map((d) => d.expenses));
   const list = (data?.transactions ?? []).filter((t: any) => !cat || t.category === cat);
   const groups: [string, any[]][] = [];
   for (const t of list) {
@@ -110,22 +101,15 @@ export function FinancePage() {
     },
     (el) => { const t = find(el); return t ? `${t.kind === "income" ? "+" : "−"}${brl(t.amount)} · ${t.description ?? t.merchant ?? t.category}` : undefined; },
   );
-  const budgetOf = new Map(budgets.filter((b) => b.category).map((b) => [b.category!, b]));
   const go = (n: number) => { haptic(6); setCat(null); setMonth(shift(month, n)); };
 
   const [tab, setTab] = useState<"overview" | "list" | "cards">("overview");
   const [focusCard, setFocusCard] = useState<string | null>(null);
   const openCards = (id?: string) => { haptic(5); setFocusCard(id ?? null); setTab("cards"); };
-  const totalBudget = budgets.find((b) => !b.category);
-  const today = new Date();
-  const elapsed = isCurrent ? today.getDate() : daysIn;
-  // próximos lembretes só nas próprias finanças (a agenda de um contato tem permissão separada)
-  const reminders = useApi<{ events: any[] }>(
-    user ? null : `/api/calendar?from=${new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()}&to=${new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14).toISOString()}`,
-  );
-  const upcoming = (reminders.data?.events ?? []).filter((e) => e.kind === "reminder").slice(0, 4);
   const periodLabel = `1 - ${daysIn} de ${monthName(month).slice(0, 3)}, ${month.slice(0, 4)}`;
-  const insight = buildInsight(cats, expenses, prevCat, budgets, monthName(month));
+  const analysis: Analysis | undefined = data?.analysis;
+  // tocar numa dica ou categoria abre os lançamentos dela
+  const openCategory = (c: string) => { setCat(c); setTab("list"); };
 
   return (
     <div className="page fin-page fit">
@@ -169,91 +153,23 @@ export function FinancePage() {
         <CardsTab user={user} readonly={readonly} focus={focusCard} onChanged={() => void reload()} />
       ) : !data ? <Loading /> : tab === "overview" ? (
         <>
-          <div className="card fin-kpis">
-            <div><small>Entradas</small><strong className={`pos${longMoney(income)}`}>{brl(income)}</strong><span>no período</span></div>
-            <div><small>Saídas</small><strong className={`neg${longMoney(expenses)}`}>{brl(expenses)}</strong><span>{income ? `${Math.round((expenses / income) * 100)}% das entradas` : diff != null ? `${diff > 0 ? "+" : "−"}${brl(Math.abs(diff))} vs ${monthName(shift(month, -1)).slice(0, 3)}` : "no período"}</span></div>
-            <div><small>Saldo</small><strong className={`${income - expenses < 0 ? "neg" : ""}${longMoney(income - expenses)}`}>{brl(income - expenses)}</strong><span>{income - expenses < 0 ? "negativo" : "positivo"}</span></div>
-            {totalBudget ? (
-              <div><small>Limite do mês</small><strong className={`${totalBudget.spent > totalBudget.limit ? "neg" : ""}${longMoney(totalBudget.limit - totalBudget.spent)}`}>{brl(Math.max(0, totalBudget.limit - totalBudget.spent))}</strong><span>restante de {brl(totalBudget.limit)}</span></div>
-            ) : (
-              <div><small>Média por dia</small><strong className={longMoney(expenses / Math.max(1, elapsed))}>{brl(expenses / Math.max(1, elapsed))}</strong><span>{Number(data.totals?.count ?? 0)} {Number(data.totals?.count ?? 0) === 1 ? "lançamento" : "lançamentos"}</span></div>
+          {analysis && <SavingsKpis a={analysis} />}
+
+          <div className="fin-overview fx-overview">
+            {analysis && (
+              <div className="fin-col">
+                <SavingsTips a={analysis} onCategory={openCategory} />
+                <RecurringCard a={analysis} />
+                <SpendingShape a={analysis} />
+              </div>
             )}
-          </div>
-
-          <div className="fin-overview">
-            <div className="fin-col">
-              <div className="card fin-insight">
-                <div className="fin-card-head">
-                  <h3>Insight do mês</h3>
-                  <span className="chip-mini">automático</span>
-                  <span className="spacer" />
-                  <button className="icon-btn" aria-label="Atualizar" onClick={() => void reload()}><Icon name="refresh" size={15} /></button>
-                </div>
-                <small className="muted">{cap(today.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }))}</small>
-                <p className="fin-insight-text">{insight}</p>
-                {cats[0] && (
-                  <>
-                    <div className="fin-insight-meta">
-                      <span className="fin-pill" style={{ ["--c" as any]: CATEGORY_COLORS[0] }}><Icon name={CAT_ICON[cats[0].label] ?? "hash"} size={13} /> {cats[0].label}</span>
-                      <strong>{brl(cats[0].value)}</strong> <span className="muted">gasto</span>
-                      <strong>{expenses ? ((cats[0].value / expenses) * 100).toFixed(1).replace(".", ",") : 0}%</strong> <span className="muted">do total</span>
-                    </div>
-                    <div className="fin-insight-bar"><i style={{ width: `${expenses ? (cats[0].value / expenses) * 100 : 0}%` }} /></div>
-                  </>
-                )}
+            {analysis && (
+              <div className="fin-col">
+                <PaceChart a={analysis} />
+                <ChangesChart a={analysis} onCategory={openCategory} />
+                <SavingsTrend a={analysis} onMonth={(m) => { setCat(null); setMonth(m); }} />
               </div>
-
-              <div className="card card-pad fin-trend">
-                <div className="fin-card-head"><h3>Últimos meses</h3></div>
-                {!months.length && <p className="muted" style={{ fontSize: 13, margin: "4px 0 0" }}>O histórico aparece aqui depois do primeiro mês com gastos.</p>}
-                <div className="fin-months" style={months.length ? undefined : { display: "none" }}>
-                  {months.map((m: any) => (
-                    <button key={m.month} className={m.month === month ? "active" : ""} onClick={() => { haptic(5); setCat(null); setMonth(m.month); }} title={`${m.month}: ${brl(m.expenses)}`}>
-                      <span className="fin-month-bar"><i style={{ height: `${(Number(m.expenses) / maxMonth) * 100}%` }} /></span>
-                      <small>{monthName(m.month).slice(0, 3)}</small>
-                    </button>
-                  ))}
-                </div>
-                <h3 style={{ marginTop: 16 }}>Dia a dia</h3>
-                <div className="bars" style={{ height: 56 }}>
-                  {days.map((d) => <div key={d.day} className={`bar ${d.expenses ? "spent" : ""}`} title={`dia ${d.day}: ${brl(d.expenses)}`} style={{ height: `${(d.expenses / maxDay) * 100}%` }} />)}
-                </div>
-              </div>
-            </div>
-
-            <div className="fin-col fin-col-donut">
-              <div className="card fin-donut-card">
-                <div className="fin-card-head">
-                  <span className="tone-ico" style={{ ["--c" as any]: "var(--brand-3)" }}><Icon name="target" size={15} /></span>
-                  <div>
-                    <h3>Gastos por categoria</h3>
-                    <small className="muted">Toque numa categoria para ver os lançamentos</small>
-                  </div>
-                </div>
-                {cats.length ? (
-                  <div className="fin-donut">
-                    <Donut items={cats} size={150} center={<div><small className="muted">Total</small><div style={{ fontWeight: 700, fontSize: 13 }} title={brl(expenses)}>{brlShort(expenses)}</div></div>} />
-                    <div className="fin-legend">
-                      {cats.map((c: any, i: number) => {
-                        const b = budgetOf.get(c.label);
-                        return (
-                          <button key={c.label} style={{ ["--c" as any]: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} onClick={() => { haptic(5); setCat(c.label); setTab("list"); }}>
-                            <span className="dot" />
-                            <span className="name" title={c.label}>{c.label}</span>
-                            <span className="muted val">{brl(c.value)}</span>
-                            <strong>{expenses ? Math.round((c.value / expenses) * 100) : 0}%</strong>
-                            <span className="bar"><i style={{ width: `${expenses ? (c.value / expenses) * 100 : 0}%` }} /></span>
-                            {b && <small className={`lim ${c.value >= b.limit ? "over" : ""}`}>{Math.round((c.value / b.limit) * 100)}% do limite de {brl(b.limit)}</small>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <Empty>Sem gastos em {monthName(month)}. No WhatsApp é só dizer "gastei 32 no almoço" ou mandar a foto do comprovante.</Empty>
-                )}
-              </div>
-            </div>
+            )}
 
             <div className="fin-col">
               <InvoicesCard user={user} readonly={readonly} onOpen={openCards} />
@@ -293,21 +209,6 @@ export function FinancePage() {
                     {!readonly && <button className="btn btn-brand btn-sm" onClick={() => openBudget({ category: null })}><Icon name="plus" size={14} /> Criar limite</button>}
                   </div>
                 )}
-              </div>
-
-              <div className="card fin-side-card">
-                <div className="fin-card-head">
-                  <span className="tone-ico" style={{ ["--c" as any]: "var(--brand-4)" }}><Icon name="bell" size={15} /></span>
-                  <h3>Próximos lembretes</h3>
-                </div>
-                {upcoming.map((e) => (
-                  <div key={e.id} className="fin-rem">
-                    <span className="fin-rem-date"><strong>{new Date(e.start).getDate()}</strong><small>{monthName(new Date(e.start).toISOString().slice(0, 7)).slice(0, 3)}</small></span>
-                    <span className="ellipsis" style={{ flex: 1 }} title={e.title}>{e.title || "(sem título)"}</span>
-                    <small className="muted">{new Date(e.start).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small>
-                  </div>
-                ))}
-                {reminders.data && !upcoming.length && <p className="muted fin-empty-side">Nenhum lembrete nos próximos 14 dias.</p>}
               </div>
             </div>
           </div>
@@ -407,21 +308,6 @@ export function FinancePage() {
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-/** Insight sem IA (não gasta token): maior categoria, comparação com o mês anterior e limites perto do fim. */
-function buildInsight(cats: { label: string; value: number }[], total: number, prev: Map<string, number>, budgets: { category: string | null; limit: number; spent: number }[], month: string) {
-  if (!cats.length) return `Nenhum gasto em ${month} ainda. Mande no WhatsApp o que gastou e eu organizo por categoria.`;
-  const top = cats[0]!;
-  const pct = Math.round((top.value / Math.max(total, 1)) * 100);
-  const parts = [pct >= 99 ? `Todo o gasto de ${month} foi com ${top.label}.` : `${top.label} é ${pct}% dos seus gastos em ${month}.`];
-  const before = prev.get(top.label);
-  if (before != null && Math.abs(top.value - before) >= 1)
-    parts.push(top.value > before ? `São ${brl(top.value - before)} a mais que no mês passado.` : `São ${brl(before - top.value)} a menos que no mês passado.`);
-  const hot = budgets.filter((b) => b.limit && b.spent / b.limit >= 0.8).sort((a, b) => b.spent / b.limit - a.spent / a.limit)[0];
-  if (hot) parts.push(`${hot.category ?? "O total do mês"} já está em ${Math.round((hot.spent / hot.limit) * 100)}% do limite.`);
-  else if (cats.length > 1) parts.push(`Depois vem ${cats[1]!.label}, com ${brl(cats[1]!.value)}.`);
-  return parts.join(" ");
-}
 
 function shift(month: string, delta: number) {
   const [y, m] = month.split("-").map(Number) as [number, number];

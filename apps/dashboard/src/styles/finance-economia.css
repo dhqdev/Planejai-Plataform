@@ -1,0 +1,137 @@
+/* ---------- Finanças > Visão geral: economia (pages/FinanceInsights.tsx) ---------- */
+.fx-kpis span b { font-weight: 650; }
+.fx-kpis span b.up, .fx-div .val.up { color: var(--err); }
+.fx-kpis span b.down, .fx-div .val.down { color: var(--ok); }
+.fx-card { padding: 18px 20px; min-width: 0; }
+.fx-card .fin-card-head { align-items: flex-start; margin-bottom: 10px; }
+.fx-card .fin-card-head > div small { display: block; font-size: 12px; margin-top: 2px; }
+.fx-empty { font-size: 13px; margin: 4px 0 0; line-height: 1.5; }
+.fx-note { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; line-height: 1.5; }
+.fx-note b { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
+
+/* Onde dá para economizar */
+.fx-headline { font-size: 15.5px; font-weight: 600; line-height: 1.45; margin: 4px 0 12px; letter-spacing: -0.01em; text-wrap: pretty; }
+.fx-tip-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.fx-tip-list li + li { border-top: 1px solid var(--border); }
+.fx-tip-list button { width: 100%; display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px 4px; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 10px; }
+.fx-tip-list button:disabled { cursor: default; }
+@media (hover: hover) and (pointer: fine) { .fx-tip-list button:not(:disabled):hover { background: var(--panel-2); } }
+.fx-tip-ico { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: var(--ok-soft); color: var(--ok); }
+.fx-tip-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fx-tip-text strong { font-size: 13.5px; font-weight: 650; overflow-wrap: anywhere; }
+.fx-tip-text small { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.fx-tip-save { display: flex; flex-direction: column; align-items: flex-end; white-space: nowrap; }
+.fx-tip-save b { color: var(--ok); font-variant-numeric: tabular-nums; font-size: 14px; }
+.fx-tip-save small { font-size: 11px; color: var(--muted); }
+
+/* Legenda de linha (ritmo) */
+.fx-legend { margin-bottom: 4px; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--muted); }
+.fx-legend span, .fx-tip span { display: inline-flex; align-items: center; gap: 5px; }
+.ln { display: inline-block; width: 14px; height: 0; border-top: 2px solid var(--ink); border-radius: 2px; }
+.ln.avg { border-top-color: var(--border-2); }
+.ln.proj { border-top-style: dashed; }
+
+/* Ritmo do mês */
+.fx-pace-plot { position: relative; height: 150px; margin: 8px 0 0 0; touch-action: pan-y; cursor: crosshair; }
+.fx-pace-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.fx-pace-plot path { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.fx-pace-plot path.actual { stroke: var(--ink); }
+.fx-pace-plot path.area { fill: var(--ink); opacity: .06; stroke: none; }
+.fx-pace-plot path.avg { stroke: var(--border-2); }
+.fx-pace-plot path.proj { stroke: var(--ink); stroke-dasharray: 5 5; opacity: .75; }
+.fx-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--border); pointer-events: none; }
+.fx-grid small { position: absolute; left: 0; top: -16px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fx-dot { position: absolute; width: 9px; height: 9px; margin: 0 0 -4.5px -4.5px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 2px var(--panel); pointer-events: none; }
+.fx-dot.hollow { background: var(--panel); border: 2px solid var(--ink); width: 10px; height: 10px; margin: 0 0 -5px -5px; box-shadow: none; }
+.fx-cross { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid var(--muted); opacity: .5; pointer-events: none; }
+.fx-tip { position: absolute; top: 0; transform: translateX(8px); display: flex; flex-direction: column; gap: 2px; padding: 7px 9px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow-lg); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; z-index: 2; }
+.fx-tip.left { transform: translateX(calc(-100% - 8px)); }
+.fx-axis { position: relative; display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--muted); }
+
+.fx-axis .today { position: absolute; top: 0; transform: translateX(-50%); color: var(--text); font-weight: 600; }
+
+/* O que mudou: barras divergentes a partir do meio */
+.fx-div { display: flex; flex-direction: column; gap: 2px; }
+.fx-div button { display: grid; grid-template-columns: minmax(70px, 108px) minmax(0, 1fr) 72px; align-items: center; gap: 10px; padding: 6px 4px; border: none; background: none; color: inherit; font: inherit; font-size: 13px; text-align: left; cursor: pointer; border-radius: 8px; }
+@media (hover: hover) and (pointer: fine) { .fx-div button:hover { background: var(--panel-2); } }
+.fx-div .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.fx-div .track { position: relative; height: 12px; }
+.fx-div .track::before { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; border-left: 1px solid var(--border-2); }
+.fx-div .track i { position: absolute; top: 0; bottom: 0; }
+.fx-div .track i.up { left: calc(50% + 1px); background: var(--err); border-radius: 0 4px 4px 0; }
+.fx-div .track i.down { right: calc(50% + 1px); background: var(--ok); border-radius: 4px 0 0 4px; }
+.fx-div .val { text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.fx-div-key { display: grid; grid-template-columns: minmax(70px, 108px) minmax(0, 1fr) 72px; gap: 10px; padding: 2px 4px 0; font-size: 10.5px; color: var(--muted); }
+.fx-div-key span { grid-column: 2; display: flex; justify-content: space-between; }
+
+/* Gastos que se repetem */
+.fx-year { font-variant-numeric: tabular-nums; font-size: 14px; }
+.fx-year small { font-size: 11px; color: var(--muted); font-weight: 500; margin-left: 2px; }
+.fx-rec { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.fx-rec:last-of-type { border-bottom: none; }
+.fx-rec-tag { font-size: 10.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .03em; padding: 3px 7px; border-radius: 99px; background: var(--panel-2); color: var(--muted); }
+.fx-rec-tag.assinatura { background: var(--violet-soft); color: var(--violet); }
+.fx-rec-name { display: flex; flex-direction: column; min-width: 0; font-size: 13.5px; font-weight: 600; }
+.fx-rec-name small, .fx-rec-val small { font-size: 11.5px; color: var(--muted); font-weight: 500; }
+.fx-rec-val { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; font-size: 13.5px; white-space: nowrap; }
+.fx-recurring .link-btn { margin-top: 4px; }
+
+/* Como você gasta */
+.fx-split { display: flex; gap: 2px; height: 14px; border-radius: 6px; overflow: hidden; }
+.fx-split i { display: block; min-width: 3px; }
+i.ess { background: var(--ink); }
+i.flex { background: var(--border-2); }
+.fx-split-key { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 12.5px; }
+.fx-split-key span { display: inline-flex; align-items: baseline; gap: 6px; }
+.fx-split-key span i { width: 9px; height: 9px; border-radius: 3px; align-self: center; }
+.fx-split-key b { font-variant-numeric: tabular-nums; }
+.fx-split-key small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.fx-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; height: 74px; margin-top: 16px; }
+.fx-week span { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; min-height: 0; }
+.fx-week i { width: min(22px, 100%); background: var(--border-2); border-radius: 4px 4px 2px 2px; }
+.fx-week span.top i { background: var(--ink); }
+.fx-week small { font-size: 10.5px; color: var(--muted); }
+.fx-week span.top small { color: var(--text); font-weight: 650; }
+
+/* Quanto sobrou: barras para cima (sobrou) e para baixo (faltou) */
+.fx-bars { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.fx-bars button { display: flex; flex-direction: column; align-items: center; gap: 3px; border: none; background: none; color: inherit; font: inherit; cursor: pointer; padding: 4px 0; border-radius: 10px; min-width: 0; }
+@media (hover: hover) and (pointer: fine) { .fx-bars button:hover { background: var(--panel-2); } }
+.fx-bars .plot { position: relative; width: 100%; height: 86px; }
+.fx-bars .plot::after { content: ""; position: absolute; left: 4px; right: 4px; bottom: var(--zero); border-top: 1px solid var(--border-2); }
+.fx-bars .plot i { position: absolute; left: 50%; width: min(26px, 70%); transform: translateX(-50%); }
+.fx-bars .plot i.pos { background: var(--border-2); border-radius: 4px 4px 0 0; }
+.fx-bars .plot i.neg { background: color-mix(in srgb, var(--err) 45%, var(--panel)); border-radius: 0 0 4px 4px; }
+.fx-bars button.active .plot i.pos { background: var(--ink); }
+.fx-bars button.active .plot i.neg { background: var(--err); }
+.fx-bars b { font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fx-bars b.neg { color: var(--err); }
+.fx-bars small { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.fx-bars button.active small { color: var(--text); font-weight: 650; }
+
+/* Notebook: as três colunas não esticam os cartões de gráfico; o último de cada coluna ocupa a sobra */
+@media (min-width: 1024px) and (min-height: 680px) {
+  .fin-page.fit .fx-overview { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(280px, .85fr); }
+  .fin-page.fit .fx-overview .fx-card { flex: 0 0 auto; padding: 16px 18px; }
+  .fin-page.fit .fx-overview .fin-col > .fx-card:last-child { flex: 1 0 auto; }
+}
+
+/* Celular: uma coluna, na ordem do que mais importa */
+@media (max-width: 767px) {
+  .fx-overview { display: flex !important; flex-direction: column; gap: 14px; }
+  .fx-overview > .fin-col { display: contents !important; }
+  .fx-tips { order: 1; }
+  .fx-pace { order: 2; }
+  .fx-changes { order: 3; }
+  .fx-recurring { order: 4; }
+  .fx-shape { order: 5; }
+  .fx-trend { order: 6; }
+  .fx-overview > .fin-col:last-child > * { order: 7; }
+  .fx-card { padding: 16px; }
+  .fx-headline { font-size: 15px; }
+  .fx-tip-list button { grid-template-columns: 28px minmax(0, 1fr); }
+  .fx-tip-ico { width: 28px; height: 28px; }
+  .fx-tip-save { grid-column: 2; flex-direction: row; align-items: baseline; gap: 5px; }
+  .fx-pace-plot { height: 130px; }
+  .fx-kpis small { font-size: 11.5px; }
+}
