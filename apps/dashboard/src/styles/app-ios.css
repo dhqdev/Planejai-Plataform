@@ -48,8 +48,6 @@
   .tab-glider { z-index: 3; pointer-events: none; }
   /* o dedo arrasta a lente, não a página nem o link */
   .tabbar-pill, .tabbar-pill * { touch-action: none; -webkit-user-drag: none; user-drag: none; }
-  .tabbar .tab .tab-ico { scale: var(--lens, 1); }
-  .tabbar-pill.lens-drag .tab-glider { transition: scale .3s var(--ios-spring); scale: 1.12 1.18; animation: none; box-shadow: inset 0 1px 0 #fff, inset 0 0 0 .5px rgba(0, 0, 0, .05), 0 10px 24px -8px rgba(0, 0, 0, .28); }
   .tab-glider.moving { animation: glider-stretch .5s cubic-bezier(.3, .7, .3, 1); }
   @keyframes glider-stretch { 0% { scale: 1 1; } 35% { scale: 1.22 .86; } 70% { scale: .96 1.04; } 100% { scale: 1 1; } }
   :root[data-theme="dark"] .tab-glider { background: linear-gradient(180deg, rgba(255, 255, 255, .2), rgba(255, 255, 255, .06)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), inset 0 0 0 .5px rgba(255, 255, 255, .1), 0 6px 16px -6px rgba(0, 0, 0, .6); }
@@ -62,15 +60,6 @@
   .tabbar .tab:active .tab-ico { transform: scale(.82); }
   .tabbar .tab-dot { box-shadow: 0 0 0 2px var(--panel); }
   @media (prefers-reduced-motion: reduce) { .tab-glider.moving, .tabbar .tab.active .tab-ico { animation: none; } }
-
-  /* folhas (modais no celular) e o "Mais": vidro grosso, quase sólido, para o texto ler bem */
-  .modal-bg .modal, .modal.more-sheet {
-    background: var(--glass-sheen), var(--glass-strong);
-    -webkit-backdrop-filter: blur(30px) saturate(1.9); backdrop-filter: blur(30px) saturate(1.9);
-    box-shadow: var(--glass-edge), 0 -10px 40px -12px rgba(0, 0, 0, .25);
-    border: none;
-  }
-  .modal-bg .modal .modal-head, .modal-bg .modal .modal-foot { border-color: var(--hairline); background: transparent; }
 }
 .cal-fab {
   background: linear-gradient(180deg, rgba(255, 255, 255, .28), rgba(255, 255, 255, 0) 55%), var(--violet);
@@ -170,8 +159,6 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 0 0 .5px rgba(0, 0, 0, .04);
   }
   :root[data-theme="dark"] .tab-glider { background: rgba(255, 255, 255, .14); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12); }
-  .tabbar-pill.lens-drag .tab-glider { background: rgba(255, 255, 255, .35); box-shadow: inset 0 1px 0 #fff, inset 0 0 0 .5px rgba(0, 0, 0, .08), 0 8px 22px -8px rgba(0, 0, 0, .3); }
-  :root[data-theme="dark"] .tabbar-pill.lens-drag .tab-glider { background: rgba(255, 255, 255, .2); }
   .main { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
 }
 
@@ -214,16 +201,6 @@
 
   /* folhas: presas ao pé da tela (soltas, a fresta embaixo aparecia preta ao subir), cantos mais redondos */
   .modal, .modal.wide, .modal.more-sheet { border-radius: 34px 34px 0 0; }
-  /* o que preenche embaixo quando a folha passa do limite é do mesmo vidro da folha, não preto */
-  .modal::after { background: var(--glass-strong); -webkit-backdrop-filter: blur(30px) saturate(1.9); backdrop-filter: blur(30px) saturate(1.9); }
-  /* tema escuro: vidro preto de verdade, com borda clara fina em cima */
-  :root[data-theme="dark"] .modal-bg .modal, :root[data-theme="dark"] .modal.more-sheet {
-    background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, 0) 40%), rgba(12, 12, 14, .78);
-    box-shadow: inset 0 .5px 0 rgba(255, 255, 255, .22), 0 -10px 40px -12px rgba(0, 0, 0, .6);
-  }
-  :root[data-theme="dark"] .modal::after { background: rgba(12, 12, 14, .78); }
-  /* o fundo atrás da folha continua escuro, mas desfocado (vidro), em vez de um preto chapado */
-  .modal-scrim { background: rgba(0, 0, 0, .28); -webkit-backdrop-filter: blur(6px) saturate(1.2); backdrop-filter: blur(6px) saturate(1.2); }
 }
 
 /* controles: ao segurar, a pastilha vira vidro (cresce e fica translúcida), como no seletor do iOS 26 */
@@ -235,22 +212,7 @@
 :is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg="on"]::before { transition: transform .45s var(--ios-spring), width .45s var(--ios-spring), height .45s var(--ios-spring), scale .3s var(--ios-spring), opacity .2s; }
 @media (prefers-reduced-motion: reduce) { .tabbar.min .tabbar-pill { transform: none; } }
 
-/* Folhas no celular: sólidas. No iPhone o backdrop-filter numa folha que está subindo vira um bloco preto,
-   então a folha não usa desfoque; o acabamento de vidro fica no brilho de cima e na borda. */
-@media (max-width: 767px) {
-  .modal-bg .modal, .modal.more-sheet, .modal::after, .modal-scrim {
-    -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
-  }
-  .modal-bg .modal, .modal.more-sheet { background: linear-gradient(180deg, rgba(255, 255, 255, .9), rgba(255, 255, 255, 0) 30%), var(--panel); }
-  .modal::after { background: var(--panel); }
-  :root[data-theme="dark"] .modal-bg .modal, :root[data-theme="dark"] .modal.more-sheet {
-    background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, 0) 30%), #0c0c0e;
-    box-shadow: inset 0 .5px 0 rgba(255, 255, 255, .22), 0 -10px 40px -12px rgba(0, 0, 0, .6);
-  }
-  :root[data-theme="dark"] .modal::after { background: #0c0c0e; }
-  :root[data-theme="dark"] .more-sheet .more-section .more-tile.active { background: rgba(255, 255, 255, .14); }
-  .modal-scrim { background: rgba(0, 0, 0, .4); }
-}
+/* Folhas, modais e o material de vidro em si: styles/vidro.css (importado depois deste). */
 
 /* ---------- Tema escuro: vidro preto (pedido do David, 2026-10-10) ----------
    Pastilhas, trilhos e botões comuns viram vidro escuro translúcido: fundo quase preto que deixa passar um

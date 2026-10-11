@@ -115,6 +115,7 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
     s.v = 0;
     s.open.forEach((a) => a.cancel());
     s.open = [];
+    sheet.current.classList.add("glass-on");
     paint();
   };
   const stop = () => {
@@ -185,10 +186,13 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
       const up = el.animate([{ transform: `translate3d(0, ${s.h}px, 0)` }, { transform: "translate3d(0, 0, 0)" }], timing);
       s.open = [up];
       if (scrim.current) s.open.push(scrim.current.animate([{ opacity: 0 }, { opacity: 1 }], timing));
+      // o vidro (desfoque do que está atrás) só liga com a folha parada: no iPhone, desfoque numa folha que
+      // ainda está subindo pelo compositor vira um bloco preto
       up.onfinish = () => {
         s.open = [];
+        el.classList.add("glass-on");
       };
-    }
+    } else el?.classList.add("glass-on");
     return () => {
       stop();
       g.current.open.forEach((a) => a.cancel());

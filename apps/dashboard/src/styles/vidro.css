@@ -1,0 +1,146 @@
+/* ---------- Vidro líquido: a regra única do painel (pedido do David, 2026-10-11) ----------
+   Um material só para tudo que flutua sobre o conteúdo: modais e folhas, o "Mais", o menu de toque longo,
+   a pílula de versão nova e a barra de baixo. Mesmo vidro no claro (branco translúcido) e no escuro
+   (preto translúcido): desfoca e satura o que passa atrás, brilho fino em cima e borda que pega luz.
+   Fontes: developer.apple.com "Adopting Liquid Glass"; receitas web de backdrop-filter e o limite do Safari
+   (não aceita filtro SVG no backdrop-filter e ignora var() dentro de -webkit-backdrop-filter, por isso os
+   valores do desfoque estão escritos por extenso). A lente que refrata está em ios.tsx (tabbarLens). */
+:root {
+  --lg-tint: rgba(255, 255, 255, .6);
+  --lg-tint-strong: rgba(250, 250, 252, .8);
+  --lg-solid: rgba(250, 250, 252, .97);
+  --lg-sheen: linear-gradient(180deg, rgba(255, 255, 255, .55), rgba(255, 255, 255, .1) 28%, rgba(255, 255, 255, 0) 55%);
+  --lg-rim: inset 0 1px 0 rgba(255, 255, 255, .95), inset 0 -1px 0 rgba(255, 255, 255, .4), inset 0 0 0 .5px rgba(255, 255, 255, .7), 0 0 0 .5px rgba(0, 0, 0, .09);
+  --lg-shadow: 0 18px 48px -16px rgba(0, 0, 0, .28), 0 2px 8px rgba(0, 0, 0, .06);
+  --lg-line: rgba(60, 60, 67, .14);
+  --lg-scrim: rgba(0, 0, 0, .2);
+  /* dentro da lente: o "vidro" mostra a cópia da barra sobre este fundo */
+  --lg-lens: rgba(255, 255, 255, .94);
+}
+:root[data-theme="dark"] {
+  --lg-tint: rgba(24, 24, 27, .56);
+  --lg-tint-strong: rgba(18, 18, 20, .7);
+  --lg-solid: rgba(18, 18, 20, .97);
+  --lg-sheen: linear-gradient(180deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .02) 28%, rgba(255, 255, 255, 0) 55%);
+  --lg-rim: inset 0 1px 0 rgba(255, 255, 255, .2), inset 0 -1px 0 rgba(255, 255, 255, .05), inset 0 0 0 .5px rgba(255, 255, 255, .12), 0 0 0 .5px rgba(0, 0, 0, .6);
+  --lg-shadow: 0 18px 48px -14px rgba(0, 0, 0, .75), 0 2px 8px rgba(0, 0, 0, .35);
+  --lg-line: rgba(255, 255, 255, .1);
+  --lg-scrim: rgba(0, 0, 0, .38);
+  --lg-lens: rgba(36, 36, 40, .96);
+}
+
+/* ---------- O material ---------- */
+.lg, .ctx-menu, .update-pill, .modal-bg .modal.glass-on {
+  background: var(--lg-sheen), var(--lg-tint);
+  -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+  border: none; box-shadow: var(--lg-rim), var(--lg-shadow);
+}
+
+/* ---------- Modais (notebook) e folhas (celular) ----------
+   Abrem quase sólidos e o vidro liga quando param (classe glass-on, Modal em components.tsx): no iPhone,
+   desfoque numa folha que ainda está subindo vira um bloco preto. O fundo atrás escurece pouco e não
+   desfoca, para o vidro da folha ter o que mostrar. */
+.modal-bg .modal {
+  background: var(--lg-sheen), var(--lg-solid);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  border: none; box-shadow: var(--lg-rim), var(--lg-shadow);
+  transition: background-color .35s ease;
+}
+.modal-bg .modal.glass-on {
+  background: var(--lg-sheen), var(--lg-tint-strong);
+  -webkit-backdrop-filter: blur(28px) saturate(180%); backdrop-filter: blur(28px) saturate(180%);
+}
+.modal-bg .modal-scrim { background: var(--lg-scrim); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.modal-bg .modal .modal-head, .modal-bg .modal .modal-foot { border-color: var(--lg-line); background: transparent; }
+@media (max-width: 767px) {
+  .modal-bg .modal, .modal-bg .modal.more-sheet { border: none; box-shadow: var(--lg-rim), 0 -12px 40px -14px rgba(0, 0, 0, .3); }
+  :root[data-theme="dark"] .modal-bg .modal { box-shadow: var(--lg-rim), 0 -12px 40px -14px rgba(0, 0, 0, .8); }
+  .modal-bg .modal.more-sheet { background: var(--lg-sheen), var(--lg-solid); }
+  .modal-bg .modal.more-sheet.glass-on { background: var(--lg-sheen), var(--lg-tint-strong); }
+  /* puxou além do limite: o que aparece embaixo é da cor da folha (sem desfoque: passaria da tela) */
+  .modal-bg .modal::after { background: var(--lg-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .modal-bg:has(.more-sheet) .modal-scrim { background: var(--lg-scrim); }
+  .modal-bg .sheet-handle { background: color-mix(in srgb, var(--text) 22%, transparent); }
+  /* blocos do "Mais" sobre o vidro: translúcidos, o ativo um pouco mais claro (sem roxo) */
+  .more-sheet .more-section .more-tile, :root[data-theme="dark"] .more-sheet .more-section .more-tile { background: color-mix(in srgb, var(--text) 6%, transparent); }
+  .more-sheet .more-section .more-tile.active, :root[data-theme="dark"] .more-sheet .more-section .more-tile.active {
+    background: color-mix(in srgb, var(--text) 13%, transparent); color: var(--text); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35);
+  }
+  .more-sheet .more-section .more-tile.active svg.ico { color: var(--text); }
+  .more-sheet .install-card { background: color-mix(in srgb, var(--text) 5%, transparent); }
+}
+
+/* ---------- Barra de baixo: a cápsula é o mesmo vidro ---------- */
+@media (max-width: 767px) {
+  .tabbar-pill {
+    background: var(--lg-sheen), var(--lg-tint);
+    -webkit-backdrop-filter: blur(22px) saturate(180%); backdrop-filter: blur(22px) saturate(180%);
+    box-shadow: var(--lg-rim), 0 12px 32px -12px rgba(0, 0, 0, .28);
+  }
+  :root[data-theme="dark"] .tabbar-pill { box-shadow: var(--lg-rim), 0 12px 32px -12px rgba(0, 0, 0, .8); }
+
+  /* ---------- A lente (ios.tsx tabbarLens) ----------
+     Parada: cápsula cinza translúcida na aba escolhida. Andando: cresce além da barra, fica transparente,
+     mostra embaixo a barra aumentada, com arco-íris nas pontas e brilho de vidro na borda. */
+  /* quem cresce são as camadas de dentro (o `scale` na própria cápsula multiplicaria também o deslocamento) */
+  .tab-glider { transition: transform .5s cubic-bezier(.34, 1.3, .5, 1), background-color .2s, box-shadow .2s; }
+  /* arrastando: a lente segue o dedo sem atraso */
+  .tabbar-pill.lens-drag .tab-glider { transition: background-color .2s, box-shadow .2s; }
+  .tab-glider > * {
+    position: absolute; inset: 0; border-radius: inherit; pointer-events: none; overflow: hidden;
+    opacity: 0; scale: 1; transition: opacity .16s, scale .38s cubic-bezier(.34, 1.45, .5, 1);
+  }
+  .tabbar-pill.lensing .tab-glider, :root[data-theme="dark"] .tabbar-pill.lensing .tab-glider { animation: none; background: transparent; box-shadow: none; }
+  .tabbar-pill.lensing .tab-glider > * { opacity: 1; scale: 1.3; }
+  .lens-core { background: var(--lg-lens); box-shadow: 0 10px 26px -8px rgba(0, 0, 0, .32), 0 1px 3px rgba(0, 0, 0, .1); overflow: hidden; }
+  :root[data-theme="dark"] .lens-core { box-shadow: 0 10px 26px -8px rgba(0, 0, 0, .85); }
+  .lens-edge {
+    overflow: hidden; background: var(--lg-lens);
+    -webkit-mask-image: linear-gradient(90deg, #000, rgba(0, 0, 0, .5) 10%, transparent 22%, transparent 78%, rgba(0, 0, 0, .5) 90%, #000);
+    mask-image: linear-gradient(90deg, #000, rgba(0, 0, 0, .5) 10%, transparent 22%, transparent 78%, rgba(0, 0, 0, .5) 90%, #000);
+  }
+  /* a cópia da barra (montada por JS): mesma caixa da cápsula, sem o vidro dela */
+  .lens-copy {
+    position: absolute; left: 0; top: 0; display: flex; align-items: center; box-sizing: border-box;
+    background: none !important; box-shadow: none !important;
+  }
+  .lens-copy * { animation: none !important; transition: none !important; }
+  .lens-copy .tabbar-scroll { flex: 1; min-width: 0; }
+  /* aberração cromática: vermelho para um lado, azul para o outro, só nas pontas */
+  .lens-edge .lens-copy { filter: drop-shadow(1.2px 0 0 rgba(255, 40, 90, .5)) drop-shadow(-1.2px 0 0 rgba(30, 160, 255, .55)); }
+  /* borda: brilho de vidro em cima, reflexo fraco embaixo e um fio de arco-íris (refração) */
+  .lens-rim { box-shadow: inset 0 1.5px .5px rgba(255, 255, 255, .95), inset 0 -1px .5px rgba(255, 255, 255, .45), inset 0 0 0 .5px rgba(255, 255, 255, .55), inset 0 0 6px rgba(255, 255, 255, .25); }
+  .lens-rim::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1.4px; opacity: .75;
+    background: conic-gradient(from 200deg, #ff5f8f, #ffb84d, #8dff9a, #4fd2ff, #8a7dff, #ff5fd2, #ff5f8f);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  }
+  :root[data-theme="dark"] .lens-rim { box-shadow: inset 0 1.5px .5px rgba(255, 255, 255, .55), inset 0 -1px .5px rgba(255, 255, 255, .2), inset 0 0 0 .5px rgba(255, 255, 255, .3), inset 0 0 8px rgba(255, 255, 255, .08); }
+  /* a lente não pega o ícone embaixo: quem aumenta é a cópia */
+  .tabbar .tab .tab-ico { scale: 1; }
+}
+
+/* ---------- Abas, filtros e menu lateral: a pastilha vira lente enquanto anda (ios.tsx segLens) ---------- */
+:is(.seg, .subtabs, .fin-tabs, .cal-pills)[data-seg] > button { scale: var(--lens, 1); }
+:is(.seg, .subtabs, .fin-tabs, .cal-pills, .sidebar .nav)[data-seg][data-lens]::before {
+  scale: 1.1 1.22;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .55), rgba(255, 255, 255, .08) 60%), rgba(255, 255, 255, .22);
+  box-shadow: inset 0 1px 0 #fff, inset 1.5px 0 2px -.5px rgba(255, 40, 90, .55), inset -1.5px 0 2px -.5px rgba(30, 160, 255, .6),
+    inset 0 0 0 .5px rgba(0, 0, 0, .08), 0 8px 20px -8px rgba(0, 0, 0, .3);
+}
+.sidebar .nav[data-seg][data-lens]::before { scale: 1.04 1.14; }
+:root[data-theme="dark"] :is(.seg, .subtabs, .fin-tabs, .cal-pills, .sidebar .nav)[data-seg][data-lens]::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .2), rgba(255, 255, 255, .04) 60%), rgba(255, 255, 255, .06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .4), inset 1.5px 0 2px -.5px rgba(255, 60, 110, .6), inset -1.5px 0 2px -.5px rgba(40, 170, 255, .65),
+    inset 0 0 0 .5px rgba(255, 255, 255, .14), 0 8px 20px -8px rgba(0, 0, 0, .8);
+}
+.sidebar .nav[data-seg]::before { transition: transform .45s var(--ios-spring), width .45s var(--ios-spring), height .45s var(--ios-spring), scale .3s cubic-bezier(.34, 1.45, .5, 1), opacity .2s; }
+
+/* ---------- Quem pediu menos transparência ou mais contraste: tudo sólido, sem lente ---------- */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .lg, .ctx-menu, .update-pill, .modal-bg .modal, .modal-bg .modal.glass-on, .modal-bg .modal.more-sheet, .tabbar-pill {
+    background: var(--panel) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  }
+  .tabbar-pill.lensing .tab-glider > * { opacity: 0; scale: 1; }
+}

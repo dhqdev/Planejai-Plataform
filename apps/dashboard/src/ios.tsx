@@ -21,11 +21,14 @@ function placeThumbs() {
       box.style.setProperty("--seg-o", "0");
       return;
     }
+    const moved = box.dataset.seg === "on" && box.style.getPropertyValue("--seg-o") === "1" &&
+      (box.style.getPropertyValue("--seg-x") !== `${on.offsetLeft}px` || box.style.getPropertyValue("--seg-y") !== `${on.offsetTop}px`);
     box.style.setProperty("--seg-x", `${on.offsetLeft}px`);
     box.style.setProperty("--seg-w", `${on.offsetWidth}px`);
     box.style.setProperty("--seg-y", `${on.offsetTop}px`);
     box.style.setProperty("--seg-h", `${on.offsetHeight}px`);
     box.style.setProperty("--seg-o", "1");
+    if (moved && !lessMotion()) segLens(box);
     // primeira vez: aparece já no lugar; depois desliza
     if (!box.dataset.seg) {
       box.dataset.seg = "ready";
@@ -65,13 +68,21 @@ export function installSegmented() {
   schedule();
 }
 
-/* ---------- Vidro líquido: lente que aumenta o que passa por baixo ---------- */
+/* ---------- Vidro líquido: lente que aumenta e refrata o que passa por baixo ---------- */
 /**
- * Como no iOS 26: a pastilha do menu e a gota da barra do celular são lentes. O "aproximar" é o ícone ou
- * o texto embaixo crescendo conforme a lente passa por cima (igual em todo navegador; filtro SVG no
- * backdrop-filter saiu desalinhado no Chrome e não existe no Safari). A gota da barra segue o dedo
- * (arrastar de aba em aba); a pastilha do menu lateral só anda no clique.
+ * Como a barra do WhatsApp no iOS 26: parada, a aba escolhida é só uma cápsula cinza translúcida; quando ela
+ * anda (toque em outra aba ou arrasto com o dedo), vira uma lente de vidro maior que a barra, que aumenta o
+ * que está embaixo e tem na borda o arco-íris da refração (aberração cromática) e o brilho de cima.
+ *
+ * O Safari não aceita filtro SVG no backdrop-filter (e no Chrome ele saiu desalinhado), então a lente não lê
+ * o fundo: ela leva dentro uma cópia da própria barra, posicionada para casar com a de verdade e aumentada
+ * a partir do centro da lente. Funciona igual em todo navegador, inclusive no iPhone. Uma segunda cópia,
+ * um pouco maior e com sombras vermelha e azul, aparece só nas pontas: é a luz "dobrando" na borda do vidro.
+ * CSS em styles/vidro.css. Abas, filtros e o menu lateral usam a mesma ideia mais leve (segLens).
  */
+const LENS_SCALE = 1.3; // a lente fica maior que a cápsula parada (passa um pouco da barra, como no WhatsApp)
+const LENS_ZOOM = 1.16; // quanto o conteúdo embaixo aparece aumentado
+
 /** Aumenta cada item conforme a distância até o centro da lente (1 = em cima, 0 = longe). */
 function magnify(items: HTMLElement[], lens: DOMRect, axis: "x" | "y", max: number) {
   const c = axis === "x" ? lens.left + lens.width / 2 : lens.top + lens.height / 2;
@@ -84,13 +95,25 @@ function magnify(items: HTMLElement[], lens: DOMRect, axis: "x" | "y", max: numb
   }
 }
 
-/** Enquanto algo anima, recalcula o aumento a cada quadro (a lente está no meio do caminho). */
-function follow(items: () => HTMLElement[], lens: () => HTMLElement | null, axis: "x" | "y", max: number, ms: number) {
-  const until = performance.now() + ms;
+/** Onde a pastilha (::before) está agora, no meio da animação. */
+function thumbBox(box: HTMLElement) {
+  const st = getComputedStyle(box, "::before");
+  const m = new DOMMatrixReadOnly(st.transform === "none" ? undefined : st.transform);
+  const r = box.getBoundingClientRect();
+  return new DOMRect(r.left + m.m41, r.top + m.m42, parseFloat(st.width), parseFloat(st.height));
+}
+
+/** Abas, filtros e menu lateral: enquanto a pastilha viaja, ela vira lente (CSS [data-lens]) e o texto embaixo cresce. */
+function segLens(box: HTMLElement) {
+  const side = box.matches(".sidebar .nav");
+  const items = () => [...box.querySelectorAll<HTMLElement>(side ? ":scope > a" : ":scope > button")];
+  box.dataset.lens = "";
+  const until = performance.now() + 460;
   const tick = () => {
-    const l = lens();
-    if (l) magnify(items(), l.getBoundingClientRect(), axis, max);
-    if (performance.now() < until) requestAnimationFrame(tick);
+    magnify(items(), thumbBox(box), side ? "y" : "x", side ? 0.07 : 0.1);
+    if (performance.now() < until) return void requestAnimationFrame(tick);
+    delete box.dataset.lens;
+    items().forEach((el) => el.style.removeProperty("--lens"));
   };
   requestAnimationFrame(tick);
 }
@@ -98,18 +121,85 @@ function follow(items: () => HTMLElement[], lens: () => HTMLElement | null, axis
 function tabbarLens() {
   const pill = () => document.querySelector<HTMLElement>(".tabbar-pill");
   const glider = () => pill()?.querySelector<HTMLElement>(".tab-glider") ?? null;
-  const icons = () => [...(pill()?.querySelectorAll<HTMLElement>(".tab .tab-ico") ?? [])];
-  const tabs = () => [...(pill()?.querySelectorAll<HTMLElement>(".tab") ?? [])];
+  const tabs = () => [...(pill()?.querySelectorAll<HTMLElement>(":scope > .tabbar-scroll > .tab, :scope > .tab") ?? [])];
   let drag: { id: number; x0: number; on: boolean; base: number; w: number } | null = null;
+  let until = 0;
+  let raf = 0;
 
-  // trocou de aba (toque ou rota): a lente viaja e vai aumentando o que cruza
-  addEventListener("pj:tab-move", () => follow(icons, glider, "x", 0.32, 700));
+  /** Monta dentro da lente as cópias da barra (sem a própria lente). Refeita a cada uso: a aba ativa muda. */
+  const build = (p: HTMLElement, g: HTMLElement) => {
+    g.replaceChildren();
+    const st = getComputedStyle(p);
+    const copy = () => {
+      const c = document.createElement("div");
+      c.className = "lens-copy";
+      c.style.width = `${p.clientWidth}px`;
+      c.style.height = `${p.clientHeight}px`;
+      c.style.padding = st.padding;
+      c.style.gap = st.gap;
+      for (const n of p.children) if (n !== g) c.appendChild(n.cloneNode(true));
+      return c;
+    };
+    for (const cls of ["lens-core", "lens-edge"]) {
+      const w = document.createElement("div");
+      w.className = cls;
+      w.appendChild(copy());
+      g.appendChild(w);
+    }
+    const rim = document.createElement("div");
+    rim.className = "lens-rim";
+    g.appendChild(rim);
+    g.querySelectorAll("[id]").forEach((n) => n.removeAttribute("id"));
+    g.setAttribute("inert", "");
+    // a cópia das abas que rolam fica na mesma rolagem da original
+    const src = p.querySelector<HTMLElement>(":scope > .tabbar-scroll");
+    g.querySelectorAll<HTMLElement>(".tabbar-scroll").forEach((s) => (s.scrollLeft = src?.scrollLeft ?? 0));
+  };
+
+  /** Casa a cópia com a barra de verdade: o ponto embaixo do centro da lente fica parado e o resto cresce em volta. */
+  const place = () => {
+    const g = glider();
+    if (!g) return;
+    const t = getComputedStyle(g).transform;
+    const m = new DOMMatrixReadOnly(t === "none" ? undefined : t);
+    const L = g.offsetLeft + m.m41;
+    const T = g.offsetTop + m.m42;
+    const k = LENS_ZOOM / LENS_SCALE;
+    g.querySelectorAll<HTMLElement>(".lens-copy").forEach((c, i) => {
+      c.style.transformOrigin = `${L + g.offsetWidth / 2}px ${T + g.offsetHeight / 2}px`;
+      c.style.transform = `translate(${-L}px, ${-T}px) scale(${(i ? k * 1.035 : k).toFixed(4)})`;
+    });
+  };
+
+  const loop = () => {
+    place();
+    if (drag?.on || performance.now() < until) raf = requestAnimationFrame(loop);
+    else {
+      raf = 0;
+      pill()?.classList.remove("lensing");
+    }
+  };
+
+  /** Liga a lente por `ms` (ou enquanto o dedo arrasta). */
+  const lens = (ms: number) => {
+    const p = pill();
+    const g = glider();
+    if (!p || !g) return;
+    if (!p.classList.contains("lensing")) build(p, g);
+    place();
+    p.classList.add("lensing");
+    until = performance.now() + ms;
+    if (!raf) raf = requestAnimationFrame(loop);
+  };
+
+  // trocou de aba (toque ou rota): a lente viaja da aba antiga até a nova e volta a ser cápsula
+  addEventListener("pj:tab-move", () => lens(560));
 
   addEventListener("pointerdown", (e) => {
     const p = pill();
     const g = glider();
     if (!p || !g || !p.contains(e.target as Node) || !isPhone()) return;
-    drag = { id: e.pointerId, x0: e.clientX, on: false, base: parseFloat(getComputedStyle(g).left) || 0, w: g.getBoundingClientRect().width };
+    drag = { id: e.pointerId, x0: e.clientX, on: false, base: parseFloat(getComputedStyle(g).left) || 0, w: g.offsetWidth };
   }, { passive: true });
 
   addEventListener("pointermove", (e) => {
@@ -121,13 +211,13 @@ function tabbarLens() {
       if (Math.abs(dx) < 8) return;
       drag.on = true;
       p.classList.add("lens-drag");
+      lens(0);
       haptic(6);
     }
     const pr = p.getBoundingClientRect();
     // a lente fica presa ao dedo (centro no dedo), sem passar das pontas
     const x = Math.max(6, Math.min(pr.width - drag.w - 6, e.clientX - pr.left - drag.w / 2));
     g.style.transform = `translateX(${x - drag.base}px)`;
-    magnify(icons(), g.getBoundingClientRect(), "x", 0.42);
   }, { passive: true });
 
   const end = (e: PointerEvent) => {
@@ -148,7 +238,7 @@ function tabbarLens() {
     }
     p.classList.remove("lens-drag");
     g.style.transform = "";
-    follow(icons, glider, "x", 0.32, 700);
+    lens(560);
     // o clique que viria depois do arrasto não conta; quem navega é a aba escolhida
     const swallow = (ev: Event) => { ev.stopPropagation(); ev.preventDefault(); };
     addEventListener("click", swallow, { capture: true, once: true });
@@ -158,29 +248,6 @@ function tabbarLens() {
   addEventListener("pointerup", end);
   addEventListener("pointercancel", end);
   addEventListener("dragstart", (e) => pill()?.contains(e.target as Node) && e.preventDefault());
-}
-
-/** Menu lateral: a pastilha só anda quando o item é clicado; enquanto ela viaja, o texto embaixo cresce. */
-function sidebarLens() {
-  const nav = () => document.querySelector<HTMLElement>(".sidebar .nav");
-  const links = () => [...(nav()?.querySelectorAll<HTMLElement>(":scope > a") ?? [])];
-  const lensBox = (n: HTMLElement) => {
-    const st = getComputedStyle(n, "::before");
-    const m = new DOMMatrixReadOnly(st.transform === "none" ? undefined : st.transform);
-    const r = n.getBoundingClientRect();
-    return new DOMRect(r.left + m.m41, r.top + m.m42, parseFloat(st.width), parseFloat(st.height));
-  };
-  document.addEventListener("click", (e) => {
-    const n = nav();
-    if (!n || !(e.target as Element | null)?.closest?.(".sidebar .nav > a")) return;
-    const until = performance.now() + 650;
-    const tick = () => {
-      magnify(links(), lensBox(n), "y", 0.07);
-      if (performance.now() < until) requestAnimationFrame(tick);
-      else links().forEach((a) => a.style.removeProperty("--lens"));
-    };
-    requestAnimationFrame(tick);
-  });
 }
 
 /** Como o tabBarMinimizeBehavior(.onScrollDown) do iOS: rolou para baixo, a barra encolhe; para cima, volta. */
@@ -202,7 +269,6 @@ export function installLiquidGlass() {
   tabbarMinimize();
   if (lessMotion()) return;
   tabbarLens();
-  sidebarLens();
 }
 
 /* ---------- Voltar arrastando da borda esquerda ---------- */
