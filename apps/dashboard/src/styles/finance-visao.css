@@ -101,3 +101,20 @@
   .fin-kpis.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fin-kpis.three > div:nth-child(3) { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--border); }
 }
+
+/* Relatório em PDF (pages/FinanceReport.tsx) */
+.rep-block { padding: 2px 0 14px; }
+.rep-block + .rep-block { border-top: 1px solid var(--border); padding-top: 14px; }
+.rep-block > strong { font-size: 14.5px; }
+.rep-block p { font-size: 13px; line-height: 1.5; margin: 6px 0 0; }
+.rep-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.rep-note { display: flex; gap: 6px; align-items: flex-start; font-size: 13px; color: var(--ok); margin: 4px 0 0; }
+@media (max-width: 767px) {
+  .fin-top { grid-template-columns: 1fr auto auto; }
+  .fin-report-btn { grid-column: 2; grid-row: 2; width: 44px; height: 44px; border-radius: 14px; }
+  .fin-top .fin-period { min-width: 0; }
+  .fin-top .fin-range { min-width: 0; overflow: hidden; padding: 8px 10px; gap: 6px; }
+  .fin-add { grid-column: 3; }
+  .rep-actions { flex-direction: column; }
+  .rep-actions .btn { justify-content: center; }
+}

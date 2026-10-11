@@ -5,6 +5,7 @@ import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { useLongPress } from "../ios";
 import { haptic } from "../touch";
+import { ReportModal } from "./FinanceReport";
 import { CardsTab, InvoicesCard, invoiceMonthFor, invoiceMonthLabel, useCards, type CreditCard } from "./FinanceCards";
 
 const SOURCE: Record<string, string> = { conversa: "conversa", audio: "áudio", comprovante: "comprovante", documento: "documento", painel: "painel" };
@@ -52,6 +53,7 @@ export function FinancePage() {
   const [month, setMonth] = useState(thisMonth());
   const [user, setUser] = useState("");
   const [adding, setAdding] = useState(false);
+  const [report, setReport] = useState(false);
   const [cat, setCat] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
   const [editing, setEditing] = useState<any | null>(null);
@@ -132,7 +134,7 @@ export function FinancePage() {
         <PageHead
           title="Finanças"
           subtitle={`${cap(monthName(month))} de ${month.slice(0, 4)}${user ? `, de ${owners.find((p) => p.id === user)?.name ?? ""} (só para ver)` : ""}`}
-          actions={!readonly && <button className="btn btn-brand" onClick={() => setAdding(true)}><Icon name="plus" size={16} /> Lançamento</button>}
+          actions={<><button className="btn" onClick={() => setReport(true)}><Icon name="file" size={16} /> Relatório PDF</button>{!readonly && <button className="btn btn-brand" onClick={() => setAdding(true)}><Icon name="plus" size={16} /> Lançamento</button>}</>}
         />
       </div>
       <div className="fin-top">
@@ -156,6 +158,11 @@ export function FinancePage() {
               <button key={p.id} className={user === p.id ? "active" : ""} title={p.name} onClick={() => { haptic(5); setUser(p.id); }}>{p.name.trim().split(" ")[0]}</button>
             ))}
           </div>
+        )}
+        {tab !== "cards" && (
+          <button className="icon-btn fin-report-btn phone-only" aria-label="Relatório em PDF" onClick={() => setReport(true)}>
+            <Icon name="file" size={18} />
+          </button>
         )}
         {!readonly && tab !== "cards" && (
           <button className="btn btn-brand fin-add phone-only" aria-label="Novo lançamento" onClick={() => setAdding(true)}>
@@ -367,6 +374,7 @@ export function FinancePage() {
         </>
       )}
       {budget && <BudgetModal initial={budget} onClose={() => { setBudget(null); void reload(); }} />}
+      {report && <ReportModal month={month} user={user} readonly={readonly} onClose={() => setReport(false)} />}
       {adding && <TransactionForm onClose={() => { setAdding(false); void reload(); }} />}
       {editing && <TransactionForm initial={editing} onClose={() => { setEditing(null); setDetail(null); void reload(); }} />}
       {detail && (

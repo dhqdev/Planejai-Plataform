@@ -130,6 +130,8 @@ async function startChannelJobs(log: WorkerLog) {
     const { remindCards } = await import("../cards.js");
     await remindCards(log).catch((err) => log.error({ err }, "lembretes de fatura falharam"));
     await billingReminders(log).catch((err) => log.error({ err }, "lembretes de assinatura falharam"));
+    const { sendScheduledReports } = await import("../finance-report.js");
+    await sendScheduledReports(log).catch((err) => log.error({ err }, "relatórios financeiros falharam"));
   });
   await boss.schedule(QUEUES.financeDaily, "0 9 * * *", undefined, { tz: config.DEFAULT_TIMEZONE });
 

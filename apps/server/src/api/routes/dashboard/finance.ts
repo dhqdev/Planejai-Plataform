@@ -4,6 +4,7 @@ import { config } from "../../../config.js";
 import { many, one, query } from "../../../db/pool.js";
 import { NOBODY, personalUser, selfUserId } from "../../../sharing.js";
 import { createBill, deleteBill, listBills, payBill, updateBill, type BillInput } from "../../../bills.js";
+import { getReportSchedule, renderFinanceReport, reportFileName, sendFinanceReport, setReportSchedule } from "../../../finance-report.js";
 import { createCard, deleteCard, getCard, invoiceItems, listCards, placeOnCard, payInvoice, unpayInvoice, updateCard, type CardInput } from "../../../cards.js";
 
 /**
@@ -154,6 +155,51 @@ export function financeRoutes(base: FastifyInstance) {
   });
 
   base.get("/api/finance/categories", async () => CATEGORIES);
+
+  // ---------- Relatório em PDF (baixar, mandar no WhatsApp agora e envio todo mês no dia escolhido) ----------
+  const monthOf = (m?: string) => (/^\d{4}-\d{2}$/.test(m ?? "") ? m! : new Intl.DateTimeFormat("en-CA", { timeZone: config.DEFAULT_TIMEZONE, year: "numeric", month: "2-digit" }).format(new Date()));
+  base.get<{ Querystring: { user?: string; month?: string } }>("/api/finance/report", async (req, reply) => {
+    const uid = await personalUser(req.account, req.query.user, "finance");
+    if (!uid) return reply.code(403).send({ error: "Essa pessoa não compartilhou as finanças com você" });
+    const month = monthOf(req.query.month);
+    try {
+      const pdf = await renderFinanceReport(uid, month);
+      return reply
+        .header("Content-Type", "application/pdf")
+        .header("Content-Disposition", `attachment; filename="relatorio-${month}.pdf"; filename*=UTF-8''${encodeURIComponent(reportFileName(month))}`)
+        .header("Cache-Control", "no-store")
+        .send(pdf);
+    } catch (err) {
+      req.log.error({ err }, "relatório financeiro falhou");
+      return reply.code(503).send({ error: "Não consegui gerar o PDF agora. Tente de novo em instantes." });
+    }
+  });
+
+  base.post<{ Body: { month?: string } }>("/api/finance/report/send", async (req, reply) => {
+    const uid = await selfUserId(req.account);
+    if (!uid) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil para receber o relatório" });
+    try {
+      return { ok: true, ...(await sendFinanceReport(uid, monthOf(req.body?.month))) };
+    } catch (err) {
+      req.log.error({ err }, "envio do relatório financeiro falhou");
+      return reply.code(503).send({ error: "Não consegui mandar o relatório agora. Tente de novo em instantes." });
+    }
+  });
+
+  base.get("/api/finance/report/schedule", async (req) => {
+    const uid = await selfUserId(req.account);
+    return { schedule: uid ? await getReportSchedule(uid) : null, linked: Boolean(uid) };
+  });
+
+  base.put<{ Body: { day?: number | null } }>("/api/finance/report/schedule", async (req, reply) => {
+    const uid = await selfUserId(req.account);
+    if (!uid) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil para agendar o relatório" });
+    try {
+      return { schedule: await setReportSchedule(uid, req.body?.day ?? null) };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
 
   // ---------- Contas fixas (lembrete antes do vencimento; "paguei" lança no mês) ----------
   base.get<{ Querystring: { user?: string } }>("/api/bills", async (req, reply) => {
