@@ -339,16 +339,24 @@ describe("trava: dizer que fez sem ter feito", () => {
   });
 
   it("pedido claro de lembrete sem ferramenta de agenda refaz a resposta", async () => {
-    const { unmetReminder } = await import("../src/agent/claims.js");
+    const { unmetRequest } = await import("../src/agent/claims.js");
     const pedido = "[msg_id=251] [áudio] Me lembre amanhã às oito horas da manhã que eu preciso falar com meu chefe.";
-    expect(unmetReminder(pedido, "Combinado, David! Deixa comigo ⏰", new Set())).toBe("agendar lembrete ou evento");
-    expect(unmetReminder(pedido, "Combinado!", new Set(["schedule_reminder"]))).toBeNull();
-    expect(unmetReminder("Mas cria um lembrete para isso", "Pronto!", new Set(["ask_agenda"]))).toBe("agendar lembrete ou evento");
-    expect(unmetReminder("Me lembra de comprar pão", "Claro! Que horas você quer o aviso?", new Set())).toBeNull();
-    expect(unmetReminder("Cancela o lembrete do treino", "Feito", new Set())).toBeNull();
-    expect(unmetReminder("Quais lembretes eu tenho amanhã?", "Só o treino às 7h.", new Set())).toBeNull();
-    expect(unmetReminder("Quanto gastei hoje?", "R$ 40", new Set())).toBeNull();
-    expect(unmetReminder("Me avisa se o preço baixar", "Fechado, deixei de olho", new Set(["watch_create"]))).toBeNull();
+    expect(unmetRequest(pedido, "Combinado, David! Deixa comigo ⏰", new Set())).toBe("agendar lembrete ou evento");
+    expect(unmetRequest(pedido, "Combinado!", new Set(["schedule_reminder"]))).toBeNull();
+    expect(unmetRequest("Mas cria um lembrete para isso", "Pronto!", new Set(["ask_agenda"]))).toBe("agendar lembrete ou evento");
+    expect(unmetRequest("Me lembra de comprar pão", "Claro! Que horas você quer o aviso?", new Set())).toBeNull();
+    expect(unmetRequest("Cancela o lembrete do treino", "Feito", new Set())).toBeNull();
+    expect(unmetRequest("Quais lembretes eu tenho amanhã?", "Só o treino às 7h.", new Set())).toBeNull();
+    expect(unmetRequest("Quanto gastei hoje?", "R$ 40", new Set())).toBeNull();
+    expect(unmetRequest("Me avisa se o preço baixar", "Fechado, deixei de olho", new Set(["watch_create"]))).toBeNull();
+    expect(unmetRequest("[áudio] Gastei 50 reais no mercado", "Show, David! 🛒", new Set())).toBe("lançar gasto ou receita");
+    expect(unmetRequest("paguei a luz 180,40", "Feito!", new Set(["add_transaction"]))).toBeNull();
+    expect(unmetRequest("Recebi 2 mil do freela", "Boa! Foi de qual conta?", new Set())).toBeNull();
+    expect(unmetRequest("Quanto gastei no mercado esse mês?", "R$ 320", new Set())).toBeNull();
+    expect(unmetRequest("Apaga o gasto de 50 do mercado", "Apaguei", new Set())).toBeNull();
+    expect(unmetRequest("comprei um tênis", "Que massa!", new Set())).toBeNull();
+    expect(unmetRequest("anota 30 reais de uber", "Fechado!", new Set())).toBe("lançar gasto ou receita");
+    expect(unmetRequest("anota que a reunião é dia 15", "Anotado!", new Set(["save_memory"]))).toBeNull();
   });
 });
 

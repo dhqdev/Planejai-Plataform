@@ -19,7 +19,7 @@ import { autoLaunchReceipts } from "./receipts.js";
 import { errandsContext, openErrands } from "../errands.js";
 import { isOwner } from "../ingest.js";
 import { describeMessage, preprocessMedia } from "./media.js";
-import { unbackedClaim, unmetReminder } from "./claims.js";
+import { unbackedClaim, unmetRequest } from "./claims.js";
 import { openPending, resolvePending } from "./confirm.js";
 import { Progress } from "./progress.js";
 import { humanize } from "./humanize.js";
@@ -460,7 +460,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     const claim =
       result.text && !result.timedOut
         ? (unbackedClaim(result.text, ctx.room.done) ??
-          (!proactive ? unmetReminder(ctx.inboundText ?? "", result.text, ctx.room.done) : null))
+          (!proactive ? unmetRequest(ctx.inboundText ?? "", result.text, ctx.room.done) : null))
         : null;
     if (claim && !guard.expired) {
       const step = await tracer.step({ agent: "cto", type: "info", name: "trava: ação não confirmada", input: { acao: claim, resposta: result.text.slice(0, 300) } });
@@ -482,7 +482,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
         ],
       }).catch(() => null);
       const still = retry?.text
-        ? (unbackedClaim(retry.text, ctx.room.done) ?? (!proactive ? unmetReminder(ctx.inboundText ?? "", retry.text, ctx.room.done) : null))
+        ? (unbackedClaim(retry.text, ctx.room.done) ?? (!proactive ? unmetRequest(ctx.inboundText ?? "", retry.text, ctx.room.done) : null))
         : claim;
       await step.ok({ refeito: Boolean(retry?.text) && !still });
       result.text = retry?.text && !still ? retry.text : `Não consegui concluir isso agora (${claim}), então nada foi feito. Pode me pedir de novo?`;

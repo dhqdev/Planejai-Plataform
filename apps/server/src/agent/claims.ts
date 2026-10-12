@@ -83,18 +83,34 @@ export function unbackedClaim(text: string, done: Set<string>): string | null {
   return null;
 }
 
-// "me lembra amanhã às 8h", "cria um lembrete", "põe um alarme": pedido claro de agendar (não de ver, mudar ou cancelar)
-const ASKS_REMINDER = /\b(me (lembr[ae]\w*|avis[ae]\w*|acord[ae]\w*|cutuc[ae]\w*)|cri[ae]\w* (um |o |esse |este )?(lembrete|alarme)|(p[õo]e|coloca|bota|marca|agenda) (um |o )?(lembrete|alarme)|lembrete (pra|para|de|às|amanh[ãa])|alarme (pra|para|às))\b/i;
-const NOT_NEW = /\b(cancel\w*|apag\w*|remov\w*|exclu\w*|desmarc\w*|tir[ae] (o|esse|aquele)|quais|lista\w*|mostr\w*|mud[ae]\w*|troc[ae]\w*|adi[ae]\w*|remarc\w*|n[ãa]o precisa|esquece)\b/i;
-const REMINDER_TOOLS = [...SCHEDULE_TOOLS, "list_reminders", "alarm_list", "watch_list", "shop_save", "shop_update"];
+// Pedidos claros de ação: se a rodada termina sem nenhuma dessas ferramentas, o modelo só respondeu "combinado"
+const REQUESTS: { what: string; asks: RegExp; unless: RegExp; tools: string[] }[] = [
+  {
+    // "me lembra amanhã às 8h", "cria um lembrete", "põe um alarme" (não ver, mudar ou cancelar)
+    what: "agendar lembrete ou evento",
+    asks: /\b(me (lembr[ae]\w*|avis[ae]\w*|acord[ae]\w*|cutuc[ae]\w*)|cri[ae]\w* (um |o |esse |este )?(lembrete|alarme)|(p[õo]e|coloca|bota|marca|agenda) (um |o )?(lembrete|alarme)|lembrete (pra|para|de|às|amanh[ãa])|alarme (pra|para|às))\b/i,
+    unless: /\b(cancel\w*|apag\w*|remov\w*|exclu\w*|desmarc\w*|tir[ae] (o|esse|aquele)|quais|lista\w*|mostr\w*|mud[ae]\w*|troc[ae]\w*|adi[ae]\w*|remarc\w*|n[ãa]o precisa|esquece)\b/i,
+    tools: [...SCHEDULE_TOOLS, "list_reminders", "alarm_list", "watch_list", "shop_save", "shop_update"],
+  },
+  {
+    // "gastei 50 no mercado", "paguei a luz 180", "recebi 2 mil", "anota 30 de uber", "guardei 200 na viagem"
+    what: "lançar gasto ou receita",
+    asks: /\b(gastei|paguei|comprei|recebi|ganhei|torrei|guardei)\b[^?\n]{0,60}\d|\b(anot[ae]|lan[cç]a|registr[ae])\b[^?\n]{0,60}(R\$\s?\d|\d\s?(reais|conto|pila)\b)/i,
+    unless: /\b(quanto|quais|qual|cad[êe]|mostr\w*|lista\w*|apag\w*|exclu\w*|remov\w*|cancel\w*|corrig\w*|n[ãa]o (anot|lan[cç]))\b/i,
+    tools: ["add_transaction", "update_transaction", "bill_pay", "bill_save", "card_invoice_pay", "card_save", "goal_add", "goal_update", "shop_update", "list_transactions", "finance_summary"],
+  },
+];
 
 /**
- * Pedido claro de lembrete que terminou sem nenhuma ferramenta de agenda: o modelo respondeu "combinado"
- * sem agendar. Pergunta de volta ("que horas?") é resposta válida. null = tudo certo.
+ * Pedido claro de ação que terminou sem nenhuma ferramenta da área: o modelo respondeu "combinado"
+ * sem fazer. Pergunta de volta ("que horas?", "qual valor?") é resposta válida. null = tudo certo.
  */
-export function unmetReminder(asked: string, answer: string, done: Set<string>): string | null {
+export function unmetRequest(asked: string, answer: string, done: Set<string>): string | null {
   const said = asked.replace(/\[msg_id=\d+\]\s*/g, "");
-  if (!ASKS_REMINDER.test(said) || NOT_NEW.test(said)) return null;
   if (/\?\s*\S{0,4}\s*$/.test(answer.trim())) return null;
-  return REMINDER_TOOLS.some((t) => done.has(t)) ? null : "agendar lembrete ou evento";
+  for (const r of REQUESTS) {
+    if (!r.asks.test(said) || r.unless.test(said)) continue;
+    if (!r.tools.some((t) => done.has(t))) return r.what;
+  }
+  return null;
 }
