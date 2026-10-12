@@ -334,6 +334,8 @@ describe("trava: dizer que fez sem ter feito", () => {
     // sem hora na mesma frase é só promessa de retorno (De olho, pesquisa)
     expect(unbackedClaim("Assim que o preço cair, eu te aviso por aqui.", new Set())).toBeNull();
     expect(unbackedClaim("Hoje tá corrido. Já vou ver e te aviso.", new Set())).toBeNull();
+    expect(unbackedClaim("Pronto, David! Agora tá criado e ativo ✅\n\n⏰ Amanhã, 13/10, às 8h: falar com o chefe.", new Set())).toBe("agendar lembrete ou evento");
+    expect(unbackedClaim("Pronto, David! Agora tá criado e ativo ✅\n\n⏰ Amanhã, 13/10, às 8h.", new Set(["schedule_reminder"]))).toBeNull();
   });
 
   it("pedido claro de lembrete sem ferramenta de agenda refaz a resposta", async () => {

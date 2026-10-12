@@ -6,6 +6,7 @@ import { isConnected } from "../integrations/registry.js";
 import { isOwner } from "../ingest.js";
 import { cacheGet, cacheSet } from "../shortmem.js";
 import { toolCacheKey } from "./cache.js";
+import { unbackedClaim } from "./claims.js";
 import type { Tool, ToolContext } from "./tools/types.js";
 
 /** Ferramentas que não mudam a resposta: se o CTO já escreveu o texto junto, não precisa de outra rodada. */
@@ -194,8 +195,9 @@ export async function runToolLoop(opts: {
     if (ctx.progress && agent === "cto") {
       if (slow) {
         ctx.progress.busy();
-        // a frase que o CTO escreveu junto da delegação ("já vou ver!") sai na hora
-        if (said) await ctx.progress.say(said);
+        // a frase que o CTO escreveu junto da delegação ("já vou ver!") sai na hora, mas nunca um "pronto, agendei"
+        // antes do resultado da ferramenta: a confirmação só vai na resposta final, que passa pela trava
+        if (said && !unbackedClaim(said, ctx.room?.done ?? new Set())) await ctx.progress.say(said);
       }
     }
     // Só reagiu/anotou na memória e já escreveu a resposta: entrega sem gastar outra rodada do modelo

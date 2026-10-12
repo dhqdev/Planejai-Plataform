@@ -30,6 +30,13 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; sameSentence?: boole
     tools: SCHEDULE_TOOLS,
   },
   {
+    // "Agora tá criado e ativo ✅", "ficou salvo na agenda"
+    what: "agendar lembrete ou evento",
+    says: /\b(t[áa]|est[áa]|foi|ficou|j[áa] (t[áa]|est[áa])) (criad[oa]|salv[oa]|agendad[oa]|marcad[oa])\b/i,
+    about: /\blembretes?\b|\balarmes?\b|\bagenda\b|\baviso\b|⏰/i,
+    tools: SCHEDULE_TOOLS,
+  },
+  {
     // "Prontinho! Amanhã às 8h eu te aviso": promessa com hora marcada também é agendar
     what: "agendar lembrete ou evento",
     says: /\b(te aviso|vou te avisar|te chamo|vou te chamar|te acordo|vou te acordar|te cutuco|te mando (um )?(aviso|lembrete))\b/i,
