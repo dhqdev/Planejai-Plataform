@@ -54,6 +54,8 @@ const schema = z.object({
   N8N_API_KEY: z.string().default(""),
   /** busca web da Tavily pela stack (sem precisar colar na tela de Integrações) */
   TAVILY_API_KEY: z.string().default(""),
+  /** GIFs da Klipy nas respostas (send_gif) pela stack; também dá para colar em Integrações > Klipy */
+  KLIPY_API_KEY: z.string().default(""),
   /** Google Places (lugares perto, com telefone) pela stack; sem ela a busca de lugares usa o OpenStreetMap */
   GOOGLE_MAPS_API_KEY: z.string().default(""),
   /** Web Push do alarme (PWA). Vazias = o servidor gera um par na primeira vez e guarda cifrado em settings */

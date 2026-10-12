@@ -73,6 +73,8 @@ export interface Tool<A = any> {
   parameters: Record<string, unknown>;
   /** id da integração necessária; a tool só aparece para o agente se estiver conectada */
   integration?: string;
+  /** outra integração que também libera a tool (ex.: GIF pela Klipy ou pela Giphy) */
+  orIntegration?: string;
   /** só o dono da plataforma (OWNER_PHONES) usa: mexe em contas pessoais dele (e-mail, pagamentos, automações) */
   ownerOnly?: boolean;
   run(args: A, ctx: ToolContext): Promise<unknown>;

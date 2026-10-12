@@ -203,6 +203,23 @@ export const INTEGRATIONS: IntegrationDef[] = [
     },
   },
   {
+    id: "klipy",
+    name: "Klipy",
+    description: "GIFs nas respostas do WhatsApp e do Telegram, em momentos leves (comemoração, bom dia). Usada antes da Giphy quando as duas estão ligadas.",
+    category: "Comunicação",
+    icon: "gif",
+    docsUrl: "https://partner.klipy.com",
+    fields: [{ key: "api_key", label: "API key", type: "password", required: true, help: "Em partner.klipy.com crie um app e copie a chave (grátis). Também pode vir da stack em KLIPY_API_KEY." }],
+    envFallback: () => (config.KLIPY_API_KEY ? { api_key: config.KLIPY_API_KEY } : null),
+    test: async (c) => {
+      const j = await okJson(
+        await fetch(`https://api.klipy.com/api/v1/${encodeURIComponent(c.api_key!)}/gifs/search?q=oi&per_page=8&customer_id=teste&locale=pt_BR`, { signal: timed() }),
+        "Klipy",
+      );
+      return `GIFs funcionando (${(j.data?.data ?? []).length} resultados)`;
+    },
+  },
+  {
     id: "giphy",
     name: "Giphy",
     description: "GIFs nas respostas do WhatsApp e do Telegram, em momentos leves (comemoração, bom dia). Sem ela, o assistente usa só emojis e as figurinhas do Mochi.",

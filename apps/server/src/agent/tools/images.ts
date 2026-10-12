@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { renderImage, type ImageKind } from "../../images.js";
 import { getCredentials } from "../../integrations/registry.js";
 import { chatCompletion } from "../../llm/openrouter.js";
@@ -152,27 +153,51 @@ export const getPicture = defineTool<{ description: string; mode?: "buscar" | "g
 /** Até 5 MB: GIF de reação é curto; maior que isso demora para chegar no celular. */
 const MAX_GIF_BYTES = 5 * 1024 * 1024;
 
+/** mp4 dos primeiros GIFs da busca: Klipy primeiro (chave da stack ou da tela), Giphy se não houver Klipy. */
+export async function searchGifMp4(q: string, userId: string): Promise<string[]> {
+  const klipy = await getCredentials("klipy");
+  if (klipy?.api_key) {
+    // a Klipy pede um id por pessoa (anônimo): hash do id do usuário, nunca telefone
+    const customer = createHash("sha256").update(`planejai:${userId}`).digest("hex").slice(0, 24);
+    const res = await fetch(
+      `https://api.klipy.com/api/v1/${encodeURIComponent(klipy.api_key)}/gifs/search?q=${encodeURIComponent(q)}&per_page=8&customer_id=${customer}&locale=pt_BR&rating=g`,
+      { signal: AbortSignal.timeout(10_000) },
+    );
+    const j: any = await res.json().catch(() => ({}));
+    if (res.ok) {
+      const urls = (j.data?.data ?? [])
+        .map((g: any) => g?.file?.sm?.mp4?.url ?? g?.file?.md?.mp4?.url ?? g?.file?.hd?.mp4?.url ?? g?.file?.xs?.mp4?.url)
+        .filter((u: unknown): u is string => typeof u === "string" && u.startsWith("https://"));
+      if (urls.length) return urls;
+    }
+  }
+  const giphy = await getCredentials("giphy");
+  if (giphy?.api_key) {
+    const res = await fetch(
+      `https://api.giphy.com/v1/gifs/search?api_key=${encodeURIComponent(giphy.api_key)}&q=${encodeURIComponent(q)}&limit=6&rating=g&lang=pt`,
+      { signal: AbortSignal.timeout(10_000) },
+    );
+    const j: any = await res.json().catch(() => ({}));
+    if (res.ok)
+      return (j.data ?? [])
+        .map((g: any) => g?.images?.downsized_small?.mp4 ?? g?.images?.fixed_height?.mp4 ?? g?.images?.original?.mp4)
+        .filter((u: unknown): u is string => typeof u === "string" && u.startsWith("https://"));
+  }
+  return [];
+}
+
 export const sendGif = defineTool<{ search: string }>({
   name: "send_gif",
-  integration: "giphy",
+  integration: "klipy",
+  orIntegration: "giphy",
   description:
-    "GIF de reação (Giphy) num balão próprio. Só em momento leve que pede (comemoração, conquista, bom dia, piada), no máximo um e nunca em assunto sério. " +
-    "search em inglês curto (ex.: celebration, good morning, high five). Devolve media_id para [[media:ID]].",
+    "GIF de reação num balão próprio. Só em momento leve que pede (comemoração, conquista, bom dia, piada), no máximo um e nunca em assunto sério. " +
+    "search curto (ex.: comemoração, bom dia, high five). Devolve media_id para [[media:ID]].",
   parameters: obj({ search: { type: "string" } }, ["search"]),
   async run(args, ctx) {
     const q = String(args.search ?? "").trim().slice(0, 50);
     if (!q) return { ok: false, error: "Diga o que buscar." };
-    const creds = await getCredentials("giphy");
-    if (!creds?.api_key) return { ok: false, error: "Giphy não está conectado." };
-    const res = await fetch(
-      `https://api.giphy.com/v1/gifs/search?api_key=${encodeURIComponent(creds.api_key)}&q=${encodeURIComponent(q)}&limit=6&rating=g&lang=pt`,
-      { signal: AbortSignal.timeout(10_000) },
-    );
-    const j: any = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: `Giphy respondeu ${res.status}` };
-    const urls: string[] = (j.data ?? [])
-      .map((g: any) => g?.images?.downsized_small?.mp4 ?? g?.images?.fixed_height?.mp4 ?? g?.images?.original?.mp4)
-      .filter((u: unknown): u is string => typeof u === "string" && u.startsWith("https://"));
+    const urls = await searchGifMp4(q, ctx.user.id).catch(() => []);
     // um dos primeiros, sorteado: o mesmo pedido não repete sempre o mesmo GIF
     for (const url of urls.slice(0, 4).sort(() => Math.random() - 0.5)) {
       try {
