@@ -1,3 +1,4 @@
+import { prefsFor, styleHint } from "../../chatprefs.js";
 import { cancelDirect, createDirect, describeDirect, directText, listDirect } from "../../direct.js";
 import { hasContactPhone, saveContact, searchContacts } from "../../phonebook.js";
 import { formatLocal, parseLocalDateTime } from "../../time.js";
@@ -91,7 +92,12 @@ export const contactsSearch = defineTool<{ query: string }>({
   async run(args, ctx) {
     const found = await searchContacts(ctx.user.id, args.query, 5);
     if (!found.length) return { contacts: [], note: "Ninguém com esse nome nem parecido na agenda dela. Peça o número e salve com contact_save." };
-    const contacts = found.map((c) => ({ name: c.name, phone: c.phone, ...(c.label ? { label: c.label } : {}) }));
+    // jeito combinado na tela Recados (tom, anotação): o texto da mensagem já sai assim
+    const prefs = await prefsFor(ctx.user.id, found.map((c) => c.phone));
+    const contacts = found.map((c) => {
+      const style = styleHint(prefs[c.phone]);
+      return { name: c.name, phone: c.phone, ...(c.label ? { label: c.label } : {}), ...(style ? { style } : {}) };
+    });
     // parecido não é certeza: ela confirma quem é antes de mandar
     return found[0]!.approximate
       ? { contacts, approximate: true, note: "Não achei com essa grafia; esses são os parecidos. Pergunte se é um deles antes de mandar." }

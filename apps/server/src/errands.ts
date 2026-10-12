@@ -1,4 +1,5 @@
 import { normalizePhone } from "./accounts.js";
+import { getPrefs, resumeFollow, withSignature } from "./chatprefs.js";
 import { humanize } from "./agent/humanize.js";
 import { redactSecrets } from "./agent/guard.js";
 import type { InboundMessage } from "./channels/types.js";
@@ -129,8 +130,9 @@ export async function startErrand(opts: {
   if (exists === null) return { ok: false, error: `O número ${phone} não tem WhatsApp. Sugira à pessoa ligar: +${phone}.`, no_whatsapp: true };
   const channel = outboundChannel();
   const jid = exists ?? (await jidFor(phone, channel));
-  const text = redactSecrets(humanize(introduce(opts.message, firstName(opts.user), opts.timezone ?? config.DEFAULT_TIMEZONE)));
+  const text = withSignature(redactSecrets(humanize(introduce(opts.message, firstName(opts.user), opts.timezone ?? config.DEFAULT_TIMEZONE))), (await getPrefs(opts.user.id, phone))?.signature);
   await channel.sendText(jid, text);
+  await resumeFollow(opts.user.id, phone);
   const hours = Math.min(Math.max(opts.hours ?? 24, 1), 72);
   const log: ErrandLogEntry[] = [{ from: "nos", text, at: new Date().toISOString() }];
   const row = await one<{ id: string }>(
@@ -282,10 +284,11 @@ async function pendingErrands(userId: string) {
 }
 
 /** O texto exato que sai quando a pessoa disser "sim" (mesmo caminho do startErrand/sendToErrand). */
-function previewOf(p: PendingErrand, user: { name?: string | null; full_name?: string | null; timezone?: string | null }) {
+function previewOf(p: PendingErrand, user: { name?: string | null; full_name?: string | null; timezone?: string | null }, signature?: string | null) {
   const raw = String(p.args.message ?? "");
   const text = p.tool === "errand_start" ? introduce(raw, firstName(user), user.timezone ?? config.DEFAULT_TIMEZONE) : raw.trim();
-  return redactSecrets(humanize(text)).slice(0, MAX_ERRAND_TEXT);
+  const out = redactSecrets(humanize(text)).slice(0, MAX_ERRAND_TEXT);
+  return p.tool === "errand_start" ? withSignature(out, signature) : out;
 }
 
 /** Lista da tela Recados: só os da própria pessoa, com os pedidos que ainda esperam o "sim". */
@@ -294,16 +297,18 @@ export async function listErrands(userId: string) {
   if (!user) return { errands: [], drafts: [], follow: followUrl() };
   const pending = await pendingErrands(userId);
   const rows = await many<Errand & { created_at: string; updated_at: string }>(
-    `SELECT * FROM errands WHERE user_id = $1 ORDER BY (status IN ('waiting', 'asking') AND expires_at > now()) DESC, updated_at DESC LIMIT 50`,
+    `SELECT * FROM errands WHERE user_id = $1 AND NOT hidden ORDER BY (status IN ('waiting', 'asking') AND expires_at > now()) DESC, updated_at DESC LIMIT 50`,
     [userId],
   );
+  const draftPhone = pending.find((p) => p.tool === "errand_start")?.args.phone;
+  const draftSignature = draftPhone ? (await getPrefs(userId, draftPhone))?.signature : null;
   const waitingYes = new Map(pending.filter((p) => p.tool === "errand_continue").map((p) => [String(p.args.errand_id), p]));
   return {
     // recado novo ainda não enviado: a pessoa vê exatamente o que vai sair antes de dizer "sim"
     drafts: pending
       .filter((p) => p.tool === "errand_start")
       .slice(0, 1)
-      .map((p) => ({ id: p.id, place: p.args.place ?? "", phone: p.args.phone ?? "", goal: p.args.goal ?? "", allowed: p.args.allowed ?? null, preview: previewOf(p, user), created_at: p.created_at })),
+      .map((p) => ({ id: p.id, place: p.args.place ?? "", phone: p.args.phone ?? "", goal: p.args.goal ?? "", allowed: p.args.allowed ?? null, preview: previewOf(p, user, draftSignature), created_at: p.created_at })),
     errands: rows.map((e) => {
       const p = waitingYes.get(e.id);
       const last = e.log.at(-1);

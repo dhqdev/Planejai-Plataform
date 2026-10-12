@@ -63,7 +63,7 @@
 .errand-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 6px 8px; }
 .errand-tools .seg button { padding: 5px 11px; font-size: 13px; }
 .errand-search { flex: 1 1 140px; min-width: 0; height: 32px; padding: 0 10px; font-size: 13px; }
-.errand-section { padding: 10px 12px 4px; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.errand-section { padding: 10px 12px 4px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
 /* avatar posicionado, não flex: segue a regra do Safari lá em cima */
 .errand-row { position: relative; padding-left: 56px; }
 .errand-row > .errand-avatar { position: absolute; left: 12px; top: 10px; }
@@ -76,3 +76,47 @@
 .errand-state.done { color: var(--muted); }
 .errand-bubble-cancel { align-self: flex-start; margin-top: 4px; padding: 0; border: 0; background: none; font: inherit; font-size: 12px; color: var(--muted); text-decoration: underline; cursor: pointer; }
 .errand-bubble-cancel:hover { color: var(--text); }
+
+/* jeito de cada conversa: cor do avatar, fixada, barra de ações, personalizar e acompanhamento */
+.errand-avatar.c-violeta { --chat: #6510e0; }
+.errand-avatar.c-azul { --chat: #2f6fd8; }
+.errand-avatar.c-verde { --chat: #15905e; }
+.errand-avatar.c-ambar { --chat: #c47a06; }
+.errand-avatar.c-rosa { --chat: #d02f78; }
+.errand-avatar.c-cinza { --chat: #66665f; }
+.errand-avatar[class*=" c-"] { background: var(--chat); border-color: var(--chat); color: #fff; }
+.errand-row.active .errand-avatar[class*=" c-"] { background: var(--chat); }
+.errand-row-top .errand-pin { display: inline-block; margin-right: 5px; vertical-align: -1px; color: var(--muted); }
+
+.errand-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.errand-bar .btn { display: inline-flex; align-items: center; gap: 5px; }
+.errand-bar .btn.on { background: var(--panel-2); color: var(--text); font-weight: 600; }
+.errand-bar-info { font-size: 12px; color: var(--muted); margin-left: 4px; }
+
+.errand-custom .field:last-child { margin-bottom: 0; }
+.errand-custom-label { font-weight: 500; font-size: 13px; }
+.errand-custom textarea { resize: vertical; min-height: 72px; font: inherit; }
+.errand-colors { display: flex; flex-wrap: wrap; gap: 10px; }
+.errand-color { width: 32px; height: 32px; border-radius: 50%; border: 2px solid transparent; outline: 2px solid transparent; outline-offset: 2px; cursor: pointer; padding: 0; transition: transform .15s ease, outline-color .15s ease; }
+.errand-color:active { transform: scale(.92); }
+.errand-color.on { outline-color: var(--text); }
+.errand-color.none { background: var(--panel-2); border-color: var(--border); }
+.errand-color.c-violeta { background: #6510e0; }
+.errand-color.c-azul { background: #2f6fd8; }
+.errand-color.c-verde { background: #15905e; }
+.errand-color.c-ambar { background: #c47a06; }
+.errand-color.c-rosa { background: #d02f78; }
+.errand-color.c-cinza { background: #66665f; }
+.errand-tones { display: flex; flex-wrap: wrap; }
+.errand-tones button { flex: 1 1 auto; padding: 6px 10px; font-size: 13px; }
+
+.errand-follow { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; }
+.errand-follow-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.errand-follow-top strong { font-size: 14px; }
+.errand-follow .seg button { padding: 5px 11px; font-size: 13px; }
+.errand-follow-del { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; }
+@media (max-width: 1023px), (max-height: 679px) {
+  .errand-bar .btn { min-height: 36px; }
+  .errand-follow-top .seg { width: 100%; display: flex; }
+  .errand-follow-top .seg button { flex: 1; }
+}

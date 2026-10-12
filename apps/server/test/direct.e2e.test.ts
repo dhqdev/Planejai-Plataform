@@ -182,6 +182,55 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     // o próprio número não
     expect(((await createDirect({ user: u, phone: david.phone, message: "oi", timezone: TZ })) as any).ok).toBe(false);
   });
+  it("Recados: apelido e assinatura por conversa; acompanhar sem prazo, parar e excluir o acompanhamento", async () => {
+    const { createDirect, listContactChats } = await import("../src/direct.js");
+    const { savePrefs, removeChat, prefsFor } = await import("../src/chatprefs.js");
+    const { ingest } = await import("../src/ingest.js");
+    const u = { id: david.id, phone: david.phone, name: "David" };
+    const PHONE = "5511933332222";
+    const reply = (text: string) => ingest({ channel: "playground", remoteJid: `${PHONE}@s.whatsapp.net`, phone: PHONE, externalId: `f${++seq}`, kind: "text", text, timestamp: new Date(), raw: {} });
+
+    expect(await savePrefs(david.id, "11 93333-2222", { nickname: "Seu João", color: "azul", tone: "formal", signature: "Abraço, David", pinned: true })).toMatchObject({ ok: true });
+    expect(await savePrefs(david.id, PHONE, { color: "neon", tone: "grosso" })).toMatchObject({ prefs: { color: null, tone: null, nickname: "Seu João", pinned: true } });
+    await savePrefs(david.id, PHONE, { tone: "formal" });
+    const r: any = await createDirect({ user: u, phone: PHONE, name: "João", message: "Oi João, aqui é o David! Amanhã passo aí.", timezone: TZ });
+    expect(r.ok).toBe(true);
+    expect(sentTexts().at(-1)).toBe("Oi João, aqui é o David! Amanhã passo aí.\n\nAbraço, David");
+
+    // resposta dentro das 72h chega com o apelido
+    expect((await reply("Combinado!")).reason).toBe("resposta de mensagem avulsa");
+    expect(sentTexts().at(-1)).toMatch(/^\*Seu João\* respondeu:/);
+    const chat = (await listContactChats(david.id)).find((c) => c.phone === PHONE)!;
+    expect(chat.reply_until).toBeTruthy();
+    expect((await prefsFor(david.id, [PHONE]))[PHONE]).toMatchObject({ nickname: "Seu João", pinned: true, follow: "auto" });
+
+    // parou de acompanhar: a resposta não volta mais
+    await savePrefs(david.id, PHONE, { follow: "off" });
+    expect((await reply("Oi?")).reason).not.toBe("resposta de mensagem avulsa");
+    await db.query("DELETE FROM users WHERE phone = $1", [PHONE]);
+
+    // sem prazo: volta mesmo depois das 72h
+    await db.query("UPDATE direct_messages SET sent_at = now() - interval '10 days' WHERE phone = $1", [PHONE]);
+    await savePrefs(david.id, PHONE, { follow: "on" });
+    expect((await reply("Chegou o material")).reason).toBe("resposta de mensagem avulsa");
+    expect(sentTexts().at(-1)).toMatch(/Seu João\* respondeu:\s+Chegou o material/);
+
+    // excluir: para, cancela a agendada e tira da tela; nada vai para ele
+    const sched: any = await createDirect({ user: u, phone: PHONE, message: "Oi, aqui é o David", sendAt: new Date(Date.now() + 3600_000), timezone: TZ });
+    const before = sentTexts().length;
+    expect(await removeChat(david.id, PHONE)).toMatchObject({ ok: true, cancelled_scheduled: 1 });
+    expect(sentTexts().length).toBe(before);
+    expect(await db.one("SELECT status FROM direct_messages WHERE id = $1", [sched.id])).toEqual({ status: "cancelled" });
+    expect((await listContactChats(david.id)).find((c) => c.phone === PHONE)).toBeUndefined();
+    expect((await reply("Alô")).reason).not.toBe("resposta de mensagem avulsa");
+    await db.query("DELETE FROM users WHERE phone = $1", [PHONE]);
+    // o jeito fica guardado; mandar de novo volta a acompanhar
+    expect((await prefsFor(david.id, [PHONE]))[PHONE]).toMatchObject({ nickname: "Seu João", follow: "off", pinned: false });
+    await createDirect({ user: u, phone: PHONE, message: "Oi, aqui é o David de novo", timezone: TZ });
+    expect((await prefsFor(david.id, [PHONE]))[PHONE]!.follow).toBe("auto");
+    expect((await reply("Opa")).reason).toBe("resposta de mensagem avulsa");
+  });
+
   it("zerar contexto: esquece a conversa e, se pedir, o que aprendeu; a conta e os dados ficam", async () => {
     const { pushShort, recentShort, cacheSet, cacheGet } = await import("../src/shortmem.js");
     const { resetContext } = await import("../src/privacy.js");

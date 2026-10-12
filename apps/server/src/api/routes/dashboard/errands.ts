@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { type PrefsPatch, prefsFor, removeChat, savePrefs } from "../../../chatprefs.js";
 import { cancelErrand, discardErrandDraft, listErrands } from "../../../errands.js";
 import { listContactChats } from "../../../direct.js";
 import { NOBODY, selfUserId } from "../../../sharing.js";
@@ -13,8 +14,17 @@ export function errandRoutes(base: FastifyInstance) {
   base.get("/api/errands", async (req) => {
     const uid = await self(req.account);
     const [errands, contacts] = await Promise.all([listErrands(uid), listContactChats(uid)]);
-    return { ...errands, contacts };
+    // jeito de cada conversa (apelido, cor, fixada...), pela chave do número que a tela usa
+    const prefs = await prefsFor(uid, [...errands.errands.map((e) => e.phone), ...contacts.map((c) => c.phone)]);
+    return { ...errands, contacts, prefs };
   });
+  // personalizar a conversa ou mudar o acompanhamento (auto, on = sem prazo, off = parar)
+  base.put<{ Params: { phone: string }; Body: PrefsPatch }>("/api/errands/chats/:phone", async (req, reply) => {
+    const r = await savePrefs(await self(req.account), req.params.phone, req.body ?? {});
+    return r.ok ? r : reply.code(400).send({ error: r.error });
+  });
+  // excluir acompanhamento: para, cancela o que estava agendado ou aberto (nada é enviado) e tira da tela
+  base.delete<{ Params: { phone: string } }>("/api/errands/chats/:phone", async (req) => removeChat(await self(req.account), req.params.phone));
   // cancelar não manda nada para o estabelecimento: só para de acompanhar
   base.post<{ Params: { id: string } }>("/api/errands/:id/cancel", async (req, reply) => {
     const r = await cancelErrand(req.params.id, await self(req.account));

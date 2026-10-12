@@ -3,6 +3,7 @@ import { humanize } from "./agent/humanize.js";
 import { redactSecrets } from "./agent/guard.js";
 import type { InboundMessage } from "./channels/types.js";
 import { many, one, query } from "./db/pool.js";
+import { followerOf, getPrefs, resumeFollow, withSignature } from "./chatprefs.js";
 import { introduce } from "./errands.js";
 import { isOwner, phoneVariants } from "./ingest.js";
 import { QUEUES, getBoss } from "./queue/boss.js";
@@ -21,7 +22,7 @@ import { findOnWhatsApp } from "./whatsapp/rpc.js";
 
 export const MAX_SCHEDULED = 20;
 export const MAX_PER_DAY = 30;
-const REPLY_WINDOW_H = 72;
+export const REPLY_WINDOW_H = 72;
 
 export interface DirectMessage {
   id: string;
@@ -80,7 +81,8 @@ export async function createDirect(opts: {
   const variants = phoneVariants(phone);
   if (variants.some((v) => phoneVariants(opts.user.phone).includes(v))) return { ok: false, error: "Esse número é da própria pessoa." };
   if (isOwner(phone) && !isOwner(opts.user.phone)) return { ok: false, error: "Para falar com o dono do Planejai, use contact_owner." };
-  const text = directText(opts.message, opts.user);
+  // assinatura combinada para esse número na tela Recados (mesmo texto que a pessoa vê depois)
+  const text = withSignature(directText(opts.message, opts.user), (await getPrefs(opts.user.id, phone))?.signature);
   if (!opts.message.trim()) return { ok: false, error: "Mensagem vazia" };
   const sendAt = opts.sendAt && opts.sendAt.getTime() > Date.now() + 30_000 ? opts.sendAt : null;
   if (sendAt && sendAt.getTime() > Date.now() + 90 * 86400_000) return { ok: false, error: "Dá para agendar até 90 dias à frente." };
@@ -110,6 +112,7 @@ export async function createDirect(opts: {
     ],
   );
   const id = row!.id;
+  await resumeFollow(opts.user.id, phone);
   const who = opts.name ? `${opts.name} (+${phone})` : `+${phone}`;
   const withFile = att ? { attachment: attachmentLabel({ kind: att.kind, name: att.fileName }) } : {};
   if (sendAt) {
@@ -183,15 +186,28 @@ export async function handleDirectReply(msg: InboundMessage): Promise<boolean> {
   if (isOwner(msg.phone)) return false;
   const member = await one("SELECT id FROM users WHERE phone = ANY($1) AND status = 'active'", [variants]);
   if (member) return false;
-  const d = await one<DirectMessage & { full_name: string | null; uname: string | null; uphone: string }>(
-    `SELECT d.*, u.full_name, u.name AS uname, u.phone AS uphone FROM direct_messages d JOIN users u ON u.id = d.user_id
+  const recent = await one<{ user_id: string; name: string | null; phone: string }>(
+    `SELECT d.user_id, d.name, d.phone FROM direct_messages d
       WHERE d.phone = ANY($1) AND d.status = 'sent' AND d.sent_at > now() - make_interval(hours => $2)
       ORDER BY d.sent_at DESC LIMIT 1`,
     [variants, REPLY_WINDOW_H],
   );
+  // quem parou de acompanhar (tela Recados) não recebe mais; quem acompanha sem prazo recebe mesmo depois das 72h
+  const prefs = recent ? await getPrefs(recent.user_id, recent.phone) : undefined;
+  let d: { user_id: string; name: string | null; phone: string } | null = recent && prefs?.follow !== "off" ? recent : null;
+  let nickname = d ? (prefs?.nickname ?? null) : null;
+  if (!d) {
+    const f = await followerOf(msg.phone);
+    if (f) {
+      const last = await one<{ name: string | null }>("SELECT name FROM contact_messages WHERE user_id = $1 AND phone = ANY($2) AND name IS NOT NULL ORDER BY created_at DESC LIMIT 1", [f.user_id, variants]);
+      const place = last ? null : await one<{ place: string }>("SELECT place FROM errands WHERE user_id = $1 AND phone = ANY($2) ORDER BY created_at DESC LIMIT 1", [f.user_id, variants]);
+      d = { user_id: f.user_id, phone: f.phone, name: last?.name ?? place?.place ?? null };
+      nickname = f.nickname;
+    }
+  }
   if (!d) return false;
   if (msg.externalId && (await markSeen(`direct:${msg.channel}:${msg.externalId}`, 48 * 3600)) === false) return true;
-  const who = d.name || msg.pushName || `+${d.phone}`;
+  const who = nickname || d.name || msg.pushName || `+${d.phone}`;
   const body =
     msg.kind === "text" ? msg.text : msg.text?.trim() ? `${msg.text}\n[mandou ${msg.kind === "image" ? "uma foto" : "um arquivo"} também]` : `[mandou ${msg.kind === "audio" ? "um áudio" : msg.kind === "image" ? "uma foto" : "um arquivo"}]`;
   await logContactMessage(d.user_id, d.phone, d.name || msg.pushName || null, "in", String(body ?? ""));
@@ -250,9 +266,15 @@ export async function listContactChats(userId: string) {
   // nome: o da agenda de contatos da pessoa ou o cadastro de quem usa o Planejai, quando a mensagem não trouxe
   const phones = [...chats.keys()];
   const all = phones.flatMap((p) => phoneVariants(p));
-  const [book, members] = await Promise.all([
+  const [book, members, windows] = await Promise.all([
     many<{ phone: string; name: string }>("SELECT phone, name FROM phonebook WHERE user_id = $1 AND phone = ANY($2)", [userId, all]),
     many<{ phone: string; name: string }>("SELECT phone, COALESCE(full_name, name) AS name FROM users WHERE phone = ANY($1) AND status = 'active'", [all]),
+    // até quando a resposta volta sozinha (72h depois da última mensagem avulsa que saiu)
+    many<{ phone: string; name: string }>(
+      `SELECT phone, (MAX(sent_at) + make_interval(hours => $3))::text AS name FROM direct_messages
+        WHERE user_id = $1 AND phone = ANY($2) AND status = 'sent' AND sent_at > now() - make_interval(hours => $3) GROUP BY phone`,
+      [userId, all, REPLY_WINDOW_H],
+    ),
   ]);
   const find = (list: { phone: string; name: string }[], phone: string) => {
     const v = phoneVariants(phone);
@@ -268,6 +290,10 @@ export async function listContactChats(userId: string) {
         member: Boolean(member),
         // a última palavra foi deles: a pessoa ainda não respondeu pelo assistente
         waiting_you: last?.from === "eles",
+        reply_until: (() => {
+          const w = find(windows, c.phone)?.name;
+          return w ? new Date(w).toISOString() : null;
+        })(),
         updated_at: c.updated_at,
         last: last ? { ...last, text: last.text.slice(0, 140) } : null,
         log: c.log.slice(-60),
