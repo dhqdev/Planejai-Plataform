@@ -600,7 +600,11 @@ export const financeSummary = defineTool<{ month?: string; of_contact?: string }
     const expenses = cents(totals?.expenses);
     const income = cents(totals?.income);
     const cards = await listCards(who.id, ctx.timezone);
+    // metas abertas entram no resumo: o Moacir comenta o mês já pensando nelas
+    const { describeGoal, listGoals } = await import("../../goals.js");
+    const goals = who.name ? [] : (await listGoals(who.id)).filter((g) => !g.done_at).map((g) => describeGoal(g, ctx.timezone));
     return {
+      ...(goals.length ? { goals } : {}),
       ...(who.name ? { of: who.name, read_only: true } : {}),
       ...(cards.length
         ? { card_invoices: cards.map((c) => `${c.name}: próxima fatura ${brl(c.next.total)}, vence ${c.next.due.split("-").reverse().join("/")} (${c.next.status})`) }

@@ -1,0 +1,14 @@
+/* ---------- Finanças > Metas ---------- */
+.goal-row { display: flex; align-items: center; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--border); }
+.goal-row:last-of-type { border-bottom: none; }
+.goal-row.done { opacity: .7; }
+.goal-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; border: none; background: none; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.goal-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 13.5px; font-weight: 550; }
+.goal-top .ellipsis { flex: 1; min-width: 0; }
+.goal-top strong { font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.goal-bar { height: 8px; border-radius: 99px; background: var(--panel-2); overflow: hidden; }
+.goal-bar i { display: block; height: 100%; border-radius: 99px; background: var(--grad); transition: width .5s cubic-bezier(.2, .9, .25, 1); }
+.goal-row.done .goal-bar i { background: var(--ok); }
+.goal-main small { font-size: 12px; overflow-wrap: anywhere; }
+.goal-add { flex-shrink: 0; border-radius: 99px; }
+@media (prefers-reduced-motion: reduce) { .goal-bar i { transition: none; } }

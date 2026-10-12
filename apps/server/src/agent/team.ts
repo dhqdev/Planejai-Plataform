@@ -4,6 +4,7 @@ import * as core from "./tools/core.js";
 import * as finance from "./tools/finance.js";
 import * as bills from "./tools/bills.js";
 import * as cards from "./tools/cards.js";
+import { GOAL_TOOLS } from "./tools/goals.js";
 import * as images from "./tools/images.js";
 import * as pdf from "./tools/pdf.js";
 import * as audio from "./tools/audio.js";
@@ -27,7 +28,8 @@ export interface Face {
   color: number;
   eyes: "dot" | "happy" | "wide" | "wink" | "glasses" | "sleepy";
   mouth: "smile" | "open" | "cat" | "grin" | "o" | "flat";
-  extra: "none" | "antenna" | "cap" | "bow" | "headset" | "leaf" | "crown";
+  /** skin:<slug> = roupa fixa de um especialista da loja (SKINS em faces.tsx) */
+  extra: "none" | "antenna" | "cap" | "bow" | "headset" | "leaf" | "crown" | `skin:${string}`;
 }
 
 const EYES: Face["eyes"][] = ["dot", "happy", "wide", "wink", "glasses", "sleepy"];
@@ -147,7 +149,9 @@ export const SPECIALISTS: AgentDef[] = [
       "Fatura é diferente de gasto do mês: 'quanto gastei em outubro' = finance_summary (pela data de cada compra/parcela); 'quanto vem a fatura' = card_invoice (pelo vencimento). " +
       "'Paguei a fatura/o cartão' é card_invoice_pay, nunca add_transaction nem bill_pay (as compras já estão lançadas; lançar de novo conta em dobro). " +
       "Compra parcelada: list_transactions mostra parcela 2/10; para trocar de cartão ou apagar a compra inteira use all_installments=true; para mudar o valor total, apague a compra inteira e lance de novo. " +
-      "O sistema avisa sozinho no WhatsApp quando a fatura fecha, antes e no dia do vencimento.",
+      "O sistema avisa sozinho no WhatsApp quando a fatura fecha, antes e no dia do vencimento. " +
+      "Metas (juntar dinheiro para algo): goal_create com valor e prazo; 'guardei 200 na viagem' é goal_add (não é gasto, nada de add_transaction); " +
+      "ao falar de gastos de quem tem meta, diga em uma frase como isso afeta a meta e quanto falta por mês (per_month), sem sermão.",
     tools: [
       finance.addTransaction,
       finance.listTransactions,
@@ -168,6 +172,7 @@ export const SPECIALISTS: AgentDef[] = [
       cards.cardInvoice,
       cards.cardInvoicePay,
       cards.cardDelete,
+      ...GOAL_TOOLS,
       core.readDocument,
     ],
   },

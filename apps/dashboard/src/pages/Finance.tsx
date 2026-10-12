@@ -6,6 +6,7 @@ import { Icon } from "../icons";
 import { useLongPress } from "../ios";
 import { haptic } from "../touch";
 import { ReportModal } from "./FinanceReport";
+import { GoalsCard } from "./FinanceGoals";
 import { CardsTab, InvoicesCard, invoiceMonthFor, invoiceMonthLabel, useCards, type CreditCard } from "./FinanceCards";
 
 const SOURCE: Record<string, string> = { conversa: "conversa", audio: "áudio", comprovante: "comprovante", documento: "documento", painel: "painel" };
@@ -260,6 +261,7 @@ export function FinancePage() {
             </div>
 
             <div className="fin-col">
+              <GoalsCard user={user} readonly={readonly} />
               <InvoicesCard user={user} readonly={readonly} onOpen={openCards} />
               <BillsCard user={user} readonly={readonly} onPaid={() => void reload()} />
               <div className="card fin-side-card">

@@ -15,6 +15,7 @@ import { memoryRoutes } from "./dashboard/memories.js";
 import { phonebookRoutes } from "./dashboard/phonebook.js";
 import { shoppingRoutes } from "./dashboard/shopping.js";
 import { storeRoutes } from "./dashboard/store.js";
+import { goalRoutes } from "./dashboard/goals.js";
 import { resourceRoutes } from "./dashboard/resources.js";
 import { settingsRoutes } from "./dashboard/settings.js";
 import { teamAdminRoutes, teamRoutes } from "./dashboard/team.js";
@@ -45,6 +46,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     billingRoutes(base);
     shoppingRoutes(base);
     storeRoutes(base);
+    goalRoutes(base);
 
     // ================= Só super admin =================
     await base.register(async (api) => {

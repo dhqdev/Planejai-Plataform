@@ -8,7 +8,7 @@ Leia antes de mexer no orquestrador, no time (CTO, especialistas, agentes sob me
 | `cto` | Juvenal | conversa com a pessoa, decide, delega com `ask_*` e revisa |
 | `pesquisador` | Clotilde | web, páginas, navegador, prints e gravações |
 | `agenda` | Cotinha | lembretes e calendário |
-| `financeiro` | Moacir | lançamentos, limites, contas fixas, gráficos |
+| `financeiro` | Moacir | lançamentos, limites, contas fixas, metas, gráficos |
 | `comunicacao` | Telma | e-mail e Slack |
 | `produtividade` | Nivaldo | Notion, Linear, GitHub, n8n do dono |
 | `recados` | Zezinho | fala com estabelecimentos pela pessoa |
