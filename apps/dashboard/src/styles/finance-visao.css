@@ -153,9 +153,19 @@
 }
 @media (max-width: 767px) {
   .fin-top { grid-template-columns: 1fr auto auto; }
-  .fin-report-btn { grid-column: 2; grid-row: 2; width: 44px; height: 44px; border-radius: 14px; transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+  /* o .phone-only vira inline-flex: sem centralizar, o ícone ficava colado na esquerda do quadrado */
+  .fin-report-btn { grid-column: 2; grid-row: 2; width: 44px; height: 44px; padding: 0; justify-content: center; align-items: center; border-radius: 14px; transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+  .fin-top .fin-add { height: 44px; border-radius: 14px; }
+  .fin-top .fin-period { gap: 8px; }
   .fin-report-btn:active { transform: scale(.9); }
   .fin-top .fin-period { min-width: 0; }
   .fin-top .fin-range { min-width: 0; overflow: hidden; padding: 8px 10px; gap: 6px; }
   .fin-add { grid-column: 3; }
+  .fin-range-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+}
+/* celular estreito (iPhone SE/mini): botões de 40px e o período sem o ícone, para a data caber */
+@media (max-width: 379px) {
+  .fin-top .fin-period .icon-btn, .fin-top .fin-report-btn.icon-btn, .fin-top .fin-add.btn { width: 40px; height: 40px; min-height: 40px; }
+  .fin-top .fin-range { padding: 8px; font-size: 12.5px; }
+  .fin-top .fin-range .ico { display: none; }
 }

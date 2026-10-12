@@ -147,7 +147,7 @@ export function FinancePage() {
         {tab !== "cards" && (
         <div className="fin-period">
           <button className="icon-btn round" aria-label="Mês anterior" onClick={() => go(-1)}><Icon name="chevron-left" size={16} /></button>
-          <span className="fin-range"><Icon name="calendar" size={15} /> {periodLabel}</span>
+          <span className="fin-range"><Icon name="calendar" size={15} /> <span className="fin-range-t">{periodLabel}</span></span>
           <button className="icon-btn round" aria-label="Próximo mês" disabled={isCurrent} onClick={() => go(1)}><Icon name="chevron-right" size={16} /></button>
         </div>
         )}
