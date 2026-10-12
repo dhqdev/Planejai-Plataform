@@ -24,6 +24,7 @@ import { openPending, resolvePending } from "./confirm.js";
 import { Progress } from "./progress.js";
 import { humanize } from "./humanize.js";
 import { isAckOnly, pickReaction } from "./reaction.js";
+import { matchQuick, quickAnswer } from "./quick.js";
 import { Tracer } from "./trace.js";
 import { allShort, pushShort, recentShort, redisAlive, type ShortEntry } from "../shortmem.js";
 import { billingAccess, blockedMessage } from "../billing.js";
@@ -308,6 +309,24 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
         else await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((m) => m.id)]);
         await tracer.finish("[[silencio]]");
         return { executionId: tracer.executionId, bubbles: [], outbox };
+      }
+      // Pedido comum e inequívoco ("quanto gastei esse mês", "o que tenho amanhã", "apaga o último"): sai do banco, sem IA
+      const intent = userMsgs.length === 1 ? matchQuick(userMsgs[0]!.content ?? "") : null;
+      const quick = intent && (await quickAnswer(user, isOwner(user.phone), intent, user.timezone ?? settings.timezone).catch(() => null));
+      if (intent && quick) {
+        const text = humanize(quick.text);
+        const step = await tracer.step({ agent: "cto", type: "tool", name: `atalho sem IA: ${intent.kind}`, input: intent });
+        await step.ok({ ...quick.data, economizou: "a chamada do CTO" });
+        await channel.sendText(conversation.remote_jid, text).catch(() => {});
+        const m = userMsgs[0]!;
+        await pushShort(conversationId, [
+          { id: m.id, role: "user" as const, text: m.content ?? "", ts: new Date(m.created_at).getTime(), ext: m.external_id },
+          { id: Date.now(), role: "assistant" as const, text, ts: Date.now() },
+        ]);
+        if (await redisAlive()) await query("DELETE FROM messages WHERE id = ANY($1)", [pending.map((p) => p.id)]);
+        else await query("UPDATE messages SET processed = true WHERE id = ANY($1)", [pending.map((p) => p.id)]);
+        await tracer.finish(text);
+        return { executionId: tracer.executionId, bubbles: [{ type: "text", text }], outbox };
       }
     }
 

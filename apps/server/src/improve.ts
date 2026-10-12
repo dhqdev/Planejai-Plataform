@@ -18,6 +18,9 @@ import { notify } from "./notifications.js";
 const MAX_AGENTS = 3;
 /** basta uma conversa no dia para a reunião aprender algo; agente novo continua exigindo assunto repetido */
 const MIN_EXECUTIONS = 1;
+/** menos pedidos que isso no dia = dia magro: reunião só a cada LIGHT_EVERY_DAYS dias (folga de 6 h para o horário da fila) */
+const LIGHT_ASKS = 3;
+const LIGHT_EVERY_DAYS = 3;
 /** fatos conhecidos que vão para a reunião (numerados, para ela corrigir ou dar assunto sem gastar com ids) */
 const KNOWN_FACTS = 50;
 /** atas guardadas por pessoa */
@@ -28,10 +31,16 @@ type Result = { created: number; updated: number; retired: number; learned: numb
 const MIN_DAYS = 2;
 
 export async function dailyImprovement(log?: { info: (...a: any[]) => void; error: (...a: any[]) => void }) {
+  // quem conversou pouco no dia (menos de LIGHT_ASKS pedidos) só tem reunião a cada LIGHT_EVERY_DAYS dias: economiza a chamada
+  // em dia magro; o que a pessoa contou nesses dias continua no resumo da conversa e nas memórias salvas na hora
   const users = await many(
-    `SELECT u.id FROM users u WHERE u.status = 'active'
-        AND (SELECT COUNT(*) FROM executions e WHERE e.user_id = u.id AND e.trigger = 'message' AND e.started_at > now() - interval '24 hours') >= $1`,
-    [MIN_EXECUTIONS],
+    `SELECT id FROM (
+       SELECT u.id,
+              (SELECT COUNT(*) FROM executions e WHERE e.user_id = u.id AND e.trigger = 'message' AND e.started_at > now() - interval '24 hours') AS asks,
+              (SELECT MAX(m.created_at) FROM improve_meetings m WHERE m.user_id = u.id) AS last_meeting
+         FROM users u WHERE u.status = 'active') x
+      WHERE asks >= $1 AND (asks >= $2 OR last_meeting IS NULL OR last_meeting < now() - make_interval(hours => $3))`,
+    [MIN_EXECUTIONS, LIGHT_ASKS, LIGHT_EVERY_DAYS * 24 - 6],
   );
   const out = { users: users.length, created: 0, updated: 0, retired: 0, learned: 0 };
   for (const u of users) {
