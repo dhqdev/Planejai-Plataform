@@ -1,6 +1,6 @@
 import { many, one } from "../db/pool.js";
 import { notify } from "../notifications.js";
-import { faceFor, MAX_CLIENT_AGENTS } from "./team.js";
+import { MAX_CLIENT_AGENTS, type Face } from "./team.js";
 
 /**
  * Loja de especialistas: modelos prontos que a pessoa liga no painel. Ligar cria um agente sob medida
@@ -128,22 +128,14 @@ export const STORE: StoreItem[] = [
     tools: ["schedule_reminder", "list_reminders", "places_nearby", "list_transactions", "calculate", "web_search", "get_datetime"],
     asks: ["Me lembra da troca de óleo a cada 6 meses", "Quanto gastei com o carro esse mês?", "Quando vence o IPVA em SP?"],
   },
-  {
-    slug: "economia",
-    name: "Economia",
-    persona: "Dona Zuleica",
-    icon: "trend",
-    blurb: "Metas de economia, onde cortar gastos e quanto sobra no fim do mês.",
-    focus: "metas de economia, cortes de gasto e reserva",
-    instructions:
-      "Ajude a guardar dinheiro: olhe os gastos do mês e dos anteriores, aponte onde dá para cortar com valor em reais, " +
-      "acompanhe a meta que ela definir e faça conta só com calculate. Gráfico quando ajudar. Sem recomendar investimento específico.",
-    tools: ["finance_summary", "list_transactions", "budget_status", "calculate", "make_chart", "bill_list", "get_datetime"],
-    asks: ["Onde eu consigo economizar esse mês?", "Quero juntar R$ 2.000 até dezembro", "Quanto sobrou nos últimos meses?"],
-  },
 ];
 
 const bySlug = (slug: string) => STORE.find((s) => s.slug === slug);
+
+/** Fundo pastel de cada um (índice de FACE_COLORS no painel), combinando com a roupa. */
+const COLORS: Record<string, number> = { treino: 7, estudos: 5, pet: 0, saude: 1, viagens: 6, cozinha: 2, casa: 0, carro: 4 };
+/** Carinha fixa: cada especialista veste a roupa dele (skin:<slug>, desenhada no painel), igual para todo mundo. */
+export const storeFace = (slug: string): Face => ({ color: COLORS[slug] ?? 5, eyes: "happy", mouth: "smile", extra: `skin:${slug}` });
 
 /** Catálogo com o que esta pessoa já ligou (e quantas vagas de agente ainda tem). */
 export async function listStore(userId: string) {
@@ -152,7 +144,7 @@ export async function listStore(userId: string) {
   return {
     items: STORE.map((s) => {
       const r = rows.find((x) => x.slug === s.slug);
-      return { ...s, active: Boolean(r?.active), face: faceFor(`${userId}:${s.slug}`), mine: Boolean(r && r.origin !== "loja") };
+      return { ...s, active: Boolean(r?.active), face: storeFace(s.slug), mine: Boolean(r && r.origin !== "loja") };
     }),
     used,
     max: MAX_CLIENT_AGENTS,
@@ -175,9 +167,9 @@ export async function activateStore(userId: string, slug: string): Promise<{ ok:
   if ((n?.n ?? 0) >= MAX_CLIENT_AGENTS) return { ok: false, error: `Seu time já tem ${MAX_CLIENT_AGENTS} agentes. Desligue um para ligar outro.`, status: 409 };
   await one(
     `INSERT INTO client_agents (user_id, slug, name, focus, instructions, tools, persona, face, origin) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'loja')
-     ON CONFLICT (user_id, slug) DO UPDATE SET active = true, name = $3, focus = $4, instructions = $5, tools = $6, persona = $7, origin = 'loja', updated_at = now()
+     ON CONFLICT (user_id, slug) DO UPDATE SET active = true, name = $3, focus = $4, instructions = $5, tools = $6, persona = $7, face = $8, origin = 'loja', updated_at = now()
      RETURNING id`,
-    [userId, slug, item.name, item.focus, item.instructions, item.tools, item.persona, JSON.stringify(faceFor(`${userId}:${slug}`))],
+    [userId, slug, item.name, item.focus, item.instructions, item.tools, item.persona, JSON.stringify(storeFace(slug))],
   );
   await notify({ userId, kind: "agente", title: `${item.persona} entrou no seu time`, body: `Especialista em ${item.name}. Peça direto no WhatsApp.`, link: `/especialistas/${slug}` });
   return { ok: true };

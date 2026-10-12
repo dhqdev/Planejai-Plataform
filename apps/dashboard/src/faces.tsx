@@ -25,8 +25,23 @@ const MOOD: Record<string, Mood> = { happy: "happy", wink: "wink", wide: "curiou
 const DEFAULT: Face = { color: 5, eyes: "dot", mouth: "smile", extra: "none" };
 const index = (n: number, len: number) => ((n % len) + len) % len;
 
+/** Especialistas da loja: cada um com a roupa do seu assunto, sempre igual (face.extra = "skin:<slug>"). */
+export const SKINS: Record<string, Outfit> = {
+  treino: { head: "sweatband", neck: "whistle" },
+  estudos: { head: "grad", eyes: "glasses" },
+  pet: { head: "dogears", neck: "pettag" },
+  saude: { head: "nurse", neck: "stethoscope" },
+  viagens: { head: "pilot", eyes: "sunglasses", neck: "camera" },
+  cozinha: { head: "chef", neck: "apron" },
+  casa: { head: "hardhat", neck: "toolbelt" },
+  carro: { head: "mechanic", neck: "bandana" },
+};
+export const skinOf = (face?: Face | null) => (face?.extra?.startsWith("skin:") ? face.extra.slice(5) : null);
+
 /** Roupinha do Mochi para esta combinação. */
 export function outfitFor(face?: Face | null): Outfit {
+  const skin = skinOf(face);
+  if (skin && SKINS[skin]) return SKINS[skin]!;
   const f = face ?? DEFAULT;
   const out: Outfit = {};
   const head = HEAD[f.extra];
@@ -41,12 +56,15 @@ export function outfitFor(face?: Face | null): Outfit {
 
 export function AgentFace({ face, size = 40, title, agent, live = false }: { face?: Face | null; size?: number; title?: string; agent?: string; live?: boolean }) {
   const f = face ?? DEFAULT;
-  const mood = useRoleMood(live ? (agent ?? "c_") : null, MOOD[f.eyes] ?? "idle");
+  // especialista da loja: o objeto e o jeito de olhar vêm da roupa dele, não do id
+  const skin = skinOf(f);
+  const role = skin ? `skin:${skin}` : agent;
+  const mood = useRoleMood(live ? (role ?? "c_") : null, MOOD[f.eyes] ?? "idle");
   return (
     <span className={`agent-face ${live ? "live" : ""}`} role="img" aria-label={title ?? "agente"} style={{ width: size, height: size, background: FACE_COLORS[index(f.color, FACE_COLORS.length)] }}>
       {/* parado (sem seguir o mouse) onde há dezenas deles; vivo nas telas do time */}
       <Mochi still={!live} mood={mood} outfit={outfitFor(f)} size={Math.round(size * 0.92)} title={title} />
-      {live && agent !== undefined && <AgentProp agent={agent} />}
+      {live && role !== undefined && <AgentProp agent={role} />}
     </span>
   );
 }

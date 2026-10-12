@@ -68,6 +68,12 @@ export const ITEMS: { id: string; slot: Slot; label: string; top?: number }[] = 
   { id: "catears", slot: "head", label: "Gatinho", top: 22 },
   { id: "halo", slot: "head", label: "Auréola", top: 16 },
   { id: "sprout", slot: "head", label: "Brotinho", top: 20 },
+  { id: "sweatband", slot: "head", label: "Faixa de treino", top: 46 },
+  { id: "nurse", slot: "head", label: "Enfermeira", top: 33 },
+  { id: "pilot", slot: "head", label: "Piloto", top: 33 },
+  { id: "hardhat", slot: "head", label: "Capacete de obra", top: 28 },
+  { id: "dogears", slot: "head", label: "Orelhas de cachorro", top: 42 },
+  { id: "mechanic", slot: "head", label: "Boné de mecânico", top: 28 },
   { id: "sunglasses", slot: "eyes", label: "Óculos escuros" },
   { id: "glasses", slot: "eyes", label: "Óculos" },
   { id: "hearts", slot: "eyes", label: "Coração" },
@@ -79,6 +85,12 @@ export const ITEMS: { id: string; slot: Slot; label: string; top?: number }[] = 
   { id: "pearls", slot: "neck", label: "Colar" },
   { id: "medal", slot: "neck", label: "Medalha" },
   { id: "bandana", slot: "neck", label: "Bandana" },
+  { id: "whistle", slot: "neck", label: "Apito" },
+  { id: "stethoscope", slot: "neck", label: "Estetoscópio" },
+  { id: "camera", slot: "neck", label: "Câmera" },
+  { id: "pettag", slot: "neck", label: "Coleira" },
+  { id: "apron", slot: "neck", label: "Avental" },
+  { id: "toolbelt", slot: "neck", label: "Trena" },
   { id: "pumpkin", slot: "costume", label: "Abóbora", top: 30 },
   { id: "bear", slot: "costume", label: "Ursinho", top: 26 },
   { id: "dino", slot: "costume", label: "Dino", top: 24 },
@@ -401,6 +413,72 @@ function Hat({ id, u }: { id: string; u: string }) {
           <path d="M44 27 Q52 24.5 60 24.5" stroke="#fff8d6" strokeWidth={1.3} fill="none" strokeLinecap="round" />
         </g>
       );
+    case "sweatband":
+      return (
+        <g>
+          <path d="M90 55 C97 57 102 64 100 72 M92 57.5 C101 62 103 70 98 77" stroke="#e23a48" strokeWidth={3.4} fill="none" strokeLinecap="round" />
+          <path d="M23 53 C40 46 80 46 97 53 L96 63 C80 56.5 40 56.5 24 63 Z" fill={`url(#${u}-red)`} />
+          <path d="M24 57.6 C40 51.5 80 51.5 96.5 57.6" stroke="#fff" strokeWidth={2.2} fill="none" />
+          <path d="M34 50 C40 48 46 47 51 47" stroke="rgba(255,255,255,.45)" strokeWidth={1.6} fill="none" strokeLinecap="round" />
+        </g>
+      );
+    case "nurse":
+      return (
+        <g>
+          <path d="M35 59 L39 37 C50 33 70 33 81 37 L85 59 C70 55 50 55 35 59 Z" fill={`url(#${u}-white)`} stroke="rgba(0,0,0,.08)" strokeWidth={0.8} />
+          <path d="M35 59 C50 55 70 55 85 59 L85 63.5 C70 59.5 50 59.5 35 63.5 Z" fill="#e6e6ee" />
+          <rect x={56.6} y={39.5} width={6.8} height={14} rx={1.4} fill="#ef3b4f" />
+          <rect x={53} y={43.1} width={14} height={6.8} rx={1.4} fill="#ef3b4f" />
+          <path d="M42 40 C47 37.5 52 36.6 56 36.4" stroke="#fff" strokeWidth={1.6} fill="none" strokeLinecap="round" />
+        </g>
+      );
+    case "pilot":
+      return (
+        <g>
+          <rect x={32} y={45} width={56} height={13} rx={3} fill={`url(#${u}-navy)`} />
+          <path d="M22 44 C26 33 94 33 98 44 C94 50.5 26 50.5 22 44 Z" fill="#2c4fae" />
+          <path d="M30 41 C40 36.5 60 35.5 74 36.5" stroke="rgba(255,255,255,.3)" strokeWidth={1.8} fill="none" strokeLinecap="round" />
+          <path d="M31 57 C44 66 76 66 89 57 L89 60.5 C76 70 44 70 31 60.5 Z" fill="#14141a" />
+          <path d="M48 51 Q54 47.5 60 50.4 Q66 47.5 72 51 Q66 50.5 60 53.4 Q54 50.5 48 51 Z" fill={`url(#${u}-gold)`} />
+          <circle cx={60} cy={51} r={2.6} fill={`url(#${u}-gold)`} stroke="#c98a12" strokeWidth={0.6} />
+        </g>
+      );
+    case "hardhat":
+      return (
+        <g>
+          <path d="M30 58 C30 39 43 30 60 30 C77 30 90 39 90 58 Z" fill={`url(#${u}-yellow)`} />
+          <path d="M60 30.5 L60 57" stroke="#d99a0a" strokeWidth={5} strokeLinecap="round" />
+          <path d="M45 36 C50 33 55 32 58 32" stroke="rgba(255,255,255,.65)" strokeWidth={2.4} fill="none" strokeLinecap="round" />
+          <path d="M20 58 C40 53.5 80 53.5 100 58 L99.5 64 C80 59.5 40 59.5 20.5 64 Z" fill="#f2b31a" />
+          <path d="M22 59.5 C40 55.5 80 55.5 98 59.5" stroke="rgba(255,255,255,.4)" strokeWidth={1} fill="none" />
+        </g>
+      );
+    case "dogears":
+      return (
+        <g>
+          {[false, true].map((flip) => (
+            <g key={String(flip)} transform={flip ? "translate(120 0) scale(-1 1)" : undefined}>
+              <path d="M33 44 C21 41 11 52 12 67 C13 79 19 86 26 84 C32 82 32 71 34 61 C35.5 53 37.5 47 33 44 Z" fill={`url(#${u}-fur)`} />
+              <path d="M19 56 C17 64 18.5 72 22.5 77" stroke="rgba(255,255,255,.22)" strokeWidth={2.2} fill="none" strokeLinecap="round" />
+            </g>
+          ))}
+          <ellipse cx={78} cy={44} rx={6.5} ry={4.5} fill="#7c4f2c" opacity={0.85} />
+        </g>
+      );
+    case "mechanic":
+      return (
+        <g>
+          <path d="M29 62 C28 40 42 30 60 30 C78 30 92 40 91 62 Z" fill={`url(#${u}-navy)`} />
+          <path d="M60 30 L60 61" stroke="rgba(0,0,0,.18)" strokeWidth={1.2} />
+          <path d="M42 36 C48 32 55 31 59 31" stroke="rgba(255,255,255,.35)" strokeWidth={2.4} fill="none" strokeLinecap="round" />
+          <circle cx={60} cy={30.5} r={2.6} fill="#ff8a2a" />
+          <path d="M50 58 C36 55 16 57 10 63 C16 67 34 66 50 64 Z" fill="#ff8a2a" />
+          <g transform="translate(73 47) rotate(-40)">
+            <rect x={-1.7} y={-5} width={3.4} height={12} rx={1.6} fill="#fff" />
+            <path d="M-4.4 -6.5 A4.6 4.6 0 1 1 4.4 -6.5 L2 -8.6 L2 -5 L-2 -5 L-2 -8.6 Z" fill="#fff" />
+          </g>
+        </g>
+      );
     case "sprout":
       return (
         <g>
@@ -526,6 +604,81 @@ function Neck({ id, u }: { id: string; u: string }) {
         <path d="M76 86 L65 99 L60 95 L69 84 Z" fill="#e23a48" />
         <circle cx={60} cy={100} r={6.6} fill={`url(#${u}-gold)`} stroke="#c98a12" strokeWidth={0.8} />
         <path d="M60 96.6 l1 2.2 2.4 0.3 -1.8 1.6 0.5 2.4 -2.1 -1.2 -2.1 1.2 0.5 -2.4 -1.8 -1.6 2.4 -0.3 Z" fill="#fff4c4" />
+      </g>
+    );
+  if (id === "whistle")
+    return (
+      <g>
+        <path d="M31 95 C41 101 52 104 59 105 M89 95 C81 101 72 104 67 105" stroke="#e8452c" strokeWidth={2.6} fill="none" strokeLinecap="round" />
+        <g transform="translate(64 105) rotate(-14)">
+          <rect x={-8} y={-4.5} width={13} height={9} rx={4} fill={`url(#${u}-silver)`} stroke="#80808e" strokeWidth={0.7} />
+          <rect x={4} y={-3.4} width={7} height={4.4} rx={1.2} fill={`url(#${u}-silver)`} stroke="#80808e" strokeWidth={0.7} />
+          <circle cx={-2.5} cy={0} r={2} fill="#4a4a55" />
+          <path d="M-6 -2.4 Q-3 -3.8 1 -3.4" stroke="#fff" strokeWidth={1} fill="none" strokeLinecap="round" />
+        </g>
+      </g>
+    );
+  if (id === "stethoscope")
+    return (
+      <g fill="none" strokeLinecap="round">
+        <path d="M27 84 C29 96 42 102 53 101" stroke="#3a3a46" strokeWidth={2.8} />
+        <path d="M93 84 C91 96 78 102 67 101" stroke="#3a3a46" strokeWidth={2.8} />
+        <path d="M53 101 Q60 103 62 108" stroke="#3a3a46" strokeWidth={2.6} />
+        <circle cx={63} cy={111} r={5} fill={`url(#${u}-silver)`} stroke="#6b6b78" strokeWidth={1.1} />
+        <circle cx={63} cy={111} r={2} fill="#ef3b4f" stroke="none" />
+        <circle cx={27} cy={83} r={2.2} fill="#3a3a46" stroke="none" />
+        <circle cx={93} cy={83} r={2.2} fill="#3a3a46" stroke="none" />
+      </g>
+    );
+  if (id === "camera")
+    return (
+      <g>
+        <path d="M26 86 C36 98 46 101 51 102 M94 86 C84 98 74 101 69 102" stroke="#6a3f1c" strokeWidth={2.6} fill="none" strokeLinecap="round" />
+        <g transform="translate(60 107)">
+          <rect x={-11} y={-6.5} width={22} height={14} rx={3.4} fill={`url(#${u}-dark)`} />
+          <rect x={-7} y={-9.2} width={7} height={3.4} rx={1.2} fill="#3a3a44" />
+          <circle cx={1} cy={0.6} r={4.8} fill="#4f6fd0" stroke="#e2e2ea" strokeWidth={1.6} />
+          <circle cx={-0.4} cy={-0.9} r={1.3} fill="#fff" opacity={0.85} />
+          <circle cx={7.4} cy={-3.4} r={1.2} fill="#ffc83d" />
+        </g>
+      </g>
+    );
+  if (id === "pettag")
+    return (
+      <g>
+        <path d="M20 86 C34 95 86 95 100 86 L99 92.5 C86 101.5 34 101.5 21 92.5 Z" fill={`url(#${u}-red)`} />
+        {[30, 44, 76, 90].map((x) => (
+          <circle key={x} cx={x} cy={x < 60 ? 92 + (x - 30) * 0.12 : 92 + (90 - x) * 0.12} r={1.4} fill="#fff4c4" />
+        ))}
+        <circle cx={60} cy={99.5} r={2.2} fill="none" stroke="#c98a12" strokeWidth={1.4} />
+        <circle cx={60} cy={106.5} r={5.4} fill={`url(#${u}-gold)`} stroke="#c98a12" strokeWidth={0.8} />
+        <g fill="#b07812">
+          <ellipse cx={60} cy={108} rx={2} ry={1.6} />
+          <circle cx={57.6} cy={105.2} r={0.9} />
+          <circle cx={60} cy={104.3} r={0.9} />
+          <circle cx={62.4} cy={105.2} r={0.9} />
+        </g>
+      </g>
+    );
+  if (id === "apron")
+    return (
+      <g>
+        <path d="M40 86 C44 92 50 95 52 96 M80 86 C76 92 70 95 68 96" stroke="#e85a5a" strokeWidth={2.2} fill="none" strokeLinecap="round" />
+        <path d="M46 96 L74 96 L76 118 L44 118 Z" fill={`url(#${u}-white)`} stroke="rgba(0,0,0,.08)" strokeWidth={0.8} />
+        <rect x={52} y={103} width={16} height={8} rx={2} fill="none" stroke="#e85a5a" strokeWidth={1.4} />
+        <path d="M46 99 L74 99" stroke="#e85a5a" strokeWidth={1.6} />
+      </g>
+    );
+  if (id === "toolbelt")
+    return (
+      <g>
+        <path d="M22 94 C36 102 84 102 98 94 L98 101 C84 109 36 109 22 101 Z" fill={`url(#${u}-leather)`} />
+        <rect x={56} y={99} width={8} height={7} rx={1.4} fill="none" stroke="#ffd34d" strokeWidth={1.5} />
+        <rect x={30} y={101} width={12} height={10} rx={2} fill="#7a4a1e" />
+        <g transform="translate(80 104)">
+          <rect x={-6} y={-5} width={12} height={10} rx={2.4} fill={`url(#${u}-yellow)`} />
+          <circle cx={0} cy={0} r={2.6} fill="#3a3a44" />
+        </g>
       </g>
     );
   if (id === "bandana")
@@ -665,6 +818,9 @@ function Defs({ u }: { u: string }) {
       {lin("navy", "#3a63c9", "#1a3480", "0")}
       {lin("fur", "#b98353", "#7c4f2c", "0.4")}
       {lin("dino", "#7fd36b", "#3f9a4c", "0.4")}
+      {lin("silver", "#f6f6fa", "#9c9caa", "0.6")}
+      {lin("yellow", "#ffe76e", "#f0a50c", "0.4")}
+      {lin("mint", "#7fe0c4", "#22a383", "0.4")}
       <linearGradient id={`${u}-glass`} x1="0" y1="0" x2="0.4" y2="1">
         <stop offset="0" stopColor="#dbeaff" stopOpacity="0.45" />
         <stop offset="1" stopColor="#a9c8f0" stopOpacity="0.12" />

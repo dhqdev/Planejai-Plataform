@@ -21,6 +21,17 @@ export const ROLE_MOODS: Record<string, Mood[]> = {
   recados: ["curious", "idle", "happy"],
 };
 export const CLIENT_MOODS: Mood[] = ["idle", "happy", "curious"];
+/** Especialistas da loja (roupa skin:<slug>): o jeito de olhar combina com o assunto. */
+Object.assign(ROLE_MOODS, {
+  "skin:treino": ["happy", "working", "finished"],
+  "skin:estudos": ["thinking", "idle", "curious"],
+  "skin:pet": ["happy", "wink", "curious"],
+  "skin:saude": ["idle", "happy", "thinking"],
+  "skin:viagens": ["curious", "happy", "wink"],
+  "skin:cozinha": ["working", "happy", "wink"],
+  "skin:casa": ["working", "idle", "finished"],
+  "skin:carro": ["working", "thinking", "happy"],
+} satisfies Record<string, Mood[]>);
 
 /** O que cada um está fazendo agora (frases curtas que se revezam no cartão do time). */
 export const ROLE_DOING: Record<string, string[]> = {
@@ -33,6 +44,16 @@ export const ROLE_DOING: Record<string, string[]> = {
   recados: ["levando seu recado", "esperando resposta", "marcando o horário"],
 };
 export const CLIENT_DOING = ["estudando o assunto", "vendo o que você gosta"];
+Object.assign(ROLE_DOING, {
+  c_treino: ["montando seu treino", "contando as séries", "de olho na constância"],
+  c_estudos: ["montando o cronograma", "resumindo a matéria", "preparando a revisão"],
+  c_pet: ["lembrando da vacina", "achando o petshop", "comparando a ração"],
+  c_saude: ["de olho no remédio", "lembrando da consulta", "contando os copos d'água"],
+  c_viagens: ["montando o roteiro", "caçando passagem", "vendo o clima de lá"],
+  c_cozinha: ["escolhendo a receita", "montando o cardápio", "fazendo a lista do mercado"],
+  c_casa: ["dividindo a faxina", "lembrando do filtro", "achando quem conserta"],
+  c_carro: ["lembrando da revisão", "vendo o IPVA", "somando a gasolina"],
+});
 
 /** Desenho do objeto de cada agente (viewBox 40x40). */
 export function PropArt({ agent }: { agent: string }) {
@@ -110,6 +131,81 @@ export function PropArt({ agent }: { agent: string }) {
           {[14.5, 20, 25.5].map((x, i) => (
             <circle key={x} className={`ap-dot d${i}`} cx={x} cy={17} r={1.9} fill={i === 1 ? "var(--ap-accent)" : INK} />
           ))}
+        </g>
+      );
+    case "skin:treino":
+      return (
+        <g className="ap-lift">
+          <rect x={8} y={17.5} width={24} height={5} rx={2.5} fill="#fff" stroke={INK} strokeWidth={2} />
+          <rect x={6} y={11} width={6} height={18} rx={2.4} fill="var(--ap-accent)" stroke={INK} strokeWidth={2} />
+          <rect x={28} y={11} width={6} height={18} rx={2.4} fill="var(--ap-accent)" stroke={INK} strokeWidth={2} />
+        </g>
+      );
+    case "skin:estudos":
+      return (
+        <g>
+          <path d="M6 12 C11 10 16 10 20 13 C24 10 29 10 34 12 V31 C29 29 24 29 20 32 C16 29 11 29 6 31 Z" fill="#fff" stroke={INK} strokeWidth={2} strokeLinejoin="round" />
+          <path d="M20 13 V32" {...line} strokeWidth={1.6} />
+          <path className="ap-page" d="M20 13 C24 10 29 10 34 12 V31 C29 29 24 29 20 32 Z" fill="var(--ap-accent)" opacity={0.35} />
+          <path d="M9.5 17 H16.5 M9.5 21 H16 M23.5 17 H30.5" stroke={INK} strokeWidth={1.4} strokeLinecap="round" opacity={0.45} />
+        </g>
+      );
+    case "skin:pet":
+      return (
+        <g className="ap-wag">
+          <ellipse cx={20} cy={25} rx={7.5} ry={6.2} fill="var(--ap-accent)" stroke={INK} strokeWidth={2} />
+          {[
+            [10.5, 16],
+            [16.5, 10.5],
+            [23.5, 10.5],
+            [29.5, 16],
+          ].map(([x, y]) => (
+            <ellipse key={x} cx={x} cy={y} rx={3.2} ry={3.8} fill="var(--ap-accent)" stroke={INK} strokeWidth={2} />
+          ))}
+        </g>
+      );
+    case "skin:saude":
+      return (
+        <g className="ap-beat">
+          <path d="M20 33 C9 25 5 19 7.5 13.5 C10 8.5 16.5 8.5 20 13.5 C23.5 8.5 30 8.5 32.5 13.5 C35 19 31 25 20 33 Z" fill="#fff" stroke={INK} strokeWidth={2.2} strokeLinejoin="round" />
+          <path d="M10.5 20 H15 L17.5 15.5 L21 24 L23.5 19 H29.5" stroke="var(--ap-accent)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </g>
+      );
+    case "skin:viagens":
+      return (
+        <g className="ap-fly">
+          <path d="M6 23 L34 12 C36 11.4 36.8 13.8 35 14.8 L24 21 L22 32 L18.5 33 L17.5 23.8 L11 26.5 L9.5 30 L7 30.5 L7.5 25.5 Z" fill="#fff" stroke={INK} strokeWidth={2} strokeLinejoin="round" />
+          <path d="M14 21 L9 15 L12 14 L20 18.5" fill="var(--ap-accent)" stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
+        </g>
+      );
+    case "skin:cozinha":
+      return (
+        <g>
+          <path className="ap-steam s0" d="M16 11 C14 8.5 18 7 16 4" {...line} strokeWidth={1.6} stroke="var(--ap-accent)" />
+          <path className="ap-steam s1" d="M22 11 C20 8.5 24 7 22 4" {...line} strokeWidth={1.6} stroke="var(--ap-accent)" />
+          <g className="ap-pan">
+            <path d="M7 16 H29 C29 24 25 29 18 29 C11 29 7 24 7 16 Z" fill="#fff" stroke={INK} strokeWidth={2.2} strokeLinejoin="round" />
+            <path d="M29 18 L36 16.5" {...line} strokeWidth={3} />
+          </g>
+        </g>
+      );
+    case "skin:casa":
+      return (
+        <g>
+          <path d="M8 19 L20 8.5 L32 19 V32 H8 Z" fill="#fff" stroke={INK} strokeWidth={2.2} strokeLinejoin="round" />
+          <rect x={16.5} y={23} width={7} height={9} rx={1} fill="var(--ap-accent)" stroke={INK} strokeWidth={1.6} />
+          <g className="ap-hammer">
+            <path d="M28 33 L35 24" {...line} strokeWidth={2.4} />
+            <rect x={31.5} y={18.5} width={8} height={5} rx={1.4} fill={INK} transform="rotate(38 35.5 21)" />
+          </g>
+        </g>
+      );
+    case "skin:carro":
+      return (
+        <g className="ap-wheel">
+          <circle cx={20} cy={20} r={12} fill="#fff" stroke={INK} strokeWidth={2.4} />
+          <circle cx={20} cy={20} r={3.6} fill="var(--ap-accent)" stroke={INK} strokeWidth={1.8} />
+          <path d="M20 16.4 V8.5 M16.6 21.4 L9.6 25 M23.4 21.4 L30.4 25" {...line} strokeWidth={2.2} />
         </g>
       );
     default:

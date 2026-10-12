@@ -67,12 +67,32 @@
 .ap-spark { transform-origin: center; animation: ap-twinkle 2.4s ease-in-out infinite; }
 @keyframes ap-twinkle { 0%, 100% { transform: scale(0.82) rotate(0); } 50% { transform: scale(1.05) rotate(20deg); } }
 
+/* especialistas da loja: cada objeto com o seu jeito de mexer */
+.ap-lift { transform-box: view-box !important; animation: ap-lift 1.6s cubic-bezier(.45, 0, .3, 1) infinite; }
+@keyframes ap-lift { 0%, 100% { transform: translateY(3px); } 45%, 55% { transform: translateY(-3px); } }
+.ap-page { transform-origin: 20px 20px; transform-box: view-box !important; animation: ap-page 2.8s ease-in-out infinite; }
+@keyframes ap-page { 0%, 60%, 100% { transform: scaleX(1); } 75% { transform: scaleX(0.2); } }
+.ap-wag { transform-origin: 20px 30px; transform-box: view-box !important; animation: ap-wag 1.4s ease-in-out infinite; }
+@keyframes ap-wag { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
+.ap-beat { transform-origin: center; transform-box: view-box !important; animation: ap-beat 1.2s ease-in-out infinite; }
+@keyframes ap-beat { 0%, 40%, 100% { transform: scale(1); } 15% { transform: scale(1.1); } 28% { transform: scale(1.03); } }
+.ap-fly { transform-box: view-box !important; animation: ap-fly 2.6s ease-in-out infinite; }
+@keyframes ap-fly { 0%, 100% { transform: translate(-1.5px, 1.5px) rotate(-3deg); } 50% { transform: translate(1.5px, -2px) rotate(3deg); } }
+.ap-steam { opacity: 0; animation: ap-steam 2.2s ease-out infinite; }
+.ap-steam.s1 { animation-delay: 1.1s; }
+@keyframes ap-steam { 0% { opacity: 0; transform: translateY(3px); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(-3px); } }
+.ap-pan { transform-origin: 18px 29px; transform-box: view-box !important; animation: ap-swing 2.6s ease-in-out infinite; }
+.ap-hammer { transform-origin: 28px 33px; transform-box: view-box !important; animation: ap-hammer 1.3s cubic-bezier(.5, 0, .3, 1) infinite; }
+@keyframes ap-hammer { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-28deg); } 45% { transform: rotate(4deg); } }
+.ap-wheel { transform-origin: 20px 20px; transform-box: view-box !important; animation: ap-steer 2.4s ease-in-out infinite; }
+@keyframes ap-steer { 0%, 100% { transform: rotate(-20deg); } 50% { transform: rotate(20deg); } }
+
 /* tema escuro: o disquinho continua claro (o objeto é desenhado em tinta) */
 :root[data-theme="dark"] .agent-prop { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.1), 0 4px 12px -4px rgba(0, 0, 0, 0.6); }
 
 @media (prefers-reduced-motion: reduce) {
   .agent-prop, .agent-prop * { animation: none !important; }
-  .ap-note, .ap-ring { opacity: 1; }
+  .ap-note, .ap-ring, .ap-steam { opacity: 1; }
   .ap-check { stroke-dashoffset: 0; }
 }
 
