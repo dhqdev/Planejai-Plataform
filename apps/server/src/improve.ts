@@ -198,7 +198,8 @@ export async function improveUser(userId: string): Promise<Result> {
     const slug = slugify(c.name ?? c.topic ?? "");
     const toolNames = (Array.isArray(c.tools) ? c.tools : []).filter((n: string) => n in CLIENT_AGENT_TOOLS).slice(0, 6);
     if (!slug || !toolNames.length || !c.instructions) continue;
-    await query(
+    // agente com o mesmo nome que a pessoa pediu ou ligou na loja não é tocado: nada de anunciar "novo agente" que não nasceu
+    const res = await query(
       `INSERT INTO client_agents (user_id, slug, name, focus, instructions, tools, persona, face) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (user_id, slug) DO UPDATE SET active = true, focus = $4, instructions = $5, tools = $6, persona = COALESCE(client_agents.persona, $7), updated_at = now()
        WHERE client_agents.origin = 'melhoria'`,
@@ -213,6 +214,7 @@ export async function improveUser(userId: string): Promise<Result> {
         JSON.stringify(faceFor(`${userId}:${slug}`)),
       ],
     );
+    if (!res.rowCount) continue;
     created++;
     changes.created.push({ name: String(c.name).slice(0, 40), persona: String(c.persona ?? c.name).slice(0, 24), focus: String(c.focus ?? c.topic).slice(0, 200) });
   }

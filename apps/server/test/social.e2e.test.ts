@@ -489,7 +489,10 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     // o agente de cinema passa a ser dela, com as instruções que ela pediu
     await db.query("UPDATE client_agents SET origin = 'pedido', instructions = 'Do jeito dela' WHERE user_id = $1 AND slug = 'cinema'", [david.id]);
     const { improveUser } = await import("../src/improve.js");
-    await improveUser(david.id);
+    // o plano tenta "criar" de novo o Cinema: como agora é dela, nada muda e não vira "novo agente" na ata
+    await db.query("UPDATE user_topics SET last_at = now() - interval '1 day' WHERE user_id = $1", [david.id]);
+    expect(await improveUser(david.id)).toMatchObject({ created: 0 });
+    expect((await db.one("SELECT changes FROM improve_meetings WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1", [david.id])).changes.created).toEqual([]);
     expect(await db.one("SELECT note, user_note FROM agent_notes WHERE user_id = $1 AND agent = 'pesquisador'", [david.id])).toEqual({
       note: "Mora em Campinas, prefere o Iguatemi.",
       user_note: "Prefere sites em português",
