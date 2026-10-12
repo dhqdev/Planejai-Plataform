@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { hashPassword, normalizePhone } from "../../accounts.js";
-import { CATEGORIES, guessCategory, parseAmount } from "../../agent/tools/finance.js";
+import { parseAmount } from "../../agent/tools/finance.js";
+import { autoCategory, resolveCategory } from "../../categories.js";
 import { config } from "../../config.js";
 import { safeEqual } from "../../crypto.js";
 import { many, one, query } from "../../db/pool.js";
@@ -204,7 +205,7 @@ export async function registerInternalRoutes(app: FastifyInstance) {
         }
         if (amount <= 0) return bad(reply, "amount precisa ser maior que zero");
         const kind = b.kind === "income" ? "income" : "expense";
-        const category = b.category && CATEGORIES.includes(b.category) ? b.category : (guessCategory(b.description ?? "") ?? (kind === "income" ? "Salário" : "Outros"));
+        const category = (b.category && (await resolveCategory(u.id, b.category))?.name) || (await autoCategory(u.id, kind, null, b.description)).category;
         const when = b.date ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(b.date) ? `${b.date}T12:00:00` : b.date) : new Date();
         if (Number.isNaN(when.getTime())) return bad(reply, "date inválida (AAAA-MM-DD)");
         const row = await one(

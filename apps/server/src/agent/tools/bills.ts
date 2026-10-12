@@ -1,4 +1,4 @@
-import { brl, CATEGORIES } from "./finance.js";
+import { brl } from "./finance.js";
 import { createBill, deleteBill, findBill, listBills, payBill, updateBill } from "../../bills.js";
 import { defineTool, obj } from "./types.js";
 
@@ -36,7 +36,7 @@ export const billSave = defineTool<{
       description: { type: "string", description: "Nome da conta nova" },
       kind: { type: "string", enum: ["expense", "income"] },
       amount: { type: "number" },
-      category: { type: "string", enum: CATEGORIES },
+      category: { type: "string", description: "Uma categoria dela; padrão automática" },
       due_day: { type: "number", description: "1 a 31" },
       remind_days_before: { type: "number", description: "Padrão 1; 0 = só no dia" },
       installments_left: { type: "number", description: "Parcelas que faltam (encerra sozinha)" },

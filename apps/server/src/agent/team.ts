@@ -5,6 +5,7 @@ import * as finance from "./tools/finance.js";
 import * as bills from "./tools/bills.js";
 import * as cards from "./tools/cards.js";
 import { GOAL_TOOLS } from "./tools/goals.js";
+import { categoriesTool } from "./tools/categories.js";
 import * as images from "./tools/images.js";
 import * as pdf from "./tools/pdf.js";
 import * as audio from "./tools/audio.js";
@@ -158,7 +159,8 @@ export const SPECIALISTS: AgentDef[] = [
       "Compra parcelada: list_transactions mostra parcela 2/10; para trocar de cartão ou apagar a compra inteira use all_installments=true; para mudar o valor total, apague a compra inteira e lance de novo. " +
       "O sistema avisa sozinho no WhatsApp quando a fatura fecha, antes e no dia do vencimento. " +
       "Metas (juntar dinheiro para algo): goal_create com valor e prazo; 'guardei 200 na viagem' é goal_add (não é gasto, nada de add_transaction); " +
-      "ao falar de gastos de quem tem meta, diga em uma frase como isso afeta a meta e quanto falta por mês (per_month), sem sermão.",
+      "ao falar de gastos de quem tem meta, diga em uma frase como isso afeta a meta e quanto falta por mês (per_month), sem sermão. " +
+      "Categorias são dela: criar, renomear, trocar cor, palavras ou excluir é categories. Corrigir a categoria com update_transaction ensina o sistema: os próximos parecidos já caem nela.",
     tools: [
       finance.addTransaction,
       finance.listTransactions,
@@ -180,6 +182,7 @@ export const SPECIALISTS: AgentDef[] = [
       cards.cardInvoicePay,
       cards.cardDelete,
       ...GOAL_TOOLS,
+      categoriesTool,
       core.readDocument,
     ],
   },
@@ -341,6 +344,7 @@ export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
   { id: "acompanhamentos", when: /(?<!\p{L})(de olho|acompanh|monitor|avis\w* quando)/iu, tools: [social.watchList, social.watchCancel, social.watchUpdate] },
   { id: "alarmes", when: /(?<!\p{L})(alarme|despert|acord)/iu, tools: [agenda.alarmList, agenda.alarmCancel] },
   { id: "dinheiro", when: /(?<!\p{L})(limite|or[çc]amento|teto|no m[aá]ximo|fatura|cart[aã]o)/iu, tools: [finance.setBudget, cards.cardInvoicePay] },
+  { id: "categorias", when: /(?<!\p{L})categori/iu, tools: [categoriesTool] },
   { id: "recados", when: /(?<!\p{L})(recado|estabelecimento)/iu, tools: [errands.errandList, errands.errandCancel] },
   { id: "documentos", when: /(?<!\p{L})(apag|exclu|delet|remov)\w*.{0,40}\b(document|arquivo|pdf|contrato)/iu, tools: [documents.documentDelete] },
 ];

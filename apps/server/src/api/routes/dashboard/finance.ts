@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { budgetStatus, CATEGORIES, guessCategory, parseAmount, recordTransaction } from "../../../agent/tools/finance.js";
+import { budgetStatus, parseAmount, recordTransaction } from "../../../agent/tools/finance.js";
+import { autoCategory, createCategory, DEFAULT_CATEGORIES, deleteCategory, learnCategory, listCategories, resolveCategory, updateCategory, type CategoryInput } from "../../../categories.js";
 import { config } from "../../../config.js";
 import { many, one, query } from "../../../db/pool.js";
 import { NOBODY, personalUser, selfUserId } from "../../../sharing.js";
@@ -71,7 +72,7 @@ export function financeRoutes(base: FastifyInstance) {
       userId: uid,
       kind,
       total: amount,
-      category: CATEGORIES.includes(req.body.category) ? req.body.category : (guessCategory(req.body.description ?? "") ?? (kind === "income" ? "Salário" : "Outros")),
+      category: (req.body.category && (await resolveCategory(uid, req.body.category))?.name) || (await autoCategory(uid, kind, null, req.body.description)).category,
       description: req.body.description?.trim().slice(0, 200) || null,
       first: when,
       installments: Number(req.body.installments) || 1,
@@ -86,7 +87,8 @@ export function financeRoutes(base: FastifyInstance) {
   base.put<{ Body: { category?: string | null; amount?: number | string } }>("/api/budgets", async (req, reply) => {
     const uid = await selfUserId(req.account);
     if (!uid) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil para criar limites" });
-    const category = req.body.category && CATEGORIES.includes(req.body.category) ? req.body.category : null;
+    const category = req.body.category ? ((await resolveCategory(uid, req.body.category))?.name ?? null) : null;
+    if (req.body.category && !category) return reply.code(400).send({ error: "Categoria não encontrada" });
     let amount: number;
     try {
       amount = parseAmount(req.body.amount);
@@ -120,7 +122,9 @@ export function financeRoutes(base: FastifyInstance) {
       }
       if (amount <= 0) return reply.code(400).send({ error: "Valor precisa ser maior que zero" });
     }
-    if (b.category && !CATEGORIES.includes(b.category)) return reply.code(400).send({ error: "Categoria inválida" });
+    const category = b.category ? ((await resolveCategory(me, b.category))?.name ?? null) : null;
+    if (b.category && !category) return reply.code(400).send({ error: "Categoria não encontrada" });
+    const before = category ? await one("SELECT category FROM transactions WHERE id = $1 AND user_id = $2", [req.params.id, me]) : null;
     if (b.date && !/^\d{4}-\d{2}-\d{2}$/.test(b.date)) return reply.code(400).send({ error: "Data inválida" });
     const row = await one(
       `UPDATE transactions SET kind = COALESCE($3, kind), amount = COALESCE($4, amount), category = COALESCE($5, category),
@@ -131,13 +135,15 @@ export function financeRoutes(base: FastifyInstance) {
         me,
         b.kind === "income" || b.kind === "expense" ? b.kind : null,
         amount,
-        b.category || null,
+        category,
         b.description !== undefined,
         b.description ? String(b.description).slice(0, 200) : null,
         b.date ? new Date(`${b.date}T12:00:00`) : null,
       ],
     );
     if (!row) return reply.code(404).send({ error: "Lançamento não encontrado" });
+    // trocou a categoria: os próximos parecidos já vão para ela
+    if (category && before && before.category !== category) await learnCategory(me, [{ kind: row.kind, category, merchant: row.merchant, description: row.description }]);
     // trocou de cartão (ou tirou do cartão) ou mudou a data: recalcula a fatura
     if (b.card_id !== undefined && (b.card_id ?? null) !== (row.card_id ?? null)) {
       await query("UPDATE transactions SET card_id = $2, invoice_month = NULL WHERE id = $1", [row.id, card?.id ?? null]);
@@ -154,7 +160,47 @@ export function financeRoutes(base: FastifyInstance) {
     return { ok: (r.rowCount ?? 0) > 0 };
   });
 
-  base.get("/api/finance/categories", async () => CATEGORIES);
+  // categorias da pessoa (as de um contato que compartilhou: só para ver as cores e nomes)
+  base.get<{ Querystring: { user?: string; month?: string } }>("/api/finance/categories", async (req, reply) => {
+    const uid = await personalUser(req.account, req.query.user, "finance");
+    if (!uid) return reply.code(403).send({ error: "Essa pessoa não compartilhou as finanças com você" });
+    // conta sem WhatsApp ligado: só mostra as de sempre, sem gravar nada
+    if (uid === NOBODY) return DEFAULT_CATEGORIES.map((c, i) => ({ id: c.name, ...c, keywords: [], aliases: [], position: i, count: 0, month_total: 0, fixed: c.name === "Outros" }));
+    return listCategories(uid, config.DEFAULT_TIMEZONE, /^\d{4}-\d{2}$/.test(req.query.month ?? "") ? req.query.month : undefined);
+  });
+
+  const own = async (req: { account: any }, reply: any) => {
+    const uid = await selfUserId(req.account);
+    if (!uid) reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil para mexer nas categorias" });
+    return uid;
+  };
+  base.post<{ Body: CategoryInput }>("/api/finance/categories", async (req, reply) => {
+    const uid = await own(req, reply);
+    if (!uid) return reply;
+    try {
+      return await createCategory(uid, req.body ?? {});
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+  base.patch<{ Params: { id: string }; Body: CategoryInput }>("/api/finance/categories/:id", async (req, reply) => {
+    const uid = await own(req, reply);
+    if (!uid) return reply;
+    try {
+      return await updateCategory(uid, req.params.id, req.body ?? {});
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+  base.delete<{ Params: { id: string }; Querystring: { move_to?: string } }>("/api/finance/categories/:id", async (req, reply) => {
+    const uid = await own(req, reply);
+    if (!uid) return reply;
+    try {
+      return { ok: true, ...(await deleteCategory(uid, req.params.id, req.query.move_to)) };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
 
   // ---------- Relatório em PDF (baixar, mandar no WhatsApp agora e envio todo mês no dia escolhido) ----------
   const monthOf = (m?: string) => (/^\d{4}-\d{2}$/.test(m ?? "") ? m! : new Intl.DateTimeFormat("en-CA", { timeZone: config.DEFAULT_TIMEZONE, year: "numeric", month: "2-digit" }).format(new Date()));

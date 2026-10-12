@@ -8,24 +8,10 @@ import { findContact } from "../../social.js";
 import { parseLocalDateTime } from "../../time.js";
 import { barChart, budgetChart, donutChart, svgToPng } from "../../charts.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
+import { autoCategory, ensureCategories, FALLBACK, learnCategory, plain, resolveCategory } from "../../categories.js";
 import { addMonths, invoiceDates, invoiceMonthFor, listCards, localDate, monthName, placeOnCard, resolveCard, shiftDate, type Card } from "../../cards.js";
 
-export const CATEGORIES = [
-  "Alimentação",
-  "Mercado",
-  "Transporte",
-  "Moradia",
-  "Saúde",
-  "Educação",
-  "Lazer",
-  "Compras",
-  "Assinaturas",
-  "Contas",
-  "Viagem",
-  "Salário",
-  "Investimentos",
-  "Outros",
-];
+export { CATEGORIES, guessCategory } from "../../categories.js";
 
 /** Converte "R$ 1.234,56", "8,20", "1234.5", 12 em número com 2 casas (centavos exatos). */
 export function parseAmount(v: unknown): number {
@@ -153,51 +139,6 @@ async function monthTotals(userId: string, timezone: string, when: Date, categor
 }
 
 
-const CATEGORY_RULES: [RegExp, string][] = [
-  [/\b(salario|holerite|pagamento do trabalho|freela|pro labore|recebi do cliente)/, "Salário"],
-  [/\b(investi|cdb|tesouro|acoes|acao da|poupanca|aporte|cripto|bitcoin|fundo imobiliario)/, "Investimentos"],
-  [/\b(netflix|spotify|disney|hbo|max\b|prime video|amazon prime|youtube premium|icloud|google one|chatgpt|deezer|globoplay|assinatura|mensalidade do app)/, "Assinaturas"],
-  [/\b(aluguel|condominio|iptu|financiamento da casa|reforma|moveis|diarista|faxina)/, "Moradia"],
-  [/\b(luz|energia|enel|cemig|copel|agua|sabesp|internet|vivo|claro|tim\b|oi fibra|telefone|conta de gas|boleto|fatura)/, "Contas"],
-  [/\b(mercado|supermercado|feira|hortifruti|atacadao|assai|carrefour|pao de acucar|extra\b|sacolao|acougue|compras do mes)/, "Mercado"],
-  [/\b(almoco|jantar|lanche|cafe|padaria|restaurante|ifood|rappi|pizza|hamburguer|burger|mcdonald|bk\b|acai|sorvete|marmita|esfiha|sushi|churrasco|bar\b|cerveja|chopp|delivery)/, "Alimentação"],
-  [/\b(uber|99\b|taxi|onibus|metro|trem|gasolina|etanol|combustivel|posto|estacionamento|pedagio|ipva|licenciamento|oficina|mecanico|lavagem|bilhete unico)/, "Transporte"],
-  [/\b(farmacia|remedio|drogasil|droga raia|pague menos|consulta|medico|dentista|exame|hospital|plano de saude|unimed|terapia|psicologo|academia|smart fit|nutricionista)/, "Saúde"],
-  [/\b(curso|faculdade|escola|livro|mensalidade escolar|material escolar|udemy|alura|apostila|idioma|ingles)/, "Educação"],
-  [/\b(hotel|passagem|voo|aereo|airbnb|hospedagem|pousada|bagagem|viagem)/, "Viagem"],
-  [/\b(cinema|ingresso|show|teatro|festa|balada|jogo|steam|playstation|xbox|parque|passeio|boliche|museu)/, "Lazer"],
-  [/\b(roupa|camisa|calca|tenis|sapato|vestido|shopping|amazon|mercado livre|shopee|shein|magalu|presente|celular|iphone|fone|notebook|eletronico|perfume|maquiagem)/, "Compras"],
-];
-
-const plain = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-/** Categoria pelo texto, sem IA. Devolve null quando não reconhece. */
-export function guessCategory(text: string): string | null {
-  const t = plain(text);
-  for (const [re, cat] of CATEGORY_RULES) if (re.test(t)) return cat;
-  return null;
-}
-
-/**
- * Categoria automática: o que a própria pessoa já usou para o mesmo lugar/descrição vale mais,
- * depois as regras por palavra, depois o palpite do modelo, e por último "Outros".
- */
-async function autoCategory(userId: string, kind: string, hint: string | undefined, description?: string, merchant?: string) {
-  const key = (merchant || description || "").trim();
-  if (key) {
-    const learned = await one(
-      `SELECT category FROM transactions WHERE user_id = $1 AND kind = $2 AND category <> 'Outros'
-         AND (lower(merchant) = lower($3) OR lower(description) = lower($3)) ORDER BY occurred_at DESC LIMIT 1`,
-      [userId, kind, key],
-    );
-    if (learned) return learned.category as string;
-  }
-  if (hint && CATEGORIES.includes(hint) && hint !== "Outros") return hint;
-  const guessed = guessCategory(`${description ?? ""} ${merchant ?? ""}`);
-  if (guessed) return guessed;
-  return kind === "income" ? "Salário" : "Outros";
-}
-
 // ---------- Limites de gastos ----------
 
 const monthKey = (d: Date, tz: string) => new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit" }).format(d);
@@ -242,14 +183,19 @@ export const setBudget = defineTool<{ category?: string; amount: number | string
     "Cria, muda ou remove limite mensal de gastos (sem categoria = total do mês). O sistema avisa sozinho em 80% e ao estourar.",
   parameters: obj(
     {
-      category: { type: "string", enum: [...CATEGORIES, "Total"] },
+      category: { type: "string", description: "Uma categoria dela; vazio ou Total = total do mês" },
       amount: { type: "number", description: "Reais por mês" },
       remove: { type: "boolean" },
     },
     ["amount"],
   ),
   async run(args, ctx) {
-    const category = !args.category || args.category === "Total" ? null : CATEGORIES.includes(args.category) ? args.category : null;
+    let category: string | null = null;
+    if (args.category?.trim() && !/^total/i.test(args.category.trim())) {
+      const found = await resolveCategory(ctx.user.id, args.category);
+      if (!found) return { ok: false, error: `Ela não tem a categoria "${args.category}". Use uma destas: ${(await ensureCategories(ctx.user.id)).map((c) => c.name).join(", ")}` };
+      category = found.name;
+    }
     if (args.remove) {
       await query("DELETE FROM budgets WHERE user_id = $1 AND COALESCE(category, '*') = COALESCE($2::text, '*')", [ctx.user.id, category]);
       return { ok: true, removed: category ?? "Total" };
@@ -298,7 +244,7 @@ export const makeChart = defineTool<{ kind: "categorias" | "meses" | "dias" | "l
   async run(args, ctx) {
     const tz = ctx.timezone;
     const month = /^\d{4}-\d{2}$/.test(args.month ?? "") ? args.month! : monthKey(new Date(), tz);
-    const cat = args.category && CATEGORIES.includes(args.category) ? args.category : null;
+    const cat = args.category ? ((await resolveCategory(ctx.user.id, args.category))?.name ?? null) : null;
     const name = ctx.user.name ? ` de ${ctx.user.name.split(" ")[0]}` : "";
     let svg: string;
     let summary: unknown;
@@ -436,7 +382,7 @@ export const addTransaction = defineTool<{
     {
       kind: { type: "string", enum: ["expense", "income"] },
       amount: { type: "number", description: "Reais, ex.: 1234.56" },
-      category: { type: "string", enum: CATEGORIES, description: "Só se a pessoa disser; senão é automática" },
+      category: { type: "string", description: "Só se a pessoa disser; senão deixe vazio (o sistema acerta pelo que ela já corrigiu)" },
       description: { type: "string", description: "Curto, ex.: almoço" },
       merchant: { type: "string" },
       date: { type: "string", description: "AAAA-MM-DD[THH:MM]; padrão agora" },
@@ -468,7 +414,8 @@ export const addTransaction = defineTool<{
       } else if (mine.length > 1)
         cardNote = { card_note: `Ela tem os cartões ${mine.map((c) => c.name).join(", ")}: pergunte em qual parcelou e corrija com update_transaction card (as parcelas acompanham).` };
     }
-    const category = await autoCategory(ctx.user.id, args.kind, args.category, args.description, args.merchant);
+    const auto = await autoCategory(ctx.user.id, args.kind, args.category, args.description, args.merchant);
+    const category = auto.category;
     const first = args.date ? parseLocalDateTime(args.date, ctx.timezone) : new Date();
     const odd = suspiciousDate(first, args);
     if (odd) return odd;
@@ -516,6 +463,7 @@ export const addTransaction = defineTool<{
       amount: brl(total),
       ...(n > 1 ? { installments: n, installment_values: n > 6 ? `${brl(parts[1]!)} por mês${parts[0] !== parts[1] ? ` (a 1ª ${brl(parts[0]!)})` : ""}` : parts.map(brl) } : {}),
       category,
+      ...categoryNote(auto, args.category),
       ...cardInfo,
       ...cardNote,
       ...(await monthTotals(ctx.user.id, ctx.timezone, first, category)),
@@ -523,6 +471,19 @@ export const addTransaction = defineTool<{
     };
   },
 });
+
+/** Só fala da categoria quando vale a pena (custa token): pediu uma e ficou outra, ou ela não tem categoria que sirva. */
+function categoryNote(auto: { category: string; how: string }, asked?: string) {
+  const want = asked?.trim();
+  if (want && auto.how !== "pedido" && plain(want) !== plain(auto.category) && plain(want) !== "outros")
+    return {
+      category_note: ["corrigido", "palavra", "historico"].includes(auto.how)
+        ? `Ficou em ${auto.category} porque ela já usa essa para esse lugar/descrição. Se ela pediu ${want} agora, corrija com update_transaction.`
+        : `Ela não tem a categoria ${want}; ficou em ${auto.category}. Se ela quer ${want}, crie com categories e corrija com update_transaction.`,
+    };
+  if (auto.category === FALLBACK) return { category_note: "Não reconheci a categoria. Se ela disser qual é, corrija com update_transaction: os próximos parecidos já vão certo." };
+  return {};
+}
 
 export const listTransactions = defineTool<{ from?: string; to?: string; category?: string; kind?: "expense" | "income"; search?: string; card?: string; limit?: number; of_contact?: string }>({
   name: "list_transactions",
@@ -556,7 +517,7 @@ export const listTransactions = defineTool<{ from?: string; to?: string; categor
           AND ($7::text IS NULL OR t.kind = $7) AND ($8::text IS NULL OR t.description ILIKE $8 OR t.merchant ILIKE $8)
           AND ($9::uuid IS NULL OR t.card_id = $9)
         ORDER BY t.occurred_at DESC LIMIT $5`,
-      [who.id, from, to, args.category ?? null, Math.min(args.limit ?? 50, 200), ctx.timezone, args.kind ?? null, args.search?.trim() ? `%${args.search.trim()}%` : null, cardId],
+      [who.id, from, to, args.category ? ((await resolveCategory(who.id, args.category))?.name ?? args.category) : null, Math.min(args.limit ?? 50, 200), ctx.timezone, args.kind ?? null, args.search?.trim() ? `%${args.search.trim()}%` : null, cardId],
     );
     const sum = (k: string) => rows.reduce((acc, r) => acc + (r.kind === k ? Math.round(Number(r.amount) * 100) : 0), 0) / 100;
     return {
@@ -660,7 +621,7 @@ export const updateTransaction = defineTool<{
     {
       ids: { type: "array", items: { type: "string" } },
       amount: { type: "number" },
-      category: { type: "string", enum: CATEGORIES },
+      category: { type: "string", description: "Uma categoria dela (lista em categories). Trocar ensina: os parecidos seguem essa daqui para frente" },
       description: { type: "string" },
       merchant: { type: "string" },
       date: { type: "string", description: "AAAA-MM-DD[THH:MM]" },
@@ -678,6 +639,13 @@ export const updateTransaction = defineTool<{
     if (args.all_installments || args.card?.trim()) ids = await withInstallments(ctx.user.id, ids);
     const amount = args.amount != null && args.amount !== "" ? parseAmount(args.amount) : null;
     if (amount !== null && amount <= 0) return { ok: false, error: "Valor precisa ser maior que zero" };
+    let category: string | null = null;
+    if (args.category?.trim()) {
+      const found = await resolveCategory(ctx.user.id, args.category);
+      if (!found)
+        return { ok: false, error: `Ela não tem a categoria "${args.category}". As dela: ${(await ensureCategories(ctx.user.id)).map((c) => c.name).join(", ")}. Se ela quer uma nova, crie com categories action=create e tente de novo.` };
+      category = found.name;
+    }
     const when = args.date ? parseLocalDateTime(args.date, ctx.timezone) : null;
     const odd = when && suspiciousDate(when, args);
     if (odd) return odd;
@@ -695,9 +663,11 @@ export const updateTransaction = defineTool<{
               merchant = COALESCE($6, merchant), occurred_at = COALESCE($7, occurred_at), kind = COALESCE($8, kind)
         WHERE user_id = $1 AND id = ANY($2::uuid[])
         RETURNING id, kind, amount, category, description, merchant, to_char(occurred_at AT TIME ZONE $9, 'DD/MM/YYYY HH24:MI') AS quando`,
-      [ctx.user.id, ids, amount, args.category && CATEGORIES.includes(args.category) ? args.category : null, args.description ?? null, args.merchant ?? null, when, args.kind ?? null, ctx.timezone],
+      [ctx.user.id, ids, amount, category, args.description ?? null, args.merchant ?? null, when, args.kind ?? null, ctx.timezone],
     );
     if (!rows.length) return { ok: false, error: "Nenhum lançamento seu com esses ids" };
+    // trocou a categoria: aprende para os próximos parecidos
+    if (category) await learnCategory(ctx.user.id, rows.map((r) => ({ kind: r.kind, category: category!, merchant: r.merchant, description: r.description })));
     if (card !== undefined) {
       const changed = rows.map((r) => r.id as string);
       await query("UPDATE transactions SET card_id = $2, invoice_month = NULL WHERE user_id = $1 AND id = ANY($3::uuid[])", [ctx.user.id, card?.id ?? null, changed]);
@@ -741,7 +711,7 @@ export const deleteTransaction = defineTool<{ ids?: string[]; id?: string; all_i
     const from = args.from ? parseLocalDateTime(args.from, ctx.timezone) : new Date(0);
     const to = args.to ? new Date(parseLocalDateTime(args.to, ctx.timezone).getTime() + 86_400_000) : new Date(Date.now() + 366 * 86_400_000);
     const where = `user_id = $1 AND occurred_at >= $2 AND occurred_at < $3 AND ($4::text IS NULL OR category = $4) AND ($5::text IS NULL OR description ILIKE $5 OR merchant ILIKE $5)`;
-    const params = [ctx.user.id, from, to, args.category ?? null, args.search?.trim() ? `%${args.search.trim()}%` : null];
+    const params = [ctx.user.id, from, to, args.category ? ((await resolveCategory(ctx.user.id, args.category))?.name ?? args.category) : null, args.search?.trim() ? `%${args.search.trim()}%` : null];
     const preview = await one(`SELECT COUNT(*)::int AS n, COALESCE(SUM(amount), 0) AS total FROM transactions WHERE ${where}`, params);
     if (!preview?.n) return { ok: false, error: "Nenhum lançamento com esse filtro" };
     const gate = await requireConfirmation(args, `apagar ${preview.n} lançamento(s) somando ${brl(cents(preview.total))}`, ctx);

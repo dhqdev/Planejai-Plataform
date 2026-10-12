@@ -1,6 +1,7 @@
 import { config } from "./config.js";
 import { many, one, query } from "./db/pool.js";
-import { brl, CATEGORIES, guessCategory, parseAmount } from "./agent/tools/finance.js";
+import { brl, parseAmount } from "./agent/tools/finance.js";
+import { categoryOr, guessCategory } from "./categories.js";
 import { emitEvent } from "./events.js";
 
 /**
@@ -81,7 +82,7 @@ function clean(input: BillInput) {
   }
   if (input.kind !== undefined) out.kind = input.kind === "income" ? "income" : "expense";
   if (input.amount !== undefined) out.amount = input.amount === null || input.amount === "" ? null : parseAmount(input.amount) || null;
-  if (input.category !== undefined) out.category = CATEGORIES.includes(String(input.category)) ? input.category : "Contas";
+  if (input.category !== undefined) out.category = String(input.category ?? "");
   if (input.due_day !== undefined) {
     const d = Math.floor(Number(input.due_day));
     if (!(d >= 1 && d <= 31)) throw new Error("Dia do vencimento entre 1 e 31");
@@ -96,7 +97,7 @@ export async function createBill(userId: string, input: BillInput) {
   const v = clean(input);
   if (!v.description || !v.due_day) throw new Error("Precisa do nome e do dia do vencimento");
   const kind = (v.kind as string) ?? "expense";
-  const category = (v.category as string) ?? guessCategory(String(v.description)) ?? (kind === "income" ? "Salário" : "Contas");
+  const category = await categoryOr(userId, (v.category as string) || guessCategory(String(v.description)), kind === "income" ? "Salário" : "Contas");
   const n = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM bills WHERE user_id = $1 AND active", [userId]);
   if ((n?.n ?? 0) >= 60) throw new Error("Limite de 60 contas fixas");
   return one<Bill>(
@@ -108,6 +109,7 @@ export async function createBill(userId: string, input: BillInput) {
 
 export async function updateBill(userId: string, id: string, input: BillInput) {
   const v = clean(input);
+  if (v.category !== undefined) v.category = await categoryOr(userId, v.category as string, "Contas");
   const cols = Object.keys(v);
   if (!cols.length) throw new Error("Nada para mudar");
   return one<Bill>(
