@@ -4,6 +4,10 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
 .btn:active:not(:disabled), .icon-btn:active, .sheet-item:active, .card.clickable:active, .nav a:active, .fab:active { transform: scale(0.97); }
 .tab:active .tab-ico { transform: scale(0.86); }
 .pressed { transform: scale(0.97); opacity: 0.85; }
+.modal-foot .btn, .rep-btn { position: relative; overflow: hidden; isolation: isolate; transition: transform .18s cubic-bezier(.2, .8, .2, 1), background .2s, border-color .2s, opacity .2s; }
+.modal-foot .btn:active:not(:disabled), .rep-btn:active:not(:disabled) { transform: scale(.96); }
+.tap-ripple { position: absolute; z-index: 0; border-radius: 50%; background: currentColor; opacity: .18; transform: scale(0); pointer-events: none; animation: tap-ripple .55s cubic-bezier(.2, .8, .2, 1) forwards; }
+@keyframes tap-ripple { to { transform: scale(1); opacity: 0; } }
 /* no toque não existe hover: linhas e itens escurecem enquanto o dedo está em cima */
 .list-item:active, .line-item.clickable:active, a.line-item:active, .step:active, .table tr.clickable:active td, .fin-tx:active, .cal-row:active, .notif-item:active,
 .fin-legend button:active, .cal-check:active, .cal-mini-grid button:active:not(.sel), .cal-cell:active:not(:has(.cal-chip:active)) { background: var(--panel-2); }
@@ -124,8 +128,15 @@ a, button, [role="button"], .tab, .sheet-item, .card.clickable, tr.clickable, la
   .modal-head { border-bottom: none; padding-top: 8px; padding-bottom: 4px; }
   .modal-body .kv { font-size: 15px; gap: 10px 16px; }
   .confirm .modal-head { padding-bottom: 14px; }
-  .modal-foot { position: sticky; bottom: 0; background: var(--panel); }
-  .modal-foot .btn { flex: 1; min-height: 44px; }
+  /* rodapé das folhas: sem risco por cima; o botão principal ocupa a largura toda (Remover/Editar ficam
+     do tamanho do texto ao lado) e afunda com uma onda saindo do dedo (touch.ts) */
+  .modal-foot { position: sticky; bottom: 0; background: var(--panel); border-top: none; gap: 10px; padding: 10px 16px 14px; }
+  .modal-foot .spacer { display: none; }
+  .modal-foot .btn { flex: 1; min-height: 50px; border-radius: 14px; font-size: 15px; font-weight: 600; }
+  .modal-foot .btn-ghost { flex: 0 0 auto; padding: 0 16px; }
+  .modal-foot .btn-primary, .modal-foot .btn-brand { flex: 2; }
+  /* ainda falta preencher: cinza sólido (não translúcido, que deixava a barra de baixo aparecer por trás) */
+  .modal-foot .btn-primary:disabled { opacity: 1; background: var(--panel-2); border-color: var(--border); color: var(--muted); }
 }
 
 

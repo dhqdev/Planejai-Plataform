@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { ErrorBox, Modal } from "../components";
 import { Icon } from "../icons";
@@ -9,17 +9,6 @@ const label = (m: string) => `${MONTHS[Number(m.slice(5)) - 1]} de ${m.slice(0, 
 const isIOS = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const viaShare = (file: File) => (isIOS() || isStandalone()) && typeof navigator.canShare === "function" && navigator.canShare({ files: [file] });
 
-/** Onda que sai do ponto do toque (o "afundar" do :active continua no CSS). */
-function ripple(e: PointerEvent<HTMLElement>) {
-  const el = e.currentTarget;
-  const r = el.getBoundingClientRect();
-  const size = Math.max(r.width, r.height) * 2;
-  const dot = document.createElement("span");
-  dot.className = "rep-ripple";
-  dot.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - r.left - size / 2}px;top:${e.clientY - r.top - size / 2}px`;
-  el.appendChild(dot);
-  dot.addEventListener("animationend", () => dot.remove());
-}
 
 /**
  * Relatório de finanças em PDF (montado no servidor por finance-report.ts, sem IA): baixar o do mês aberto,
@@ -145,12 +134,12 @@ export function ReportModal({ month, user, readonly, onClose }: { month: string;
         <p className="muted">Resumo explicado, categorias, gráficos, cartões e todos os lançamentos do mês.</p>
       </div>
       <div className="rep-actions">
-        <button className={`btn btn-primary rep-btn rep-main is-${phase}`} disabled={busy != null} onPointerDown={ripple} onClick={download} aria-live="polite">
+        <button className={`btn btn-primary rep-btn rep-main is-${phase}`} disabled={busy != null} onClick={download} aria-live="polite">
           {main.icon ? <Icon key={phase} name={main.icon} size={18} /> : <span className="rep-spin" aria-hidden="true" />}
           <span>{main.text}</span>
         </button>
         {!readonly && (
-          <button className="btn rep-btn" disabled={busy != null} onPointerDown={ripple} onClick={send}>
+          <button className="btn rep-btn" disabled={busy != null} onClick={send}>
             {busy === "send" ? <span className="rep-spin" aria-hidden="true" /> : <Icon name="send" size={17} />}
             <span>{busy === "send" ? "Mandando…" : "Mandar no WhatsApp"}</span>
           </button>

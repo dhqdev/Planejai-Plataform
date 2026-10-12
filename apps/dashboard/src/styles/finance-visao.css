@@ -127,15 +127,13 @@
 .rep-btn { position: relative; overflow: hidden; height: 50px; border-radius: 14px; font-size: 15px; font-weight: 600; width: 100%; isolation: isolate;
   transition: transform .18s cubic-bezier(.2, .8, .2, 1), background .2s, border-color .2s, opacity .2s; }
 .rep-btn:active:not(:disabled) { transform: scale(.96); }
-.rep-btn > * { position: relative; z-index: 1; }
+.rep-btn > :not(.tap-ripple) { position: relative; z-index: 1; }
 .rep-main.is-loading:disabled { opacity: 1; }
 .rep-main.is-loading::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .16), transparent); transform: translateX(-100%); animation: rep-sheen 1.1s linear infinite; }
 .rep-main.is-ready { background: var(--violet); border-color: var(--violet); color: #fff; animation: rep-nudge .5s cubic-bezier(.2, .8, .2, 1); }
 .rep-main.is-done { background: var(--ok); border-color: var(--ok); color: #fff; }
 .rep-main.is-done .ico { animation: rep-pop .36s cubic-bezier(.2, 1.6, .4, 1); }
-.rep-ripple { position: absolute; z-index: 0 !important; border-radius: 50%; background: currentColor; opacity: .18; transform: scale(0); pointer-events: none; animation: rep-ripple .55s cubic-bezier(.2, .8, .2, 1) forwards; }
 .rep-spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: rep-turn .7s linear infinite; }
-@keyframes rep-ripple { to { transform: scale(1); opacity: 0; } }
 @keyframes rep-sheen { to { transform: translateX(100%); } }
 @keyframes rep-turn { to { transform: rotate(360deg); } }
 @keyframes rep-pop { from { transform: scale(.3); } }
@@ -151,8 +149,7 @@
 :root[data-theme="dark"] .rep-paper i.bar { background: var(--violet); }
 :root[data-theme="dark"] .rep-paper .chart b { background: #4b3a73; }
 @media (prefers-reduced-motion: reduce) {
-  .rep-paper.busy, .rep-paper.busy .chart b, .rep-main.is-loading::after, .rep-main.is-ready, .rep-main.is-done .ico, .rep-ripple { animation: none; }
-  .rep-ripple { display: none; }
+  .rep-paper.busy, .rep-paper.busy .chart b, .rep-main.is-loading::after, .rep-main.is-ready, .rep-main.is-done .ico { animation: none; }
 }
 @media (max-width: 767px) {
   .fin-top { grid-template-columns: 1fr auto auto; }

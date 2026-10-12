@@ -47,7 +47,23 @@ function tappable(target: EventTarget | null) {
 }
 const strength = (el: HTMLElement) => (el.classList.contains("btn-primary") || el.classList.contains("btn-danger") ? 12 : 6);
 
+/** Botões grandes (Salvar das folhas, ações do relatório): uma onda sai do ponto do toque. */
+const RIPPLE = ".modal-foot .btn, .rep-btn";
+function ripple(e: PointerEvent) {
+  const el = (e.target as Element | null)?.closest?.(RIPPLE) as HTMLButtonElement | null;
+  if (!el || el.disabled || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const r = el.getBoundingClientRect();
+  const size = Math.max(r.width, r.height) * 2;
+  const dot = document.createElement("span");
+  dot.className = "tap-ripple";
+  dot.setAttribute("aria-hidden", "true");
+  dot.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - r.left - size / 2}px;top:${e.clientY - r.top - size / 2}px`;
+  el.appendChild(dot);
+  dot.addEventListener("animationend", () => dot.remove());
+}
+
 export function installTouchFeedback() {
+  document.addEventListener("pointerdown", ripple, { passive: true });
   if (canVibrate()) {
     // Android: vibra já ao encostar o dedo, sem esperar soltar
     document.addEventListener(
