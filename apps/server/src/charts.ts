@@ -1,20 +1,20 @@
 import { getCredentials } from "./integrations/registry.js";
 import { config } from "./config.js";
+import { DOC, FONT } from "./doc-theme.js";
 
 /**
  * Gráficos sem IA e sem biblioteca: os números vêm do banco, o desenho é um SVG montado aqui
  * e vira PNG no navegador da stack (Browserless) ou no Chrome local. Sai em ~1s e não gasta token.
  */
 
-/** Paleta do Planejai: laranja, coral, magenta e roxo, usados em pontos de destaque. */
-// cores do Mochi, iguais às do painel: roxo elétrico, magenta, noite e tons entre eles; cinzas para o resto
-export const PALETTE = ["#6510E0", "#C42BEA", "#210552", "#8B5CF6", "#A21CAF", "#4A3A8C", "#141414", "#7A7A75", "#B5B5AF", "#D9D9D4"];
+// cores da noite do Mochi (doc-theme.ts): roxo, noite, lilás, magenta e tons entre eles; cinzas arroxeados para o resto
+export const PALETTE = ["#6510E0", "#1D0B42", "#9B6BF0", "#B832D6", "#4A3A8C", "#C9B6F5", "#77728A", "#B5B0C4", "#D9D4E6", "#ECE8F4"];
 /** vermelho só para o que estourou e âmbar para o alerta de 80% (sinal, não marca) */
 const DANGER = "#E03150";
 const WARN = "#F59E0B";
-const INK = "#141414";
-const MUTED = "#7A7A75";
-const GRID = "#ECECE8";
+const INK = DOC.ink;
+const MUTED = DOC.muted;
+const GRID = DOC.line;
 const W = 1080;
 
 export interface Slice {
@@ -27,14 +27,13 @@ const money = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency",
 const short = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(".", ",")} mil` : String(Math.round(n)));
 
 function frame(title: string, subtitle: string, body: string, height: number) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}" font-family="Inter, 'Segoe UI', Roboto, Arial, sans-serif">
-  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6510E0"/><stop offset="1" stop-color="#C42BEA"/></linearGradient></defs>
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}" font-family='${FONT}'>
+  <defs><linearGradient id="g"><stop offset="0" stop-color="${DOC.violet}"/></linearGradient></defs>
   <rect width="${W}" height="${height}" rx="36" fill="#FFFFFF"/>
-  <rect x="56" y="56" width="64" height="8" rx="4" fill="url(#g)"/>
-  <text x="56" y="118" font-size="40" font-weight="700" fill="${INK}">${esc(title)}</text>
-  <text x="56" y="160" font-size="26" fill="${MUTED}">${esc(subtitle)}</text>
+  <text x="56" y="104" font-size="40" font-weight="700" letter-spacing="-0.5" fill="${INK}">${esc(title)}</text>
+  <text x="56" y="146" font-size="26" fill="${MUTED}">${esc(subtitle)}</text>
   ${body}
-  <text x="${W - 56}" y="${height - 36}" font-size="20" fill="#B5B5AF" text-anchor="end">planejai</text>
+  <text x="${W - 56}" y="${height - 36}" font-size="20" font-weight="700" fill="${DOC.violet}" text-anchor="end">planejai</text>
 </svg>`;
 }
 
@@ -90,7 +89,7 @@ export function barChart(title: string, subtitle: string, bars: Slice[], opts: {
       const x = left + i * bw + bw * 0.18;
       const w = bw * 0.64;
       const last = i === bars.length - 1 && opts.highlightLast;
-      const fill = last ? "url(#g)" : opts.limit && b.value > opts.limit ? DANGER : "#D9D9D4";
+      const fill = last ? DOC.violet : opts.limit && b.value > opts.limit ? DANGER : "#DCD6EA";
       const label = bars.length > 16 ? (i % 5 === 0 || i === bars.length - 1 ? b.label : "") : b.label;
       return `<rect x="${x}" y="${y(b.value)}" width="${w}" height="${Math.max(0, bottom - y(b.value))}" rx="${Math.min(14, w / 3)}" fill="${fill}"/>
       ${label ? `<text x="${x + w / 2}" y="${bottom + 40}" font-size="22" fill="${MUTED}" text-anchor="middle">${esc(label)}</text>` : ""}
@@ -113,7 +112,7 @@ export function budgetChart(title: string, subtitle: string, rows: { label: stri
       const y = 240 + i * 96;
       const pct = r.limit ? r.spent / r.limit : 0;
       const w = 968;
-      const fill = pct >= 1 ? DANGER : pct >= 0.8 ? WARN : "url(#g)";
+      const fill = pct >= 1 ? DANGER : pct >= 0.8 ? WARN : DOC.violet;
       return `<text x="56" y="${y}" font-size="28" fill="${INK}">${esc(r.label)}</text>
       <text x="1024" y="${y}" font-size="24" fill="${MUTED}" text-anchor="end">${money(r.spent)} de ${money(r.limit)} · ${Math.round(pct * 100)}%</text>
       <rect x="56" y="${y + 18}" width="${w}" height="20" rx="10" fill="${GRID}"/>
@@ -141,7 +140,7 @@ async function launchChrome() {
 export async function svgToPng(svg: string): Promise<string> {
   const size = svg.match(/width="(\d+)" height="(\d+)"/);
   const width = Number(size?.[1] ?? W);
-  const html = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#F6F6F4}svg{display:block}</style></head><body>${svg}</body></html>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#FBF8FF}svg{display:block}</style></head><body>${svg}</body></html>`;
   return htmlToPng(html, width);
 }
 

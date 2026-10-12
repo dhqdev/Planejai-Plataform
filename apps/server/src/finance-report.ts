@@ -4,6 +4,7 @@ import { many, one, query } from "./db/pool.js";
 import { brl } from "./agent/tools/finance.js";
 import { todayIn } from "./bills.js";
 import { pdfFooter } from "./pdf.js";
+import { DOC, PDF_BASE_CSS, coverHtml } from "./doc-theme.js";
 
 /**
  * Relatório de finanças em PDF (Finanças > Relatório PDF e envio agendado no WhatsApp), sem IA:
@@ -56,54 +57,31 @@ const daysOf = (month: string) => {
   return new Date(Date.UTC(y, m, 0)).getUTCDate();
 };
 
-const CSS = `
-@page{size:A4;margin:18mm 16mm 20mm}
-*{box-sizing:border-box}
-html,body{margin:0;background:#fff}
-body{font-family:Inter,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color:#141414;font-size:10.5pt;line-height:1.55;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.bar{width:56px;height:7px;border-radius:4px;background:linear-gradient(90deg,#6510E0,#C42BEA)}
-.cover{height:250mm;display:flex;flex-direction:column;justify-content:space-between;break-after:page}
-.cover h1{font-size:34pt;line-height:1.1;letter-spacing:-.02em;margin:24mm 0 5mm;font-weight:700}
-.cover .sub{font-size:14pt;color:#7A7A75;margin:0 0 12mm}
-.cover .meta{font-size:10pt;color:#7A7A75;border-top:1px solid #ECECE8;padding-top:5mm;display:flex;justify-content:space-between}
-.brand{font-weight:700;color:#6510E0}
-.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm;margin:4mm 0 5mm}
-.kpi{border:1px solid #ECECE8;border-radius:3mm;padding:3.5mm 4mm;break-inside:avoid}
-.kpi small{display:block;color:#7A7A75;font-size:8.5pt}
-.kpi b{display:block;font-size:15pt;letter-spacing:-.01em;margin:1mm 0 .5mm;font-variant-numeric:tabular-nums}
-.kpi span{font-size:8.5pt;color:#7A7A75}
-.pos{color:#1F7A4D}.neg{color:#D12F45}
-.toc ol{list-style:none;margin:0;padding:0}
-.toc li{display:flex;gap:4mm;padding:2.2mm 0;border-bottom:1px solid #ECECE8;font-size:11pt}
-.toc .n{color:#6510E0;font-weight:700;min-width:8mm}
-section{margin:0 0 8mm}
+const CSS = `${PDF_BASE_CSS}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm;margin:1mm 0 5mm}
+.kpi{background:${DOC.marsh};border:1px solid ${DOC.line};border-radius:3mm;padding:3.5mm 4mm;break-inside:avoid}
+.kpi small{display:block;color:${DOC.muted};font-size:8.5pt}
+.kpi b{display:block;font-size:14.5pt;letter-spacing:-.01em;margin:1mm 0 .5mm;font-variant-numeric:tabular-nums;color:${DOC.ink}}
+.kpi span{font-size:8.5pt;color:${DOC.muted}}
+.pos,.kpi b.pos{color:${DOC.pos}}.neg,.kpi b.neg{color:${DOC.neg}}
+.cover .kpis{gap:4mm;margin:0}
+.cover .kpi{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.12)}
+.cover .kpi small{color:rgba(255,255,255,.6)}
+.cover .kpi b{color:#fff;font-size:17pt}
+.cover .kpi b.pos{color:#86E0AE}.cover .kpi b.neg{color:#FF9DAC}
+.cv-toc{list-style:none;margin:10mm 0 0;padding:0;columns:2;column-gap:10mm}
+.cv-toc li{color:rgba(255,255,255,.75);padding:1.6mm 0 1.6mm 8mm;margin:0;font-size:10pt;break-inside:avoid}
+.cv-toc li::before{content:attr(data-n);background:none;width:auto;height:auto;border-radius:0;top:1.6mm;left:0;color:${DOC.lilac};font-weight:600;font-size:9pt}
 section.page{break-before:page}
-h2{font-size:15pt;line-height:1.25;margin:0 0 3mm;break-after:avoid;display:flex;gap:3mm;align-items:baseline}
-h2 .n{color:#6510E0;font-size:11pt;font-weight:700}
-h3{font-size:11.5pt;margin:5mm 0 2mm;break-after:avoid}
-p{margin:0 0 3mm;orphans:3;widows:3}
-.lead{font-size:11.5pt}
-ul{margin:1mm 0 3mm;padding:0;list-style:none}
-li{position:relative;padding-left:5mm;margin:1.4mm 0;break-inside:avoid}
-li::before{content:"";position:absolute;left:0;top:.62em;width:2mm;height:2mm;border-radius:50%;background:#6510E0}
-table{width:100%;border-collapse:collapse;margin:2mm 0 4mm;font-size:9pt}
-thead{display:table-header-group}
-th{text-align:left;background:#141414;color:#fff;padding:2mm 2.6mm;font-weight:600}
-td{padding:1.9mm 2.6mm;border-bottom:1px solid #ECECE8;vertical-align:top}
-td.r,th.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-tr{break-inside:avoid}
-tr:nth-child(even) td{background:#FAFAF8}
+.lead{font-size:11pt}
 tfoot{display:table-row-group}
-tfoot td{font-weight:700;border-top:1.5px solid #141414;background:#fff !important}
-.chart{break-inside:avoid;margin:2mm 0 4mm;border:1px solid #ECECE8;border-radius:4mm;overflow:hidden}
-.chart svg{display:block;width:100%;height:auto;max-height:92mm}
-.hl{border-left:3px solid #6510E0;background:#F6F3FE;border-radius:0 3mm 3mm 0;padding:3mm 4mm;margin:2mm 0 4mm;break-inside:avoid}
-.hl p:last-child{margin:0}
-.muted{color:#7A7A75}
-.tag{display:inline-block;font-size:8pt;padding:.3mm 2mm;border-radius:9px;background:#F1F1EE;color:#555}
-.tag.ok{background:#E6F4EC;color:#1F7A4D}.tag.bad{background:#FBE8EB;color:#D12F45}
-.split{display:flex;height:5mm;border-radius:2.5mm;overflow:hidden;margin:2mm 0}
-.split i{display:block}
+tfoot td{font-weight:700;color:${DOC.ink};border-top:1.5px solid ${DOC.night};background:#fff !important}
+.chart{break-inside:avoid;margin:2mm 0 5mm;background:${DOC.marsh};border-radius:4mm;padding:3mm;display:flex;justify-content:center}
+.chart svg{display:block;width:100%;height:auto;max-height:90mm}
+.tag{display:inline-block;font-size:8pt;padding:.3mm 2mm;border-radius:9px;background:${DOC.soft};color:${DOC.text}}
+.tag.ok{background:#E6F4EC;color:${DOC.pos}}.tag.bad{background:#FBE8EB;color:${DOC.neg}}
+.split{display:flex;gap:1mm;height:4mm;margin:2mm 0 3mm}
+.split i{display:block;border-radius:2mm}
 `;
 
 function table(cols: { label: string; right?: boolean }[], rows: (string | number)[][], foot?: (string | number)[]) {
@@ -275,7 +253,7 @@ ${chart(barChart("Gastos por dia", label, byDay.map((v, i) => ({ label: String(i
         topPlaces.map(([k, p]) => [esc(k), p.count, brl(p.total), `${pct(p.total, expenses)}%`]),
       )}
 <h3>Como você pagou</h3>
-<div class="split">${pays.map(([, v], i) => `<i style="flex:${v};background:${["#141414", "#6510E0", "#C42BEA", "#8B5CF6", "#B5B5AF"][i % 5]}"></i>`).join("")}</div>
+<div class="split">${pays.map(([, v], i) => `<i style="flex:${v};background:${[DOC.night, DOC.violet, "#9B6BF0", "#C9B6F5", "#D9D4E6"][i % 5]}"></i>`).join("")}</div>
 ${table([{ label: "Forma" }, { label: "Valor", right: true }, { label: "% do mês", right: true }], pays.map(([k, v]) => [esc(k), brl(v), `${pct(v, expenses)}%`]))}${
         parcels.length ? `<p class="muted">${parcels.length} ${parcels.length === 1 ? "parcela de compra caiu" : "parcelas de compras caíram"} neste mês, somando ${brl(sum(parcels))}.</p>` : ""
       }`,
@@ -339,10 +317,15 @@ ${table(
   }
 
   const date = new Date(`${d.today}T12:00:00Z`).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric", timeZone: "UTC" });
-  const cover = `<div class="cover"><div><div class="bar"></div><h1>Relatório financeiro<br>${esc(cap(label))}</h1><p class="sub">${esc(d.name)}${isCurrent ? " · parcial, até hoje" : ""}</p>
-<div class="kpis"><div class="kpi"><small>Entradas</small><b class="pos">${brl(income)}</b></div><div class="kpi"><small>Saídas</small><b class="neg">${brl(expenses)}</b></div><div class="kpi"><small>Saldo</small><b class="${balance < 0 ? "neg" : ""}">${brl(balance)}</b></div></div>
-<div class="toc"><ol>${sections.map((s, i) => `<li><span class="n">${i + 1}</span><span>${esc(s.title)}</span></li>`).join("")}</ol></div></div>
-<div class="meta"><span>Gerado em ${esc(date)}</span><span class="brand">planejai</span></div></div>`;
+  const cover = coverHtml({
+    kicker: `Relatório financeiro${isCurrent ? " · parcial, até hoje" : ""}`,
+    title: esc(cap(label)),
+    subtitle: esc(d.name),
+    extra: `<div class="kpis"><div class="kpi"><small>Entradas</small><b class="pos">${brl(income)}</b></div><div class="kpi"><small>Saídas</small><b class="neg">${brl(expenses)}</b></div><div class="kpi"><small>Saldo</small><b class="${balance < 0 ? "neg" : ""}">${brl(balance)}</b></div></div>
+<ol class="cv-toc">${sections.map((s, i) => `<li data-n="${String(i + 1).padStart(2, "0")}">${esc(s.title)}</li>`).join("")}</ol>`,
+    metaLeft: `Gerado em ${esc(date)}`,
+    metaRight: "Feito pelo seu assistente",
+  });
   const body = sections
     .map((s, i) => `<section${s.page && i > 0 ? ' class="page"' : ""}><h2><span class="n">${String(i + 1).padStart(2, "0")}</span><span>${esc(s.title)}</span></h2>${s.html}</section>`)
     .join("");
