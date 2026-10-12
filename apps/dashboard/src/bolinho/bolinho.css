@@ -1,33 +1,33 @@
-/* Bolinho: corpo sólido e parado; a vida está nos olhos. Só amassa quando alguém toca nele. */
+/* Bolinho: corpo fofo que pula, amassa, rola e acena; os olhos andam numa esfera seguindo o mouse. */
 .bolinho { display: block; overflow: visible; flex-shrink: 0; -webkit-tap-highlight-color: transparent; }
-.bolinho .m-squish { transform-box: view-box; transform-origin: 60px 106px; }
-.bolinho .m-look { transition: transform 0.14s cubic-bezier(.3, .7, .3, 1); }
-.bolinho .m-blink, .bolinho .m-eye, .bolinho .m-spin, .bolinho .m-wear, .bolinho .m-shadow { transform-box: fill-box; transform-origin: center; }
+/* Quem mexe o corpo, os olhos, o chapéu e as mãozinhas é o motor (engine.ts), quadro a quadro.
+   O CSS só cuida do "estalo" ao trocar de expressão, do giro dos olhos tontos e das partículas. */
+.bolinho .m-eye, .bolinho .m-spin, .bolinho .m-wear, .bolinho .m-shadow, .bolinho .m-star { transform-box: fill-box; transform-origin: center; }
 .bolinho .m-wear { transition: transform 0.3s cubic-bezier(.3, 1.4, .5, 1); }
-
-/* piscar (classe colocada pelo JS em intervalos aleatórios) */
-.bolinho .m-blink { transition: transform 0.07s ease-in; }
-.bolinho .m-blink.m-blinking { transform: scaleY(0.08); }
 
 /* troca de expressão: os olhos "estalam" para a forma nova */
 .bolinho .m-eye { animation: m-eye-in 0.18s cubic-bezier(.3, 1.6, .5, 1) both; }
 @keyframes m-eye-in { from { transform: scale(0.6, 0.2); } to { transform: none; } }
 
-/* procurando / trabalhando: os olhos correm de um lado para o outro */
-.bolinho .m-scanning { transform-box: view-box; }
-.bolinho.m-scan-slow .m-scanning { animation: m-scan 2.4s cubic-bezier(.6, 0, .4, 1) infinite; }
-.bolinho.m-scan-fast .m-scanning { animation: m-scan 1.1s cubic-bezier(.6, 0, .4, 1) infinite; }
-@keyframes m-scan { 0%, 100% { transform: translate(-6px, 0); } 40%, 50% { transform: translate(6px, 0.5px); } 90% { transform: translate(-6px, 0); } }
-
 .bolinho .m-spin { animation: m-spin 1.3s linear infinite; }
+.bolinho .m-star-l { animation: m-spin 4.2s linear infinite reverse; }
+.bolinho .m-star-r { animation: m-spin 4.2s linear infinite; }
 @keyframes m-spin { to { transform: rotate(360deg); } }
 
-/* toque: amassa e volta, como uma bolinha de silicone */
-.bolinho .m-squish-0, .bolinho .m-squish-1 { animation: m-poke 0.55s cubic-bezier(.2, .9, .3, 1); }
-.bolinho .m-squish-1 { animation-name: m-poke2; }
-@keyframes m-poke { 0% { transform: scale(1); } 18% { transform: scale(1.1, 0.86); } 45% { transform: scale(0.96, 1.05); } 70% { transform: scale(1.02, 0.98); } 100% { transform: scale(1); } }
-@keyframes m-poke2 { 0% { transform: scale(1); } 18% { transform: scale(1.1, 0.86); } 45% { transform: scale(0.96, 1.05); } 70% { transform: scale(1.02, 0.98); } 100% { transform: scale(1); } }
-.bolinho:not(.m-still) { cursor: pointer; }
+/* selo no canto: pílula com três pontinhos (trabalhando) ou bolinha de cor (pronto, erro) */
+.bolinho .m-badge .bb-pill { fill: var(--badge); display: none; }
+.bolinho .m-badge .bb-core { fill: var(--badge); }
+.bolinho .m-badge[data-kind="dots"] .bb-pill, .bolinho .m-badge[data-kind="dots"] .bb-dot { display: inline; }
+.bolinho .m-badge[data-kind="dots"] .bb-ring, .bolinho .m-badge[data-kind="dots"] .bb-core, .bolinho .m-badge .bb-dot { display: none; }
+
+/* partículas: corações, estrelas, faíscas, gotas de suor e os "z" do sono */
+.bolinho .m-fx { pointer-events: none; }
+.bolinho .bp-heart { fill: #ff4d6d; }
+.bolinho .bp-star { fill: #f7b32b; }
+.bolinho .bp-spark { fill: #fff; stroke: rgba(0, 0, 0, 0.12); stroke-width: 0.6; }
+.bolinho .bp-sweat { fill: #7cc7ff; }
+.bolinho .bp-z { fill: #8e9bb5; font-family: inherit; }
+.bolinho:not(.m-still) { cursor: pointer; touch-action: manipulation; }
 
 .bolinho.m-still *, .bolinho.m-still { animation: none !important; }
 

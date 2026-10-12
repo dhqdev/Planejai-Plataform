@@ -78,7 +78,7 @@ function Wardrobe({ onClose }: { onClose: () => void }) {
 
       <div className="bolinho-section">Expressões</div>
       <p className="muted" style={{ margin: "-4px 0 10px", fontSize: 12.5 }}>
-        Ele fala com os olhos: procura enquanto salva, sorri quando dá certo e cochila se você some. Toque nele para ver a reação.
+        Ele vira a cabeça atrás do mouse, procura enquanto salva, dá cambalhota quando dá certo e boceja antes de cochilar. Toque nele e ele faz cara feia; três toques seguidos e ele fica tonto. Deixe o mouse em cima um pouquinho e ele se apaixona.
       </p>
       <div className="bolinho-grid">
         {MOODS.map((m) => (

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import "./bolinho.css";
+import { BolinhoEngine, type BotState, type EyeOverride, HEART, STAR } from "./engine";
 
 /**
  * Bolinho, o mascote do Planejai: uma bolinha branca, fosca e sólida, desenhada em SVG.
@@ -26,6 +27,8 @@ export type Mood =
   | "sad"
   | "shy"
   | "dizzy"
+  | "love"
+  | "proud"
   | "error";
 
 export const MOODS: { id: Mood; label: string }[] = [
@@ -44,6 +47,8 @@ export const MOODS: { id: Mood; label: string }[] = [
   { id: "sad", label: "triste" },
   { id: "shy", label: "tímido" },
   { id: "dizzy", label: "tonto" },
+  { id: "love", label: "apaixonado" },
+  { id: "proud", label: "orgulhoso" },
   { id: "error", label: "erro" },
 ];
 
@@ -115,7 +120,10 @@ type EyeShape =
   | { k: "line" }
   | { k: "gt" }
   | { k: "lt" }
-  | { k: "spiral" };
+  | { k: "spiral" }
+  | { k: "heart" }
+  | { k: "star" }
+  | { k: "squint" };
 
 interface Face {
   l: EyeShape;
@@ -146,6 +154,8 @@ const FACES: Record<Mood, Face> = {
   sad: { l: { k: "dot", lid: { out: 0.2, in: -4.5 } }, r: { k: "dot", lid: { out: 0.2, in: -4.5 } }, gaze: [0, 3] },
   shy: { l: { k: "dot", s: 0.85 }, r: { k: "dot", s: 0.85 }, gaze: [-5, 3] },
   dizzy: { l: { k: "spiral" }, r: { k: "spiral" } },
+  love: { l: { k: "heart" }, r: { k: "heart" } },
+  proud: { l: { k: "star" }, r: { k: "star" } },
   error: { l: { k: "line" }, r: { k: "line" } },
 };
 
@@ -198,6 +208,23 @@ function Eye({ shape, x, side, u }: { shape: EyeShape; x: number; side: "l" | "r
           <path d={`M${x} ${y} m-0.4 0 a0.8 0.8 0 1 1 1.6 0 a1.9 1.9 0 1 1 -3.8 0 a3 3 0 1 1 6 0 a4.2 4.2 0 1 1 -8.4 0`} stroke={INK} strokeWidth={1.7} strokeLinecap="round" fill="none" />
         </g>
       );
+    case "heart":
+      return (
+        <g className="m-eye">
+          <path d={HEART} transform={`translate(${x} ${y}) scale(0.62)`} fill="#ff4d6d" />
+        </g>
+      );
+    case "star":
+      return (
+        <g className="m-eye">
+          <g transform={`translate(${x} ${y})`}>
+            <path className={`m-star m-star-${side}`} d={STAR} transform="scale(0.6)" fill="#f7b32b" />
+          </g>
+        </g>
+      );
+    case "squint":
+      // cara feia de quem levou um tapa: tracinho inclinado para dentro
+      return <path className="m-eye" d={`M${x - 5} ${y + (side === "l" ? -1.6 : 1.6)} L${x + 5} ${y + (side === "l" ? 1.6 : -1.6)}`} {...s} strokeWidth={3.4} />;
   }
 }
 
@@ -795,6 +822,11 @@ function Defs({ u }: { u: string }) {
         <stop offset="0.25" stopColor="#000" stopOpacity="0" />
         <stop offset="1" stopColor="#000" stopOpacity="0" />
       </linearGradient>
+      {/* cor do estado (o motor põe --tint no svg) */}
+      <linearGradient id={`${u}-tint`} x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0" style={{ stopColor: "var(--tint, #e6e8ee)", stopOpacity: 0.72 }} />
+        <stop offset="1" style={{ stopColor: "var(--tint, #e6e8ee)", stopOpacity: 0 }} />
+      </linearGradient>
       <clipPath id={`${u}-clip`}>
         <path d={BODY} />
       </clipPath>
@@ -864,11 +896,32 @@ function Defs({ u }: { u: string }) {
   );
 }
 
-/* ---------------- Comportamento dos olhos ---------------- */
+/* ---------------- Comportamento ---------------- */
 
-const POKES: Mood[] = ["happy", "surprised", "laughing", "wink", "happy", "curious"];
-const RANGE_X = 6.5;
-const RANGE_Y = 4.5;
+/** humor do app → o que o motor faz com o corpo (cor, selo, jeito de se mexer) */
+const STATE_OF: Partial<Record<Mood, BotState>> = {
+  working: "working",
+  searching: "searching",
+  thinking: "thinking",
+  finished: "finished",
+  error: "error",
+  sleeping: "sleeping",
+  dizzy: "dizzy",
+};
+
+/** olhos impostos pelo motor (reações) → desenho dos dois olhos */
+const OVERRIDE: Record<EyeOverride, Face> = {
+  heart: FACES.love,
+  star: FACES.proud,
+  squint: { l: { k: "squint" }, r: { k: "squint" } },
+  happy: FACES.happy,
+  closed: FACES.sleeping,
+  wink: FACES.wink,
+  big: FACES.surprised,
+};
+
+/** desliga a vida para quem pediu menos movimento no sistema */
+const calm = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 export function Bolinho({
   mood = "idle",
@@ -897,171 +950,250 @@ export function Bolinho({
   void follow;
   const u = "m" + useId().replace(/[^a-zA-Z0-9]/g, "");
   const svg = useRef<SVGSVGElement>(null);
-  const look = useRef<SVGGElement>(null);
-  const lids = useRef<SVGGElement>(null);
-  const [poke, setPoke] = useState<Mood | null>(null);
-  const [squish, setSquish] = useState(0);
-  const clicks = useRef<number[]>([]);
+  const body = useRef<SVGGElement>(null);
+  const spin = useRef<SVGGElement>(null);
+  const eyeL = useRef<SVGGElement>(null);
+  const eyeR = useRef<SVGGElement>(null);
+  const hat = useRef<SVGGElement>(null);
+  const neck = useRef<SVGGElement>(null);
+  const eyewear = useRef<SVGGElement>(null);
+  const blush = useRef<SVGGElement>(null);
+  const tint = useRef<SVGPathElement>(null);
+  const handL = useRef<SVGGElement>(null);
+  const handR = useRef<SVGGElement>(null);
+  const badge = useRef<SVGGElement>(null);
+  const fx = useRef<SVGGElement>(null);
+  const engine = useRef<BolinhoEngine | null>(null);
 
-  const shown: Mood = poke ?? mood;
-  const face = FACES[shown] ?? FACES.idle;
-  const fixed = face.gaze;
-  const scanning = !!face.scan;
+  const alive = !still && !calm();
+  const [override, setOverride] = useState<EyeOverride | null>(null);
+  const [dizzy, setDizzy] = useState(false);
+  // roupa que aparece: troca só depois que a velha saiu de cena
+  const [worn, setWorn] = useState<Outfit>(outfit);
+  const outfitKey = JSON.stringify(outfit);
 
-  // olhar: segue o ponteiro; parado, os olhos passeiam sozinhos (pulinhos rápidos como olhos de verdade)
+  const shown: Mood = dizzy ? "dizzy" : mood;
+  const face = override ? OVERRIDE[override] : (FACES[shown] ?? FACES.idle);
+
+  // liga o motor
   useEffect(() => {
-    if (still) return;
-    const g = look.current;
-    const el = svg.current;
-    if (!g || !el) return;
-    const set = (x: number, y: number) => {
-      g.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`;
-    };
-    if (fixed) {
-      set(fixed[0], fixed[1]);
-      return;
-    }
-    if (scanning) {
-      set(0, 0);
-      return;
-    }
-    let lastMove = 0;
-    let raf = 0;
-    const onMove = (e: PointerEvent) => {
-      lastMove = Date.now();
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const r = el.getBoundingClientRect();
-        if (!r.width) return;
-        const dx = e.clientX - (r.left + r.width / 2);
-        const dy = e.clientY - (r.top + r.height * 0.62);
-        const d = Math.hypot(dx, dy) || 1;
-        const k = Math.min(1, d / (r.width * 1.6));
-        set((dx / d) * RANGE_X * k, (dy / d) * RANGE_Y * k);
-      });
-    };
+    if (!alive || !svg.current || !body.current || !spin.current || !eyeL.current || !eyeR.current) return;
+    const e = new BolinhoEngine({
+      svg: svg.current,
+      body: body.current,
+      spin: spin.current,
+      eyeL: eyeL.current,
+      eyeR: eyeR.current,
+      hat: hat.current,
+      neck: neck.current,
+      eyewear: eyewear.current,
+      blush: blush.current,
+      tint: tint.current,
+      handL: handL.current,
+      handR: handR.current,
+      badge: badge.current,
+      fx: fx.current,
+    });
+    e.small = size < 48;
+    e.onEye = setOverride;
+    // três tapas em 1,7 s: fica tonto, dá duas cambalhotas e depois volta sorrindo
     let t: ReturnType<typeof setTimeout>;
-    const wander = () => {
-      if (Date.now() - lastMove > 2500 && !document.hidden) {
-        const r = Math.random();
-        if (r < 0.3) set(0, 0);
-        else set((Math.random() * 2 - 1) * RANGE_X, (Math.random() * 2 - 1) * RANGE_Y * 0.8);
-      }
-      t = setTimeout(wander, 700 + Math.random() * 2300);
+    e.onDizzy = () => {
+      setDizzy(true);
+      clearTimeout(t);
+      t = setTimeout(() => {
+        setDizzy(false);
+        e.emote("happy");
+      }, 3300);
     };
-    t = setTimeout(wander, 900);
-    window.addEventListener("pointermove", onMove);
+    engine.current = e;
+    e.start();
     return () => {
       clearTimeout(t);
-      cancelAnimationFrame(raf);
-      window.removeEventListener("pointermove", onMove);
+      e.stop();
+      engine.current = null;
     };
-  }, [still, fixed?.[0], fixed?.[1], scanning]);
+  }, [alive, size]);
 
-  // piscar: intervalo aleatório, às vezes duas vezes seguidas
+  // humor → estado do corpo e reações de entrada
   useEffect(() => {
-    if (still || shown === "sleeping") return;
-    const g = lids.current;
-    if (!g) return;
-    let t: ReturnType<typeof setTimeout>;
-    const blink = (twice: boolean) => {
-      g.classList.add("m-blinking");
-      setTimeout(() => {
-        g.classList.remove("m-blinking");
-        if (twice) setTimeout(() => blink(false), 140);
-      }, 130);
-    };
-    const loop = () => {
-      blink(Math.random() < 0.25);
-      t = setTimeout(loop, (shown === "sleepy" ? 1400 : 2200) + Math.random() * 3800);
-    };
-    t = setTimeout(loop, 1200 + Math.random() * 2000);
-    return () => clearTimeout(t);
-  }, [still, shown]);
+    const e = engine.current;
+    if (!e) return;
+    const f = FACES[shown] ?? FACES.idle;
+    e.gaze = f.gaze ? [f.gaze[0] / 6.5, f.gaze[1] / 4.5] : null;
+    e.setState(STATE_OF[shown] ?? "idle");
+    if (shown === "greeting") e.greet();
+    else if (shown === "surprised") e.emote("surprised", 0.6);
+    else if (shown === "happy" || shown === "laughing") e.emote("happy", 0.4);
+    else if (shown === "love") e.emote("love", 1.2);
+    else if (shown === "proud") e.emote("proud", 1.2);
+  }, [shown, alive, size]);
 
-  // reação ao toque some depois de um tempinho
+  // troca de roupa animada; sem motor, troca na hora
+  const first = useRef(true);
   useEffect(() => {
-    if (!poke) return;
-    const t = setTimeout(() => setPoke(null), poke === "dizzy" ? 2200 : 1100);
-    return () => clearTimeout(t);
-  }, [poke, squish]);
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    const next = JSON.parse(outfitKey) as Outfit;
+    const e = engine.current;
+    if (!e) {
+      setWorn(next);
+      return;
+    }
+    const added = Object.keys(next).some((k) => next[k as Slot] && next[k as Slot] !== worn[k as Slot]);
+    e.changeOutfit(() => {
+      setWorn(next);
+      if (added) setTimeout(() => e.emote("proud"), 400);
+    });
+  }, [outfitKey]);
+
+  useEffect(() => {
+    if (engine.current) engine.current.dressed = Object.values(worn).some(Boolean);
+  }, [worn]);
+
+  // mouse em cima: olhos crescem; ficou ali quase 2 s, ele se apaixona (no máximo a cada 6 s)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const lastLove = useRef(0);
+  const onEnter = (ev: React.PointerEvent) => {
+    const e = engine.current;
+    if (!e || ev.pointerType !== "mouse") return;
+    if (Date.now() - lastLove.current < 6000) return;
+    e.hover(true);
+    clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => {
+      if (Date.now() - lastLove.current < 6000) return;
+      lastLove.current = Date.now();
+      e.emote("love");
+    }, 1900);
+  };
+  const onLeave = () => {
+    clearTimeout(hoverTimer.current);
+    engine.current?.hover(false);
+  };
+  useEffect(() => () => clearTimeout(hoverTimer.current), []);
 
   const onPoke = () => {
-    if (still) return;
-    const now = Date.now();
-    clicks.current = [...clicks.current.filter((c) => now - c < 2000), now];
-    setSquish((n) => n + 1);
-    setPoke(clicks.current.length >= 5 ? "dizzy" : POKES[Math.floor(Math.random() * POKES.length)]);
+    clearTimeout(hoverTimer.current);
+    engine.current?.slap();
   };
 
-  const pumpkin = outfit.costume === "pumpkin";
-  const hood = outfit.costume === "bear" || outfit.costume === "dino";
-  const astronaut = outfit.costume === "astronaut";
+  const o = alive ? worn : outfit;
+  const pumpkin = o.costume === "pumpkin";
+  const hood = o.costume === "bear" || o.costume === "dino";
+  const astronaut = o.costume === "astronaut";
   // recorte justo no corpo; se tem chapéu, a caixa cresce para cima (mesma proporção) e nada fica cortado
-  const top = Math.min(34, ...ITEMS.filter((i) => i.top !== undefined && outfit[i.slot] === i.id && !(astronaut && i.slot === "head")).map((i) => (i.top as number) - 2));
+  const top = Math.min(34, ...ITEMS.filter((i) => i.top !== undefined && o[i.slot] === i.id && !(astronaut && i.slot === "head")).map((i) => (i.top as number) - 2));
   const ch = 114 - top;
   const cw = (ch * 104) / 80;
   const cropBox = `${(60 - cw / 2).toFixed(1)} ${top} ${cw.toFixed(1)} ${ch}`;
-  const shadesUp = outfit.eyes === "sunglasses" && !(face.l.k === "dot" && face.r.k === "dot" && !face.l.lid && !face.l.s);
+  const shadesUp = o.eyes === "sunglasses" && !(face.l.k === "dot" && face.r.k === "dot" && !face.l.lid && !face.l.s);
+  const hand = (ref: React.RefObject<SVGGElement | null>) => (
+    <g ref={ref} style={{ display: "none" }}>
+      <ellipse rx={12} ry={9.5} fill={`url(#${u}-body)`} stroke="#000" strokeOpacity={0.08} strokeWidth={0.8} />
+    </g>
+  );
 
   return (
     <svg
       ref={svg}
-      className={`bolinho ${still ? "m-still" : ""} ${face.scan ? `m-scan-${face.scan}` : ""} ${className ?? ""}`}
+      className={`bolinho ${alive ? "" : "m-still"} ${className ?? ""}`}
       width={size}
       height={crop ? Math.round((size * 80) / 104) : size}
       viewBox={crop ? cropBox : "0 0 120 120"}
       role="img"
       aria-label={title ?? "Bolinho"}
       style={style}
-      onPointerDown={onPoke}
+      onPointerDown={alive ? onPoke : undefined}
+      onPointerEnter={alive ? onEnter : undefined}
+      onPointerLeave={alive ? onLeave : undefined}
     >
       <Defs u={u} />
       <ellipse className="m-shadow" cx={60} cy={108.5} rx={40} ry={4} fill="#000" opacity={0.22} filter={`url(#${u}-shadow)`} />
       <ellipse className="m-shadow" cx={60} cy={106.4} rx={30} ry={2.4} fill="#000" opacity={0.42} filter={`url(#${u}-contact)`} />
-      <g className={squish ? `m-squish m-squish-${squish % 2}` : "m-squish"}>
-        {pumpkin ? (
-          <Pumpkin u={u} />
-        ) : (
-          <>
-            <path d={BODY} fill={`url(#${u}-body)`} />
-            <path d={BODY} fill={`url(#${u}-shade)`} />
-            <path d={BODY} fill={`url(#${u}-side)`} />
-            {/* brilho largo e difuso no alto à direita (acabamento fosco) */}
-            <g clipPath={`url(#${u}-clip)`}>
-              <ellipse cx={70} cy={52} rx={24} ry={9} fill="#fff" opacity={0.75} filter={`url(#${u}-soft)`} />
-              {/* luz que volta do chão na borda de baixo: dá volume */}
-              <ellipse cx={58} cy={106} rx={32} ry={4.5} fill="#fff" opacity={0.45} filter={`url(#${u}-soft)`} />
+      <g ref={spin}>
+        {alive && hand(handL)}
+        {alive && hand(handR)}
+        <g ref={body}>
+          {pumpkin ? (
+            <Pumpkin u={u} />
+          ) : (
+            <>
+              <path d={BODY} fill={`url(#${u}-body)`} />
+              <path d={BODY} fill={`url(#${u}-shade)`} />
+              <path d={BODY} fill={`url(#${u}-side)`} />
+              {/* brilho largo e difuso no alto à direita (acabamento fosco) */}
+              <g clipPath={`url(#${u}-clip)`}>
+                <ellipse cx={70} cy={52} rx={24} ry={9} fill="#fff" opacity={0.75} filter={`url(#${u}-soft)`} />
+                {/* luz que volta do chão na borda de baixo: dá volume */}
+                <ellipse cx={58} cy={106} rx={32} ry={4.5} fill="#fff" opacity={0.45} filter={`url(#${u}-soft)`} />
+              </g>
+              <path d={BODY} fill="none" stroke="#000" strokeOpacity={0.07} strokeWidth={0.8} />
+            </>
+          )}
+          {alive && (
+            <>
+              {/* cor do que ele está fazendo, subindo de baixo */}
+              <path ref={tint} d={BODY} fill={`url(#${u}-tint)`} style={{ opacity: 0 }} />
+              <g clipPath={`url(#${u}-clip)`}>
+                <g ref={blush} style={{ opacity: 0 }} fill="#ff7896" opacity={0.5}>
+                  <ellipse cx={37} cy={88} rx={6.2} ry={3.6} />
+                  <ellipse cx={83} cy={88} rx={6.2} ry={3.6} />
+                </g>
+              </g>
+            </>
+          )}
+
+          {hood && <Hood id={o.costume as string} u={u} />}
+          {o.neck && !pumpkin && !astronaut && (
+            <g ref={neck}>
+              <Neck id={o.neck} u={u} />
             </g>
-            <path d={BODY} fill="none" stroke="#000" strokeOpacity={0.07} strokeWidth={0.8} />
-          </>
-        )}
+          )}
 
-        {hood && <Hood id={outfit.costume as string} u={u} />}
-        {outfit.neck && !pumpkin && !astronaut && <Neck id={outfit.neck} u={u} />}
-
-        <g className="m-look" ref={look}>
-          <g className={`m-eyes ${face.scan ? "m-scanning" : ""}`}>
-            <g className="m-blink" ref={lids} key={shown}>
-              <Eye shape={face.l} x={LX} side="l" u={u} />
-              <Eye shape={face.r} x={RX} side="r" u={u} />
+          <g clipPath={pumpkin ? undefined : `url(#${u}-clip)`}>
+            <g key={`${shown}-${override ?? ""}`}>
+              <g ref={eyeL}>
+                <Eye shape={face.l} x={LX} side="l" u={u} />
+              </g>
+              <g ref={eyeR}>
+                <Eye shape={face.r} x={RX} side="r" u={u} />
+              </g>
             </g>
           </g>
+          {o.eyes && (
+            <g ref={eyewear}>
+              {/* óculos escuros sobem para a testa quando a expressão precisa aparecer */}
+              <g className="m-wear" style={shadesUp ? { transform: "translateY(-14px) scale(0.92)" } : undefined}>
+                <EyeWear id={o.eyes} u={u} />
+              </g>
+            </g>
+          )}
+
+          {o.head && !astronaut && (
+            <g ref={hat}>
+              <g transform={hood ? "translate(0 -9)" : "translate(0 -6.5)"}>
+                <Hat id={o.head} u={u} />
+              </g>
+            </g>
+          )}
+          {astronaut && <Helmet u={u} />}
         </g>
-        {outfit.eyes && (
-          // óculos escuros sobem para a testa quando a expressão precisa aparecer
-          <g className="m-wear" style={shadesUp ? { transform: "translateY(-14px) scale(0.92)" } : undefined}>
-            <EyeWear id={outfit.eyes} u={u} />
-          </g>
-        )}
-
-        {outfit.head && !astronaut && (
-          <g transform={hood ? "translate(0 -9)" : "translate(0 -6.5)"}>
-            <Hat id={outfit.head} u={u} />
-          </g>
-        )}
-        {astronaut && <Helmet u={u} />}
       </g>
+      {alive && (
+        <>
+          <g ref={badge} className="m-badge" style={{ display: "none" }}>
+            <circle r={7.6} fill="#000" className="bb-ring" />
+            <rect className="bb-pill" x={-13} y={-6.5} width={26} height={13} rx={6.5} />
+            <circle className="bb-core" r={4.9} />
+            {[-1, 0, 1].map((i) => (
+              <circle key={i} className="bb-dot" cx={i * 6.5} cy={0} r={2} fill="#fff" />
+            ))}
+          </g>
+          <g ref={fx} className="m-fx" />
+        </>
+      )}
     </svg>
   );
 }
