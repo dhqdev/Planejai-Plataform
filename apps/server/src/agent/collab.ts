@@ -16,9 +16,9 @@ const ASK_RESERVE_MS = 90_000;
 const CONSULT_RESERVE_MS = 45_000;
 /**
  * Tempo máximo de cada pedido a um especialista (antes era só "90 s antes do fim da execução", e uma pesquisa
- * chegou a levar 4 min). Pesquisa responde com o que achou nesse tempo; compras clica no site e fica sem teto.
+ * chegou a levar 4 min). Pesquisa responde com o que achou nesse tempo.
  */
-export const ASK_BUDGET_MS: Record<string, number> = { pesquisador: 80_000, compras: Infinity, default: 120_000 };
+export const ASK_BUDGET_MS: Record<string, number> = { pesquisador: 80_000, default: 120_000 };
 export const CONSULT_BUDGET_MS = 45_000;
 /** Pedidos ao mesmo especialista numa resposta: depois disso o CTO responde com o que tem (a pesquisa do carro foi pedida 3 vezes). */
 export const MAX_ASKS_PER_AGENT = 2;
@@ -108,10 +108,10 @@ const WANTS_SCREEN = /\b(print|printa|captura de tela|screenshot|grav(a|e|ar|aç
 
 /**
  * Pesquisa é texto: busca e leitura de página resolvem sem navegador. O Chrome (browser_*, screenshot_url) só entra
- * quando alguém pediu para ver ou gravar; compras é a exceção (precisa clicar no carrinho da loja).
+ * quando alguém pediu para ver ou gravar.
  */
-export function needsChrome(def: { id: string }, ...texts: (string | undefined)[]) {
-  return def.id === "compras" || texts.some((t) => t && WANTS_SCREEN.test(t));
+export function needsChrome(_def: { id: string }, ...texts: (string | undefined)[]) {
+  return texts.some((t) => t && WANTS_SCREEN.test(t));
 }
 
 async function toolsFor(def: AgentDef, chain: string[], ctx: ToolContext, request?: string) {
@@ -154,7 +154,7 @@ export function delegationTool(def: AgentDef): Tool<{ message: string }> {
     parameters: obj({ message: { type: "string", description: "Tarefa completa, com o contexto" } }, ["message"]),
     async run(args, ctx) {
       const asked = (ctx.room.asks.get(def.id) ?? 0) + 1;
-      if (asked > MAX_ASKS_PER_AGENT && def.id !== "compras") {
+      if (asked > MAX_ASKS_PER_AGENT) {
         return { error: `Você já pediu ${MAX_ASKS_PER_AGENT} vezes para ${def.persona ?? def.name} nesta resposta. Responda à pessoa agora com o que voltou (dados e links), dizendo o que não deu para confirmar.` };
       }
       ctx.room.asks.set(def.id, asked);

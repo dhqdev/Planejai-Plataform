@@ -16,7 +16,7 @@ import * as direct from "./tools/direct.js";
 import * as support from "./tools/support.js";
 import * as places from "./tools/places.js";
 import * as research from "./tools/research.js";
-import * as shop from "./tools/purchases.js";
+import * as shopping from "./tools/shopping.js";
 import * as social from "./tools/social.js";
 import { many } from "../db/pool.js";
 import type { Tool } from "./tools/types.js";
@@ -89,7 +89,7 @@ export const SPECIALISTS: AgentDef[] = [
       research.browserAction,
       research.browserScreenshot,
       research.browserClose,
-      research.mercadolivreSearch,
+      shopping.shopSearch,
       core.attachImage,
       core.readDocument,
       images.makeImage,
@@ -240,32 +240,16 @@ SPECIALISTS.push({
   name: "Compras",
   icon: "shop",
   role:
-    "Compra para a pessoa numa loja online (Mercado Livre, Shopee, Amazon, Magalu e outras que ela conectou): acha o produto, entra na conta dela na loja, monta o carrinho com o endereço dela " +
-    "e vai até o Pix do checkout. Depois do sim dela, o sistema manda o Pix para ela pagar do banco dela.",
+    "Acha o menor preço de um produto nas lojas (Mercado Livre e Shopee ao mesmo tempo), compara e manda o link para a pessoa comprar no app da loja. " +
+    "Guarda o que ela quer na lista de compras e fica de olho no preço para avisar quando baixar.",
   instructions:
-    "1) purchase_info primeiro: lojas conectadas, endereço e limites. Loja sem login e sem acesso salvo: devolva ao CTO que ela precisa conectar a loja em Compras no painel. " +
-    "2) Ache o produto (mercadolivre_search ou web_search) e confirme com o CTO qual é, se houver dúvida de modelo, cor ou tamanho. " +
-    "3) browser_open no produto (entra já logada), adicione 1 unidade ao carrinho (Comprar agora e compra em um clique são bloqueados), confira o endereço de entrega (o de purchase_info), escolha o frete mais barato salvo pedido contrário " +
-    "e Pix como pagamento. Login vencido: store_login_fill para o e-mail e a senha salvos e store_login_code para o código que a loja manda por e-mail (o sistema digita; você não vê). " +
-      "Nunca digite senha, código ou cartão com browser_action. Código por SMS: pare e peça para ela entrar de novo em Compras. " +
-    "4) Ao gerar o Pix, a página volta com pix_codes: chame purchase_start com o código inteiro e o título curto, ainda com o navegador nessa página. " +
-    "5) Devolva ao CTO em uma frase o que vai ser comprado e o total, para ele perguntar o sim. Feche o navegador (browser_close) no fim. " +
-    "Deu erro (estoque, CEP, login vencido): pare e explique, sem tentar outra loja por conta própria. " +
-    "Não compre nada ilegal, arma, remédio de receita, bebida alcoólica, cigarro, cartão-presente, saldo de outra plataforma, cripto ou quantidade para revenda (Termos de compra).",
-  tools: [
-    shop.purchaseInfo,
-    research.mercadolivreSearch,
-    research.webSearch,
-    research.browserOpen,
-    research.browserAction,
-    research.browserScreenshot,
-    research.browserClose,
-    shop.storeLoginFill,
-    shop.storeLoginCode,
-    shop.purchaseStart,
-    shop.purchaseList,
-    shop.purchaseUpdate,
-  ],
+    "1) shop_search com marca e modelo. Faltou o que muda o preço (tamanho, cor, voltagem, capacidade): devolva a pergunta ao CTO antes de buscar. " +
+    "2) Devolva ao CTO as 3 melhores, uma por linha: loja, nome curto, preço como veio, frete grátis se tiver, e o link. Diga qual vale mais a pena em uma frase (mais barata, ou a de loja oficial se a diferença for pequena). " +
+    "3) Sem ofertas das lojas (veio web): passe os links da web dizendo que o preço é para conferir na página. " +
+    "4) 'Me avisa quando baixar' ou 'guarda pra mim': shop_save com o preço em centavos e o link da oferta escolhida (alert=true; alert_below se ela disse um valor). " +
+    "'Comprei' ou 'tira da lista': shop_list e shop_update. " +
+    "Você não compra nem paga nada: a compra é sempre da pessoa, no app da loja. Não ofereça arma, remédio de receita, bebida alcoólica, cigarro ou cópia pirata.",
+  tools: [shopping.shopSearch, shopping.shopSave, shopping.shopList, shopping.shopUpdate, research.webSearch, research.fetchUrl],
 });
 
 /**

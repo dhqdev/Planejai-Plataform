@@ -50,7 +50,8 @@ export function registerSecurity(app: FastifyInstance, publicDir: string) {
     `script-src 'self' ${inlineScriptHashes(publicDir).join(" ")}`.trim(),
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
-    "img-src 'self' data: blob:",
+    // fotos dos produtos em Compras: só os CDNs do Mercado Livre e da Shopee
+    "img-src 'self' data: blob: https://*.mlstatic.com https://*.susercontent.com",
     "media-src 'self' blob:",
     "connect-src 'self'",
     "worker-src 'self'",

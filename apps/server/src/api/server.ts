@@ -288,9 +288,7 @@ export async function buildServer() {
     // planos e pacotes de grãos: a landing mostra a vitrine mesmo com a cobrança desligada
     // quem responde pelos dados, para a página /privacidade (LGPD)
     const legal = { name: s.legalName, document: s.legalDocument, email: s.privacyEmail, city: s.legalCity };
-    // regras das compras pelo assistente (termos de compra e privacidade mostram os números do dono)
-    const { purchaseRules } = await import("../purchases.js");
-    return { signupMode: s.signupMode, version: VERSION, pricing: pricingOf(s), legal, purchases: purchaseRules(s) };
+    return { signupMode: s.signupMode, version: VERSION, pricing: pricingOf(s), legal };
   });
 
   app.post("/api/auth/logout", async (_req, reply) => {

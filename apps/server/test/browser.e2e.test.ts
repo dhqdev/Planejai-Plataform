@@ -89,7 +89,7 @@ describe.skipIf(!enabled)("navegador com gravação", () => {
     }
   }, 60_000);
 
-  it("loja abre como um Chrome comum, no tamanho do aparelho, e a senha digitada não aparece para o modelo", async () => {
+  it("site abre como um Chrome comum, no tamanho do aparelho", async () => {
     const { BrowserSession } = await import("../src/agent/browser.js");
     for (const device of ["mobile", "desktop"] as const) {
       const b = await BrowserSession.open(false, { device });
@@ -101,38 +101,9 @@ describe.skipIf(!enabled)("navegador com gravação", () => {
         expect(info.webdriver).toBeFalsy();
         expect(info).toMatchObject({ w: device === "mobile" ? 390 : 1280, tz: "America/Sao_Paulo", lang: "pt-BR" });
         expect(info.ua.includes("Mobile")).toBe(device === "mobile");
-        const ref = Number((await b.snapshot()).elements.match(/\[(\d+)\] campo password/)?.[1]);
-        await b.fillSecret(ref, "s3gredo!", "a senha da loja", "password");
-        const after = await b.snapshot();
-        expect(JSON.stringify(after)).not.toContain("s3gredo");
-        expect(b.actions.join(" ")).not.toContain("s3gredo");
-        expect(await b.page.$eval("input", (el) => (el as HTMLInputElement).value)).toBe("s3gredo!");
       } finally {
         await b.close();
       }
-    }
-  }, 60_000);
-
-  it("logado numa loja: só fecha pedido com Pix escolhido, não sai do site e segredo só no campo certo", async () => {
-    const { BrowserSession } = await import("../src/agent/browser.js");
-    const b = await BrowserSession.open(false);
-    b.lockedTo = ["127.0.0.1"];
-    try {
-      const refOf = async (re: RegExp) => Number((await b.snapshot()).elements.match(re)?.[1]);
-      await b.goto(`${base}/checkout?pay=card`);
-      await expect(b.act({ action: "click", ref: await refOf(/\[(\d+)\] botão: Finalizar compra/) })).rejects.toThrow(/Pix não está escolhido/);
-      await expect(b.act({ action: "click", ref: await refOf(/\[(\d+)\] botão: Comprar agora/) })).rejects.toThrow(/carrinho/);
-      await expect(b.fillSecret(await refOf(/\[(\d+)\] campo text: Pergunte/), "s3gredo!", "a senha da loja", "password")).rejects.toThrow(/senha/);
-      await expect(b.fillSecret(await refOf(/\[(\d+)\] campo text: Pergunte/), "123456", "o código", "code")).rejects.toThrow(/código/);
-      // sair da loja logada é bloqueado
-      await b.act({ action: "click", ref: await refOf(/\[(\d+)\] link: outro site/) });
-      expect(b.page.url()).toContain("127.0.0.1");
-      expect(b.actions.join(" ")).toContain("bloqueado: sair da loja");
-      await b.goto(`${base}/checkout?pay=pix`);
-      await b.act({ action: "click", ref: await refOf(/\[(\d+)\] botão: Finalizar compra/) });
-      expect(await b.page.title()).toBe("pedido");
-    } finally {
-      await b.close();
     }
   }, 60_000);
 });

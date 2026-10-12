@@ -129,13 +129,13 @@ describe("prazo do especialista", () => {
     sub.dispose();
   });
 
-  it("navegador só quando pediram para ver, printar ou gravar (compras sempre)", () => {
+  it("navegador só quando pediram para ver, printar ou gravar", () => {
     const pesq = { id: "pesquisador" };
     expect(needsChrome(pesq, "me manda uns links do Fastback barato")).toBe(false);
     expect(needsChrome(pesq, "quais filmes passam amanhã às 20h?")).toBe(false);
     expect(needsChrome(pesq, "tira um print da programação")).toBe(true);
     expect(needsChrome(pesq, undefined, "grava a tela entrando no site")).toBe(true);
-    expect(needsChrome({ id: "compras" }, "compra o tênis")).toBe(true);
+    expect(needsChrome({ id: "compras" }, "acha o tênis mais barato")).toBe(false);
   });
 
   it("cai junto quando a execução cai", async () => {
@@ -162,15 +162,3 @@ describe("prazo do especialista", () => {
   });
 });
 
-describe("teste das lojas (Compras > Testar lojas)", () => {
-  it("reconhece a proteção pelos cabeçalhos e o que a página mostrou", async () => {
-    const { guardOf, pageState } = await import("../src/storecheck.js");
-    expect(guardOf(new Headers({ "set-cookie": "_abck=1; bm_sz=2" }))).toBe("Akamai");
-    expect(guardOf(new Headers({ "cf-ray": "x", server: "cloudflare" }))).toBe("Cloudflare");
-    expect(guardOf(new Headers({ "x-datadome": "protected" }))).toBe("DataDome");
-    expect(guardOf(new Headers({ server: "nginx" }))).toBeNull();
-    expect(pageState("Olá! Para continuar, acesse sua conta", "https://www.mercadolivre.com.br/gz/account-verification?go=x")).toBe("desafio");
-    expect(pageState("Sorry, you have been blocked! Cybersecurity Policy Violation")).toBe("bloqueado");
-    expect(pageState("Ofertas do dia ".repeat(40))).toBe("ok");
-  });
-});

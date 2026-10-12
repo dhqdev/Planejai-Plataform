@@ -10,7 +10,6 @@ import { delegationTool, TeamRoom } from "./collab.js";
 import { ctoSystemPrompt } from "./prompts.js";
 import { availableTools, OWNER_INTEGRATIONS, personOf, runToolLoop } from "./runner.js";
 import { asPerson } from "../integrations/person.js";
-import { purchaseRules } from "../purchases.js";
 import { clientAgents, CTO_TOOLS, SPECIALISTS, type AgentDef } from "./team.js";
 import { TEAM_TOOLS } from "./tools/team.js";
 import { finishBrowser } from "./tools/research.js";
@@ -364,10 +363,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     }
     // Só entra no time quem tem pelo menos uma ferramenta utilizável (menos token e nada de delegação inútil)
     const team: AgentDef[] = [];
-    const shopping = purchaseRules(await getSettings()).enabled;
     for (const s of [...SPECIALISTS, ...(await clientAgents(user.id))]) {
-      // compras desligadas pelo dono: o agente de compras nem aparece para o CTO
-      if (s.id === "compras" && !shopping) continue;
       if ((await availableTools(s.tools, user)).length) team.push(s);
     }
     const lastText = fresh.map((e) => e.text).join(" ").slice(0, 500);
@@ -385,7 +381,6 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       summary: conversation.summary,
       specialists: team,
       disconnected,
-      shoppingOff: shopping ? null : owner ? "owner" : "client",
       autoReaction,
       styleNotes: (user as any).style_notes ?? null,
       errands: errandsContext(await openErrands(user.id)),

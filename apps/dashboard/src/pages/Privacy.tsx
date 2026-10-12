@@ -82,10 +82,9 @@ export function PrivacyPage() {
             uma mensagem que você pediu. Só você vê, ninguém recebe nada por estarem aí, e você apaga um ou todos em Contatos.
           </li>
           <li>
-            <b>Compras pelo assistente</b> (se você usar): o endereço de entrega, se você cadastrar, fica criptografado e vai só para a loja. Você
-            paga a loja direto do seu banco, então nenhum dado de pagamento passa por aqui. Da sua conta na loja guardamos o login (cookies)
-            criptografado até você desconectar, e o e-mail e a senha da loja só se você ligar o login automático (criptografados, digitados só no
-            site daquela loja). Com o Gmail conectado, o sistema lê os e-mails recentes da loja só para achar o código de acesso. O histórico das compras fica enquanto a conta existir. As regras estão nos <a href="/termos-de-compra">Termos de compra</a>.
+            <b>Compras</b> (se você usar): a lista do que você quer comprar (nome, preço, loja e link) fica na sua conta até você tirar. Para achar
+            o preço, só o nome do produto vai para as lojas. A compra é sua, no app da loja, então nenhum dado de pagamento nem login de loja passa
+            por aqui.
           </li>
           <li>
             <b>Contas conectadas</b> (Google Agenda, Gmail e outras que você ligar): usadas só para o que você pedir. As chaves ficam criptografadas e
@@ -107,8 +106,8 @@ export function PrivacyPage() {
           <li>Provedores de inteligência artificial (via OpenRouter), só com o trecho necessário para responder cada pedido.</li>
           <li>Serviços de busca e de mapas, com o termo ou o endereço pesquisado.</li>
           <li>WhatsApp (Meta) e Telegram, para entregar as mensagens.</li>
-          <li>Asaas, para a cobrança da assinatura e, nas compras pelo assistente, para ler o valor de um Pix da loja (só leitura).</li>
-          <li>Lojas onde você pede para o assistente comprar, com o que a compra precisa (produto e endereço de entrega), usando a sua própria conta nelas.</li>
+          <li>Asaas, para a cobrança da assinatura.</li>
+          <li>Mercado Livre e Shopee, só com o nome do produto que você pediu para buscar.</li>
           <li>Google e outros serviços que você mesmo conectar, só no que você pedir.</li>
           <li>
             Pessoas e estabelecimentos para quem você pede para mandar algo (convites, recados, agendamentos), com o que você aprovou. Você é

@@ -270,7 +270,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
   {
     id: "mercadolivre",
     name: "Mercado Livre",
-    description: "Busca produtos, compara preços, frete e reputação do vendedor para te ajudar a comprar.",
+    description: "Busca produtos e preços no catálogo do Mercado Livre para comparar com outras lojas.",
     category: "Compras",
     icon: "shop",
     oauth: "mercadolivre",
@@ -291,6 +291,23 @@ export const INTEGRATIONS: IntegrationDef[] = [
       const { mercadolivreApi } = await import("./mercadolivre.js");
       const j = await mercadolivreApi("/users/me");
       return `Conectado como ${j.nickname}`;
+    },
+  },
+  {
+    id: "shopee",
+    name: "Shopee",
+    description: "Busca produtos e preços na Shopee para comparar com outras lojas. Os links saem com a sua comissão de afiliado.",
+    category: "Compras",
+    icon: "shop",
+    docsUrl: "https://affiliate.shopee.com.br/open_api",
+    fields: [
+      { key: "app_id", label: "App ID", type: "text", required: true, help: "Afiliados da Shopee > Open API: peça o acesso e copie o App ID." },
+      { key: "secret", label: "Secret", type: "password", required: true },
+    ],
+    test: async (c) => {
+      const { shopeeGraphql } = await import("./shopee.js");
+      const d = await shopeeGraphql(c, '{ productOfferV2(keyword: "fone", limit: 1) { nodes { itemId } } }');
+      return `Busca funcionando (${(d?.productOfferV2?.nodes ?? []).length} produto)`;
     },
   },
   {

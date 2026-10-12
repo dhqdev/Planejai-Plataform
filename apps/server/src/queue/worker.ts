@@ -109,12 +109,8 @@ async function startChannelJobs(log: WorkerLog) {
   });
   await boss.schedule(QUEUES.watch, "*/15 * * * *");
 
-  // compras pelo assistente: pedidos sem "sim" e Pix de loja não pago caem (sem IA)
-  await boss.work(QUEUES.purchases, { batchSize: 1, pollingIntervalSeconds: 30 }, async () => {
-    const { checkOpenPurchases } = await import("../purchases.js");
-    await checkOpenPurchases().catch((err) => log.error({ err }, "conferência de compras falhou"));
-  });
-  await boss.schedule(QUEUES.purchases, "*/2 * * * *");
+  // o checkout pelo navegador saiu (Compras virou busca de preço): tira o agendamento antigo do banco
+  await boss.unschedule("purchases.check").catch(() => {});
 
   // melhoria diária dos agentes de cada cliente, às 19h
   await boss.work(QUEUES.improve, { batchSize: 1, pollingIntervalSeconds: 60 }, async () => {

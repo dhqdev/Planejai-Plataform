@@ -8,6 +8,7 @@ const TOOL_CACHE_SECONDS: Record<string, number> = {
   web_search: 6 * 3600,
   fetch_url: 6 * 3600,
   mercadolivre_search: 3600,
+  shop_search: 1800,
   places_nearby: 6 * 3600,
 };
 

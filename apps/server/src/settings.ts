@@ -40,12 +40,6 @@ export interface AgentSettings {
   billingReferralMax: number;
   /** quantos dias antes do vencimento lembrar quem paga por Pix/boleto (também lembra no dia) */
   billingReminderDays: number;
-  /** Compras pelo assistente (o agente vai até o Pix do checkout e a pessoa paga do banco dela). Desligado, ninguém compra. */
-  purchasesEnabled: boolean;
-  /** teto por compra (valor da loja), em centavos */
-  purchaseMaxCents: number;
-  /** teto por pessoa em 30 dias, em centavos */
-  purchaseMonthMaxCents: number;
   /** Quem responde pelos dados (LGPD art. 9º e 41): aparece em /privacidade */
   legalName: string;
   /** CPF ou CNPJ do responsável */
@@ -138,8 +132,6 @@ export const GUARD_LIMITS: Record<string, [number, number]> = {
   billingReferralStep: [0, 50],
   billingReferralMax: [0, 90],
   billingReminderDays: [0, 10],
-  purchaseMaxCents: [500, 2_000_000],
-  purchaseMonthMaxCents: [500, 10_000_000],
 };
 
 const defaults = (): AgentSettings => ({
@@ -163,9 +155,6 @@ const defaults = (): AgentSettings => ({
   billingReferralStep: 5,
   billingReferralMax: 30,
   billingReminderDays: 3,
-  purchasesEnabled: false,
-  purchaseMaxCents: 30_000,
-  purchaseMonthMaxCents: 100_000,
   legalName: "",
   legalDocument: "",
   privacyEmail: "",
@@ -191,7 +180,6 @@ export async function saveSettings(patch: Partial<AgentSettings>, opts: { unchec
     rest.billingEnabled = rest.billingEnabled === true || (rest.billingEnabled as unknown) === "true";
     if (rest.billingEnabled && !(await getSettings()).billingStartedAt) (rest as Partial<AgentSettings>).billingStartedAt = new Date().toISOString();
   }
-  if (rest.purchasesEnabled !== undefined) rest.purchasesEnabled = rest.purchasesEnabled === true || (rest.purchasesEnabled as unknown) === "true";
   if (rest.billingPlans !== undefined) rest.billingPlans = cleanPlans(rest.billingPlans);
   if (rest.billingPacks !== undefined) rest.billingPacks = cleanPacks(rest.billingPacks);
   for (const k of ["legalName", "legalDocument", "privacyEmail", "legalCity"] as const) {

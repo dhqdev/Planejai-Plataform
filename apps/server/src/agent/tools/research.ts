@@ -309,7 +309,6 @@ export function snapshotText(s: Snapshot) {
     title: s.title,
     page_text: s.text,
     clickable: s.elements || "(nenhum elemento clicável visível)",
-    ...(s.pix?.length ? { pix_codes: s.pix } : {}),
   };
 }
 
@@ -319,13 +318,6 @@ export async function finishBrowser(ctx: ToolContext, opts: { send?: boolean; ca
   if (!b) return { ok: false, error: "Nenhum navegador aberto" };
   ctx.room.browser = undefined;
   const video = await b.stopRecording().catch(() => null);
-  // login da loja renovado durante a navegação: guarda os cookies novos
-  if (b.store && b.saveLogin) {
-    const { saveStoreCookies } = await import("../../storelogin.js");
-    const { storeDefFor } = await import("../../stores.js");
-    const fresh = await b.cookiesFor((await storeDefFor(ctx.user.id, b.store))?.domains ?? []).catch(() => []);
-    if (fresh.length) await saveStoreCookies(ctx.user.id, b.store, fresh).catch(() => {});
-  }
   await b.close();
   if (!video) return { ok: true, recording: null, actions: b.actions };
   const fileId = await saveMediaFile(ctx, "recording", "video/mp4", video, "gravacao.mp4");
@@ -358,13 +350,7 @@ export const browserOpen = defineTool<{ url: string; record?: boolean; send_reco
     }
     ctx.room.usage.browserOpens++;
     if (ctx.room.browser) await finishBrowser(ctx, { send: false });
-    // loja em que a pessoa conectou a conta (Compras no painel): o navegador já entra logado
-    const { cookiesForUrl } = await import("../../storelogin.js");
-    const login = await cookiesForUrl(ctx.user.id, args.url).catch(() => ({ store: null, cookies: [] }));
-    const b = await BrowserSession.open(Boolean(args.record || args.send_recording), { cookies: login.cookies });
-    b.store = login.store;
-    b.saveLogin = login.cookies.length > 0;
-    if (b.saveLogin && login.store) b.lockedTo = (await (await import("../../stores.js")).storeDefFor(ctx.user.id, login.store))?.domains ?? null;
+    const b = await BrowserSession.open(Boolean(args.record || args.send_recording));
     b.sendRecording = Boolean(args.send_recording);
     ctx.room.browser = b;
     await b.goto(args.url);

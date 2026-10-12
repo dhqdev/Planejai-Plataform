@@ -117,58 +117,6 @@ function BillingSection({ form, setForm }: { form: any; setForm: (f: any) => voi
   );
 }
 
-/**
- * Compras pelo assistente: ligar e os limites. Valores em centavos no servidor, em reais aqui.
- * Desligado por padrão. A pessoa paga o Pix da loja do banco dela: nenhum dinheiro passa pela sua conta.
- */
-function PurchasesSection({ form, setForm }: { form: any; setForm: (f: any) => void }) {
-  const { data } = useApi<any>("/api/compras/admin");
-  const money = (key: string, label: string, help: string) => (
-    <div className="field">
-      <label>{label}</label>
-      <input
-        className="input"
-        type="number"
-        inputMode="decimal"
-        step={0.01}
-        min={0}
-        value={form[key] === "" || form[key] == null ? "" : Number(form[key]) / 100}
-        onChange={(e) => setForm({ ...form, [key]: e.target.value === "" ? "" : Math.round(Number(e.target.value) * 100) })}
-      />
-      <div className="help">{help}</div>
-    </div>
-  );
-  return (
-    <Section id="compras" icon="shop" title="Compras pelo assistente" desc="O agente Compras entra na conta da pessoa na loja, monta o carrinho e chega no Pix do checkout. Depois do sim dela, manda o Pix para ela pagar do banco dela. O valor sai do próprio código Pix, nunca do modelo.">
-      <label className="set-switch">
-        <input type="checkbox" checked={!!form.purchasesEnabled} onChange={(e) => setForm({ ...form, purchasesEnabled: e.target.checked })} />
-        <span>
-          <strong>Ligar compras</strong>
-          <small>A tela Compras aparece para todo mundo e o agente entra no time. Sem taxa e sem dinheiro passando por você. Veja como funciona em <a href="/compras">Compras</a>.</small>
-        </span>
-      </label>
-      {form.purchasesEnabled && (
-        <>
-          <h4 className="set-sub">Limites</h4>
-          <div className="set-fields">
-            {money("purchaseMaxCents", "Limite por compra (R$)", "Valor do Pix da loja, com frete.")}
-            {money("purchaseMonthMaxCents", "Limite por pessoa em 30 dias (R$)", "Somando as compras que não foram canceladas.")}
-          </div>
-          <p className="help">Com o Asaas conectado, o assistente também lê o valor de Pix dinâmico que não traz o valor escrito (só leitura, nada é cobrado).</p>
-          {data && (
-            <p className="bill-counts">
-              <span><strong>{data.month?.paid ?? 0}</strong> compras pagas no mês</span>
-              <span><strong>{brl((data.month?.stores_cents ?? 0) / 100)}</strong> pagos às lojas</span>
-              <span><strong>{data.month?.waiting ?? 0}</strong> esperando o Pix</span>
-              <span><strong>{data.month?.people ?? 0}</strong> pessoas comprando</span>
-            </p>
-          )}
-        </>
-      )}
-    </Section>
-  );
-}
-
 /** Uma área das configurações: título e explicação curtos, campos embaixo. */
 function Section({ id, icon, title, desc, children }: { id: string; icon: string; title: string; desc: string; children: ReactNode }) {
   return (
@@ -189,7 +137,6 @@ const SECTIONS = [
   { id: "assistente", icon: "sparkle", label: "Assistente" },
   { id: "travas", icon: "shield", label: "Travas de segurança" },
   { id: "graos", icon: "card", label: "Grãos e planos" },
-  { id: "compras", icon: "shop", label: "Compras" },
   { id: "dados", icon: "file", label: "Dados e LGPD" },
   { id: "canal", icon: "phone", label: "WhatsApp e acesso" },
 ];
@@ -300,8 +247,6 @@ export function SettingsPage() {
           </Section>
 
           <BillingSection form={form} setForm={setForm} />
-
-          <PurchasesSection form={form} setForm={setForm} />
 
           <Section id="dados" icon="file" title="Dados e LGPD" desc="Quem é o responsável pelos dados. Aparece em Termos e privacidade (/privacidade): a LGPD pede que o cliente saiba quem trata os dados dele e por onde falar.">
             <div className="set-fields">

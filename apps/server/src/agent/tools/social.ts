@@ -125,7 +125,7 @@ export const sendToContact = defineTool<{ contact: string; message: string; at?:
 export const watchCreate = defineTool<{ kind: "price" | "news"; query: string; target_price?: number; every_hours?: number; days?: number; notify?: NotifyMode }>({
   name: "watch_create",
   description:
-    "Fica de olho (padrão 7 dias, sem gastar IA): price = menor preço no Mercado Livre; news = novidades de um assunto. " +
+    "Fica de olho (padrão 7 dias, sem gastar IA): price = menor preço no Mercado Livre e na Shopee; news = novidades de um assunto. " +
     "Conta cada olhada; notify=changes só quando achar algo melhor.",
   parameters: obj(
     {

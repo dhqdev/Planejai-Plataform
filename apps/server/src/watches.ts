@@ -2,7 +2,8 @@ import { chatCompletion } from "./llm/openrouter.js";
 import { resolveModel } from "./llm/router.js";
 import { many, one, query } from "./db/pool.js";
 import { isConnected } from "./integrations/registry.js";
-import { mercadolivreSearch, webSearch } from "./agent/tools/research.js";
+import { webSearch } from "./agent/tools/research.js";
+import { searchOffers } from "./shopping.js";
 import { Tracer } from "./agent/trace.js";
 import { notifyUser } from "./social.js";
 import { brl } from "./agent/tools/finance.js";
@@ -162,7 +163,7 @@ async function checkOne(w: any): Promise<boolean> {
   // carteira de grãos zerada: sem IA. Preço tem aviso pronto; novidade precisa da IA para filtrar, então espera
   const noAi = !(await billingAccess(ctx.user)).allowed;
   if (noAi && w.kind === "news") return false;
-  let out = w.kind === "price" ? await checkPrice(w, ctx) : await checkNews(w, ctx);
+  let out = w.kind === "price" ? await checkPrice(w) : await checkNews(w, ctx);
   let sent = false;
   if (out.found && out.facts) sent = await send(w, out.facts, out.fallback ?? null, out.mayBeIrrelevant, noAi);
   // a IA leu os resultados novos e nada respondia ao pedido
@@ -187,13 +188,15 @@ async function checkOne(w: any): Promise<boolean> {
   return sent;
 }
 
-async function checkPrice(w: any, ctx: any): Promise<Outcome> {
-  if (!(await isConnected("mercadolivre"))) return { found: false, summary: "não consegui ver os preços agora (Mercado Livre não está conectado)." };
-  const r: any = await mercadolivreSearch.run({ query: w.query, limit: 10, sort: "price_asc" }, ctx);
-  const items = (r?.items ?? []).filter((i: any) => Number(i.price) > 0);
-  if (!items.length) return { found: false, summary: "não achei anúncio desse produto agora." };
-  const best = items.reduce((a: any, b: any) => (Number(b.price) < Number(a.price) ? b : a));
-  const price = Number(best.price);
+async function checkPrice(w: any): Promise<Outcome> {
+  if (!(await isConnected("mercadolivre")) && !(await isConnected("shopee")))
+    return { found: false, summary: "não consegui ver os preços agora (nenhuma loja conectada em Integrações)." };
+  // Mercado Livre e Shopee juntos, só ofertas que batem com o pedido; sem web (aqui não tem preço garantido)
+  const r = await searchOffers(w.query, { limit: 10, web: false });
+  if (!r.offers.length) return { found: false, summary: "não achei anúncio desse produto agora." };
+  const o = r.offers[0]!;
+  const best = { title: `${o.title} (${o.store})`, link: o.link, free_shipping: o.free_shipping };
+  const price = o.cents / 100;
   const prev = w.best?.price != null ? Number(w.best.price) : null;
   await query("UPDATE watches SET best = $2 WHERE id = $1", [w.id, { price, title: best.title, link: best.link, at: new Date().toISOString() }]);
   const target = w.target != null ? Number(w.target) : null;
