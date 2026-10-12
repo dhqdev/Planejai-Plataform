@@ -1,0 +1,26 @@
+/* ---------- Loja de especialistas e aba de cada um ---------- */
+.store-count { margin: -4px 0 12px; font-size: 13px; }
+.store-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 720px) { .store-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1180px) { .store-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.store-card { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; min-width: 0; transition: box-shadow .2s ease; }
+.store-card.on { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.store-card-main { display: flex; gap: 12px; align-items: flex-start; color: inherit; text-decoration: none; min-width: 0; }
+.store-card-main > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.store-card-main strong { font-size: 15px; }
+.store-card-main .muted { font-size: 12.5px; }
+.store-card-main p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.store-card > .btn, .store-card > .badge { align-self: flex-end; }
+.store-hero { display: flex; gap: 16px; align-items: center; padding: 18px; margin-bottom: 12px; }
+.store-hero > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.store-hero h1 { margin: 0; font-size: 22px; }
+.store-hero p { margin: 6px 0 0; font-size: 14px; line-height: 1.45; }
+.store-asks { padding: 16px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.store-asks h3, .store-asks p { margin: 0; }
+.store-asks ul { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.store-ask { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: transparent; color: inherit; font: inherit; font-size: 14px; text-align: left; cursor: pointer; transition: transform .15s ease, background .15s ease; }
+.store-ask span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.store-ask svg { flex-shrink: 0; color: var(--accent); }
+.store-ask:active { transform: scale(.98); background: var(--hover, rgba(127, 127, 127, .08)); }
+.store-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+@media (prefers-reduced-motion: reduce) { .store-ask, .store-card { transition: none; } .store-ask:active { transform: none; } }

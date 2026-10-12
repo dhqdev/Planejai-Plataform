@@ -5,6 +5,7 @@ import { many, one, query } from "../../../db/pool.js";
 import { eraseUserData } from "../../../privacy.js";
 import { getOnboarding, ONBOARDING, saveOnboarding } from "../../../onboarding.js";
 import { NOBODY, selfUserId } from "../../../sharing.js";
+import { activeStoreAgents } from "../../../agent/store.js";
 import { ESSENTIAL, getTabs, OPTIONAL } from "../../../tabs.js";
 import { botUsername, connections, telegramLink, unlink } from "../../../telegram.js";
 import { googleAuthUrl } from "../../../integrations/google.js";
@@ -169,9 +170,12 @@ export function meRoutes(base: FastifyInstance) {
 
   // ---------- Abas do app: essencial para todo mundo, o resto liberado pela reunião noturna ----------
   base.get("/api/me/tabs", async (req) => {
-    if (req.account.role === "superadmin") return { all: true, essential: ESSENTIAL, modules: Object.keys(OPTIONAL), custom: [], catalog: OPTIONAL };
+    // especialistas ligados na loja viram abas (de cada um, o dono também)
+    const self = await selfUserId(req.account);
+    const specialists = self ? await activeStoreAgents(self) : [];
+    if (req.account.role === "superadmin") return { all: true, essential: ESSENTIAL, modules: Object.keys(OPTIONAL), custom: [], catalog: OPTIONAL, specialists };
     const tabs = req.account.userId ? await getTabs(req.account.userId) : { modules: [], custom: [] };
-    return { all: false, essential: ESSENTIAL, ...tabs, catalog: OPTIONAL };
+    return { all: false, essential: ESSENTIAL, ...tabs, catalog: OPTIONAL, specialists };
   });
 
   // ================= Contas conectadas (Google, Notion...): cada cliente usa só as dele =================

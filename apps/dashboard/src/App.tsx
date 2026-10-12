@@ -41,6 +41,7 @@ const load = {
   queues: () => import("./pages/Queues"),
   resources: () => import("./pages/Resources"),
   settings: () => import("./pages/Settings"),
+  specialists: () => import("./pages/Specialists"),
   team: () => import("./pages/Team"),
   watches: () => import("./pages/Watches"),
   whatsapp: () => import("./pages/WhatsApp"),
@@ -76,6 +77,8 @@ const IntegrationsPage = page(() => load.integrations().then((m) => m.Integratio
 const InvitesPage = page(() => load.invites().then((m) => m.InvitesPage));
 const MemoriesPage = page(() => load.memories().then((m) => m.MemoriesPage));
 const MeetingsPage = page(() => load.meetings().then((m) => m.MeetingsPage));
+const SpecialistsPage = page(() => load.specialists().then((m) => m.SpecialistsPage));
+const SpecialistPage = page(() => load.specialists().then((m) => m.SpecialistPage));
 const ModelsPage = page(() => load.models().then((m) => m.ModelsPage));
 const ProfilePage = page(() => load.profile().then((m) => m.ProfilePage));
 const CalendarPage = page(() => load.calendar().then((m) => m.CalendarPage));
@@ -165,6 +168,7 @@ const MY_DAY: NavItem[] = [
   { to: "/recados", label: "Recados", icon: "send" },
   { to: "/contatos", label: "Contatos", icon: "users" },
   { to: "/documentos", label: "Documentos", icon: "file" },
+  { to: "/especialistas", label: "Especialistas", icon: "sparkle" },
 ];
 
 /** Barra de baixo do celular: só as telas do dia a dia; o resto fica organizado por seção no "Mais". */
@@ -191,6 +195,19 @@ interface AppTabs {
   modules: string[];
   custom: { slug: string; title: string; icon: string; widgets: string[] }[];
   catalog: Record<string, { label: string; icon: string; to: string }>;
+  /** especialistas ligados na loja: cada um vira uma aba */
+  specialists?: { slug: string; name: string; persona: string; icon: string }[];
+}
+
+const specialistTabs = (tabs: AppTabs | null): NavItem[] =>
+  (tabs?.specialists ?? []).map((a) => ({ to: `/especialistas/${a.slug}`, label: a.persona, icon: a.icon }));
+
+/** O dono também liga especialistas para ele: as abas entram antes da Plataforma. */
+function superNav(tabs: AppTabs | null): NavItem[] {
+  const extra = specialistTabs(tabs);
+  if (!extra.length) return SUPER_NAV;
+  const at = SUPER_NAV.findIndex((i) => "section" in i && i.section === "Plataforma");
+  return [...SUPER_NAV.slice(0, at), { section: "Feito para você" }, ...extra, ...SUPER_NAV.slice(at)];
 }
 
 /**
@@ -201,6 +218,7 @@ function adminNav(tabs: AppTabs | null, billing = false): NavItem[] {
   const extra: NavItem[] = [
     ...(tabs?.modules ?? []).map((m) => tabs!.catalog[m]).filter(Boolean).map((m) => ({ to: m!.to, label: m!.label, icon: m!.icon })),
     ...(tabs?.custom ?? []).map((t) => ({ to: `/aba/${t.slug}`, label: t.title, icon: t.icon })),
+    ...specialistTabs(tabs),
   ];
   return [
     { section: "Meu dia" },
@@ -272,7 +290,7 @@ export function App() {
   const tabs = useApi<AppTabs>(me ? `/api/me/tabs?for=${me.id}` : null);
   const isSuper = me?.role === "superadmin";
   const billing = useApi<{ pricing: { enabled: boolean } }>(me && !isSuper ? "/api/billing" : null);
-  const NAV = !me ? NO_NAV : isSuper ? SUPER_NAV : adminNav(tabs.data ?? null, billing.data?.pricing?.enabled);
+  const NAV = !me ? NO_NAV : isSuper ? superNav(tabs.data ?? null) : adminNav(tabs.data ?? null, billing.data?.pricing?.enabled);
   const links = NAV.filter((i): i is NavLinkItem => "to" in i);
   // com o app parado, baixa em segundo plano o código das telas do menu desta pessoa (e só delas)
   const routes = links.map((l) => l.to).join(" ");
@@ -431,6 +449,8 @@ export function App() {
           {/* abas de Minha conta: todo mundo vê o que ele sabe e as atas das reuniões (o módulo "memorias" só põe no menu) */}
           <Route path="/memories" element={<MemoriesPage />} />
           <Route path="/reunioes" element={<MeetingsPage />} />
+          <Route path="/especialistas" element={<SpecialistsPage />} />
+          <Route path="/especialistas/:slug" element={<SpecialistPage />} />
           <Route path="*" element={tabs.loading && !isSuper ? <Loading /> : <Navigate to="/" />} />
         </Routes>
         </div>
