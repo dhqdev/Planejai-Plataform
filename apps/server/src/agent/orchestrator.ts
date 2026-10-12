@@ -526,7 +526,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       result.text = `${result.text.replace(/^\[\[sil[eê]ncio\]\]$/i, "").trim()}\n\n👉 Responda *sim* para eu ${what}`.trim();
     }
     const silent = !result.text || /^\[\[sil[eê]ncio\]\]$/i.test(result.text.trim());
-    // [[figurinha:nome]] vira uma figurinha do Bolinho num balão próprio
+    // [[figurinha:nome]] vira uma figurinha do Mochi num balão próprio
     const withStickers = silent ? "" : placeStickers(result.text, conversationId, (base64) => outbox.addMedia({ kind: "sticker", base64, mimetype: "image/webp" }));
     const bubbles = silent ? [] : splitBubbles(withStickers);
     // mídia que o CTO não posicionou vai depois do primeiro balão

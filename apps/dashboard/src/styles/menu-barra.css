@@ -1,4 +1,4 @@
-/* ---------- Menu lateral e barra do celular: painel branco, item ativo com o roxo do Bolinho ----------
+/* ---------- Menu lateral e barra do celular: painel branco, item ativo com o roxo do Mochi ----------
    O menu é um painel flutuante branco com borda fina; a aba ativa é uma "almofada" lilás com o ícone roxo.
    Mesma linguagem no celular. (Os nomes --night/--marsh ficaram da versão roxa antiga.) */
 :root {
@@ -55,7 +55,7 @@
 }
 @media (max-width: 1180px) and (min-width: 768px) {
   .sidebar .nav a { width: 50px; height: 46px; padding: 0; }
-  /* menu estreito: só o Bolinho e os dois ícones, um embaixo do outro */
+  /* menu estreito: só o Mochi e os dois ícones, um embaixo do outro */
   .sidebar-foot .me-card { flex-direction: column; padding: 8px 4px; gap: 6px; }
   .sidebar-foot .me.me-card > div.me-actions { display: flex; flex-direction: column; }
 }

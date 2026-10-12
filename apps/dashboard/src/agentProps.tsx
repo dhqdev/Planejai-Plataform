@@ -1,9 +1,9 @@
-import type { Mood } from "./bolinho/Bolinho";
+import type { Mood } from "./mochi/Mochi";
 import "./agents.css";
 
 /**
- * O que cada agente está fazendo, ao lado do Bolinho dele: um objeto pequeno que se mexe (a batuta do Juvenal,
- * a lupa da Clotilde, o sino da Cotinha...). O corpo do Bolinho continua parado; quem se mexe é o objeto e os olhos.
+ * O que cada agente está fazendo, ao lado do Mochi dele: um objeto pequeno que se mexe (a batuta do Juvenal,
+ * a lupa da Clotilde, o sino da Cotinha...). O corpo do Mochi continua parado; quem se mexe é o objeto e os olhos.
  * Tudo em CSS (agents.css), desligado com movimento reduzido.
  */
 

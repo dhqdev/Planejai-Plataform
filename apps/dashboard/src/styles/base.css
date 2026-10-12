@@ -1,4 +1,4 @@
-/* Planejai: preto e branco. A paleta do Bolinho aparece só em pontos escolhidos (marca, bolinhas de novidade, hoje na agenda, o CTO no mapa do time, perguntas de boas-vindas); as cores que informam (status, agendas, categorias) continuam. Celular, iPad e desktop. */
+/* Planejai: preto e branco. A paleta do Mochi aparece só em pontos escolhidos (marca, bolinhas de novidade, hoje na agenda, o CTO no mapa do time, perguntas de boas-vindas); as cores que informam (status, agendas, categorias) continuam. Celular, iPad e desktop. */
 :root {
   --bg: #fafafa;
   --panel: #ffffff;
@@ -35,7 +35,7 @@
   --brand-2: #ff4458;
   --brand-3: #e23382;
   --brand-4: #8b2be2;
-  /* cores do Bolinho (ícone do app): roxo elétrico, magenta do anel e o fundo noite */
+  /* cores do Mochi (ícone do app): roxo elétrico, magenta do anel e o fundo noite */
   --violet: #6510e0;
   --magenta: #c42bea;
   --midnight: #210552;

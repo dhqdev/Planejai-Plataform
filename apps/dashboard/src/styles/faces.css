@@ -1,7 +1,7 @@
 /* ---------- Carinhas e time ---------- */
-/* o Bolinho fica um pouco para cima do centro: os pés encostam na borda de baixo e o chapéu pode passar da de cima */
+/* o Mochi fica um pouco para cima do centro: os pés encostam na borda de baixo e o chapéu pode passar da de cima */
 .agent-face { display: inline-grid; place-items: center; flex-shrink: 0; border-radius: 50%; vertical-align: middle; }
-.agent-face .bolinho { pointer-events: none; margin-top: -6%; }
+.agent-face .mochi { pointer-events: none; margin-top: -6%; }
 .face-tile { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
 .team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 .team-card { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 18px 14px; cursor: pointer; border: 1px solid var(--border); background: var(--panel); border-radius: var(--radius); }

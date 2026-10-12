@@ -97,7 +97,7 @@ apps/server/src/
     claims.ts              trava de honestidade: "anotei/apaguei/agendei" só se a ferramenta rodou
     progress.ts  reaction.ts  humanize.ts
                            "digitando" e avisos curtos, reação temática sem IA, travessão vira vírgula e lista vira "•"
-    stickers.ts            figurinhas do Bolinho ([[figurinha:nome]] vira balão de figurinha)
+    stickers.ts            figurinhas do Mochi ([[figurinha:nome]] vira balão de figurinha)
     receipts.ts            comprovante vira lançamento antes do CTO
     browser.ts             "computador" dos agentes (browserless/CHROME_PATH), snapshot em texto, gravação MP4
     errand-agent.ts        agente que conversa com o estabelecimento nos recados
@@ -119,7 +119,7 @@ apps/dashboard/src/        React + Vite; App.tsx monta menu (SUPER_NAV / ADMIN_N
   pages/                   uma tela por arquivo; pages/executions/ é a tela de Execuções (lista, detalhe, fluxo)
   components.tsx           Modal (bottom sheet no celular), ICONS, AGENT_LABEL
   hooks.ts  api.ts         useApi com cache em memória, FIT_QUERY; cliente HTTP
-  faces.tsx  bolinho/        carinhas dos agentes; mascote Bolinho (Bolinho.tsx, Wardrobe.tsx, Parade.tsx)
+  faces.tsx  mochi/        carinhas dos agentes; mascote Mochi (Mochi.tsx, Wardrobe.tsx, Parade.tsx)
   touch.ts  update.ts  notify.ts  a11y.ts  motion.css  styles.css (só @import de styles/*.css)
 apps/dashboard/public/     manifest.webmanifest, sw.js (cache só de /assets e /icons; nunca /api) e icons/
 deploy/                    portainer-stack.yml, swarm-traefik-stack.yml (planejai.tekvosoft.com), n8n-stack.yml

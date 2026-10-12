@@ -222,7 +222,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
   {
     id: "giphy",
     name: "Giphy",
-    description: "GIFs nas respostas do WhatsApp e do Telegram, em momentos leves (comemoração, bom dia). Sem ela, o assistente usa só emojis e as figurinhas do Bolinho.",
+    description: "GIFs nas respostas do WhatsApp e do Telegram, em momentos leves (comemoração, bom dia). Sem ela, o assistente usa só emojis e as figurinhas do Mochi.",
     category: "Comunicação",
     icon: "gif",
     docsUrl: "https://developers.giphy.com/dashboard/",

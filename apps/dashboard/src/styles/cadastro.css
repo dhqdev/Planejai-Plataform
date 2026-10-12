@@ -1,6 +1,6 @@
-/* ---------- Cadastro com o Bolinho: palco que troca de fantasia a cada etapa e pequenos flutuando ---------- */
-.stage-bolinho { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.stage-bolinho-body { display: block; animation: stage-hop .62s cubic-bezier(.34, 1.56, .64, 1) both, stage-bob 3.4s ease-in-out .7s infinite; transform-origin: 50% 100%; }
+/* ---------- Cadastro com o Mochi: palco que troca de fantasia a cada etapa e pequenos flutuando ---------- */
+.stage-mochi { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.stage-mochi-body { display: block; animation: stage-hop .62s cubic-bezier(.34, 1.56, .64, 1) both, stage-bob 3.4s ease-in-out .7s infinite; transform-origin: 50% 100%; }
 @keyframes stage-hop {
   0% { opacity: 0; transform: translateY(26px) scale(.55, .45) rotate(-8deg); }
   55% { opacity: 1; transform: translateY(-10px) scale(.96, 1.06) rotate(3deg); }
@@ -15,8 +15,8 @@
 .stage-say::after { content: ""; position: absolute; left: 50%; bottom: -5px; width: 12px; height: 12px; margin-left: -6px; background: inherit; border-radius: 2px; transform: rotate(45deg); }
 @keyframes stage-say { from { opacity: 0; transform: translateY(8px) scale(.8); } }
 
-.float-bolinhos { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-.float-bolinho { position: absolute; display: block; opacity: 0; animation: float-in .7s ease-out calc(var(--d) * .3) forwards, float-drift 7s ease-in-out var(--d) infinite; }
+.float-mochis { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.float-mochi { position: absolute; display: block; opacity: 0; animation: float-in .7s ease-out calc(var(--d) * .3) forwards, float-drift 7s ease-in-out var(--d) infinite; }
 @keyframes float-in { to { opacity: .92; } }
 @keyframes float-drift {
   0%, 100% { transform: translateY(0) rotate(0); }
@@ -28,11 +28,11 @@
 .auth-hero-stage { position: relative; flex: 1; display: grid; place-items: center; min-height: 300px; margin: 12px -24px; }
 .auth-form { position: relative; overflow: hidden; }
 .auth-form .card { position: relative; z-index: 1; }
-.auth-form > .float-bolinhos { display: none; }
+.auth-form > .float-mochis { display: none; }
 .auth-logo { text-align: center; }
-.auth-logo .stage-bolinho { margin: -6px auto 2px; }
+.auth-logo .stage-mochi { margin: -6px auto 2px; }
 @media (max-width: 767px) {
-  .auth-form > .float-bolinhos { display: block; }
+  .auth-form > .float-mochis { display: block; }
 }
 
 .signup-dots { display: flex; gap: 6px; margin-bottom: 16px; }
@@ -52,7 +52,7 @@
 .welcome-float { position: fixed; z-index: -1; display: none; }
 @media (min-width: 900px) { .welcome-float { display: block; } }
 .welcome-stage { display: flex; gap: 14px; align-items: flex-end; margin-bottom: 22px; min-height: 92px; }
-.welcome-stage .stage-bolinho { flex-shrink: 0; }
+.welcome-stage .stage-mochi { flex-shrink: 0; }
 .welcome-stage .welcome-hello { margin: 0 0 14px; font-size: 14px; display: block; animation: stage-say .4s ease .3s both; }
 
 /* convite gerado: o código grande para ditar ou copiar */
@@ -65,7 +65,7 @@
 .invite-chip { margin-left: 8px; font-size: 11.5px; padding: 2px 7px; border-radius: 6px; background: var(--violet-soft); color: var(--violet); letter-spacing: .06em; }
 
 @media (prefers-reduced-motion: reduce) {
-  .stage-bolinho-body, .stage-say, .float-bolinho, .signup-step, .code-input.found, .invite-code, .welcome-stage .welcome-hello { animation: none !important; }
-  .float-bolinho { opacity: .9; }
+  .stage-mochi-body, .stage-say, .float-mochi, .signup-step, .code-input.found, .invite-code, .welcome-stage .welcome-hello { animation: none !important; }
+  .float-mochi { opacity: .9; }
 }
 .forgot-link { display: block; margin: 8px 0 0 auto; font-size: 13px; font-weight: 500; color: var(--muted); }

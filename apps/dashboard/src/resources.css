@@ -1,4 +1,4 @@
-/* Servidor e Armazenamento (só super admin). Tinta sobre branco; o roxo do Bolinho só no que importa: a linha de
+/* Servidor e Armazenamento (só super admin). Tinta sobre branco; o roxo do Mochi só no que importa: a linha de
    memória dos processos, o ponto "no ar" e os arquivos (o que mais pesa). Números em mono, como em Finanças. */
 .srv-page .mono-num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 

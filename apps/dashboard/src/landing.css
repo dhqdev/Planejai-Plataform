@@ -1,5 +1,5 @@
-/* Landing pública (pages/Landing.tsx + LandingHero.tsx). Sempre clara: tinta sobre branco, com o roxo do Bolinho só nos
-   pontos estratégicos (botão principal, verbo do título, o Juvenal, barras e a faixa final na noite do Bolinho).
+/* Landing pública (pages/Landing.tsx + LandingHero.tsx). Sempre clara: tinta sobre branco, com o roxo do Mochi só nos
+   pontos estratégicos (botão principal, verbo do título, o Juvenal, barras e a faixa final na noite do Mochi).
    Pouco texto: quem fala são as cenas. Tudo anima transform/opacity, só enquanto aparece, e para com movimento reduzido. */
 .lp {
   --lp-bg: #ffffff;
@@ -87,8 +87,8 @@
 
 /* conversa do topo (HeroChat) */
 .hc { position: relative; z-index: 1; width: min(460px, 100%); }
-.hc-bolinho { position: absolute; z-index: 3; right: -34px; top: -88px; filter: drop-shadow(0 14px 16px rgba(0, 0, 0, .14)); }
-.hc-bolinho-in { display: block; animation: hc-hop .6s var(--lp-spring) both; }
+.hc-mochi { position: absolute; z-index: 3; right: -34px; top: -88px; filter: drop-shadow(0 14px 16px rgba(0, 0, 0, .14)); }
+.hc-mochi-in { display: block; animation: hc-hop .6s var(--lp-spring) both; }
 @keyframes hc-hop { from { opacity: 0; transform: translateY(26px) scale(.6) rotate(-12deg); } }
 .hc-win { border-radius: 28px; overflow: hidden; background: #fff; border: 1px solid var(--lp-line); box-shadow: 0 40px 80px -40px rgba(0, 0, 0, .4), 0 12px 24px -16px rgba(0, 0, 0, .18); }
 .hc-top { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--lp-line); font-size: 14.5px; line-height: 1.2; }
@@ -194,7 +194,7 @@
 @keyframes lp-cycle { 0% { opacity: 0; transform: translateY(14px); } 9%, 88% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-6px); } }
 @keyframes lp-strike { 0% { opacity: 1; } 10%, 90% { opacity: .5; } 100% { opacity: 1; } }
 
-/* ---------- time: os sete Bolinhos numa fila, cada um com o nome e o que faz ---------- */
+/* ---------- time: os sete Mochis numa fila, cada um com o nome e o que faz ---------- */
 .lp-crew { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; margin: 44px 0 0; padding: 0; list-style: none; }
 .lp-crew li { display: grid; justify-items: center; align-content: start; gap: 4px; padding: 22px 8px 20px; border-radius: 24px; background: var(--lp-sand); text-align: center; }
 .lp-crew li > :first-child { margin-bottom: 8px; }
@@ -252,7 +252,7 @@
 .lp-q.open .lp-a { grid-template-rows: 1fr; }
 .lp-q.open .lp-a > p { padding-bottom: 22px; }
 
-/* ---------- fim: a noite do Bolinho ---------- */
+/* ---------- fim: a noite do Mochi ---------- */
 .lp-final { padding: 120px 0; }
 .lp-final-grid {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 40px; align-items: center; padding: 72px 72px 64px; border-radius: 40px;
@@ -289,8 +289,8 @@
   .lp-hero-cta .lp-btn { width: 100%; height: 52px; }
   .lp-hero-stage { padding: 44px 0 0; }
   .hc { width: 100%; max-width: 420px; }
-  .hc-bolinho { right: 4px; top: -52px; }
-  .hc-bolinho svg { width: 76px; height: 76px; }
+  .hc-mochi { right: 4px; top: -52px; }
+  .hc-mochi svg { width: 76px; height: 76px; }
   .hc-chat { height: 252px; padding: 12px 10px 18px; }
   .hc-b { font-size: 14px; }
   .hc-tabs { margin-top: 12px; }
@@ -327,7 +327,7 @@
 
 /* ---------- movimento: entrada, rolagem e clique ----------
    Entrada do topo em cascata. Na rolagem: --hero (0 a 1) afasta a conversa; --sp enche a barra roxa do topo;
-   --lean inclina o Bolinho que acompanha. Parallax usa translate/scale soltos para não brigar com as animações. */
+   --lean inclina o Mochi que acompanha. Parallax usa translate/scale soltos para não brigar com as animações. */
 .lp-progress {
   position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--lp-violet);
   transform-origin: left; transform: scaleX(var(--sp, 0)); pointer-events: none;
@@ -363,10 +363,10 @@
 .lp.reveal-on .lp-apps[data-in] li { opacity: 1; translate: none; }
 .lp.reveal-on .lp-final-grid[data-reveal] { translate: 0 60px; scale: .96; transition-property: opacity, translate, scale; }
 .lp.reveal-on .lp-final-grid[data-reveal][data-in] { scale: 1; }
-.lp.reveal-on .lp-final-grid .lp-final-bolinho { opacity: 0; translate: 0 80px; rotate: 16deg; transition: opacity .5s, translate .9s var(--lp-spring), rotate .9s var(--lp-spring); transition-delay: .35s; }
-.lp.reveal-on .lp-final-grid[data-in] .lp-final-bolinho { opacity: 1; translate: none; rotate: none; }
+.lp.reveal-on .lp-final-grid .lp-final-mochi { opacity: 0; translate: 0 80px; rotate: 16deg; transition: opacity .5s, translate .9s var(--lp-spring), rotate .9s var(--lp-spring); transition-delay: .35s; }
+.lp.reveal-on .lp-final-grid[data-in] .lp-final-mochi { opacity: 1; translate: none; rotate: none; }
 
-/* o Bolinho que acompanha a rolagem */
+/* o Mochi que acompanha a rolagem */
 .lp-buddy {
   position: fixed; right: 28px; bottom: 24px; z-index: 30; display: flex; align-items: flex-end; gap: 8px; pointer-events: none;
   opacity: 0; translate: 0 60px; scale: .5; transform-origin: bottom right;

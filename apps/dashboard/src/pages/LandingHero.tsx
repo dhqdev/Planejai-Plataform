@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Bolinho, type Mood, type Outfit } from "../bolinho/Bolinho";
+import { Mochi, type Mood, type Outfit } from "../mochi/Mochi";
 import { BlurText } from "../reactbits/BlurText";
 import { CountUp } from "../reactbits/CountUp";
 import { RotatingText } from "../reactbits/RotatingText";
 
 /**
  * Topo da landing: título curto com o verbo girando (RotatingText) junto com uma conversa de WhatsApp que se
- * repete em três cenas (cinema, gasto, lembrete). Em cada uma a mensagem chega, o Bolinho reage com um emoji,
+ * repete em três cenas (cinema, gasto, lembrete). Em cada uma a mensagem chega, o Mochi reage com um emoji,
  * digita e responde com um cartão. Os botões embaixo pulam para a cena. Para fora da tela e com a aba escondida;
  * com movimento reduzido, mostra a cena pronta.
  */
@@ -123,7 +123,7 @@ export const SCENES: Scene[] = [
   },
 ];
 
-/** Passos de cada cena: chega a mensagem, o Bolinho reage, digita, responde, segura e some. Duração de cada um (ms). */
+/** Passos de cada cena: chega a mensagem, o Mochi reage, digita, responde, segura e some. Duração de cada um (ms). */
 const STEPS = [260, 900, 650, 1150, 4300, 460];
 const MOOD_AT: Mood[] = ["idle", "curious", "surprised", "thinking"];
 
@@ -180,15 +180,15 @@ export function HeroChat({ scene, onScene }: { scene: number; onScene: (i: numbe
 
   return (
     <div className="hc" ref={box}>
-      <div className="hc-bolinho" aria-hidden="true">
-        <span className="hc-bolinho-in" key={s.id}>
-          <Bolinho size={120} mood={mood} outfit={s.outfit} />
+      <div className="hc-mochi" aria-hidden="true">
+        <span className="hc-mochi-in" key={s.id}>
+          <Mochi size={120} mood={mood} outfit={s.outfit} />
         </span>
       </div>
       <div className="hc-win" role="img" aria-label={`Exemplo de conversa no WhatsApp: você pede e ele ${s.verb}`}>
         <div className="hc-top" aria-hidden="true">
           <span className="hc-avatar">
-            <Bolinho size={28} still mood="happy" />
+            <Mochi size={28} still mood="happy" />
           </span>
           <span>
             <strong>Planejai</strong>

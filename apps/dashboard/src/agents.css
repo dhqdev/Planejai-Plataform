@@ -1,5 +1,5 @@
-/* Agentes vivos (faces.tsx + agentProps.tsx): o Bolinho muda o olhar sozinho e o objeto de cada um trabalha.
-   O corpo do Bolinho não se mexe; só olhos e objeto. Nada anima com movimento reduzido. */
+/* Agentes vivos (faces.tsx + agentProps.tsx): o Mochi muda o olhar sozinho e o objeto de cada um trabalha.
+   O corpo do Mochi não se mexe; só olhos e objeto. Nada anima com movimento reduzido. */
 .agent-face.live { position: relative; overflow: visible; }
 .agent-prop {
   --ap-accent: #6510e0;

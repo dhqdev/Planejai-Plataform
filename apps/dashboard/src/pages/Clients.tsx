@@ -4,7 +4,7 @@ import { AgentTag, CopyField, Empty, ErrorBox, Loading, Modal, PageHead, Status,
 import { AgentFace, CORE_FACES } from "../faces";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
-import { UserBolinho } from "../bolinho/UserBolinho";
+import { UserMochi } from "../mochi/UserMochi";
 
 /** Super admin: clientes (quem usa o Planejai no WhatsApp), com cadastro completo, convites e acesso ao painel. */
 export function ClientsPage() {
@@ -49,7 +49,7 @@ export function ClientsPage() {
                 setDetail(c);
               }}
             >
-              <UserBolinho name={name} outfit={c.outfit} seed={c.id} size={32} />
+              <UserMochi name={name} outfit={c.outfit} seed={c.id} size={32} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="ellipsis" style={{ maxWidth: "none" }} title={name}>
                   <strong>{name}</strong>
@@ -140,7 +140,7 @@ function ClientDetail({ client, onClose }: { client: any; onClose: () => void })
     setStatus(r.status);
   };
   return (
-    <Modal title={client.full_name || client.name || (client.phone ? phoneFmt(client.phone) : "Cliente")} icon={<UserBolinho name={client.full_name || client.name} outfit={client.outfit} seed={client.id} size={26} />} onClose={onClose} wide>
+    <Modal title={client.full_name || client.name || (client.phone ? phoneFmt(client.phone) : "Cliente")} icon={<UserMochi name={client.full_name || client.name} outfit={client.outfit} seed={client.id} size={26} />} onClose={onClose} wide>
       <dl className="kv">
         <dt>WhatsApp</dt><dd>{client.phone ? phoneFmt(client.phone) : "–"}</dd>
         <dt>E-mail</dt><dd>{client.email ?? "–"}</dd>

@@ -130,7 +130,7 @@ const ROLE_HINT: Record<string, string> = {
   app: "Tudo num processo só (ROLE=all)",
 };
 
-/** Cores dos tipos de dado: o roxo do Bolinho para arquivos (o que mais pesa) e tons neutros e frios no resto. */
+/** Cores dos tipos de dado: o roxo do Mochi para arquivos (o que mais pesa) e tons neutros e frios no resto. */
 const CAT_COLOR: Record<Cat, string> = {
   files: "var(--violet)",
   talk: "#2f7bea",

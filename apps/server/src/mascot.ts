@@ -4,7 +4,7 @@ import { ownerUserId } from "./sharing.js";
 export type Outfit = Record<string, string>;
 
 /**
- * Roupinha do Bolinho de cada pessoa: é o avatar dela no painel (ninguém sobe foto).
+ * Roupinha do Mochi de cada pessoa: é o avatar dela no painel (ninguém sobe foto).
  * Fica na conta do painel (`accounts.mascot`); a do dono mora em settings. Duas consultas no máximo,
  * nada de uma por pessoa. Quem nunca escolheu fica fora do mapa (o painel veste um visual pelo id).
  */

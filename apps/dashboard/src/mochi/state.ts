@@ -1,9 +1,9 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { api } from "../api";
-import type { Mood, Outfit } from "./Bolinho";
+import type { Mood, Outfit } from "./Mochi";
 
 /**
- * Humor e roupinha do Bolinho, compartilhados pelo app inteiro.
+ * Humor e roupinha do Mochi, compartilhados pelo app inteiro.
  * O humor reage ao que acontece: salvando = trabalhando, deu certo = pronto, deu erro = erro,
  * parado muito tempo = dormindo. A roupinha fica salva na conta (e no aparelho, para abrir já vestido).
  */
@@ -15,7 +15,7 @@ const subscribe = (l: () => void) => {
   return () => listeners.delete(l);
 };
 
-const KEY = "pj-bolinho";
+const KEY = "pj-mochi";
 let outfit: Outfit = read();
 let mood: Mood = "idle";
 let transient: { mood: Mood; until: number } | null = null;
@@ -25,8 +25,7 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 
 function read(): Outfit {
   try {
-    // "pj-mochi" era o nome antigo do mascote: quem já tinha roupinha salva continua vestido
-    return JSON.parse(localStorage.getItem(KEY) ?? localStorage.getItem("pj-mochi") ?? "{}") ?? {};
+    return JSON.parse(localStorage.getItem(KEY) ?? "{}") ?? {};
   } catch {
     return {};
   }
@@ -55,7 +54,7 @@ export function flashMood(m: Mood, ms = 2200) {
   recompute();
 }
 
-export function useBolinhoMood() {
+export function useMochiMood() {
   return useSyncExternalStore(subscribe, () => mood);
 }
 
@@ -80,11 +79,11 @@ export function setOutfit(o: Outfit) {
 }
 
 export function openWardrobe() {
-  window.dispatchEvent(new Event("pj:bolinho-open"));
+  window.dispatchEvent(new Event("pj:mochi-open"));
 }
 
-/** Liga o Bolinho ao app: chamado uma vez depois do login. */
-export function useBolinhoLife() {
+/** Liga o Mochi ao app: chamado uma vez depois do login. */
+export function useMochiLife() {
   useEffect(() => {
     void api<{ outfit?: Outfit } | null>("/api/me/mascot")
       .then((r) => {
