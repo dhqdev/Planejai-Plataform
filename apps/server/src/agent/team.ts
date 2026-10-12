@@ -70,8 +70,8 @@ export const SPECIALISTS: AgentDef[] = [
     name: "Pesquisador",
     icon: "search",
     role:
-      "Pesquisa qualquer coisa atual na internet: sessões de cinema, preços e lojas (inclusive Mercado Livre), restaurantes, notícias, endereços, horários, " +
-      "lugares perto da pessoa, comparações de produtos. Abre páginas e tira print de páginas para mandar como foto.",
+      "Pesquisa qualquer coisa atual na internet: sessões de cinema, restaurantes, notícias, endereços, horários, lugares perto da pessoa, " +
+      "informações e avaliações de produtos. Abre páginas e tira print de páginas para mandar como foto. Menor preço para comprar é com Compras.",
     instructions:
       "Seja rápido e econômico: na maioria das vezes um web_search resolve; só abra a página (fetch_url) se o resumo da busca não trouxer o dado. " +
       "Lugar perto ('petshop mais perto', 'farmácia aqui perto'): places_nearby com o endereço da pessoa, uma chamada só; traga só o que foi pedido " +
