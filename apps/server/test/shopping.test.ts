@@ -111,13 +111,14 @@ describe("busca comparada", () => {
 
 describe("variação certa", () => {
   it("pergunta o que muda o produto antes de buscar, e só o que falta", () => {
-    expect(variantQuestions("tênis Nike Revolution 7")).toEqual(["qual o número do calçado"]);
-    expect(variantQuestions("tênis Nike Revolution 7 42")).toEqual([]);
+    expect(variantQuestions("tênis Nike Revolution 7")).toEqual(["qual o número do calçado", "qual a cor"]);
+    expect(variantQuestions("tênis Nike Revolution 7 42")).toEqual(["qual a cor"]);
+    expect(variantQuestions("tênis Nike Revolution 7 42 preto")).toEqual([]);
     expect(variantQuestions("air fryer Mondial 4L")).toEqual(["qual a voltagem (110 ou 220)"]);
     expect(variantQuestions("air fryer Mondial 4L 220v")).toEqual([]);
     expect(variantQuestions("iPhone 15")).toEqual(["quanta memória (ex.: 128 GB)"]);
     expect(variantQuestions("capinha iPhone 15")).toEqual([]);
-    expect(variantQuestions("camiseta Hering básica")).toEqual(["qual o tamanho (P, M, G...)"]);
+    expect(variantQuestions("camiseta Hering básica")).toEqual(["qual o tamanho (P, M, G...)", "qual a cor"]);
     expect(variantQuestions("fone JBL Tune 520BT")).toEqual([]);
     // respondeu (ou disse que tanto faz): busca
     expect(variantQuestions("tênis Nike Revolution 7", "tanto faz")).toEqual([]);

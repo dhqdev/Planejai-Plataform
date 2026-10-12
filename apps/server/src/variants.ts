@@ -82,7 +82,7 @@ export function parseQuery(query: string): Wanted {
 }
 
 /**
- * O que perguntar antes de buscar: tamanho para calçado e roupa, voltagem para eletro, memória para celular e armazenamento.
+ * O que perguntar antes de buscar: tamanho e cor para calçado e roupa, voltagem para eletro, memória para celular e armazenamento.
  * Se a pessoa já respondeu (`variant`), ou disse que tanto faz, nada a perguntar.
  */
 export function variantQuestions(query: string, variant?: string | null): string[] {
@@ -90,8 +90,11 @@ export function variantQuestions(query: string, variant?: string | null): string
   const t = norm(query);
   const w = parseQuery(query);
   const out: string[] = [];
+  const wear = SHOE.test(t) || CLOTHES.test(t);
   if (SHOE.test(t) && !w.size) out.push("qual o número do calçado");
   else if (CLOTHES.test(t) && !w.size && !/ (pp|p|m|g|gg|xg|xgg) /.test(t)) out.push("qual o tamanho (P, M, G...)");
+  // roupa e calçado: a cor também (o dono pediu); eletrônico pega qualquer cor se a pessoa não disser
+  if (wear && !w.color) out.push("qual a cor");
   if (VOLTAGE.test(t) && !w.voltage) out.push("qual a voltagem (110 ou 220)");
   if (CAPACITY.test(t) && !ACCESSORY.test(t) && !w.capacity) out.push("quanta memória (ex.: 128 GB)");
   return out;
