@@ -16,6 +16,8 @@ const READS = [
   "/api/watches",
   "/api/errands",
   "/api/memories",
+  "/api/memories/overview",
+  "/api/meetings",
   "/api/documents",
   "/api/recordings",
   "/api/notifications",
@@ -44,6 +46,8 @@ describe.skipIf(!enabled)("permissão por rota (e2e)", () => {
     const conv = await db.one("INSERT INTO conversations (user_id, channel, remote_jid) VALUES ($1, 'whatsapp', $2) RETURNING id", [u.id, `${phone}@s.whatsapp.net`]);
     await db.query("INSERT INTO transactions (user_id, kind, amount, category, description) VALUES ($1, 'expense', 10, 'Outros', $2)", [u.id, mark]);
     await db.query("INSERT INTO memories (user_id, content) VALUES ($1, $2)", [u.id, mark]);
+    await db.query("INSERT INTO improve_meetings (user_id, summary) VALUES ($1, $2)", [u.id, mark]);
+    await db.query("UPDATE users SET style_notes = $2 WHERE id = $1", [u.id, mark]);
     await db.query("INSERT INTO reminders (user_id, conversation_id, intent, due_at) VALUES ($1, $2, $3, now() + interval '1 day')", [u.id, conv.id, mark]);
     await db.query("INSERT INTO bills (user_id, description, amount, due_day) VALUES ($1, $2, 10, 5)", [u.id, mark]);
     await db.query("INSERT INTO documents (user_id, name, mimetype, size, data) VALUES ($1, $2, 'text/plain', 1, '\\x00')", [u.id, mark]);

@@ -1,5 +1,6 @@
 import { safeFetch } from "../../net.js";
 import { cacheGet } from "../../shortmem.js";
+import { rememberFact } from "../../memories.js";
 import { many, one, query } from "../../db/pool.js";
 import { formatLocal, isoLocal } from "../../time.js";
 import { defineTool, obj } from "./types.js";
@@ -40,41 +41,13 @@ export const saveMemory = defineTool<{ content: string; tags?: string[]; replace
   parameters: obj(
     {
       content: { type: "string", description: "Uma frase" },
-      tags: { type: "array", items: { type: "string" }, description: "perfil para cidade, família e trabalho" },
+      tags: { type: "array", items: { type: "string" }, description: "assunto: perfil, familia, trabalho, rotina, gostos, saude, dinheiro ou objetivos" },
       replaces_id: { type: "string" },
     },
     ["content"],
   ),
   async run(args, ctx) {
-    const content = args.content.trim();
-    if (!content) return { ok: false, error: "Memória vazia" };
-    const tags = [...new Set((args.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean))].slice(0, 6);
-    if (!args.replaces_id) {
-      // já sabe isso (todas as palavras do fato novo estão numa memória): não duplica, só junta as tags
-      const known = await one("SELECT id FROM memories WHERE user_id = $1 AND search @@ plainto_tsquery('portuguese', $2) ORDER BY created_at DESC LIMIT 1", [ctx.user.id, content]);
-      if (known) {
-        await query("UPDATE memories SET tags = (SELECT ARRAY(SELECT DISTINCT unnest(tags || $2::text[]))), created_at = now() WHERE id = $1", [known.id, tags]);
-        return { ok: true, already_known: known.id };
-      }
-    }
-    // troca o fato antigo, ou um que o novo detalha (todas as palavras dele estão no novo) em vez de duplicar
-    const same = args.replaces_id && /^[0-9a-f-]{36}$/i.test(args.replaces_id)
-      ? await one("SELECT id FROM memories WHERE id = $1 AND user_id = $2", [args.replaces_id, ctx.user.id])
-      : await one(
-          "SELECT id FROM memories WHERE user_id = $1 AND to_tsvector('portuguese', $2) @@ plainto_tsquery('portuguese', content) ORDER BY created_at DESC LIMIT 1",
-          [ctx.user.id, content],
-        );
-    if (same) {
-      await query("UPDATE memories SET content = $3, tags = (SELECT ARRAY(SELECT DISTINCT unnest(tags || $4::text[]))), created_at = now() WHERE id = $1 AND user_id = $2", [
-        same.id,
-        ctx.user.id,
-        content,
-        tags,
-      ]);
-      return { ok: true, updated: same.id };
-    }
-    await query("INSERT INTO memories (user_id, content, tags) VALUES ($1, $2, $3)", [ctx.user.id, content, tags]);
-    return { ok: true };
+    return rememberFact(ctx.user.id, args.content, { tags: args.tags, replacesId: args.replaces_id, source: "conversa" });
   },
 });
 

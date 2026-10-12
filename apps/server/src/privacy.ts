@@ -39,7 +39,7 @@ export async function eraseUserData(userId: string): Promise<{ ok: boolean }> {
 /**
  * "Zerar contexto" (aba Clientes): o assistente esquece a conversa com a pessoa e começa do zero, sem apagar a conta.
  * Sai: memória curta no Redis, mensagens já respondidas e o resumo da conversa, o que esperava o "sim" e o cache da conversa.
- * Com memories=true sai também o que ele aprendeu dela (memórias, jeito de falar e notas por agente).
+ * Com memories=true sai também o que ele aprendeu dela (memórias, jeito de falar, notas por agente e atas das reuniões).
  * Ficam: cadastro, gastos, lembretes, agenda, documentos, contatos e mensagens ainda não respondidas.
  */
 export async function resetContext(userId: string, opts: { memories?: boolean } = {}) {
@@ -59,6 +59,7 @@ export async function resetContext(userId: string, opts: { memories?: boolean } 
   if (opts.memories) {
     memories = (await query("DELETE FROM memories WHERE user_id = $1", [userId])).rowCount ?? 0;
     await query("UPDATE users SET style_notes = NULL WHERE id = $1", [userId]);
+    await query("DELETE FROM improve_meetings WHERE user_id = $1", [userId]);
     // a nota que a própria pessoa escreveu para um agente (user_note) é dela, não aprendizado: fica
     await query("UPDATE agent_notes SET note = NULL WHERE user_id = $1", [userId]);
     await query("DELETE FROM agent_notes WHERE user_id = $1 AND note IS NULL AND user_note IS NULL", [userId]);

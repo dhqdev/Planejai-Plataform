@@ -474,4 +474,42 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(usage.agents).toMatchObject([{ persona: "Pipoca", focus: "filmes" }]);
     await app.close();
   });
+
+  it("o que ele sabe de mim: a pessoa ensina, corrige e apaga; reunião agora só de 20 em 20 min", async () => {
+    const { buildServer } = await import("../src/api/server.js");
+    const { hashPassword } = await import("../src/accounts.js");
+    const app = await buildServer();
+    await db.query("DELETE FROM accounts WHERE email = 'rita@x.com'");
+    await db.query("DELETE FROM users WHERE phone = '5519977770000'");
+    const u = await db.one("INSERT INTO users (phone, name, status, style_notes) VALUES ('5519977770000', 'Rita', 'active', 'curto e direto') RETURNING id");
+    await db.query("INSERT INTO accounts (email, name, password_hash, role, status, user_id, phone) VALUES ('rita@x.com', 'Rita', $1, 'admin', 'active', $2, '5519977770000')", [
+      hashPassword("senha-forte-123"),
+      u.id,
+    ]);
+    await db.query("INSERT INTO agent_notes (user_id, agent, note, user_note) VALUES ($1, 'financeiro', 'usa Nubank', 'sempre em reais')", [u.id]);
+    const login = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "rita@x.com", password: "senha-forte-123" } });
+    const cookie = String(login.headers["set-cookie"]).split(";")[0]!;
+    const call = (method: string, url: string, payload?: unknown): Promise<any> => app.inject({ method: method as any, url, headers: { cookie }, payload: payload as any });
+
+    const added = (await call("POST", "/api/memories", { content: "Tem uma filha, a Laura", category: "familia" })).json();
+    expect(added.created).toBeTruthy();
+    const row = await db.one("SELECT category, source, 'perfil' = ANY(tags) AS perfil FROM memories WHERE id = $1", [added.created]);
+    expect(row).toEqual({ category: "familia", source: "pessoa", perfil: true });
+    expect((await call("PATCH", `/api/memories/${added.created}`, { content: "Tem uma filha, a Laura, de 6 anos" })).json()).toMatchObject({ content: "Tem uma filha, a Laura, de 6 anos" });
+    const ov = (await call("GET", "/api/memories/overview")).json();
+    expect(ov).toMatchObject({ style: "curto e direto", notes: [{ agent: "financeiro", note: "usa Nubank", persona: expect.any(String) }] });
+    expect(ov.facts.map((f: any) => f.content)).toEqual(["Tem uma filha, a Laura, de 6 anos"]);
+    // esquecer o que o agente aprendeu não apaga o pedido que ela fez a ele
+    await call("DELETE", "/api/memories/notes/financeiro");
+    expect(await db.one("SELECT note, user_note FROM agent_notes WHERE user_id = $1", [u.id])).toEqual({ note: null, user_note: "sempre em reais" });
+    await call("DELETE", "/api/memories/style");
+    await call("DELETE", `/api/memories/${added.created}`);
+    expect((await call("GET", "/api/memories/overview")).json()).toMatchObject({ facts: [], style: null, notes: [] });
+    // sem conversa no dia não tem reunião; logo depois de uma, espera
+    expect((await call("POST", "/api/meetings/run")).statusCode).toBe(400);
+    await db.query("INSERT INTO improve_meetings (user_id, summary) VALUES ($1, 'ok')", [u.id]);
+    expect((await call("POST", "/api/meetings/run")).statusCode).toBe(429);
+    expect((await call("GET", "/api/meetings")).json()).toMatchObject([{ summary: "ok", learned: [], changes: { agent_notes: [] } }]);
+    await app.close();
+  });
 });

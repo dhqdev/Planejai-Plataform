@@ -27,6 +27,9 @@ function fakeOpenRouter(body: any) {
   if (system.includes("reunião noturna")) {
     return completion(
       JSON.stringify({
+        summary: "Hoje você falou muito de cinema. O time vai sugerir sessões depois das 19h.",
+        facts: [{ category: "perfil", fact: "Mora em Campinas" }, { category: "gostos", fact: "Gosta de filmes da Marvel" }, { category: "xyz", fact: "ok" }],
+        fix: [{ n: 99, fact: "fato que não existe" }],
         topics: [{ topic: "cinema", weight: 4 }],
         style: "Respostas curtas, com emoji de cinema. Chama ele de Davi.",
         agent_notes: [{ agent: "pesquisador", note: "Mora em Campinas, prefere o Iguatemi." }, { agent: "hacker", note: "x" }],
@@ -446,10 +449,26 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     }
     const { improveUser } = await import("../src/improve.js");
     // primeiro dia: só registra o assunto
-    expect(await improveUser(david.id)).toEqual({ created: 0, updated: 0, retired: 0 });
+    expect(await improveUser(david.id)).toMatchObject({ created: 0, updated: 0, retired: 0, learned: 2 });
+    // o que aprendeu vai para "O que ele sabe de mim" com assunto e origem, e a ata fica guardada
+    const facts = await db.many("SELECT content, category, source, 'perfil' = ANY(tags) AS perfil FROM memories WHERE user_id = $1 AND source = 'reuniao' ORDER BY content", [david.id]);
+    expect(facts).toEqual([
+      { content: "Gosta de filmes da Marvel", category: "gostos", source: "reuniao", perfil: false },
+      { content: "Mora em Campinas", category: "perfil", source: "reuniao", perfil: true },
+    ]);
+    const meeting = await db.one("SELECT asks, summary, learned, changes FROM improve_meetings WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1", [david.id]);
+    expect(meeting.asks).toBeGreaterThanOrEqual(3);
+    expect(meeting.summary).toContain("cinema");
+    expect(meeting.learned).toHaveLength(2);
+    expect(meeting.changes).toMatchObject({ topics: ["cinema"], tabs: ["Meu time"], custom: ["Cinema"] });
+    expect(await db.one("SELECT kind, link FROM notifications WHERE user_id = $1 ORDER BY id DESC LIMIT 1", [david.id])).toEqual({ kind: "reuniao", link: "/reunioes" });
     // no dia seguinte o assunto volta: agora vira agente (com só as ferramentas permitidas)
     await db.query("UPDATE user_topics SET last_at = now() - interval '1 day' WHERE user_id = $1", [david.id]);
-    expect(await improveUser(david.id)).toEqual({ created: 1, updated: 0, retired: 0 });
+    // no segundo dia não repete o que já sabe
+    expect(await improveUser(david.id)).toMatchObject({ created: 1, updated: 0, retired: 0, learned: 0 });
+    expect((await db.one("SELECT changes FROM improve_meetings WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1", [david.id])).changes.created).toEqual([
+      { name: "Cinema", persona: "Pipoca", focus: "sessões e estreias em Campinas" },
+    ]);
     const agent = await db.one("SELECT slug, name, tools, persona, face IS NOT NULL AS has_face FROM client_agents WHERE user_id = $1", [david.id]);
     expect(agent).toEqual({ slug: "cinema", name: "Cinema", tools: ["web_search", "fetch_url"], persona: "Pipoca", has_face: true });
     // reunião noturna: jeito de falar, notas só de agentes que existem, abas só do catálogo

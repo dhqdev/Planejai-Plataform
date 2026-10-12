@@ -163,11 +163,11 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
   {
     task: "improve",
     label: "Melhoria diária (19h)",
-    why: "Uma chamada por cliente ativo por dia: lê um resumo do uso e decide se cria ou ajusta agentes. Saída JSON curta.",
+    why: "Uma chamada por cliente ativo por dia: lê um resumo do uso, anota o que aprendeu sobre a pessoa, escreve a ata e decide se cria ou ajusta agentes. Saída JSON.",
     model: "deepseek/deepseek-v4.1-flash",
     fallbacks: ["google/gemini-3.8-flash"],
     temperature: 0.2,
-    maxTokens: 900,
+    maxTokens: 1400,
   },
   {
     task: "proactive",
