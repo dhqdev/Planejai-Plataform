@@ -13,6 +13,8 @@
 .shop-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
 .shop-max { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .shop-max .input { width: 110px; padding: 6px 10px; }
+.shop-variant { display: grid; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; }
+.shop-variant .input { width: 100%; min-width: 0; }
 .shop-stores { margin: 0; font-size: 13px; color: var(--muted); }
 .shop-stores b { color: var(--text); font-weight: 600; }
 
@@ -42,6 +44,8 @@
 .shop-store, .shop-best { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
 .shop-store { background: var(--panel-2); color: var(--muted); }
 .shop-best { background: var(--violet-soft); color: var(--violet); }
+.shop-variant-ok { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--ok-soft); color: var(--ok); }
+.shop-pick { color: var(--text); font-size: 12.5px; }
 .shop-title {
   color: var(--text); font-weight: 550; line-height: 1.3; text-decoration: none; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;

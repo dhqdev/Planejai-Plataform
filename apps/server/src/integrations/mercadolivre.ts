@@ -7,6 +7,8 @@ import { getCredentials, rawCredentials, saveCredentials } from "./registry.js";
  * No app do DevCenter marque o escopo "offline_access" (sem ele não vem refresh token).
  */
 const API = "https://api.mercadolibre.com";
+/** a busca de compras espera as lojas em paralelo: uma loja lenta não pode segurar a resposta */
+const TIMEOUT_MS = 12_000;
 
 export const mercadolivreRedirectUri = () => `${config.PUBLIC_URL.replace(/\/$/, "")}/api/integrations/mercadolivre/oauth/callback`;
 
@@ -24,6 +26,7 @@ async function tokenRequest(body: Record<string, string>) {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: new URLSearchParams(body),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   const j: any = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`Mercado Livre OAuth: ${j.message ?? j.error ?? res.status}`);
@@ -68,7 +71,10 @@ export class MercadoLivreError extends Error {
 }
 
 export async function mercadolivreApi(path: string) {
-  const res = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${await accessToken()}`, Accept: "application/json" } });
+  const res = await fetch(`${API}${path}`, {
+    headers: { Authorization: `Bearer ${await accessToken()}`, Accept: "application/json" },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
   const j: any = await res.json().catch(() => ({}));
   if (!res.ok) throw new MercadoLivreError(`Mercado Livre ${res.status}: ${j.message ?? JSON.stringify(j).slice(0, 200)}`, res.status);
   return j;

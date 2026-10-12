@@ -17,6 +17,8 @@ interface Offer {
   seller?: string;
   rating?: number;
   sold?: number;
+  variant_ok?: boolean;
+  pick?: string;
 }
 interface Search {
   offers: Offer[];
@@ -24,6 +26,10 @@ interface Search {
   failed: string[];
   web?: { title: string; url: string; content?: string }[];
   web_answer?: string;
+  /** o que falta dizer para o link abrir na variação certa ("qual a voltagem (110 ou 220)") */
+  ask?: string[];
+  /** a variação usada nesta busca (vai junto ao guardar) */
+  variant?: string;
 }
 interface Item {
   id: string;
@@ -33,6 +39,7 @@ interface Item {
   link: string | null;
   image: string | null;
   query: string | null;
+  variant: string | null;
   bought_at: string | null;
   created_at: string;
   watch_id: string | null;
@@ -67,6 +74,7 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
   const [q, setQ] = useState("");
   const [condition, setCondition] = useState<"" | "new" | "used">("");
   const [max, setMax] = useState("");
+  const [variant, setVariant] = useState("");
   const [result, setResult] = useState<Search | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -90,7 +98,8 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
       const p = new URLSearchParams({ q: text.trim() });
       if (condition) p.set("condition", condition);
       if (Number(max) > 0) p.set("max", max);
-      setResult(await api<Search>(`/api/compras/busca?${p}`));
+      if (variant.trim()) p.set("variant", variant.trim());
+      setResult({ ...(await api<Search>(`/api/compras/busca?${p}`)), variant: variant.trim() || undefined });
       haptic(8);
     } catch (err) {
       setSearchError((err as Error).message);
@@ -101,7 +110,10 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
 
   const save = async (o: Offer, alert = false) => {
     try {
-      await api("/api/compras/lista", { method: "POST", json: { title: o.title, store: o.store, cents: o.cents, link: o.link, image: o.image, query: q.trim() || o.title, alert } });
+      await api("/api/compras/lista", {
+        method: "POST",
+        json: { title: o.title, store: o.store, cents: o.cents, link: o.link, image: o.image, query: q.trim() || o.title, variant: result?.variant, alert },
+      });
       haptic(10);
       reload();
     } catch (err) {
@@ -144,6 +156,18 @@ export function ComprasPage({ isSuper }: { isSuper?: boolean }) {
           />
           <button className="btn btn-primary" disabled={!q.trim() || searching}>{searching ? "Buscando…" : "Buscar"}</button>
         </form>
+        <label className="shop-variant">
+          <span>Cor, tamanho, voltagem</span>
+          <input
+            className="input"
+            value={variant}
+            onChange={(e) => setVariant(e.target.value)}
+            placeholder="ex.: 42, preto · 220V · 128 GB"
+            maxLength={60}
+            enterKeyHint="search"
+            onKeyDown={(e) => e.key === "Enter" && void search()}
+          />
+        </label>
         <div className="shop-filters">
           <div className="seg" role="radiogroup" aria-label="Condição">
             {([["", "Todos"], ["new", "Novos"], ["used", "Usados"]] as const).map(([v, label]) => (
@@ -222,6 +246,9 @@ function Results({ result, saved, onSave }: { result: Search; saved: Set<string 
   const cheapest = result.offers[0]?.cents;
   return (
     <section className="shop-results" aria-live="polite">
+      {result.ask && result.ask.length > 0 && result.offers.length > 0 && (
+        <p className="shop-warn">Diga {result.ask.join(" e ")} no campo de cima e o link já abre na variação certa.</p>
+      )}
       {result.failed.length > 0 && <p className="shop-warn">Não deu para ver {result.failed.join(" e ")} agora; mostrando o resto.</p>}
       {result.offers.length > 0 ? (
         <ul className="shop-grid">
@@ -235,6 +262,7 @@ function Results({ result, saved, onSave }: { result: Search; saved: Set<string 
                   <div className="shop-tags">
                     <span className="shop-store">{o.store}</span>
                     {o.cents === cheapest && i === 0 && <span className="shop-best">Menor preço</span>}
+                    {o.variant_ok && <span className="shop-variant-ok">Variação certa</span>}
                   </div>
                   <a className="shop-title" href={o.link} target="_blank" rel="noreferrer noopener">{o.title}</a>
                   <div className="shop-price">
@@ -244,6 +272,7 @@ function Results({ result, saved, onSave }: { result: Search; saved: Set<string 
                   <small className="muted">
                     {[o.free_shipping && "Frete grátis", o.seller, o.rating && `${o.rating.toFixed(1)} de nota`, o.sold && `${o.sold.toLocaleString("pt-BR")} vendidos`].filter(Boolean).join(" · ")}
                   </small>
+                  {o.pick && <small className="shop-pick">Na loja, escolha: {o.pick}</small>}
                 </div>
                 <div className="shop-actions">
                   <a className="btn btn-primary btn-sm" href={o.link} target="_blank" rel="noreferrer noopener">
@@ -292,7 +321,7 @@ function ListItem({ it, onAlert, onBought, onRemove }: { it: Item; onAlert?: () 
       <div className="shop-item-main">
         {it.link ? <a href={it.link} target="_blank" rel="noreferrer noopener" className="shop-title">{it.title}</a> : <span className="shop-title">{it.title}</span>}
         <small className="muted">
-          {[it.store, it.cents && `guardado por ${reais(it.cents)}`].filter(Boolean).join(" · ")}
+          {[it.variant, it.store, it.cents && `guardado por ${reais(it.cents)}`].filter(Boolean).join(" · ")}
           {now != null && (
             <>
               {" · "}

@@ -8,6 +8,7 @@ vi.mock("../src/integrations/registry.js", () => ({
   isConnected: async (id: string) => Boolean(creds[id]),
 }));
 const ml: Record<string, unknown> = {};
+const calls: string[] = [];
 vi.mock("../src/integrations/mercadolivre.js", () => ({
   MercadoLivreError: class extends Error {
     constructor(m: string, readonly status: number) {
@@ -15,13 +16,18 @@ vi.mock("../src/integrations/mercadolivre.js", () => ({
     }
   },
   mercadolivreApi: async (path: string) => {
-    const key = Object.keys(ml).find((k) => path.startsWith(k));
+    calls.push(path);
+    // a chave mais longa que casa ganha ("/products/MLB1/items" antes de "/products/MLB1")
+    const key = Object.keys(ml)
+      .sort((a, b) => b.length - a.length)
+      .find((k) => path.startsWith(k));
     if (!key) throw new Error(`sem mock para ${path}`);
     return ml[key];
   },
 }));
 
 const { relevant, searchOffers } = await import("../src/shopping.js");
+const { conflicts, parseWanted, variantQuestions } = await import("../src/variants.js");
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 
@@ -29,6 +35,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   for (const k of Object.keys(creds)) delete creds[k];
   for (const k of Object.keys(ml)) delete ml[k];
+  calls.length = 0;
 });
 
 describe("busca comparada", () => {
@@ -99,5 +106,105 @@ describe("busca comparada", () => {
     expect(r.offers).toEqual([]);
     expect(r.web?.[0]?.url).toBe("https://loja.example/fone");
     expect(r.web_answer).toContain("R$ 200");
+  });
+});
+
+describe("variação certa", () => {
+  it("pergunta o que muda o produto antes de buscar, e só o que falta", () => {
+    expect(variantQuestions("tênis Nike Revolution 7")).toEqual(["qual o número do calçado"]);
+    expect(variantQuestions("tênis Nike Revolution 7 42")).toEqual([]);
+    expect(variantQuestions("air fryer Mondial 4L")).toEqual(["qual a voltagem (110 ou 220)"]);
+    expect(variantQuestions("air fryer Mondial 4L 220v")).toEqual([]);
+    expect(variantQuestions("iPhone 15")).toEqual(["quanta memória (ex.: 128 GB)"]);
+    expect(variantQuestions("capinha iPhone 15")).toEqual([]);
+    expect(variantQuestions("camiseta Hering básica")).toEqual(["qual o tamanho (P, M, G...)"]);
+    expect(variantQuestions("fone JBL Tune 520BT")).toEqual([]);
+    // respondeu (ou disse que tanto faz): busca
+    expect(variantQuestions("tênis Nike Revolution 7", "tanto faz")).toEqual([]);
+  });
+
+  it("lê tamanho, cor, voltagem e memória do jeito que a pessoa escreve", () => {
+    expect(parseWanted("42, preta", true)).toEqual({ size: "42", color: "preto" });
+    expect(parseWanted("220 V", true)).toEqual({ voltage: "220" });
+    expect(parseWanted("110v", true)).toEqual({ voltage: "127" });
+    expect(parseWanted("128 GB azul", true)).toEqual({ capacity: "128gb", color: "azul" });
+    expect(parseWanted("tamanho M", true)).toEqual({ size: "m" });
+  });
+
+  it("anúncio que diz outra voltagem ou memória não serve; bivolt serve para qualquer uma", () => {
+    expect(conflicts({ voltage: "220" }, "Air Fryer Mondial 4L 127V Preta")).toBe(true);
+    expect(conflicts({ voltage: "220" }, "Air Fryer Mondial 4L 220V")).toBe(false);
+    expect(conflicts({ voltage: "220" }, "Air Fryer Mondial 4L Bivolt")).toBe(false);
+    expect(conflicts({ voltage: "220" }, "Air Fryer Mondial 4L")).toBe(false);
+    expect(conflicts({ capacity: "128gb" }, "Apple iPhone 15 (256 GB) - Preto")).toBe(true);
+    expect(conflicts({ capacity: "128gb" }, "Xiaomi Redmi 13 128GB 6GB RAM")).toBe(false);
+  });
+
+  it("leva o link do Mercado Livre para a cor e o tamanho pedidos, com o preço dessa variação", async () => {
+    creds.mercadolivre = { refresh_token: "x" };
+    ml["/sites/MLB/search"] = {
+      results: [{ title: "Tênis Nike Revolution 7 Branco", price: 299.9, permalink: "https://www.mercadolivre.com.br/p/MLB10" }],
+    };
+    const shoe = (id: string, name: string) => ({
+      id,
+      name,
+      pickers: [
+        { picker_id: "COLOR", picker_name: "Cor", products: [{ product_id: "MLB10", picker_label: "Branco" }, { product_id: "MLB20", picker_label: "Preto" }] },
+        {
+          picker_id: "SIZE",
+          picker_name: "Tamanho",
+          products: id === "MLB10" ? [{ product_id: "MLB10", picker_label: "BR 40" }] : [{ product_id: "MLB20", picker_label: "BR 40" }, { product_id: "MLB22", picker_label: "BR 42" }],
+        },
+      ],
+    });
+    ml["/products/MLB10"] = shoe("MLB10", "Tênis Nike Revolution 7 Branco 40");
+    ml["/products/MLB20"] = shoe("MLB20", "Tênis Nike Revolution 7 Preto 40");
+    ml["/products/MLB22"] = { ...shoe("MLB20", "Tênis Nike Revolution 7 Preto 42"), id: "MLB22", pictures: [{ url: "http://http2.mlstatic.com/p.jpg" }] };
+    ml["/products/MLB22/items"] = { results: [{ price: 349.9, condition: "new", shipping: { free_shipping: true } }, { price: 289.9, condition: "used" }] };
+    const r = await searchOffers("tênis Nike Revolution 7", { web: false, variant: "42, preto", condition: "new" });
+    expect(r.offers).toHaveLength(1);
+    expect(r.offers[0]).toMatchObject({
+      link: "https://www.mercadolivre.com.br/p/MLB22",
+      cents: 34_990,
+      variant_ok: true,
+      free_shipping: true,
+      title: "Tênis Nike Revolution 7 Preto 42",
+      image: "https://http2.mlstatic.com/p.jpg",
+    });
+    expect(r.offers[0]!.pick).toBeUndefined();
+  });
+
+  it("tira a oferta quando a loja não tem a variação, e a Shopee diz o que escolher na página", async () => {
+    creds.mercadolivre = { refresh_token: "x" };
+    creds.shopee = { app_id: "123", secret: "s3" };
+    ml["/sites/MLB/search"] = { results: [{ title: "Tênis Nike Revolution 7", price: 299.9, permalink: "https://www.mercadolivre.com.br/p/MLB10" }] };
+    ml["/products/MLB10"] = {
+      id: "MLB10",
+      name: "Tênis Nike Revolution 7",
+      pickers: [{ picker_id: "SIZE", picker_name: "Tamanho", products: [{ product_id: "MLB10", picker_label: "BR 39" }, { product_id: "MLB11", picker_label: "BR 40" }] }],
+    };
+    vi.stubGlobal("fetch", async () =>
+      json({ data: { productOfferV2: { nodes: [{ productName: "Tênis Nike Revolution 7 Masculino", priceMin: "279.90", offerLink: "https://s.shopee.com.br/t" }] } } }),
+    );
+    const r = await searchOffers("tênis Nike Revolution 7", { web: false, variant: "44" });
+    expect(r.offers.map((o) => [o.store, o.pick, o.variant_ok])).toEqual([["Shopee", "tamanho 44", undefined]]);
+  });
+
+  it("corta voltagem errada e preço bom demais para ser verdade", async () => {
+    creds.mercadolivre = { refresh_token: "x" };
+    ml["/sites/MLB/search"] = {
+      results: [
+        { title: "Air Fryer Mondial 4L 127V", price: 289, permalink: "https://produto.mercadolivre.com.br/A" },
+        { title: "Air Fryer Mondial 4L 220V", price: 309, permalink: "https://produto.mercadolivre.com.br/B" },
+        { title: "Air Fryer Mondial 4L Bivolt", price: 329, permalink: "https://produto.mercadolivre.com.br/C" },
+        { title: "Air Fryer Mondial 4L 220V Preta", price: 319, permalink: "https://produto.mercadolivre.com.br/D" },
+        { title: "Air Fryer Mondial 4L 220V Oferta", price: 49, permalink: "https://produto.mercadolivre.com.br/E" },
+      ],
+    };
+    const r = await searchOffers("air fryer Mondial 4L", { web: false, variant: "220V" });
+    expect(r.offers.map((o) => o.cents)).toEqual([30_900, 31_900, 32_900]);
+    // anúncio comum (sem /p/) não troca de variação: diz o que escolher, sem gastar chamada
+    expect(r.offers[0]!.pick).toBe("220V");
+    expect(calls.filter((c) => c.startsWith("/products"))).toEqual([]);
   });
 });

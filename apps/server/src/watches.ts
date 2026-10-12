@@ -21,6 +21,8 @@ export interface WatchInput {
   conversationId: string;
   kind: "price" | "news";
   query: string;
+  /** só preço: a variação (tamanho, cor, voltagem, capacidade) que a busca precisa respeitar */
+  variant?: string | null;
   target?: number | null;
   everyHours?: number;
   days?: number;
@@ -42,10 +44,20 @@ export async function createWatch(w: WatchInput) {
   const n = await one("SELECT COUNT(*)::int AS n FROM watches WHERE user_id = $1 AND active", [w.userId]);
   if (n.n >= MAX_ACTIVE_PER_USER) throw new Error(`Já existem ${n.n} acompanhamentos ativos; cancele algum antes.`);
   return one(
-    `INSERT INTO watches (user_id, conversation_id, kind, query, target, every_hours, next_check_at, expires_at, notify_mode)
-     VALUES ($1,$2,$3,$4,$5,$6, now(), now() + make_interval(days => $7), $8)
-     RETURNING id, kind, query, target, every_hours, expires_at, notify_mode`,
-    [w.userId, w.conversationId, w.kind, w.query.slice(0, 200), w.target ?? null, clampHours(w.kind, w.everyHours), clampDays(w.days), w.notifyMode ?? "always"],
+    `INSERT INTO watches (user_id, conversation_id, kind, query, target, every_hours, next_check_at, expires_at, notify_mode, variant)
+     VALUES ($1,$2,$3,$4,$5,$6, now(), now() + make_interval(days => $7), $8, $9)
+     RETURNING id, kind, query, variant, target, every_hours, expires_at, notify_mode`,
+    [
+      w.userId,
+      w.conversationId,
+      w.kind,
+      w.query.slice(0, 200),
+      w.target ?? null,
+      clampHours(w.kind, w.everyHours),
+      clampDays(w.days),
+      w.notifyMode ?? "always",
+      w.kind === "price" ? w.variant?.trim().slice(0, 60) || null : null,
+    ],
   );
 }
 
@@ -192,10 +204,10 @@ async function checkPrice(w: any): Promise<Outcome> {
   if (!(await isConnected("mercadolivre")) && !(await isConnected("shopee")))
     return { found: false, summary: "não consegui ver os preços agora (nenhuma loja conectada em Integrações)." };
   // Mercado Livre e Shopee juntos, só ofertas que batem com o pedido; sem web (aqui não tem preço garantido)
-  const r = await searchOffers(w.query, { limit: 10, web: false });
+  const r = await searchOffers(w.query, { limit: 10, web: false, variant: w.variant });
   if (!r.offers.length) return { found: false, summary: "não achei anúncio desse produto agora." };
   const o = r.offers[0]!;
-  const best = { title: `${o.title} (${o.store})`, link: o.link, free_shipping: o.free_shipping };
+  const best = { title: `${o.title} (${o.store})${o.pick ? `, na loja escolha ${o.pick}` : ""}`, link: o.link, free_shipping: o.free_shipping };
   const price = o.cents / 100;
   const prev = w.best?.price != null ? Number(w.best.price) : null;
   await query("UPDATE watches SET best = $2 WHERE id = $1", [w.id, { price, title: best.title, link: best.link, at: new Date().toISOString() }]);
@@ -207,7 +219,7 @@ async function checkPrice(w: any): Promise<Outcome> {
   if (!dropped && !hitTarget)
     return { found: false, summary: `nada mais barato por enquanto, o menor segue ${brl(price)}${target != null ? ` (meta ${brl(target)})` : ""}.` };
   const facts =
-    `Produto acompanhado: ${w.query}. Achei agora: "${best.title}" por ${brl(price)} (antes o melhor era ${brl(prev)})` +
+    `Produto acompanhado: ${w.query}${w.variant ? ` (${w.variant})` : ""}. Achei agora: "${best.title}" por ${brl(price)} (antes o melhor era ${brl(prev)})` +
     `${target != null ? `, meta da pessoa: ${brl(target)}` : ""}${best.free_shipping ? ", frete grátis" : ""}. Link: ${best.link}`;
   return {
     found: true,

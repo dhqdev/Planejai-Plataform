@@ -5,6 +5,7 @@ import { hit } from "../../../ratelimit.js";
 import { selfUserId } from "../../../sharing.js";
 import { addItem, listItems, markBought, removeItem, searchOffers, setItemAlert } from "../../../shopping.js";
 import { conversationOf } from "../../../social.js";
+import { variantQuestions } from "../../../variants.js";
 import { isUuid } from "./shared.js";
 
 const fail = (reply: any, err: unknown) => reply.code(400).send({ error: (err as Error).message });
@@ -32,7 +33,7 @@ export function shoppingRoutes(base: FastifyInstance) {
     return { items, stores: { "Mercado Livre": ml, Shopee: shopee }, web: tavily || brave };
   });
 
-  base.get<{ Querystring: { q?: string; condition?: string; max?: string } }>("/api/compras/busca", async (req, reply) => {
+  base.get<{ Querystring: { q?: string; condition?: string; max?: string; variant?: string } }>("/api/compras/busca", async (req, reply) => {
     const uid = await uidOf(req, reply);
     if (!uid) return;
     if ((await hit(`compras:busca:${uid}`, 3600)) > SEARCHES_PER_HOUR) return reply.code(429).send({ error: "Muitas buscas seguidas. Tente de novo daqui a pouco." });
@@ -41,24 +42,26 @@ export function shoppingRoutes(base: FastifyInstance) {
       // pela tela, a busca web só entra com chave (Tavily/Brave): a busca pela IA fica para o WhatsApp, onde passa pelo Tracer
       const { _usage, ...r } = await searchOffers(req.query.q ?? "", {
         limit: 12,
+        variant: req.query.variant?.slice(0, 60),
         condition: req.query.condition === "used" ? "used" : req.query.condition === "new" ? "new" : undefined,
         maxCents: Number.isFinite(max) && max > 0 ? Math.round(max * 100) : undefined,
         web: "keys",
       });
-      return r;
+      // pela tela a busca sai mesmo assim; a pergunta vira uma dica ao lado do campo da variação
+      return { ...r, ask: variantQuestions(req.query.q ?? "", req.query.variant) };
     } catch (err) {
       return fail(reply, err);
     }
   });
 
-  base.post<{ Body: { title?: string; store?: string; cents?: number; link?: string; image?: string; query?: string; alert?: boolean } }>(
+  base.post<{ Body: { title?: string; store?: string; cents?: number; link?: string; image?: string; query?: string; variant?: string; alert?: boolean } }>(
     "/api/compras/lista",
     async (req, reply) => {
       const uid = await uidOf(req, reply);
       if (!uid) return;
       const b = req.body ?? {};
       try {
-        const item = await addItem(uid, { title: b.title ?? "", store: b.store, cents: b.cents, link: b.link, image: b.image, query: b.query });
+        const item = await addItem(uid, { title: b.title ?? "", store: b.store, cents: b.cents, link: b.link, image: b.image, query: b.query, variant: b.variant });
         if (b.alert) await setItemAlert(uid, item.id, await convOf(uid), { on: true });
         return item;
       } catch (err) {

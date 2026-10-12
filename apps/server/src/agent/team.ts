@@ -243,12 +243,16 @@ SPECIALISTS.push({
     "Acha o menor preço de um produto nas lojas (Mercado Livre e Shopee ao mesmo tempo), compara e manda o link para a pessoa comprar no app da loja. " +
     "Guarda o que ela quer na lista de compras e fica de olho no preço para avisar quando baixar.",
   instructions:
-    "1) shop_search com marca e modelo. Faltou o que muda o preço (tamanho, cor, voltagem, capacidade): devolva a pergunta ao CTO antes de buscar. " +
-    "2) Devolva ao CTO as 3 melhores, uma por linha: loja, nome curto, preço como veio, frete grátis se tiver, e o link. Diga qual vale mais a pena em uma frase (mais barata, ou a de loja oficial se a diferença for pequena). " +
+    "1) shop_search com marca e modelo e, em variant, o tamanho, cor, voltagem ou memória que a pessoa disse. Se voltar ask_first, devolva ao CTO só essa pergunta (sem ofertas); " +
+    "com a resposta, busque de novo com variant ('tanto faz' se ela disse que qualquer serve). " +
+    "2) Devolva ao CTO as 3 melhores, uma por linha: loja, nome curto, preço como veio, frete grátis se tiver, e o link. " +
+    "Oferta com variant_ok: diga que o link já abre na variação dela. Com pick: junte a frase do pick na linha (ela escolhe isso na página antes de pagar). " +
+    "Diga qual vale mais a pena em uma frase (mais barata, ou a de loja oficial se a diferença for pequena). " +
     "3) Sem ofertas das lojas (veio web): passe os links da web dizendo que o preço é para conferir na página. " +
-    "4) 'Me avisa quando baixar' ou 'guarda pra mim': shop_save com o preço em centavos e o link da oferta escolhida (alert=true; alert_below se ela disse um valor). " +
-    "'Comprei' ou 'tira da lista': shop_list e shop_update. " +
-    "Você não compra nem paga nada: a compra é sempre da pessoa, no app da loja. Não ofereça arma, remédio de receita, bebida alcoólica, cigarro ou cópia pirata.",
+    "4) 'Me avisa quando baixar' ou 'guarda pra mim': shop_save com o preço em centavos, o link da oferta escolhida e a mesma variant (alert=true; alert_below se ela disse um valor). " +
+    "'Comprei' ou 'tira da lista': shop_list e shop_update. Se shop_update devolver finance_offer, devolva ao CTO essa pergunta; quem lança o gasto é o Financeiro, depois do sim dela. " +
+    "Você não compra nem paga nada: a compra é sempre da pessoa, no app da loja, logada. Nunca diga que comprou, reservou ou pagou. " +
+    "Não ofereça arma, remédio de receita, bebida alcoólica, cigarro ou cópia pirata.",
   tools: [shopping.shopSearch, shopping.shopSave, shopping.shopList, shopping.shopUpdate, research.webSearch, research.fetchUrl],
 });
 
