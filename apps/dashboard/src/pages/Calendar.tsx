@@ -4,6 +4,7 @@ import { api } from "../api";
 import { ErrorBox, Modal, alertDialog, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
+import { DateField, TimeField } from "../pickers";
 import { haptic } from "../touch";
 
 /**
@@ -951,8 +952,8 @@ function NewReminder({ at, tags, onClose }: { at: Date; tags: Tag[]; onClose: (s
         <textarea id="rm-intent" name="intent" className="input" rows={2} value={f.intent} onChange={(e) => setF({ ...f, intent: e.target.value })} placeholder="Ligar para o dentista…" />
       </div>
       <div className="grid grid-2" style={{ gap: 10 }}>
-        <div className="field"><label htmlFor="rm-date">Dia</label><input id="rm-date" name="date" className="input" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></div>
-        <div className="field"><label htmlFor="rm-time">Hora</label><input id="rm-time" name="time" className="input" type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} /></div>
+        <div className="field"><label htmlFor="rm-date">Dia</label><DateField id="rm-date" title="Dia do lembrete" value={f.date} onChange={(date) => setF({ ...f, date })} /></div>
+        <div className="field"><label htmlFor="rm-time">Hora</label><TimeField id="rm-time" title="Hora do lembrete" value={f.time} onChange={(time) => setF({ ...f, time })} /></div>
       </div>
       <TagPicker tags={tags} tag={f.tag} color={f.color} onChange={(tag, color) => setF({ ...f, tag, color })} />
       <p className="muted" style={{ fontSize: 13, margin: 0 }}>Sem tag, o assistente escolhe pelo assunto. Na hora, ele manda a mensagem no WhatsApp com o contexto.</p>

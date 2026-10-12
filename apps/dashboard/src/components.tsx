@@ -74,7 +74,8 @@ type ModalProps = {
   title: string;
   icon?: ReactNode;
   onClose: () => void;
-  children?: ReactNode;
+  /** Como função recebe o "fechar" animado (para fechar depois de escolher algo, como no seletor de dia). */
+  children?: ReactNode | ((close: () => void) => ReactNode);
   /** Rodapé; como função recebe o "fechar" animado (para botões como Cancelar). */
   footer?: ReactNode | ((close: () => void) => ReactNode);
   wide?: boolean;
@@ -430,7 +431,7 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
             <Icon name="x" size={16} />
           </button>
         </div>
-        <div className="modal-body" id={bodyId}>{children}</div>
+        <div className="modal-body" id={bodyId}>{typeof children === "function" ? children(close) : children}</div>
         {footer && <div className="modal-foot">{typeof footer === "function" ? footer(close) : footer}</div>}
       </div>
     </div>,

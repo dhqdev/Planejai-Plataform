@@ -3,6 +3,7 @@ import { api, brl, day } from "../api";
 import { CATEGORY_COLORS, Donut, Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
+import { DateField, isoDate } from "../pickers";
 import { useLongPress } from "../ios";
 import { haptic } from "../touch";
 import { ReportModal } from "./FinanceReport";
@@ -445,7 +446,7 @@ function TransactionForm({ initial, onClose }: { initial?: any; onClose: () => v
     amount: initial ? String(initial.amount).replace(".", ",") : "",
     category: initial?.category ?? "",
     description: initial?.description ?? "",
-    date: (initial ? new Date(initial.occurred_at) : new Date()).toISOString().slice(0, 10),
+    date: isoDate(initial ? new Date(initial.occurred_at) : new Date()),
     card_id: (initial?.card_id as string | null) ?? "",
     installments: 1,
   });
@@ -509,7 +510,7 @@ function TransactionForm({ initial, onClose }: { initial?: any; onClose: () => v
           {f.installments > 1 ? "1ª parcela na" : "Cai na"} fatura de {invoiceMonthLabel(firstInvoice)}
         </p>
       )}
-      <div className="field"><label htmlFor="tx-date">Data</label><input id="tx-date" name="date" className="input" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></div>
+      <div className="field"><label htmlFor="tx-date">Data</label><DateField id="tx-date" title="Data do lançamento" presets="passado" value={f.date} onChange={(date) => setF({ ...f, date })} /></div>
       <ErrorBox error={error} />
     </Modal>
   );

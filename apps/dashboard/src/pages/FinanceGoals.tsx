@@ -3,6 +3,7 @@ import { api, brl } from "../api";
 import { ErrorBox, Modal, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
+import { DateField, isoDate } from "../pickers";
 import { haptic } from "../touch";
 
 /** Valores da API em centavos (target, saved, left, perMonth) ao lado dos campos originais da meta. */
@@ -131,7 +132,7 @@ function GoalForm({ initial, onClose, onWithdraw }: { initial: Goal | null; onCl
         </div>
         <div className="field">
           <label htmlFor="gl-deadline">Até quando (opcional)</label>
-          <input id="gl-deadline" className="input" type="date" value={f.deadline} onChange={(e) => setF({ ...f, deadline: e.target.value })} />
+          <DateField id="gl-deadline" title="Até quando" presets="prazo" clearable placeholder="Sem prazo" min={isoDate(new Date())} value={f.deadline} onChange={(deadline) => setF({ ...f, deadline })} />
         </div>
         {!initial && (
           <div className="field">
