@@ -71,7 +71,7 @@ export const SPECIALISTS: AgentDef[] = [
     icon: "search",
     role:
       "Pesquisa qualquer coisa atual na internet: sessões de cinema, restaurantes, notícias, endereços, horários, lugares perto da pessoa, " +
-      "informações e avaliações de produtos. Abre páginas e tira print de páginas para mandar como foto. Menor preço para comprar é com Compras.",
+      "informações e avaliações de produtos, acompanhamentos (De olho: listar, ajustar, parar). Abre páginas e tira print de páginas para mandar como foto. Menor preço para comprar é com Compras.",
     instructions:
       "Seja rápido e econômico: na maioria das vezes um web_search resolve; só abra a página (fetch_url) se o resumo da busca não trouxer o dado. " +
       "Lugar perto ('petshop mais perto', 'farmácia aqui perto'): places_nearby com o endereço da pessoa, uma chamada só; traga só o que foi pedido " +
@@ -97,6 +97,10 @@ export const SPECIALISTS: AgentDef[] = [
       images.makeImage,
       images.getPicture,
       pdf.makePdf,
+      social.watchCreate,
+      social.watchList,
+      social.watchUpdate,
+      social.watchCancel,
     ],
   },
   {
@@ -105,7 +109,7 @@ export const SPECIALISTS: AgentDef[] = [
     face: { color: 2, eyes: "happy", mouth: "smile", extra: "bow" },
     name: "Agenda",
     icon: "calendar",
-    role: "Lembretes (únicos ou recorrentes), compromissos e Google Agenda: criar, listar, mudar o horário, cancelar, ver o que tem no dia.",
+    role: "Lembretes (únicos ou recorrentes), alarmes, compromissos e Google Agenda: criar, listar, mudar o horário, cancelar, ver o que tem no dia.",
     instructions:
       "Converta pedidos de tempo relativo com cuidado usando a data/hora atual informada. Para 'daqui X minutos' use in_minutes. " +
       "O intent do lembrete deve ter contexto suficiente para o CTO escrever uma mensagem natural na hora (quem pediu, o porquê, detalhes). " +
@@ -117,6 +121,9 @@ export const SPECIALISTS: AgentDef[] = [
       agenda.cancelReminderTool,
       agenda.calendarListEvents,
       agenda.calendarCreateEvent,
+      agenda.setAlarm,
+      agenda.alarmList,
+      agenda.alarmCancel,
       core.getDatetime,
     ],
   },
@@ -182,10 +189,31 @@ export const SPECIALISTS: AgentDef[] = [
     face: { color: 1, eyes: "wink", mouth: "cat", extra: "headset" },
     name: "Comunicação",
     icon: "mail",
-    role: "E-mail (Gmail) e Slack: buscar, ler, resumir, redigir e enviar mensagens.",
+    role:
+      "Mensagens em nome da pessoa: WhatsApp para contatos e para qualquer número (agora ou agendada, com foto ou arquivo), mensagens agendadas, convites, " +
+      "contatos e liberar telas para um contato; e-mail (Gmail) e Slack: buscar, ler, resumir, redigir e enviar.",
     instructions:
-      "Para enviar, chame a ferramenta com o texto final: o sistema guarda e só envia depois do sim da pessoa. Devolva ao CTO o resumo do que vai sair para ele perguntar.",
-    tools: [comm.gmailSearch, comm.gmailRead, comm.gmailSend, comm.slackListChannels, comm.slackReadChannel, comm.slackSendMessage],
+      "Para enviar, chame a ferramenta com o texto final: o sistema guarda e só envia depois do sim da pessoa. Devolva ao CTO o resumo do que vai sair para ele perguntar. " +
+      "Pelo nome ('manda pra Ana'): contacts_search antes de pedir o número; se vier approximate, devolva ao CTO para confirmar quem é. " +
+      "Contato do Planejai: send_to_contact; qualquer outro número: send_whatsapp (não convida nem cria contato). Com hora: agende com at na própria ferramenta, nunca troque por lembrete. " +
+      "Arquivo junto: attach=true (o que ela mandou ou o assistente fez agora) ou document_id. Convite (invite_person) só com nome e número confirmados.",
+    tools: [
+      direct.contactsSearch,
+      social.sendToContact,
+      direct.sendWhatsapp,
+      direct.contactSave,
+      direct.directList,
+      direct.directCancel,
+      social.invitePerson,
+      social.listContactsTool,
+      social.shareScreen,
+      comm.gmailSearch,
+      comm.gmailRead,
+      comm.gmailSend,
+      comm.slackListChannels,
+      comm.slackReadChannel,
+      comm.slackSendMessage,
+    ],
   },
   {
     id: "produtividade",
@@ -262,8 +290,9 @@ SPECIALISTS.push({
 });
 
 /**
- * Ferramentas do CTO. Além do núcleo da conversa, ele tem atalhos para o que é simples e frequente
- * (anotar um gasto, um lembrete, uma conta), que resolve sem acionar o time e gasta menos token.
+ * Ferramentas do CTO que vão em toda chamada: o núcleo da conversa e os atalhos para o que é simples e frequente
+ * (anotar um gasto, um lembrete, uma conta), que ele resolve sem acionar o time e gasta menos token.
+ * O resto entra só quando a mensagem pede (CTO_TOOL_GROUPS), porque cada definição é paga em toda chamada.
  */
 export const CTO_TOOLS: Tool[] = [
   core.reactToMessage,
@@ -273,45 +302,56 @@ export const CTO_TOOLS: Tool[] = [
   core.readDocument,
   finance.addTransaction,
   finance.calculate,
-  finance.setBudget,
   finance.makeChart,
   bills.billPay,
-  cards.cardInvoicePay,
-  images.makeImage,
-  images.getPicture,
-  images.sendGif,
-  pdf.makePdf,
-  audio.makeAudio,
   places.placesNearby,
   research.mapRoute,
   research.webSearch,
   documents.documentSave,
   documents.documentList,
   documents.documentSend,
-  documents.documentDelete,
   agenda.scheduleReminder,
   agenda.setAlarm,
-  agenda.alarmList,
-  agenda.alarmCancel,
   agenda.calendarCreateEvent,
-  social.sendToContact,
-  direct.sendWhatsapp,
-  direct.contactsSearch,
-  direct.contactSave,
-  direct.directList,
-  direct.directCancel,
-  social.listContactsTool,
-  social.invitePerson,
-  social.shareScreen,
   social.watchCreate,
-  social.watchList,
-  social.watchCancel,
-  social.watchUpdate,
   errands.errandContinue,
-  errands.errandList,
-  errands.errandCancel,
   support.contactOwner,
 ];
+
+/**
+ * Ferramentas do CTO que só entram quando a mensagem (ou a última fala dele) toca no assunto. Sem o grupo,
+ * o CTO ainda chega lá pelo especialista que também tem essas ferramentas (ver a linha "Sem a ferramenta" no prompt).
+ */
+export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
+  {
+    id: "mensagens",
+    when: /(?<!\p{L})(mand|envi|mensage|msg|recado|avis[ae] (o|a|pr)|fala (pr|com)|diz(er|e)? (pr|que)|convi|contato|n[uú]mero|whats|zap|agendad)|te mandou|\d{8,}|\(\d{2}\)/iu,
+    tools: [social.sendToContact, direct.sendWhatsapp, direct.contactsSearch, direct.contactSave, direct.directList, direct.directCancel, social.invitePerson],
+  },
+  {
+    id: "midia",
+    when: /(?<!\p{L})(imag|foto|figura|desenh|ilustr|mapa mental|tabela|card|pdf|relat[oó]rio|apostila|e-?book|livro|documento|resum|[aá]udio|voz|ouvir|l[eê] (pra|para) mim|gif|passo a passo|cart[aã]z|logo)/iu,
+    tools: [images.makeImage, images.getPicture, images.sendGif, pdf.makePdf, audio.makeAudio],
+  },
+  {
+    id: "contatos",
+    when: /(?<!\p{L})(contatos?|liber|compartilh|acesso|tira (o|a) )/iu,
+    tools: [social.listContactsTool, social.shareScreen],
+  },
+  { id: "acompanhamentos", when: /(?<!\p{L})(de olho|acompanh|monitor|avis\w* quando)/iu, tools: [social.watchList, social.watchCancel, social.watchUpdate] },
+  { id: "alarmes", when: /(?<!\p{L})(alarme|despert|acord)/iu, tools: [agenda.alarmList, agenda.alarmCancel] },
+  { id: "dinheiro", when: /(?<!\p{L})(limite|or[çc]amento|teto|no m[aá]ximo|fatura|cart[aã]o)/iu, tools: [finance.setBudget, cards.cardInvoicePay] },
+  { id: "recados", when: /(?<!\p{L})(recado|estabelecimento)/iu, tools: [errands.errandList, errands.errandCancel] },
+  { id: "documentos", when: /(?<!\p{L})(apag|exclu|delet|remov)\w*.{0,40}\b(document|arquivo|pdf|contrato)/iu, tools: [documents.documentDelete] },
+];
+
+/** Assunto do time sob medida (team_create_agent e companhia, em tools/team.ts). */
+export const TEAM_TOOLS_WHEN = /\b(agente|especialista|time|equipe)\b/i;
+
+/** Grupos de CTO_TOOL_GROUPS que este texto pede. */
+export function ctoGroups(text: string) {
+  return CTO_TOOL_GROUPS.filter((g) => g.when.test(text));
+}
 
 export const CTO: Omit<AgentDef, "tools"> = {
   id: "cto",

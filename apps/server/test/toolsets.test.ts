@@ -1,0 +1,42 @@
+import { describe, expect, it } from "vitest";
+import { ctoGroups, CTO_TOOL_GROUPS, CTO_TOOLS, SPECIALISTS, TEAM_TOOLS_WHEN } from "../src/agent/team.js";
+
+const ids = (t: string) => ctoGroups(t).map((g) => g.id);
+
+describe("ferramentas do CTO por assunto", () => {
+  it("mensagem comum não carrega grupo nenhum", () => {
+    for (const t of ["quanto gastei com mercado esse mês?", "gastei 30 no almoço", "me lembra de pagar a luz amanhã às 9", "qual o petshop mais perto?", "bom dia!"]) {
+      expect(ids(t), t).toEqual([]);
+    }
+  });
+
+  it("o assunto traz o grupo certo", () => {
+    expect(ids("manda pro João que eu chego às 8")).toContain("mensagens");
+    expect(ids("fala pra ele que topo")).toContain("mensagens");
+    expect(ids("*Giovani* te mandou pelo Planejai: bora?")).toContain("mensagens");
+    expect(ids("avisa a Ana às 7h que a reunião mudou")).toContain("mensagens");
+    expect(ids("me faz um PDF com o resumo do livro")).toContain("midia");
+    expect(ids("me manda um áudio contando uma história")).toContain("midia");
+    expect(ids("cria uma imagem de um gato astronauta")).toContain("midia");
+    expect(ids("libera minhas finanças pro Giovani")).toContain("contatos");
+    expect(ids("tira o Giovani da minha agenda")).toContain("contatos");
+    expect(ids("para de ficar de olho no iphone")).toContain("acompanhamentos");
+    expect(ids("cancela o alarme de amanhã")).toContain("alarmes");
+    expect(ids("no máximo 600 com restaurante")).toContain("dinheiro");
+    expect(ids("paguei a fatura do nubank")).toContain("dinheiro");
+    expect(ids("apaga o documento do contrato")).toContain("documentos");
+    expect(TEAM_TOOLS_WHEN.test("cria um agente pra cuidar do meu treino")).toBe(true);
+    expect(TEAM_TOOLS_WHEN.test("quanto tá o dólar?")).toBe(false);
+  });
+
+  it("toda ferramenta que sai do CTO tem um especialista que também faz (ou é do próprio CTO)", () => {
+    const core = new Set(CTO_TOOLS.map((t) => t.name));
+    const team = new Set(SPECIALISTS.flatMap((s) => s.tools.map((t) => t.name)));
+    // make_audio e send_gif não têm especialista: o grupo de mídia pega "áudio" e "gif" pela palavra
+    const own = new Set(["make_audio", "send_gif", "document_delete"]);
+    for (const t of CTO_TOOL_GROUPS.flatMap((g) => g.tools)) {
+      expect(core.has(t.name), `${t.name} não pode estar no núcleo e num grupo`).toBe(false);
+      expect(team.has(t.name) || own.has(t.name), `${t.name} sem especialista`).toBe(true);
+    }
+  });
+});

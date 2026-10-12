@@ -3,7 +3,7 @@ import type { ChatMessage } from "../llm/types.js";
 import { isOwner } from "../ingest.js";
 import { asPerson } from "../integrations/person.js";
 import { isOwnerOnly, personOf } from "./runner.js";
-import { CLIENT_AGENT_TOOLS, CTO_TOOLS, SPECIALISTS } from "./team.js";
+import { CLIENT_AGENT_TOOLS, CTO_TOOL_GROUPS, CTO_TOOLS, SPECIALISTS } from "./team.js";
 import type { Tool, ToolContext } from "./tools/types.js";
 
 /** Pedido de confirmação vale por este tempo; depois a pessoa precisa pedir de novo. */
@@ -49,7 +49,7 @@ export async function openPending(conversationId: string): Promise<PendingAction
 
 let registry: Map<string, Tool> | null = null;
 function toolByName(name: string) {
-  registry ??= new Map([...CTO_TOOLS, ...SPECIALISTS.flatMap((s) => s.tools), ...Object.values(CLIENT_AGENT_TOOLS)].map((t) => [t.name, t]));
+  registry ??= new Map([...CTO_TOOLS, ...CTO_TOOL_GROUPS.flatMap((g) => g.tools), ...SPECIALISTS.flatMap((s) => s.tools), ...Object.values(CLIENT_AGENT_TOOLS)].map((t) => [t.name, t]));
   return registry.get(name);
 }
 

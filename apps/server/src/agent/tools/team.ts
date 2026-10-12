@@ -29,9 +29,8 @@ export const teamCreateAgent = defineTool<{
 }>({
   name: "team_create_agent",
   description:
-    "Cria um especialista novo só para esta pessoa (ou refaz um que ela já tem com o mesmo nome). Use quando ela pedir um agente " +
-    "ou quando um assunto dela volta sempre e pede um jeito próprio de atender (treino, dieta, uma loja, um projeto, estudos). Não crie para pedido avulso. " +
-    "Com first_task ele já faz a primeira tarefa agora e devolve o relatório; nas próximas mensagens aparece como ask_c_<nome>. " +
+    "Cria (ou refaz com o mesmo nome) um especialista só desta pessoa, para um assunto que volta sempre (treino, dieta, loja, estudos). " +
+    "Com first_task ele já trabalha agora; depois vira ask_c_<nome>. " +
     `Ferramentas possíveis: ${TOOL_NAMES.join(", ")}.`,
   parameters: obj(
     {
@@ -40,7 +39,7 @@ export const teamCreateAgent = defineTool<{
       focus: { type: "string", description: "Uma frase: do que ele cuida para esta pessoa" },
       instructions: {
         type: "string",
-        description: "3 a 6 frases práticas: o que ela costuma querer, preferências (cidade, marcas, faixa de preço, horários), onde buscar e como entregar",
+        description: "3 a 6 frases: o que ela costuma querer, preferências, onde buscar e como entregar",
       },
       tools: { type: "array", items: { type: "string" }, description: "Só as que ele precisa mesmo (1 a 6)" },
       first_task: { type: "string", description: "Tarefa completa para ele fazer já (opcional)" },

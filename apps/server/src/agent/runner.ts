@@ -108,13 +108,15 @@ export async function runToolLoop(opts: {
   task: string;
   messages: ChatMessage[];
   tools: Tool[];
+  /** ferramentas que rodam se o modelo chamar pelo nome (ex.: viu no histórico), mas não vão na lista paga a cada chamada */
+  hiddenTools?: Tool[];
   ctx: ToolContext;
   maxSteps?: number;
 }): Promise<LoopResult> {
   const { ctx, agent } = opts;
   const messages = [...opts.messages];
   const specs = toSpecs(opts.tools);
-  const byName = new Map(opts.tools.map((t) => [t.name, t]));
+  const byName = new Map([...(opts.hiddenTools ?? []), ...opts.tools].map((t) => [t.name, t]));
   const choice = await resolveModel(opts.task);
   const maxSteps = opts.maxSteps ?? 8;
 

@@ -117,7 +117,10 @@ export function needsChrome(_def: { id: string }, ...texts: (string | undefined)
 async function toolsFor(def: AgentDef, chain: string[], ctx: ToolContext, request?: string) {
   let own = await availableTools(def.tools, ctx.user);
   if (!needsChrome(def, ctx.inboundText, ctx.typedText, request)) own = own.filter((t) => !CHROME_TOOL.test(t.name));
-  const peers = chain.length < MAX_CHAIN ? ctx.room.team.filter((s) => s.id !== def.id && !chain.includes(s.id)).map(consultTool) : [];
+  // colegas consultáveis: só os fixos. Agente sob medida é de um assunto da pessoa e o CTO chama direto; com 6 deles
+  // cada especialista pagaria 13 consult_ em toda chamada
+  const peers =
+    chain.length < MAX_CHAIN ? ctx.room.team.filter((s) => !s.clientAgentId && s.id !== def.id && !chain.includes(s.id)).map(consultTool) : [];
   return { own, all: [...own, ...peers, shareTool()] };
 }
 

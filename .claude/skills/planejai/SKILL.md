@@ -132,7 +132,7 @@ docs/operacao.md           segredos, backup/restore, rollback, saúde
 1. Crie com `defineTool` no arquivo do domínio em `agent/tools/` (JSON Schema em `parameters`, use `obj()`). Descrição curta: a definição vai em **toda** chamada do agente; regra de comportamento mora no prompt, e guia longo (como o formato do n8n) volta no resultado quando o agente precisa (ex.: `automation_save` com `nodes=[]`).
 2. Se depende de conector, ponha `integration: "<id>"`: a tool some do agente enquanto não estiver conectada.
 3. Ação com dinheiro, que fala com terceiros ou apaga: inclua `...CONFIRM_PARAM` (marcador vazio: não manda nada ao modelo) e comece com `const c = await requireConfirmation(args, resumo, ctx); if (c) return c;`. O servidor guarda e só executa depois do "sim" da pessoa (ver `agentes.md`). Se só lê, confira se o nome cai em `NO_SIDE_EFFECT` (`orchestrator.ts`).
-4. Registre a tool no especialista certo em `agent/team.ts` (ou em `CTO_TOOLS` se for núcleo da conversa).
+4. Registre a tool no especialista certo em `agent/team.ts`. Para o CTO: `CTO_TOOLS` só se for frequente; senão no grupo do assunto em `CTO_TOOL_GROUPS` (ver `agentes.md`, "Ferramentas do CTO por assunto").
 5. Imagens para enviar: `ctx.outbox.addMedia(...)` e devolva o `media_id`; o CTO posiciona com `[[media:ID]]`.
 6. Se a tool chama um LLM, devolva `_usage` (o `ChatResult`) para o custo entrar no log.
 7. Se a resposta pode dizer "fiz" por causa dela (anotei, apaguei, agendei), acrescente o nome na regra certa de `CLAIMS` (`agent/claims.ts`).

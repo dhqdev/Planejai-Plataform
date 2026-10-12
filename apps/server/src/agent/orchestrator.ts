@@ -10,7 +10,7 @@ import { delegationTool, TeamRoom } from "./collab.js";
 import { ctoSystemPrompt } from "./prompts.js";
 import { availableTools, OWNER_INTEGRATIONS, personOf, runToolLoop } from "./runner.js";
 import { asPerson } from "../integrations/person.js";
-import { clientAgents, CTO_TOOLS, SPECIALISTS, type AgentDef } from "./team.js";
+import { clientAgents, ctoGroups, CTO_TOOL_GROUPS, CTO_TOOLS, SPECIALISTS, TEAM_TOOLS_WHEN, type AgentDef } from "./team.js";
 import { TEAM_TOOLS } from "./tools/team.js";
 import { finishBrowser } from "./tools/research.js";
 import { Guard, GuardTimeout, redactSecrets } from "./guard.js";
@@ -394,7 +394,14 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     await asPerson(personOf(user), async () => {
       for (const i of INTEGRATIONS) if ((owner || !OWNER_INTEGRATIONS.has(i.id)) && !(await isConnected(i.id))) disconnected.push(i.name);
     });
+    // ferramentas e regras que só entram quando o assunto aparece (cada definição é paga em toda chamada):
+    // o que chegou agora e a última fala do assistente ("quer que eu mande pro João?" -> "pode")
+    const lastSaid = [...past].reverse().find((e) => e.role === "assistant")?.text ?? "";
+    const topicText = `${fresh.map((e) => e.text).join(" ")}\n${lastSaid.slice(-400)}`;
+    const groups = ctoGroups(topicText);
+    const wantsTeam = TEAM_TOOLS_WHEN.test(topicText);
     const system = ctoSystemPrompt({
+      groups: new Set([...groups.map((g) => g.id), ...(wantsTeam ? ["time"] : [])]),
       settings,
       user,
       timezone,
@@ -428,7 +435,10 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     };
     // "manda essa foto pro João" pode vir na mensagem seguinte: a última mídia fica um tempo no Redis
     await rememberInboundMedia(conversationId, ctx.inboundFiles);
-    const tools = [...(await availableTools(CTO_TOOLS, user)), ...TEAM_TOOLS, ...team.map(delegationTool)];
+    // ordem estável primeiro (núcleo + time): o prefixo igual entre mensagens sai mais barato no cache do provedor
+    const extra = [...groups.flatMap((g) => g.tools), ...(wantsTeam ? TEAM_TOOLS : [])];
+    const tools = [...(await availableTools(CTO_TOOLS, user)), ...team.map(delegationTool), ...(await availableTools(extra, user))];
+    const hiddenTools = (await availableTools([...CTO_TOOL_GROUPS.flatMap((g) => g.tools), ...TEAM_TOOLS], user)).filter((t) => !extra.includes(t));
     // "sim"/"não" da pessoa para a ação guardada: o servidor executa (ou descarta) antes do CTO responder
     const confirmNotes = await resolvePending(
       waiting,
@@ -439,7 +449,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     try {
       // comprovante na foto vira despesa na hora, sem depender do modelo lembrar
       const receiptNotes = !proactive ? await autoLaunchReceipts(pending, ctx) : [];
-      result = await runToolLoop({ agent: "cto", task: "agent:cto", ctx, tools, messages: [{ role: "system", content: system }, ...messages, ...confirmNotes, ...receiptNotes], maxSteps: 10 });
+      result = await runToolLoop({ agent: "cto", task: "agent:cto", ctx, tools, hiddenTools, messages: [{ role: "system", content: system }, ...messages, ...confirmNotes, ...receiptNotes], maxSteps: 10 });
     } finally {
       // navegador esquecido aberto: fecha e, se a pessoa pediu a gravação, manda junto
       if (ctx.room.browser) await finishBrowser(ctx).catch(() => {});
@@ -453,7 +463,8 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
         agent: "cto",
         task: "agent:cto",
         ctx,
-        tools,
+        // a correção pode precisar de qualquer ferramenta dele ("mandei" sem ter mandado)
+        tools: [...tools, ...hiddenTools],
         maxSteps: 5,
         messages: [
           ...result.messages,
