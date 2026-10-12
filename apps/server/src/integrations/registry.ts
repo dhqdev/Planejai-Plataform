@@ -203,6 +203,19 @@ export const INTEGRATIONS: IntegrationDef[] = [
     },
   },
   {
+    id: "giphy",
+    name: "Giphy",
+    description: "GIFs nas respostas do WhatsApp e do Telegram, em momentos leves (comemoração, bom dia). Sem ela, o assistente usa só emojis e as figurinhas do Mochi.",
+    category: "Comunicação",
+    icon: "gif",
+    docsUrl: "https://developers.giphy.com/dashboard/",
+    fields: [{ key: "api_key", label: "API key", type: "password", required: true, help: 'Em developers.giphy.com > Create an App > "API" (não SDK) e copie a chave. A chave de teste já serve para pouco uso.' }],
+    test: async (c) => {
+      const j = await okJson(await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${encodeURIComponent(c.api_key!)}&q=oi&limit=1&rating=g`, { signal: timed() }), "Giphy");
+      return `GIFs funcionando (${(j.data ?? []).length} resultado)`;
+    },
+  },
+  {
     id: "brave",
     name: "Brave Search",
     description: "Busca na web alternativa à Tavily.",

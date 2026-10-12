@@ -26,8 +26,8 @@ export interface InboundMessage {
 }
 
 export interface OutboundImage {
-  /** padrão "image" */
-  kind?: "image" | "video" | "document" | "audio";
+  /** padrão "image"; "sticker" = figurinha webp 512x512 */
+  kind?: "image" | "video" | "document" | "audio" | "sticker";
   base64?: string;
   url?: string;
   mimetype?: string;
@@ -35,6 +35,8 @@ export interface OutboundImage {
   fileName?: string;
   /** áudio: true = mensagem de voz (bolinha do WhatsApp), Ogg/Opus */
   ptt?: boolean;
+  /** vídeo curto que roda em loop, sem som (GIF do WhatsApp) */
+  gif?: boolean;
   seconds?: number;
   /** áudio: o texto falado, para a memória curta saber o que foi dito */
   spoken?: string;

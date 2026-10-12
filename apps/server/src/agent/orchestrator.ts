@@ -23,6 +23,7 @@ import { unbackedClaim } from "./claims.js";
 import { openPending, resolvePending } from "./confirm.js";
 import { Progress } from "./progress.js";
 import { humanize } from "./humanize.js";
+import { placeStickers } from "./stickers.js";
 import { isAckOnly, pickReaction } from "./reaction.js";
 import { matchQuick, quickAnswer } from "./quick.js";
 import { Tracer } from "./trace.js";
@@ -54,9 +55,10 @@ export function toWhatsApp(text: string) {
     .replace(/\*\*(.+?)\*\*/g, "*$1*")
     .replace(/__(.+?)__/g, "_$1_")
     .replace(/^#{1,6}\s+(.+)$/gm, "*$1*")
+    .replace(/[ \t]*\[\[figurinha:[^\]]*\]\]/gi, "")
     .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, (_m, label, url) => (label === url ? url : `${label}: ${url}`))
     .trim();
-  return humanize(out);
+  return humanize(out, { bullets: true });
 }
 
 export type Bubble = { type: "text"; text: string } | { type: "media"; id: string };
@@ -506,7 +508,9 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       result.text = `${result.text.replace(/^\[\[sil[eê]ncio\]\]$/i, "").trim()}\n\n👉 Responda *sim* para eu ${what}`.trim();
     }
     const silent = !result.text || /^\[\[sil[eê]ncio\]\]$/i.test(result.text.trim());
-    const bubbles = silent ? [] : splitBubbles(result.text);
+    // [[figurinha:nome]] vira uma figurinha do Mochi num balão próprio
+    const withStickers = silent ? "" : placeStickers(result.text, conversationId, (base64) => outbox.addMedia({ kind: "sticker", base64, mimetype: "image/webp" }));
+    const bubbles = silent ? [] : splitBubbles(withStickers);
     // mídia que o CTO não posicionou vai depois do primeiro balão
     const placed = new Set(bubbles.filter((b) => b.type === "media").map((b) => (b as { id: string }).id));
     const unplaced = [...outbox.media.keys()].filter((id) => !placed.has(id)).map((id) => ({ type: "media", id }) as Bubble);
@@ -525,7 +529,11 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     // áudio entra na memória curta com o que foi falado, para a próxima resposta saber o que já foi dito
     const sentTexts = [
       ...progress.sent,
-      ...bubbles.flatMap((b) => (b.type === "text" ? [b.text] : outbox.media.get(b.id)?.spoken ? [`[áudio] ${outbox.media.get(b.id)!.spoken}`] : [])),
+      ...bubbles.flatMap((b) => {
+        if (b.type === "text") return [b.text];
+        const m = outbox.media.get(b.id);
+        return m?.spoken ? [`[áudio] ${m.spoken}`] : m?.kind === "sticker" ? ["[figurinha]"] : m?.gif ? ["[gif]"] : [];
+      }),
     ];
     if (sentTexts.length) await pushShort(conversationId, [{ id: Date.now(), role: "assistant", text: sentTexts.join("\n"), ts: Date.now() }]);
     if (!ctx.room.partial && guard.toolCalls >= guard.maxToolCalls) ctx.room.partial = `Bateu o limite de ${guard.maxToolCalls} ações`;
@@ -612,7 +620,8 @@ async function costLimitHit(userId: string, limitUsd: number) {
 
 async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: ConversationRow; outbox: Outbox; tracer: Tracer; keepInDb: boolean }) {
   for (const [i, b] of bubbles.entries()) {
-    const name = b.type === "text" ? "enviar_texto" : o.outbox.media.get(b.id)?.kind === "audio" ? "enviar_audio" : "enviar_imagem";
+    const m = b.type === "media" ? o.outbox.media.get(b.id) : undefined;
+    const name = b.type === "text" ? "enviar_texto" : m?.kind === "audio" ? "enviar_audio" : m?.kind === "sticker" ? "enviar_figurinha" : m?.gif ? "enviar_gif" : "enviar_imagem";
     const step = await o.tracer.step({ agent: "cto", type: "channel", name, input: b.type === "text" ? { text: b.text } : { media: b.id } });
     try {
       if (b.type === "text") {
@@ -637,7 +646,7 @@ async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: C
         const r = await o.channel.sendImage(o.conversation.remote_jid, img);
         if (o.keepInDb) await query(
           "INSERT INTO messages (conversation_id, role, content, external_id, media, processed) VALUES ($1, 'assistant', $2, $3, $4, true)",
-          [o.conversation.id, img.spoken ? `[áudio] ${img.spoken}` : img.caption ?? "[imagem]", r.id ?? null, { url: img.url ?? null, mimetype: img.mimetype ?? null }],
+          [o.conversation.id, img.spoken ? `[áudio] ${img.spoken}` : img.kind === "sticker" ? "[figurinha]" : img.caption ?? (img.gif ? "[gif]" : "[imagem]"), r.id ?? null, { url: img.url ?? null, mimetype: img.mimetype ?? null }],
         );
         await step.ok(r);
       }

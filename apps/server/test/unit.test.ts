@@ -12,7 +12,7 @@ import { phoneVariants } from "../src/ingest.js";
 describe("formatação para WhatsApp", () => {
   it("converte markdown para o estilo do WhatsApp", () => {
     expect(toWhatsApp("**Kinoplex** e [ingresso](https://ingresso.com)\n- 14h30\n### Sessões")).toBe(
-      "*Kinoplex* e ingresso: https://ingresso.com\n14h30\n*Sessões*",
+      "*Kinoplex* e ingresso: https://ingresso.com\n• 14h30\n*Sessões*",
     );
   });
 
@@ -26,15 +26,18 @@ describe("formatação para WhatsApp", () => {
     expect(isAckOnly([""], false)).toBe(false);
   });
 
-  it("tira traços e travessões para soar como gente", () => {
-    expect(toWhatsApp("Opções:\n- Kinoplex — 14h30\n• Cinemark - das 16 - 18h\n1. Pipoca")).toBe("Opções:\nKinoplex, 14h30\nCinemark, das 16 a 18h\n1. Pipoca");
+  it("lista vira •, travessão vira vírgula e figurinha solta some", () => {
+    expect(toWhatsApp("Opções:\n- Kinoplex — 14h30\n• Cinemark - das 16 - 18h\n* Pipoca\n1. Refri")).toBe(
+      "Opções:\n• Kinoplex, 14h30\n• Cinemark, das 16 a 18h\n• Pipoca\n1. Refri",
+    );
+    expect(toWhatsApp("📅 *Amanhã*\n🍿 Cinema às 19h [[figurinha:feliz]]")).toBe("📅 *Amanhã*\n🍿 Cinema às 19h");
     expect(toWhatsApp("Fica uns R$ 50 – com pipoca 🍿")).toBe("Fica uns R$ 50, com pipoca 🍿");
     expect(toWhatsApp("Guarda-chuva e -5 graus")).toBe("Guarda-chuva e -5 graus");
   });
 
   it("divide balões com --- e posiciona mídias", () => {
     expect(splitBubbles("Sessões de sábado:\n• 14h30\n[[media:m1]]\n---\nQual horário você prefere?")).toEqual([
-      { type: "text", text: "Sessões de sábado:\n14h30" },
+      { type: "text", text: "Sessões de sábado:\n• 14h30" },
       { type: "media", id: "m1" },
       { type: "text", text: "Qual horário você prefere?" },
     ]);
@@ -353,6 +356,27 @@ describe("humanize", () => {
     expect(humanize("100 - 30 = 70")).toBe("100 - 30 = 70");
     expect(humanize("Ficou ótimo — vou mandar")).toBe("Ficou ótimo, vou mandar");
     expect(humanize("- pão\n- leite")).toBe("pão\nleite");
+    expect(humanize("- pão\n- leite", { bullets: true })).toBe("• pão\n• leite");
+  });
+});
+
+describe("figurinhas do Mochi", () => {
+  it("vira balão próprio, uma por resposta, com intervalo por conversa, e nome errado some", async () => {
+    const { placeStickers, stickerBase64, STICKERS } = await import("../src/agent/stickers.js");
+    for (const n of STICKERS) expect(stickerBase64(n)?.startsWith("UklGR")).toBe(true); // webp = RIFF
+    expect(stickerBase64("Óculos escuros")).not.toBeNull();
+    expect(stickerBase64("inexistente")).toBeNull();
+    const added: string[] = [];
+    const add = (b: string) => (added.push(b), `m${added.length}`);
+    const conv = `t-${Date.now()}`;
+    expect(splitBubbles(placeStickers("Prontinho, anotado ✅ [[figurinha:pronto]] [[figurinha:feliz]]", conv, add))).toEqual([
+      { type: "text", text: "Prontinho, anotado ✅" },
+      { type: "media", id: "m1" },
+    ]);
+    expect(added).toHaveLength(1);
+    // logo depois, na mesma conversa, a figurinha não sai de novo
+    expect(placeStickers("[[figurinha:oi]]\nBom dia!", conv, add)).toBe("Bom dia!");
+    expect(placeStickers("Oi [[figurinha:nada]]", `${conv}-2`, add)).toBe("Oi");
   });
 });
 

@@ -67,8 +67,10 @@ export class BaileysChannel implements Channel {
     const r = await this.run((s) =>
       image.kind === "document"
         ? s.sendMessage(jid, { document: content, caption: image.caption, mimetype: image.mimetype ?? "application/pdf", fileName: image.fileName ?? "arquivo.pdf" })
+        : image.kind === "sticker"
+        ? s.sendMessage(jid, { sticker: content })
         : image.kind === "video"
-        ? s.sendMessage(jid, { video: content, caption: image.caption, mimetype: image.mimetype ?? "video/mp4" })
+        ? s.sendMessage(jid, { video: content, caption: image.caption, mimetype: image.mimetype ?? "video/mp4", gifPlayback: image.gif || undefined })
         : image.kind === "audio"
         ? s.sendMessage(jid, { audio: content, mimetype: image.mimetype ?? "audio/ogg; codecs=opus", ptt: image.ptt ?? true, seconds: image.seconds || undefined })
         : s.sendMessage(jid, { image: content, caption: image.caption, mimetype: image.mimetype }),

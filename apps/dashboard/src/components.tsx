@@ -533,6 +533,7 @@ const ICONS: Record<string, string> = {
   send: "send",
   workflow: "graph",
   phone: "phone",
+  gif: "sparkle",
 };
 
 export function IntegrationIcon({ icon }: { icon: string }) {

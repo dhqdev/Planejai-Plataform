@@ -54,6 +54,10 @@ export class EvolutionChannel implements Channel {
       const r = await this.call("/message/sendWhatsAppAudio", { number: remoteJid, audio: image.base64 ?? (await checkedUrl(image.url!)) });
       return { id: r?.key?.id };
     }
+    if (image.kind === "sticker") {
+      const r = await this.call("/message/sendSticker", { number: remoteJid, sticker: image.base64 ?? (await checkedUrl(image.url!)) });
+      return { id: r?.key?.id };
+    }
     const r = await this.call("/message/sendMedia", {
       number: remoteJid,
       mediatype: image.kind ?? "image",

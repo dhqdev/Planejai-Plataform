@@ -148,3 +148,44 @@ export const getPicture = defineTool<{ description: string; mode?: "buscar" | "g
     };
   },
 });
+
+/** Até 5 MB: GIF de reação é curto; maior que isso demora para chegar no celular. */
+const MAX_GIF_BYTES = 5 * 1024 * 1024;
+
+export const sendGif = defineTool<{ search: string }>({
+  name: "send_gif",
+  integration: "giphy",
+  description:
+    "GIF de reação (Giphy) num balão próprio. Só em momento leve que pede (comemoração, conquista, bom dia, piada), no máximo um e nunca em assunto sério. " +
+    "search em inglês curto (ex.: celebration, good morning, high five). Devolve media_id para [[media:ID]].",
+  parameters: obj({ search: { type: "string" } }, ["search"]),
+  async run(args, ctx) {
+    const q = String(args.search ?? "").trim().slice(0, 50);
+    if (!q) return { ok: false, error: "Diga o que buscar." };
+    const creds = await getCredentials("giphy");
+    if (!creds?.api_key) return { ok: false, error: "Giphy não está conectado." };
+    const res = await fetch(
+      `https://api.giphy.com/v1/gifs/search?api_key=${encodeURIComponent(creds.api_key)}&q=${encodeURIComponent(q)}&limit=6&rating=g&lang=pt`,
+      { signal: AbortSignal.timeout(10_000) },
+    );
+    const j: any = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: `Giphy respondeu ${res.status}` };
+    const urls: string[] = (j.data ?? [])
+      .map((g: any) => g?.images?.downsized_small?.mp4 ?? g?.images?.fixed_height?.mp4 ?? g?.images?.original?.mp4)
+      .filter((u: unknown): u is string => typeof u === "string" && u.startsWith("https://"));
+    // um dos primeiros, sorteado: o mesmo pedido não repete sempre o mesmo GIF
+    for (const url of urls.slice(0, 4).sort(() => Math.random() - 0.5)) {
+      try {
+        const r = await safeFetch(url, { signal: AbortSignal.timeout(15_000) });
+        if (!r.ok || !(r.headers.get("content-type") ?? "").includes("mp4")) continue;
+        const data = Buffer.from(await r.arrayBuffer());
+        if (data.length > MAX_GIF_BYTES) continue;
+        const id = ctx.outbox.addMedia({ kind: "video", gif: true, base64: data.toString("base64"), mimetype: "video/mp4", fileName: "gif.mp4" });
+        return { media_id: id, how_to_send: `Coloque [[media:${id}]] num balão próprio.` };
+      } catch {
+        // próximo
+      }
+    }
+    return { ok: false, error: "Não achei GIF para isso. Siga só com o texto." };
+  },
+});

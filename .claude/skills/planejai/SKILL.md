@@ -96,7 +96,8 @@ apps/server/src/
     confirm.ts             "sim"/"não" da pessoa para ação sensível, sem IA
     claims.ts              trava de honestidade: "anotei/apaguei/agendei" só se a ferramenta rodou
     progress.ts  reaction.ts  humanize.ts
-                           "digitando" e avisos curtos, reação temática sem IA, texto sem marcador de lista
+                           "digitando" e avisos curtos, reação temática sem IA, travessão vira vírgula e lista vira "•"
+    stickers.ts            figurinhas do Mochi ([[figurinha:nome]] vira balão de figurinha)
     receipts.ts            comprovante vira lançamento antes do CTO
     browser.ts             "computador" dos agentes (browserless/CHROME_PATH), snapshot em texto, gravação MP4
     errand-agent.ts        agente que conversa com o estabelecimento nos recados

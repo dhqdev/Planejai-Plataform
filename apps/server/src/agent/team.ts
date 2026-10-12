@@ -274,6 +274,7 @@ export const CTO_TOOLS: Tool[] = [
   cards.cardInvoicePay,
   images.makeImage,
   images.getPicture,
+  images.sendGif,
   pdf.makePdf,
   audio.makeAudio,
   places.placesNearby,
