@@ -160,7 +160,7 @@ export function FinancePage() {
           </div>
         )}
         {tab !== "cards" && (
-          <button className="icon-btn fin-report-btn phone-only" aria-label="Relatório em PDF" onClick={() => setReport(true)}>
+          <button className="icon-btn fin-report-btn phone-only" aria-label="Relatório em PDF" onClick={() => { haptic(8); setReport(true); }}>
             <Icon name="file" size={18} />
           </button>
         )}
