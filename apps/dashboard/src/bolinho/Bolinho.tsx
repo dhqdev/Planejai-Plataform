@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import "./mochi.css";
+import "./bolinho.css";
 
 /**
- * Mochi, o mascote do Planejai: uma bolinha branca, fosca e sólida, desenhada em SVG.
+ * Bolinho, o mascote do Planejai: uma bolinha branca, fosca e sólida, desenhada em SVG.
  * O corpo fica parado; quem fala são os olhos: seguem o mouse/dedo, passeiam sozinhos, piscam
  * e mudam de forma em cada expressão. Ao tocar, ele amassa e reage.
  */
@@ -870,7 +870,7 @@ const POKES: Mood[] = ["happy", "surprised", "laughing", "wink", "happy", "curio
 const RANGE_X = 6.5;
 const RANGE_Y = 4.5;
 
-export function Mochi({
+export function Bolinho({
   mood = "idle",
   outfit = {},
   size = 64,
@@ -1007,12 +1007,12 @@ export function Mochi({
   return (
     <svg
       ref={svg}
-      className={`mochi ${still ? "m-still" : ""} ${face.scan ? `m-scan-${face.scan}` : ""} ${className ?? ""}`}
+      className={`bolinho ${still ? "m-still" : ""} ${face.scan ? `m-scan-${face.scan}` : ""} ${className ?? ""}`}
       width={size}
       height={crop ? Math.round((size * 80) / 104) : size}
       viewBox={crop ? cropBox : "0 0 120 120"}
       role="img"
-      aria-label={title ?? "Mochi"}
+      aria-label={title ?? "Bolinho"}
       style={style}
       onPointerDown={onPoke}
     >
@@ -1066,12 +1066,12 @@ export function Mochi({
   );
 }
 
-/** Mochi num quadrinho escuro, como na grade de expressões. */
-export function MochiTile({ children, active, onClick, label }: { children: ReactNode; active?: boolean; onClick?: () => void; label: string }) {
+/** Bolinho num quadrinho escuro, como na grade de expressões. */
+export function BolinhoTile({ children, active, onClick, label }: { children: ReactNode; active?: boolean; onClick?: () => void; label: string }) {
   return (
-    <button type="button" className={`mochi-tile ${active ? "active" : ""}`} onClick={onClick} aria-pressed={active}>
-      <span className="mochi-tile-art">{children}</span>
-      <span className="mochi-tile-label">{label}</span>
+    <button type="button" className={`bolinho-tile ${active ? "active" : ""}`} onClick={onClick} aria-pressed={active}>
+      <span className="bolinho-tile-art">{children}</span>
+      <span className="bolinho-tile-label">{label}</span>
     </button>
   );
 }

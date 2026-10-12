@@ -7,7 +7,7 @@ import { DOC, FONT } from "./doc-theme.js";
  * e vira PNG no navegador da stack (Browserless) ou no Chrome local. Sai em ~1s e não gasta token.
  */
 
-// cores da noite do Mochi (doc-theme.ts): roxo, noite, lilás, magenta e tons entre eles; cinzas arroxeados para o resto
+// cores da noite do Bolinho (doc-theme.ts): roxo, noite, lilás, magenta e tons entre eles; cinzas arroxeados para o resto
 export const PALETTE = ["#6510E0", "#1D0B42", "#9B6BF0", "#B832D6", "#4A3A8C", "#C9B6F5", "#77728A", "#B5B0C4", "#D9D4E6", "#ECE8F4"];
 /** vermelho só para o que estourou e âmbar para o alerta de 80% (sinal, não marca) */
 const DANGER = "#E03150";

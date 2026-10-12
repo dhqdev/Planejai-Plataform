@@ -391,7 +391,7 @@ describe("humanize", () => {
   });
 });
 
-describe("figurinhas do Mochi", () => {
+describe("figurinhas do Bolinho", () => {
   it("vira balão próprio, uma por resposta, com intervalo por conversa, e nome errado some", async () => {
     const { placeStickers, stickerBase64, STICKERS } = await import("../src/agent/stickers.js");
     for (const n of STICKERS) expect(stickerBase64(n)?.startsWith("UklGR")).toBe(true); // webp = RIFF

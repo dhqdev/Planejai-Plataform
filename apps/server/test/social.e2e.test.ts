@@ -347,7 +347,7 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     expect(reg.json()).toMatchObject({ role: "admin", pending: false });
     expect((await app.inject({ method: "GET", url: "/api/invite/NAOEXISTE" })).statusCode).toBe(404);
 
-    // o avatar de cada cliente é o Mochi dele: a lista já traz a roupinha (null = nunca escolheu)
+    // o avatar de cada cliente é o Bolinho dele: a lista já traz a roupinha (null = nunca escolheu)
     await db.query(`UPDATE accounts SET mascot = '{"outfit":{"head":"crown"}}' WHERE email = 'maria@x.com'`);
     const clients = (await app.inject({ method: "GET", url: "/api/clients", headers: { cookie: sup } })).json();
     const d = clients.find((c: any) => c.phone === "5519911110000");

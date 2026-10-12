@@ -1,7 +1,7 @@
 import { htmlToPng } from "./charts.js";
-import { DOC, FONT, mochi } from "./doc-theme.js";
+import { DOC, FONT, bolinho } from "./doc-theme.js";
 
-/** cores dos ramos e cartões: família do roxo do Mochi, sem degradê */
+/** cores dos ramos e cartões: família do roxo do Bolinho, sem degradê */
 const TONES = [DOC.violet, "#B832D6", "#4A3A8C", "#8B5CF6", DOC.night, "#A0459C", "#6D5BD0", "#77728A"];
 
 /**
@@ -44,12 +44,12 @@ li::before{content:"";position:absolute;left:2px;top:.62em;width:7px;height:7px;
 function page(width: number, inner: string, css = "", script = "") {
   return {
     width,
-    html: `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}${css}</style></head><body><div class="page" style="width:${width}px">${inner}<div class="foot">${mochi(28, "ft")}<span>feito pelo <b>planejai</b></span></div></div>${script ? `<script>${script}</script>` : ""}</body></html>`,
+    html: `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}${css}</style></head><body><div class="page" style="width:${width}px">${inner}<div class="foot">${bolinho(28, "ft")}<span>feito pelo <b>planejai</b></span></div></div>${script ? `<script>${script}</script>` : ""}</body></html>`,
   };
 }
 
 function header(s: ImageSpec, kicker = "") {
-  return `<div class="brand">${mochi(40, "hd")}${kicker ? `<span>${esc(kicker)}</span>` : ""}</div><h1>${esc(clip(s.title, 90))}</h1>${s.subtitle ? `<p class="sub">${esc(clip(s.subtitle, 140))}</p>` : '<div style="height:32px"></div>'}`;
+  return `<div class="brand">${bolinho(40, "hd")}${kicker ? `<span>${esc(kicker)}</span>` : ""}</div><h1>${esc(clip(s.title, 90))}</h1>${s.subtitle ? `<p class="sub">${esc(clip(s.subtitle, 140))}</p>` : '<div style="height:32px"></div>'}`;
 }
 
 const sectionsOf = (s: ImageSpec) =>
@@ -80,8 +80,8 @@ svg.lines{position:absolute;inset:0;width:100%;height:100%;z-index:0;overflow:vi
 document.querySelectorAll('.br').forEach(function(b){var B=b.getBoundingClientRect(),isL=B.right<C.left,x1=isL?C.left-R.left:C.right-R.left,y1=C.top+C.height/2-R.top,x2=isL?B.right-R.left:B.left-R.left,y2=B.top+B.height/2-R.top,mx=(x1+x2)/2,col=getComputedStyle(b).getPropertyValue('--c');
 p+='<path d="M'+x1+' '+y1+' C'+mx+' '+y1+' '+mx+' '+y2+' '+x2+' '+y2+'" stroke="'+col+'" stroke-width="3" stroke-opacity=".55" fill="none" stroke-linecap="round"/><circle cx="'+x2+'" cy="'+y2+'" r="6" fill="'+col+'"/>';});
 var s=document.createElementNS('http://www.w3.org/2000/svg','svg');s.setAttribute('class','lines');s.innerHTML=p;m.prepend(s);})();`;
-  const inner = `<div class="brand">${mochi(40, "hd")}<span>Mapa mental</span></div><h1>${esc(clip(s.title, 90))}</h1>${s.subtitle ? `<p class="sub">${esc(clip(s.subtitle, 140))}</p>` : '<div style="height:28px"></div>'}
-<div class="map"><div class="col">${left}</div><div class="center"><small>${mochi(64, "ct")}</small>${esc(clip(s.title, 80))}</div><div class="col">${right}</div></div>`;
+  const inner = `<div class="brand">${bolinho(40, "hd")}<span>Mapa mental</span></div><h1>${esc(clip(s.title, 90))}</h1>${s.subtitle ? `<p class="sub">${esc(clip(s.subtitle, 140))}</p>` : '<div style="height:28px"></div>'}
+<div class="map"><div class="col">${left}</div><div class="center"><small>${bolinho(64, "ct")}</small>${esc(clip(s.title, 80))}</div><div class="col">${right}</div></div>`;
   return page(1600, inner, css, script);
 }
 
@@ -124,7 +124,7 @@ td{padding:15px 18px;border-bottom:1.5px solid ${DOC.line};line-height:1.4;backg
 function quote(s: ImageSpec) {
   const css = `.q{font-size:44px;line-height:1.3;font-weight:700;letter-spacing:-.01em;margin:40px 0 20px}.q::before{content:"“";display:block;font-size:120px;line-height:.8;color:${DOC.violet}}
 .who{font-size:24px;color:${DOC.muted}}`;
-  return page(1080, `<div class="brand">${mochi(40, "hd")}</div><p class="q">${esc(clip(s.text || s.title, 400))}</p><p class="who">${esc(clip(s.subtitle ?? (s.text ? s.title : ""), 120))}</p>`, css);
+  return page(1080, `<div class="brand">${bolinho(40, "hd")}</div><p class="q">${esc(clip(s.text || s.title, 400))}</p><p class="who">${esc(clip(s.subtitle ?? (s.text ? s.title : ""), 120))}</p>`, css);
 }
 
 export function buildImageHtml(spec: ImageSpec) {

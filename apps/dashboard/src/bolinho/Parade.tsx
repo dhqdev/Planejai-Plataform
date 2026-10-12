@@ -1,8 +1,8 @@
 import type { CSSProperties } from "react";
-import { Mochi, type Mood, type Outfit } from "./Mochi";
+import { Bolinho, type Mood, type Outfit } from "./Bolinho";
 
 /**
- * Mochis do cadastro: um no palco, que troca de fantasia e de cara a cada etapa e entra pulando,
+ * Bolinhos do cadastro: um no palco, que troca de fantasia e de cara a cada etapa e entra pulando,
  * e alguns pequenos flutuando em volta, cada um vestido de um jeito. Só enfeite: nada aqui é clicável.
  */
 
@@ -27,13 +27,13 @@ export const LOOKS: Look[] = [
 
 export const lookAt = (i: number) => LOOKS[((i % LOOKS.length) + LOOKS.length) % LOOKS.length]!;
 
-/** O Mochi do palco. Mudou a etapa (key), ele sai do chão de novo com a fantasia nova. */
-export function StageMochi({ step, look, mood, size = 120, say }: { step: string | number; look: Look; mood?: Mood; size?: number; say?: string }) {
+/** O Bolinho do palco. Mudou a etapa (key), ele sai do chão de novo com a fantasia nova. */
+export function StageBolinho({ step, look, mood, size = 120, say }: { step: string | number; look: Look; mood?: Mood; size?: number; say?: string }) {
   return (
-    <div className="stage-mochi" key={step}>
+    <div className="stage-bolinho" key={step}>
       {say && <span className="stage-say">{say}</span>}
-      <span className="stage-mochi-body">
-        <Mochi size={size} outfit={look.outfit} mood={mood ?? look.mood} />
+      <span className="stage-bolinho-body">
+        <Bolinho size={size} outfit={look.outfit} mood={mood ?? look.mood} />
       </span>
     </div>
   );
@@ -58,16 +58,16 @@ const EDGES: typeof SPOTS = [
 ];
 
 /** Os pequenos flutuando. `edges` deixa só os das bordas (celular). */
-export function FloatingMochis({ edges, className }: { edges?: boolean; className?: string }) {
+export function FloatingBolinhos({ edges, className }: { edges?: boolean; className?: string }) {
   return (
-    <div className={className ? `float-mochis ${className}` : "float-mochis"} aria-hidden="true">
+    <div className={className ? `float-bolinhos ${className}` : "float-bolinhos"} aria-hidden="true">
       {(edges ? EDGES : SPOTS).map((s, i) => (
         <span
           key={i}
-          className="float-mochi"
+          className="float-bolinho"
           style={{ left: `${s.x}%`, top: `${s.y}%`, ["--d" as string]: `${s.delay}s`, ["--r" as string]: `${i % 2 ? 8 : -8}deg` } as CSSProperties}
         >
-          <Mochi size={s.size} outfit={s.look.outfit} mood={s.look.mood} still />
+          <Bolinho size={s.size} outfit={s.look.outfit} mood={s.look.mood} still />
         </span>
       ))}
     </div>

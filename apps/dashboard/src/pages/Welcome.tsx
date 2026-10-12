@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { haptic } from "../touch";
-import { FloatingMochis, StageMochi, lookAt } from "../mochi/Parade";
+import { FloatingBolinhos, StageBolinho, lookAt } from "../bolinho/Parade";
 
 interface Question {
   id: string;
@@ -29,7 +29,7 @@ function active(questions: Question[], answers: Answers) {
   });
 }
 
-/** Perguntas de boas-vindas: uma por tela, cada resposta pode abrir outras. O Mochi guarda o resumo para a conversa no WhatsApp. */
+/** Perguntas de boas-vindas: uma por tela, cada resposta pode abrir outras. O Bolinho guarda o resumo para a conversa no WhatsApp. */
 export function Welcome({ data, name, onDone }: { data: Onboarding; name?: string | null; onDone: () => void }) {
   const [answers, setAnswers] = useState<Answers>(data.answers ?? {});
   const [step, setStep] = useState(0);
@@ -83,7 +83,7 @@ export function Welcome({ data, name, onDone }: { data: Onboarding; name?: strin
   const first = (name ?? "").trim().split(/\s+/)[0];
   return (
     <div className="welcome" role="dialog" aria-modal="true" aria-labelledby="welcome-q">
-      <FloatingMochis className="welcome-float" />
+      <FloatingBolinhos className="welcome-float" />
       <div className="welcome-top">
         <div className="welcome-progress" aria-hidden="true">
           <span style={{ width: `${((step + 1) / list.length) * 100}%` }} />
@@ -94,7 +94,7 @@ export function Welcome({ data, name, onDone }: { data: Onboarding; name?: strin
       </div>
       <div className="welcome-body" key={q.id}>
         <div className="welcome-stage">
-          <StageMochi step={q.id} look={lookAt(step)} mood={busy ? "working" : error ? "error" : undefined} size={step === 0 ? 92 : 76} />
+          <StageBolinho step={q.id} look={lookAt(step)} mood={busy ? "working" : error ? "error" : undefined} size={step === 0 ? 92 : 76} />
           {step === 0 && (
             <p className="muted welcome-hello">{first ? `Oi, ${first}! ` : "Oi! "}Umas perguntas rápidas pra eu já te conhecer quando a gente conversar no WhatsApp.</p>
           )}

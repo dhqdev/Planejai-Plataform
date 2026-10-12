@@ -1,6 +1,6 @@
 /**
  * Visual único dos documentos que o Planejai gera (make_pdf, relatório de Finanças, make_image e gráficos):
- * cores da "noite do Mochi" do painel, sem degradê, um roxo só de destaque, o Mochi na capa e no rodapé.
+ * cores da "noite do Bolinho" do painel, sem degradê, um roxo só de destaque, o Bolinho na capa e no rodapé.
  * Tudo HTML/CSS montado aqui, sem IA.
  */
 
@@ -21,8 +21,8 @@ export const DOC = {
 
 export const FONT = `Inter,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif`;
 
-/** O Mochi do logo do painel (apps/dashboard/public/logo.svg). `id` evita colisão quando aparece mais de uma vez. */
-export function mochi(size: number, id = "mo") {
+/** O Bolinho do logo do painel (apps/dashboard/public/logo.svg). `id` evita colisão quando aparece mais de uma vez. */
+export function bolinho(size: number, id = "mo") {
   const body = "M60 42 C88 42 102 45.5 102 64 L102 82 C102 100 88 106 60 106 C32 106 18 100 18 82 L18 64 C18 45.5 32 42 60 42 Z";
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="12 34 96 80" width="${size}" height="${Math.round((size * 80) / 96)}" style="display:block">
 <defs><radialGradient id="${id}b" cx="0.6" cy="0.2" r="0.95" fx="0.62" fy="0.18"><stop offset="0" stop-color="#fff"/><stop offset="0.35" stop-color="#f3f3f5"/><stop offset="0.7" stop-color="#dcdce0"/><stop offset="1" stop-color="#b9b9bf"/></radialGradient></defs>
@@ -83,7 +83,7 @@ tbody tr:nth-child(even) td{background:${DOC.marsh}}
 
 /** Capa escura de página inteira. `extra` entra logo abaixo do subtítulo (números do relatório, por exemplo). */
 export function coverHtml(o: { kicker: string; title: string; subtitle?: string; extra?: string; metaLeft: string; metaRight: string }) {
-  return `<div class="cover"><div class="cv-top">${mochi(40, "cv")}<span>planejai</span></div>
+  return `<div class="cover"><div class="cv-top">${bolinho(40, "cv")}<span>planejai</span></div>
 <div class="cv-main"><p class="cv-kicker">${esc(o.kicker)}</p><h1>${o.title}</h1>${o.subtitle ? `<p class="cv-sub">${o.subtitle}</p>` : ""}${o.extra ? `<div class="cv-extra">${o.extra}</div>` : ""}</div>
 <div class="cv-meta"><span>${o.metaLeft}</span><span>${o.metaRight}</span></div></div>`;
 }

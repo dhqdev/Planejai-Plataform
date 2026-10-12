@@ -6,9 +6,9 @@ import { BlockLoader } from "./BlockLoader";
 import { Empty, Loading, Modal } from "./components";
 import { clearApiCache, prefetchApi, useApi } from "./hooks";
 import { Icon } from "./icons";
-import { openWardrobe } from "./mochi/state";
-import { UserMochi } from "./mochi/UserMochi";
-import { MochiButton, MochiIcon, WardrobeHost } from "./mochi/Wardrobe";
+import { openWardrobe } from "./bolinho/state";
+import { UserBolinho } from "./bolinho/UserBolinho";
+import { BolinhoButton, BolinhoIcon, WardrobeHost } from "./bolinho/Wardrobe";
 import { useUnread } from "./notify";
 import { AuthPage } from "./pages/Login";
 import { PrivacyPage } from "./pages/Privacy";
@@ -361,7 +361,7 @@ export function App() {
     <div className="layout">
       <a className="skip-link" href="#conteudo" onClick={(e) => { e.preventDefault(); mainRef.current?.focus(); }}>Pular para o conteúdo</a>
       <header className="topbar">
-        <MochiButton size={50} />
+        <BolinhoButton size={50} />
         <strong className="topbar-title">{titleFor(loc.pathname, NAV)}</strong>
         <span className="spacer" />
         <BellButton />
@@ -369,7 +369,7 @@ export function App() {
       </header>
       <aside className="sidebar">
         <div className="brand">
-          <MochiButton size={42} />
+          <BolinhoButton size={42} />
           <div>
             planejai
             <small>{isSuper ? "Super admin" : "Painel"}</small>
@@ -379,7 +379,7 @@ export function App() {
         <div className="sidebar-foot">
           {/* um cartão só: quem está logado à esquerda, tema e sair como ícones à direita */}
           <div className="me me-card">
-            <UserMochi me name={me.name ?? me.email} size={34} />
+            <UserBolinho me name={me.name ?? me.email} size={34} />
             <div className="me-text">
               <div className="me-name">{me.name ?? me.email}</div>
               <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · <span className="app-version">v{__APP_VERSION__}</span></div>
@@ -501,7 +501,7 @@ export function App() {
             </div>
           )}
           <div className="me more-me">
-            <UserMochi me name={me.name ?? me.email} size={28} />
+            <UserBolinho me name={me.name ?? me.email} size={28} />
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className="me-name">{me.name ?? me.email}</div>
               <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · <span className="app-version">v{__APP_VERSION__}</span></div>
@@ -524,8 +524,8 @@ export function App() {
                   {last && (
                     <>
                       <button className="more-tile" onClick={() => { setMenu(false); openWardrobe(); }}>
-                        <MochiIcon size={30} />
-                        <span>Mochi</span>
+                        <BolinhoIcon size={30} />
+                        <span>Bolinho</span>
                       </button>
                       <button className="more-tile" onClick={toggleTheme}>
                         <Icon name={theme === "dark" ? "sun" : "moon"} size={24} />

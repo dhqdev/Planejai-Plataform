@@ -122,7 +122,7 @@ export function meRoutes(base: FastifyInstance) {
     return { ok: true };
   });
 
-  // ---------- Mochi, o mascote: roupinha escolhida por cada conta ----------
+  // ---------- Bolinho, o mascote: roupinha escolhida por cada conta ----------
   base.get("/api/me/mascot", async (req) => {
     if (req.account.owner) return (await one("SELECT value FROM settings WHERE key = 'owner_mascot'"))?.value ?? null;
     return (await one("SELECT mascot FROM accounts WHERE id = $1", [req.account.id]))?.mascot ?? null;

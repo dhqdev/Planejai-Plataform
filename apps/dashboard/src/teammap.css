@@ -1,5 +1,5 @@
 /* Mapa do time (TeamMap.tsx): quadro com grade de pontinhos que arrasta e dá zoom, agentes arrastáveis,
-   recados correndo pelas linhas. O corpo do Mochi não se mexe sozinho: quem anima é o olhar, o anel e os recados. */
+   recados correndo pelas linhas. O corpo do Bolinho não se mexe sozinho: quem anima é o olhar, o anel e os recados. */
 
 .tm {
   overflow: hidden; border-radius: 14px; cursor: grab; user-select: none; -webkit-user-select: none;

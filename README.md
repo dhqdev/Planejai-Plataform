@@ -69,7 +69,7 @@ Todos os modelos têm fallback. Para trocar, use a tela **Modelos**, que mostra 
 
 ## Painel
 
-PWA instalável no celular e no notebook, com tema claro e escuro, puxar para atualizar e uma pílula "Atualizar" quando sai versão nova. O mascote do app é o Mochi.
+PWA instalável no celular e no notebook, com tema claro e escuro, puxar para atualizar e uma pílula "Atualizar" quando sai versão nova. O mascote do app é o Bolinho.
 
 - **Para todo mundo:**
   - Início: painel editável com widgets.
@@ -290,7 +290,7 @@ apps/
     net.ts          bloqueio de endereços internos
     privacy.ts      apagar dados (LGPD)
     healthcheck.ts  healthcheck da imagem
-  dashboard/src/    React + Vite (PWA), pages/, mochi/ (mascote)
+  dashboard/src/    React + Vite (PWA), pages/, bolinho/ (mascote)
 deploy/             stacks do Portainer (Planejai Swarm + Traefik, compose comum e n8n ligado ao Planejai)
 docs/operacao.md    segredos, backup, rollback, saúde e plano do número
 ```

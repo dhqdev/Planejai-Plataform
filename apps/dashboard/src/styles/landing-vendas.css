@@ -17,7 +17,7 @@
 .lv-plan-grains { margin-top: 12px; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .lv-plan-blurb { margin-top: 4px; margin-bottom: 26px; color: var(--lp-muted); font-size: 15px; line-height: 1.5; text-wrap: pretty; }
 .lv-plan .lp-btn { margin-top: auto; width: 100%; position: relative; z-index: 2; }
-/* o plano em destaque vai para a noite do Mochi */
+/* o plano em destaque vai para a noite do Bolinho */
 .lv-plan.hi { background: #1d0b42; border-color: #1d0b42; color: #f6efff; box-shadow: 0 30px 60px -36px rgba(29, 11, 66, .8); }
 .lv-plan.hi .lv-plan-price span, .lv-plan.hi .lv-plan-blurb { color: rgba(246, 239, 255, .66); }
 .lv-plan.hi :focus-visible { outline-color: #c9a8ff; }

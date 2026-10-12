@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode,
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { AgentFace, CORE_FACES } from "../faces";
-import { Mochi, type Mood } from "../mochi/Mochi";
+import { Bolinho, type Mood } from "../bolinho/Bolinho";
 import { ClickSpark } from "../reactbits/ClickSpark";
 import { CountUp } from "../reactbits/CountUp";
 import { GlareHover } from "../reactbits/GlareHover";
@@ -60,7 +60,7 @@ function useInView<T extends Element>(margin = "0px") {
 
 /**
  * Rolagem: grava no .lp a posição (--sp, 0 a 1), quanto do topo já saiu (--hero) e a inclinação pela
- * velocidade (--lean). O CSS usa isso para o parallax do topo, a barra de progresso e o Mochi que acompanha.
+ * velocidade (--lean). O CSS usa isso para o parallax do topo, a barra de progresso e o Bolinho que acompanha.
  * Sem estado do React: nada renderiza de novo enquanto rola.
  */
 function useScrollVars(root: RefObject<HTMLDivElement | null>) {
@@ -127,7 +127,7 @@ function useReveal(root: RefObject<HTMLDivElement | null>) {
   }, [root]);
 }
 
-/** O que o Mochi que acompanha a rolagem diz e sente em cada parte da página. */
+/** O que o Bolinho que acompanha a rolagem diz e sente em cada parte da página. */
 const BUDDY: Record<string, { mood: Mood; say: string }> = {
   "como-funciona": { mood: "curious", say: "Olha só." },
   time: { mood: "happy", say: "Esse é o meu time!" },
@@ -137,8 +137,8 @@ const BUDDY: Record<string, { mood: Mood; say: string }> = {
 };
 
 /**
- * Mochi que acompanha a rolagem: assume quando o do topo sai da tela, inclina com a velocidade,
- * pula e muda de cara a cada seção e sai de cena quando chega o Mochi grande do final.
+ * Bolinho que acompanha a rolagem: assume quando o do topo sai da tela, inclina com a velocidade,
+ * pula e muda de cara a cada seção e sai de cena quando chega o Bolinho grande do final.
  */
 function Buddy({ root }: { root: RefObject<HTMLDivElement | null> }) {
   const box = useRef<HTMLDivElement>(null);
@@ -193,7 +193,7 @@ function Buddy({ root }: { root: RefObject<HTMLDivElement | null> }) {
         </span>
       )}
       <div className="lp-buddy-body" ref={body}>
-        <Mochi size={80} mood={now?.mood ?? "happy"} />
+        <Bolinho size={80} mood={now?.mood ?? "happy"} />
       </div>
     </div>
   );
@@ -525,7 +525,7 @@ export function LandingPage() {
         <span className="lp-progress" aria-hidden="true" />
         <div className="lp-wrap lp-nav-row">
           <a href="/" className="lp-logo" aria-label="Planejai, início">
-            <Mochi size={34} mood="happy" still />
+            <Bolinho size={34} mood="happy" still />
             <span>Planejai</span>
           </a>
           <nav className="lp-links" aria-label="Seções">
@@ -605,7 +605,7 @@ export function LandingPage() {
                     ["wink", "Hoje vence a luz, R$ 186,32."],
                   ].map(([m, t], i) => (
                     <div key={t} className="lp-notif" style={{ ["--i" as string]: i }}>
-                      <Mochi size={30} still mood={m as Mood} />
+                      <Bolinho size={30} still mood={m as Mood} />
                       <span>
                         <b>Planejai</b>
                         <small>{t}</small>
@@ -639,7 +639,7 @@ export function LandingPage() {
 
         <section id="time" className="lp-section">
           <div className="lp-wrap">
-            <Words className="lp-h2" text="Um time de Mochis por trás." />
+            <Words className="lp-h2" text="Um time de Bolinhos por trás." />
             <p className="lp-sub" data-reveal style={{ ["--d" as string]: 2 }}>
               Você fala com o {cto}. Ele chama quem precisa.
             </p>
@@ -712,8 +712,8 @@ export function LandingPage() {
                 </ClickSpark>
               )}
             </div>
-            <div className="lp-final-mochi">
-              <Mochi size={180} mood="greeting" outfit={{ head: "party" }} />
+            <div className="lp-final-bolinho">
+              <Bolinho size={180} mood="greeting" outfit={{ head: "party" }} />
             </div>
           </div>
         </section>
@@ -722,7 +722,7 @@ export function LandingPage() {
       <footer className="lp-foot">
         <div className="lp-wrap lp-foot-row">
           <span className="lp-logo">
-            <Mochi size={26} still mood="happy" />
+            <Bolinho size={26} still mood="happy" />
             <span>Planejai</span>
           </span>
           <span className="lp-foot-links">

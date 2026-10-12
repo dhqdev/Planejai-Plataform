@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { AgentProp, CLIENT_MOODS, ROLE_MOODS } from "./agentProps";
-import { Mochi, type Mood, type Outfit } from "./mochi/Mochi";
+import { Bolinho, type Mood, type Outfit } from "./bolinho/Bolinho";
 
 /**
- * Carinhas dos agentes: todo agente é o Mochi, cada um com a sua roupinha, dentro de um círculo pastel.
+ * Carinhas dos agentes: todo agente é o Bolinho, cada um com a sua roupinha, dentro de um círculo pastel.
  * O servidor guarda só a combinação (faceFor), e daqui ela vira roupa e jeito de olhar,
  * então agente novo já nasce com o mascote vestido de um jeito só dele:
  * color = fundo pastel e o que vai no pescoço, extra = o que vai na cabeça, eyes = óculos e humor.
@@ -38,7 +38,7 @@ export const SKINS: Record<string, Outfit> = {
 };
 export const skinOf = (face?: Face | null) => (face?.extra?.startsWith("skin:") ? face.extra.slice(5) : null);
 
-/** Roupinha do Mochi para esta combinação. */
+/** Roupinha do Bolinho para esta combinação. */
 export function outfitFor(face?: Face | null): Outfit {
   const skin = skinOf(face);
   if (skin && SKINS[skin]) return SKINS[skin]!;
@@ -63,7 +63,7 @@ export function AgentFace({ face, size = 40, title, agent, live = false }: { fac
   return (
     <span className={`agent-face ${live ? "live" : ""}`} role="img" aria-label={title ?? "agente"} style={{ width: size, height: size, background: FACE_COLORS[index(f.color, FACE_COLORS.length)] }}>
       {/* parado (sem seguir o mouse) onde há dezenas deles; vivo nas telas do time */}
-      <Mochi still={!live} mood={mood} outfit={outfitFor(f)} size={Math.round(size * 0.92)} title={title} />
+      <Bolinho still={!live} mood={mood} outfit={outfitFor(f)} size={Math.round(size * 0.92)} title={title} />
       {live && role !== undefined && <AgentProp agent={role} />}
     </span>
   );
