@@ -132,6 +132,14 @@ export function FinancePage() {
   );
   const upcoming = (reminders.data?.events ?? []).filter((e) => e.kind === "reminder").slice(0, 4);
   const periodLabel = `1 - ${daysIn} de ${monthName(month).slice(0, 3)}, ${month.slice(0, 4)}`;
+  // atalho grande para as categorias: no celular logo abaixo dos totais, no notebook no pé do card da rosca
+  const CategoriesBar = ({ className }: { className: string }) => (
+    <button className={`fin-cats-bar ${className}`} onClick={() => { haptic(5); setManaging(true); }}>
+      <span className="fin-cats-dots" aria-hidden>{categories.list.slice(0, 5).map((c) => <i key={c.id} style={{ background: c.color }} />)}</span>
+      <span className="fin-cats-bar-text"><strong>Suas categorias</strong><small className="muted">Criar, renomear, trocar a cor e ensinar palavras</small></span>
+      <Icon name="chevron-right" size={16} />
+    </button>
+  );
   const insight = buildInsight(cats, expenses, prevCat, budgets, monthName(month));
 
   return (
@@ -190,6 +198,7 @@ export function FinancePage() {
             )}
           </div>
 
+          {!readonly && <CategoriesBar className="phone-only" />}
           <div className="fin-overview">
             <div className="fin-col">
               <div className="card fin-insight">
@@ -239,7 +248,7 @@ export function FinancePage() {
                     <h3>Gastos por categoria</h3>
                     <small className="muted">Toque numa categoria para ver os lançamentos</small>
                   </div>
-                  {!readonly && <button className="link-btn fin-cats-edit" onClick={() => { haptic(5); setManaging(true); }}>Categorias <Icon name="chevron-right" size={13} /></button>}
+                  {!readonly && <button className="btn btn-sm fin-cats-edit" onClick={() => { haptic(5); setManaging(true); }}><Icon name="edit" size={14} /> Categorias</button>}
                 </div>
                 {cats.length ? (
                   <div className="fin-donut">
@@ -263,6 +272,7 @@ export function FinancePage() {
                 ) : (
                   <Empty>Sem gastos em {monthName(month)}. No WhatsApp é só dizer "gastei 32 no almoço" ou mandar a foto do comprovante.</Empty>
                 )}
+                {!readonly && <CategoriesBar className="hide-phone" />}
               </div>
             </div>
 
@@ -330,7 +340,7 @@ export function FinancePage() {
           <div className="fin-section-head">
             <h3>Por categoria</h3>
             {cat && <button className="btn btn-sm btn-ghost" aria-label={`Tirar o filtro ${cat}`} onClick={() => setCat(null)}><Icon name="x" size={14} /> <span>{cat}</span></button>}
-            {!readonly && <button className="link-btn fin-cats-edit" onClick={() => { haptic(5); setManaging(true); }}>Editar categorias <Icon name="chevron-right" size={13} /></button>}
+            {!readonly && <button className="btn btn-sm fin-cats-edit" onClick={() => { haptic(5); setManaging(true); }}><Icon name="edit" size={14} /> Editar categorias</button>}
           </div>
           {cats.length ? (
             <div className="fin-cats">
