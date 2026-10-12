@@ -123,6 +123,20 @@ export function budgetChart(title: string, subtitle: string, rows: { label: stri
   return frame(title, subtitle, body, h);
 }
 
+/**
+ * Abre o Chrome local. Às vezes a primeira abertura trava (máquina ocupada, Chrome frio) e o
+ * padrão do puppeteer espera 30 s: aqui desiste em 12 s e tenta mais uma vez, que costuma abrir na hora.
+ */
+async function launchChrome() {
+  const puppeteer = (await import("puppeteer-core")).default;
+  const open = () => puppeteer.launch({ executablePath: config.CHROME_PATH, headless: true, timeout: 12_000, args: ["--no-sandbox", "--disable-dev-shm-usage", "--no-first-run"] });
+  try {
+    return await open();
+  } catch {
+    return open();
+  }
+}
+
 /** SVG -> PNG (base64) no navegador da stack, ou no Chrome local em dev. */
 export async function svgToPng(svg: string): Promise<string> {
   const size = svg.match(/width="(\d+)" height="(\d+)"/);
@@ -146,8 +160,7 @@ export async function htmlToPng(html: string, width: number): Promise<string> {
     return Buffer.from(await res.arrayBuffer()).toString("base64");
   }
   if (!config.CHROME_PATH) throw new Error("Para gerar imagem preciso do navegador da stack (Browserless) ou de CHROME_PATH.");
-  const puppeteer = (await import("puppeteer-core")).default;
-  const browser = await puppeteer.launch({ executablePath: config.CHROME_PATH, headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+  const browser = await launchChrome();
   try {
     const page = await browser.newPage();
     await page.setViewport({ width, height: 600, deviceScaleFactor: 1 });
@@ -175,8 +188,7 @@ export async function htmlToPdf(html: string, footer: string): Promise<Buffer> {
     return Buffer.from(await res.arrayBuffer());
   }
   if (!config.CHROME_PATH) throw new Error("Para gerar PDF preciso do navegador da stack (Browserless) ou de CHROME_PATH.");
-  const puppeteer = (await import("puppeteer-core")).default;
-  const browser = await puppeteer.launch({ executablePath: config.CHROME_PATH, headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+  const browser = await launchChrome();
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load" });

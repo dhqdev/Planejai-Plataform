@@ -246,13 +246,13 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     const sent = ch.sent;
     expect(sent.some((s) => s.text?.includes("tool_call"))).toBe(false);
     expect(sent.find((s) => s.type === "image")).toMatchObject({ image: { kind: "document", mimetype: "application/pdf", fileName: "Pai Rico.pdf" } });
-  });
+  }, 60_000); // abre o Chrome de verdade: na máquina do CI a primeira abertura pode demorar
 
   it.skipIf(!process.env.CHROME_PATH)("pdf pedido só com título e roteiro: a ferramenta escreve o texto e manda o PDF", async () => {
     const ch = await say("me manda um resumo em pdf do pai rico");
     expect(writerAsks.at(-1)).toContain("Resumo completo do livro");
     expect(ch.sent.find((s) => s.type === "image")).toMatchObject({ image: { kind: "document", fileName: "Pai Rico, Pai Pobre.pdf" } });
-  });
+  }, 60_000);
 
   it("mesma chamada que já falhou não roda de novo: o agente responde em vez de entrar em loop", async () => {
     const ch = await say("me manda um áudio do nada");
