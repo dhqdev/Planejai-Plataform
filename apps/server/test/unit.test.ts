@@ -326,6 +326,27 @@ describe("trava: dizer que fez sem ter feito", () => {
     expect(unbackedClaim("Convidei a Ana, agora é só ela aceitar.", new Set())).toBe("convidar");
     expect(unbackedClaim("Gerei o link: https://mp.com/x", new Set())).toBe("gerar link de pagamento");
     expect(unbackedClaim("Marquei com o petshop às 18h.", new Set(["errand_done"]))).toBeNull();
+    // 12/10: "Prontinho! Amanhã às 8h eu te aviso" passou sem schedule_reminder
+    const prontinho = "Combinado, David! Deixa comigo ⏰\nProntinho! Amanhã às *8h* eu te aviso pra falar com seu chefe sobre o treinamento da Adriana. Bom descanso 😴";
+    expect(unbackedClaim(prontinho, new Set())).toBe("agendar lembrete ou evento");
+    expect(unbackedClaim(prontinho, new Set(["schedule_reminder"]))).toBeNull();
+    expect(unbackedClaim("Te chamo às 7:30 pra corrida.", new Set())).toBe("agendar lembrete ou evento");
+    // sem hora na mesma frase é só promessa de retorno (De olho, pesquisa)
+    expect(unbackedClaim("Assim que o preço cair, eu te aviso por aqui.", new Set())).toBeNull();
+    expect(unbackedClaim("Hoje tá corrido. Já vou ver e te aviso.", new Set())).toBeNull();
+  });
+
+  it("pedido claro de lembrete sem ferramenta de agenda refaz a resposta", async () => {
+    const { unmetReminder } = await import("../src/agent/claims.js");
+    const pedido = "[msg_id=251] [áudio] Me lembre amanhã às oito horas da manhã que eu preciso falar com meu chefe.";
+    expect(unmetReminder(pedido, "Combinado, David! Deixa comigo ⏰", new Set())).toBe("agendar lembrete ou evento");
+    expect(unmetReminder(pedido, "Combinado!", new Set(["schedule_reminder"]))).toBeNull();
+    expect(unmetReminder("Mas cria um lembrete para isso", "Pronto!", new Set(["ask_agenda"]))).toBe("agendar lembrete ou evento");
+    expect(unmetReminder("Me lembra de comprar pão", "Claro! Que horas você quer o aviso?", new Set())).toBeNull();
+    expect(unmetReminder("Cancela o lembrete do treino", "Feito", new Set())).toBeNull();
+    expect(unmetReminder("Quais lembretes eu tenho amanhã?", "Só o treino às 7h.", new Set())).toBeNull();
+    expect(unmetReminder("Quanto gastei hoje?", "R$ 40", new Set())).toBeNull();
+    expect(unmetReminder("Me avisa se o preço baixar", "Fechado, deixei de olho", new Set(["watch_create"]))).toBeNull();
   });
 });
 
