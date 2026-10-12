@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api, brl, day } from "../api";
-import { CATEGORY_COLORS, Donut, Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
+import { Donut, Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { DateField, isoDate } from "../pickers";
@@ -8,6 +8,7 @@ import { useLongPress } from "../ios";
 import { haptic } from "../touch";
 import { ReportModal } from "./FinanceReport";
 import { GoalsCard } from "./FinanceGoals";
+import { CategoriesModal, useCategories } from "./FinanceCategories";
 import { CardsTab, InvoicesCard, invoiceMonthFor, invoiceMonthLabel, useCards, type CreditCard } from "./FinanceCards";
 
 const SOURCE: Record<string, string> = { conversa: "conversa", audio: "áudio", comprovante: "comprovante", documento: "documento", painel: "painel" };
@@ -64,6 +65,9 @@ export function FinancePage() {
   const shared = useApi<{ withMe: { id: string; name: string; scopes: string[] }[] }>("/api/shares");
   const owners = (shared.data?.withMe ?? []).filter((p) => p.scopes.includes("finance"));
   const { data, error, reload } = useApi<any>(`/api/finance?month=${month}${user ? `&user=${user}` : ""}`, { poll: 20000 });
+  const categories = useCategories(user);
+  const colorOf = categories.colorOf;
+  const [managing, setManaging] = useState(false);
 
   const months = data?.months ?? [];
   const expenses = Number(data?.totals?.expenses ?? 0);
@@ -71,7 +75,7 @@ export function FinancePage() {
   const prevTotal = Number(months.find((m: any) => m.month === shift(month, -1))?.expenses ?? NaN);
   const diff = Number.isFinite(prevTotal) ? expenses - prevTotal : null;
   const prevCat = new Map<string, number>((data?.prevByCategory ?? []).map((c: any) => [c.category, Number(c.total)]));
-  const cats = (data?.byCategory ?? []).map((c: any) => ({ label: c.category as string, value: Number(c.total), count: Number(c.count) }));
+  const cats = (data?.byCategory ?? []).map((c: any, i: number) => ({ label: c.category as string, value: Number(c.total), count: Number(c.count), color: colorOf(c.category, i) }));
   const maxMonth = Math.max(1, ...months.map((m: any) => Number(m.expenses)));
   const daysIn = new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0).getDate();
   const byDay = new Map<number, number>((data?.daily ?? []).map((d: any) => [Number(d.day), Number(d.expenses ?? 0)]));
@@ -200,7 +204,7 @@ export function FinancePage() {
                 {cats[0] && (
                   <>
                     <div className="fin-insight-meta">
-                      <span className="fin-pill" style={{ ["--c" as any]: CATEGORY_COLORS[0] }}><Icon name={CAT_ICON[cats[0].label] ?? "hash"} size={13} /> {cats[0].label}</span>
+                      <span className="fin-pill" style={{ ["--c" as any]: cats[0].color }}><Icon name={CAT_ICON[cats[0].label] ?? "hash"} size={13} /> {cats[0].label}</span>
                       <strong>{brl(cats[0].value)}</strong> <span className="muted">gasto</span>
                       <strong>{expenses ? ((cats[0].value / expenses) * 100).toFixed(1).replace(".", ",") : 0}%</strong> <span className="muted">do total</span>
                     </div>
@@ -235,15 +239,16 @@ export function FinancePage() {
                     <h3>Gastos por categoria</h3>
                     <small className="muted">Toque numa categoria para ver os lançamentos</small>
                   </div>
+                  {!readonly && <button className="link-btn fin-cats-edit" onClick={() => { haptic(5); setManaging(true); }}>Categorias <Icon name="chevron-right" size={13} /></button>}
                 </div>
                 {cats.length ? (
                   <div className="fin-donut">
                     <Donut items={cats} size={150} center={<div><small className="muted">Total</small><div style={{ fontWeight: 700, fontSize: 13 }} title={brl(expenses)}>{brlShort(expenses)}</div></div>} />
                     <div className="fin-legend">
-                      {cats.map((c: any, i: number) => {
+                      {cats.map((c: any) => {
                         const b = budgetOf.get(c.label);
                         return (
-                          <button key={c.label} style={{ ["--c" as any]: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} onClick={() => { haptic(5); setCat(c.label); setTab("list"); }}>
+                          <button key={c.label} style={{ ["--c" as any]: c.color }} onClick={() => { haptic(5); setCat(c.label); setTab("list"); }}>
                             <span className="dot" />
                             <span className="name" title={c.label}>{c.label}</span>
                             <span className="muted val">{brl(c.value)}</span>
@@ -325,14 +330,15 @@ export function FinancePage() {
           <div className="fin-section-head">
             <h3>Por categoria</h3>
             {cat && <button className="btn btn-sm btn-ghost" aria-label={`Tirar o filtro ${cat}`} onClick={() => setCat(null)}><Icon name="x" size={14} /> <span>{cat}</span></button>}
+            {!readonly && <button className="link-btn fin-cats-edit" onClick={() => { haptic(5); setManaging(true); }}>Editar categorias <Icon name="chevron-right" size={13} /></button>}
           </div>
           {cats.length ? (
             <div className="fin-cats">
-              {cats.map((c: any, i: number) => {
+              {cats.map((c: any) => {
                 const prev = prevCat.get(c.label);
                 const d = prev != null ? c.value - prev : null;
                 return (
-                  <button key={c.label} style={{ ["--c" as any]: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} className={`card fin-cat ${cat === c.label ? "active" : ""} ${cat && cat !== c.label ? "dim" : ""}`} onClick={() => { haptic(5); setCat(cat === c.label ? null : c.label); }}>
+                  <button key={c.label} style={{ ["--c" as any]: c.color }} className={`card fin-cat ${cat === c.label ? "active" : ""} ${cat && cat !== c.label ? "dim" : ""}`} onClick={() => { haptic(5); setCat(cat === c.label ? null : c.label); }}>
                     <span className="fin-cat-ico"><Icon name={CAT_ICON[c.label] ?? "hash"} size={18} /></span>
                     <span className="fin-cat-name" title={c.label}>{c.label}</span>
                     <strong className={`fin-cat-value${longMoney(c.value)}`}>{brl(c.value)}</strong>
@@ -357,7 +363,7 @@ export function FinancePage() {
                   <div className="fin-day"><span>{dayLabel(items[0].occurred_at)}</span>{total > 0 && <span>{brl(total)}</span>}</div>
                   {items.map((t: any) => (
                     <button key={t.id} className="fin-tx" data-id={t.id} onClick={() => setDetail(t)} {...press}>
-                      <span className="fin-tx-ico" style={{ ["--c" as any]: CATEGORY_COLORS[Math.max(0, cats.findIndex((c: any) => c.label === t.category)) % CATEGORY_COLORS.length] }}><Icon name={t.kind === "income" ? "arrow-down" : CAT_ICON[t.category] ?? "hash"} size={16} /></span>
+                      <span className="fin-tx-ico" style={{ ["--c" as any]: colorOf(t.category, Math.max(0, cats.findIndex((c: any) => c.label === t.category))) }}><Icon name={t.kind === "income" ? "arrow-down" : CAT_ICON[t.category] ?? "hash"} size={16} /></span>
                       <span className="fin-tx-text">
                         <span className="ellipsis">{t.description ?? t.merchant ?? t.category}</span>
                         <small className="muted ellipsis">
@@ -376,6 +382,7 @@ export function FinancePage() {
           </div>
         </>
       )}
+      {managing && <CategoriesModal onClose={(changed) => { setManaging(false); if (changed) { void reload(); void categories.reload(); } }} />}
       {budget && <BudgetModal initial={budget} onClose={() => { setBudget(null); void reload(); }} />}
       {report && <ReportModal month={month} user={user} readonly={readonly} onClose={() => setReport(false)} />}
       {adding && <TransactionForm onClose={() => { setAdding(false); void reload(); }} />}
@@ -439,7 +446,7 @@ function shift(month: string, delta: number) {
 
 /** Novo lançamento ou edição de um existente (valor, tipo, categoria, descrição e data). */
 function TransactionForm({ initial, onClose }: { initial?: any; onClose: () => void }) {
-  const cats = useApi<string[]>("/api/finance/categories");
+  const cats = useCategories().list;
   const cards: CreditCard[] = useCards("").data?.cards ?? [];
   const [f, setF] = useState({
     kind: initial?.kind ?? "expense",
@@ -481,7 +488,8 @@ function TransactionForm({ initial, onClose }: { initial?: any; onClose: () => v
       <div className="field"><label htmlFor="tx-cat">Categoria</label>
         <select id="tx-cat" className="select" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>
           {!initial && <option value="">Automática (pela descrição)</option>}
-          {(cats.data ?? []).map((c) => <option key={c}>{c}</option>)}
+          {cats.filter((c) => c.kind === "both" || c.kind === f.kind || c.name === f.category).map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+          {f.category && !cats.some((c) => c.name === f.category) && <option value={f.category}>{f.category}</option>}
         </select>
       </div>
       <div className="field"><label htmlFor="tx-desc">Descrição</label><input id="tx-desc" name="description" className="input" autoComplete="off" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
@@ -517,7 +525,7 @@ function TransactionForm({ initial, onClose }: { initial?: any; onClose: () => v
 }
 
 function BudgetModal({ initial, onClose }: { initial: { category: string | null; amount?: number }; onClose: () => void }) {
-  const cats = useApi<string[]>("/api/finance/categories");
+  const cats = useCategories().list;
   const [category, setCategory] = useState(initial.category ?? "");
   const [amount, setAmount] = useState(initial.amount ? String(initial.amount).replace(".", ",") : "");
   const [error, setError] = useState<string | null>(null);
@@ -545,7 +553,7 @@ function BudgetModal({ initial, onClose }: { initial: { category: string | null;
       <div className="field"><label htmlFor="bd-cat">Para</label>
         <select id="bd-cat" className="select" value={category} disabled={initial.amount != null} onChange={(e) => setCategory(e.target.value)}>
           <option value="">Total do mês</option>
-          {(cats.data ?? []).filter((c) => c !== "Salário" && c !== "Investimentos").map((c) => <option key={c} value={c}>{c}</option>)}
+          {cats.filter((c) => c.kind !== "income" || c.name === category).map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
         </select>
       </div>
       <div className="field"><label htmlFor="bd-amount">Limite por mês (R$)</label><input id="bd-amount" name="limit" className="input" inputMode="decimal" autoComplete="off" placeholder="800" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus /></div>

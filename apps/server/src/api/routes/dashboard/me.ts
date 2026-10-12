@@ -34,8 +34,10 @@ export function meRoutes(base: FastifyInstance) {
       [uid],
     );
     const byCategory = await many(
-      `SELECT category, SUM(amount) AS total FROM transactions WHERE user_id = $1 AND kind = 'expense'
-          AND date_trunc('month', occurred_at AT TIME ZONE $2) = date_trunc('month', now() AT TIME ZONE $2) GROUP BY category ORDER BY total DESC`,
+      `SELECT t.category, SUM(t.amount) AS total, MIN(fc.color) AS color FROM transactions t
+         LEFT JOIN finance_categories fc ON fc.user_id = t.user_id AND fc.name = t.category
+        WHERE t.user_id = $1 AND t.kind = 'expense'
+          AND date_trunc('month', t.occurred_at AT TIME ZONE $2) = date_trunc('month', now() AT TIME ZONE $2) GROUP BY t.category ORDER BY total DESC`,
       [uid, tz],
     );
     const nextReminders = await many(

@@ -604,7 +604,7 @@ export function CopyField({ value }: { value: string }) {
 export const CATEGORY_COLORS = ["#FF7A1A", "#FF4458", "#E23382", "#B830C8", "#8B2BE2", "#5B45E8", "#2F7BEA", "#16A3A3", "#9AA0A6", "#C9CCD1", "#7d7d78", "#b5b5af", "#5f5f5a", "#dcdcd6"];
 
 /** Rosca SVG simples (sem biblioteca) para gastos por categoria. */
-export function Donut({ items, size = 150, center }: { items: { label: string; value: number }[]; size?: number; center?: ReactNode }) {
+export function Donut({ items, size = 150, center }: { items: { label: string; value: number; color?: string }[]; size?: number; center?: ReactNode }) {
   const total = items.reduce((a, i) => a + i.value, 0);
   const r = size / 2 - 12;
   const c = 2 * Math.PI * r;
@@ -617,7 +617,7 @@ export function Donut({ items, size = 150, center }: { items: { label: string; v
           items.map((it, i) => {
             const len = (it.value / total) * c;
             const el = (
-              <circle key={it.label} cx={size / 2} cy={size / 2} r={r} fill="none" stroke={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} strokeWidth={18}
+              <circle key={it.label} cx={size / 2} cy={size / 2} r={r} fill="none" stroke={it.color ?? CATEGORY_COLORS[i % CATEGORY_COLORS.length]} strokeWidth={18}
                 strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-offset}>
                 <title>{it.label}</title>
               </circle>

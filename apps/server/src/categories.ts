@@ -103,7 +103,14 @@ const cleanName = (s: unknown) => String(s ?? "").replace(/\s+/g, " ").trim().sl
 const cleanColor = (s: unknown) => (/^#[0-9a-f]{6}$/i.test(String(s ?? "")) ? String(s).toUpperCase() : null);
 const cleanKeywords = (v: unknown) => {
   const list = Array.isArray(v) ? v : String(v ?? "").split(/[,;\n]/);
-  return [...new Set(list.map((k) => learnKey(String(k))).filter((k): k is string => Boolean(k)))].slice(0, 30);
+  // guarda como ela escreveu (com acento); compara sem acento
+  const out = new Map<string, string>();
+  for (const k of list) {
+    const word = String(k).replace(/\s+/g, " ").trim().toLowerCase().slice(0, 40);
+    const key = learnKey(word);
+    if (key && !out.has(key)) out.set(key, word);
+  }
+  return [...out.values()].slice(0, 30);
 };
 
 /** Categorias da pessoa; na primeira vez cria as de sempre e as que ela já usa nos lançamentos antigos. */
@@ -157,7 +164,7 @@ export async function autoCategory(userId: string, kind: string, hint?: string |
     const near = exact ?? learned.filter((l) => hasPhrase(text, l.key)).sort((a, b) => b.key.length - a.key.length)[0];
     const c = near && valid(near.category);
     if (c) return { category: c.name, how: "corrigido" as const };
-    const byWord = cats.filter((c) => fits(c, kind)).find((c) => c.keywords.some((k) => hasPhrase(text, k)));
+    const byWord = cats.filter((c) => fits(c, kind)).find((c) => c.keywords.some((k) => hasPhrase(text, learnKey(k) ?? "")));
     if (byWord) return { category: byWord.name, how: "palavra" as const };
   }
   const key = (merchant || description || "").trim();

@@ -223,16 +223,16 @@ const WIDGETS: Record<string, WidgetDef> = {
     icon: "circle",
     sizes: ["m", "l"],
     render: ({ mine }) => {
-      const cats = (mine?.byCategory ?? []).map((c: any) => ({ label: c.category, value: Number(c.total) }));
+      const cats = (mine?.byCategory ?? []).map((c: any, i: number) => ({ label: c.category, value: Number(c.total), color: c.color ?? CATEGORY_COLORS[i % CATEGORY_COLORS.length] }));
       return (
         <Box title="Gastos por categoria" icon="circle" to="/finance">
           {cats.length ? (
             <div className="donut-wrap">
               <Donut items={cats} size={130} center={<strong>{brl(cats.reduce((a: number, c: any) => a + c.value, 0))}</strong>} />
               <div className="legend">
-                {cats.slice(0, 6).map((c: any, i: number) => (
+                {cats.slice(0, 6).map((c: any) => (
                   <div className="item" key={c.label}>
-                    <span className="sw" style={{ background: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} />
+                    <span className="sw" style={{ background: c.color }} />
                     {c.label}
                     <strong>{brl(c.value)}</strong>
                   </div>

@@ -46,7 +46,7 @@ describe.skipIf(!enabled)("categorias (e2e)", () => {
   it("quem nunca mexeu tem as de sempre; cria uma nova com palavras e ela já pega os gastos", async () => {
     const list: any = await tool.run({ action: "list" }, ctx);
     expect(list.categories.map((c: any) => c.name)).toContain("Alimentação");
-    expect(await tool.run({ action: "create", name: "Pets", keywords: "ração, veterinário, petshop" }, ctx)).toMatchObject({ ok: true, created: "Pets", keywords: "racao, veterinario, petshop" });
+    expect(await tool.run({ action: "create", name: "Pets", keywords: "ração, veterinário, petshop" }, ctx)).toMatchObject({ ok: true, created: "Pets", keywords: "ração, veterinário, petshop" });
     expect(await tool.run({ action: "create", name: "pets" }, ctx)).toMatchObject({ ok: false, error: expect.stringContaining("Já existe") });
     const a: any = await fin.addTransaction.run({ kind: "expense", amount: 120, description: "ração do Thor" }, ctx);
     expect(a.category).toBe("Pets");
