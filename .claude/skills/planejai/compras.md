@@ -20,7 +20,7 @@ Nenhuma loja brasileira abre API para um app de fora fechar a compra pela pessoa
 Em "Meu dia" para todo mundo. Busca com filtro Novos/Usados e teto em R$, ofertas em grade (no celular viram linha com foto pequena), "Abrir na loja" e "Guardar"; "Sua lista" com preço guardado, preço de hoje do acompanhamento, sino do aviso (modal com meta), Comprei e Tirar. Fotos só dos CDNs `*.mlstatic.com` e `*.susercontent.com` (liberados no `img-src` da CSP em `api/security.ts`). Rotas (`api/routes/dashboard/shopping.ts`): `GET /api/compras`, `GET /api/compras/busca?q=&condition=&max=` (40 por hora por pessoa), `POST /api/compras/lista`, `PATCH|DELETE /api/compras/lista/:id`.
 
 ## O que saiu
-Checkout pelo navegador, Pix da loja, login e cookies de loja, endereço, termos de compra, "Testar lojas", limites em Configurações e a fila `purchases.check` (o worker tira o agendamento antigo). As tabelas antigas (`purchases`, `buyer_profiles`, `user_stores`, `store_sessions`, `store_logins`) ficaram no banco sem uso; apagar os logins guardados só com o sim do dono, numa migração nova.
+Checkout pelo navegador, Pix da loja, login e cookies de loja, endereço, termos de compra, "Testar lojas", limites em Configurações e a fila `purchases.check` (o worker tira o agendamento antigo). Os logins guardados das lojas (`store_sessions`, `store_logins`) foram apagados a pedido do dono (`db/migrations/051_sem_login_de_loja.sql`); `purchases`, `buyer_profiles` e `user_stores` ficaram no banco sem uso.
 
 ## Não testado de verdade
 APIs do Mercado Livre e da Shopee de verdade (o sandbox não alcança). Teste com a busca do painel depois de colar as chaves da Shopee.
