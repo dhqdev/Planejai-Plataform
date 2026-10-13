@@ -30,6 +30,19 @@ RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ...
 RCLONE_CONFIG_R2_ENDPOINT: https://<conta>.r2.cloudflarestorage.com
 ```
 
+Com Backblaze B2 (um bucket só para banco e arquivos, dumps na pasta `backups/`):
+
+```
+BACKUP_REMOTE: b2:Mensageria/backups
+RCLONE_CONFIG_B2_TYPE: s3
+RCLONE_CONFIG_B2_PROVIDER: Other
+RCLONE_CONFIG_B2_ACCESS_KEY_ID: <keyID da Application Key>
+RCLONE_CONFIG_B2_SECRET_ACCESS_KEY: <applicationKey>
+RCLONE_CONFIG_B2_ENDPOINT: https://s3.us-east-005.backblazeb2.com
+```
+
+No B2 crie uma Application Key só desse bucket (Read and Write), nunca a Master. Com "Keep all versions" o que o rclone apaga vira versão oculta e continua cobrando: ponha a regra de ciclo de vida "Keep prior versions for this number of days" (ex.: 30).
+
 **Conferir:** os logs do serviço `backup` mostram `backup ok: /backups/planejai-AAAAMMDD-HHMM.dump`.
 
 **Restaurar:**
@@ -55,6 +68,8 @@ STORAGE_S3_REGION: auto
 STORAGE_S3_ACCESS_KEY_ID: ...
 STORAGE_S3_SECRET_ACCESS_KEY: ...
 ```
+
+No B2 o endpoint é `https://s3.<região>.backblazeb2.com` e `STORAGE_S3_REGION` é a região (ex.: `us-east-005`), não `auto`: a assinatura usa a região.
 
 3. Atualize a stack. Arquivo novo já vai pro bucket (`documents/<pessoa>/<id>` e `media/<id>`). Os antigos saem do banco aos poucos: a limpeza de hora em hora leva até 50 por rodada (log `limpeza de dados antigos`, campo `movedToStorage`).
 
