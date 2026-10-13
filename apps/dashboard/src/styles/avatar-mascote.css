@@ -1,0 +1,19 @@
+/* Avatar de pessoa = o Mascote dela (mascote/UserMascote.tsx). Nada de foto nem iniciais: a bolinha escura é a noite
+   do Mascote, igual ao palco do guarda-roupa, e o Mascote branco fica por cima com a roupinha que a pessoa escolheu. */
+.user-mascote {
+  display: inline-grid; place-items: end center; flex-shrink: 0; overflow: hidden; border-radius: 50%;
+  /* numa linha flex (lista de Clientes) não estica na altura da linha: fica sempre redondo */
+  align-self: center; aspect-ratio: 1 / 1; flex-grow: 0;
+  /* o respiro de baixo vem do tamanho (UserMascote.tsx): padding em % seria da largura da LINHA e esticava a bolinha */
+  box-sizing: border-box; line-height: 0;
+  background: radial-gradient(70% 70% at 50% 40%, #2a2a30 0%, #161618 72%, #0e0e10 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+}
+.user-mascote .mascote { max-width: 100%; max-height: 100%; }
+
+/* no fundo claro (menu branco, tema claro) um anel fininho separa a bolinha do papel */
+:root[data-theme="light"] .user-mascote, .sidebar .user-mascote, .more-sheet .user-mascote { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06), 0 0 0 1px rgba(0, 0, 0, .06); }
+
+/* o Mascote de quem está logado (canto de baixo do menu e folha "Mais" no celular) fica solto, sem a bolinha,
+   igual ao Mascote lá de cima */
+.sidebar-foot .me .user-mascote, .more-sheet .more-me .user-mascote { background: none; box-shadow: none; border-radius: 0; overflow: visible; }

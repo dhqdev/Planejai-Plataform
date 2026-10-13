@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Mochi, type Mood } from "./Mochi";
+import { Mascote, type Mood } from "./Mascote";
 import { useOutfit } from "./state";
 
 /**
- * O Mochi passeando pela tela. Ao abrir o app ele entra pulando pelo canto, acena e volta;
+ * O Mascote passeando pela tela. Ao abrir o app ele entra pulando pelo canto, acena e volta;
  * de vez em quando atravessa a tela de um lado ao outro, para no meio para olhar e segue.
  * Tocar nele: ele amassa, acena e vai embora. Desliga no guarda-roupa ("Passear pela tela")
  * e com movimento reduzido. Nada de efeito: só andar, pular e acenar.
@@ -23,7 +23,7 @@ export function setStrollEnabled(on: boolean) {
   } catch {
     /* sem storage */
   }
-  window.dispatchEvent(new Event("pj:mochi-passeio"));
+  window.dispatchEvent(new Event("pj:mascote-passeio"));
 }
 
 /** velocidade de caminhada, px por segundo */
@@ -34,7 +34,7 @@ const wait = (ms: number, signal: AbortSignal) =>
     signal.addEventListener("abort", () => (clearTimeout(t), no(new Error("abort"))), { once: true });
   });
 
-export function MochiStroll() {
+export function MascoteStroll() {
   const [outfit] = useOutfit();
   const [on, setOn] = useState(strollEnabled);
   const [show, setShow] = useState(false);
@@ -49,8 +49,8 @@ export function MochiStroll() {
 
   useEffect(() => {
     const sync = () => setOn(strollEnabled());
-    window.addEventListener("pj:mochi-passeio", sync);
-    return () => window.removeEventListener("pj:mochi-passeio", sync);
+    window.addEventListener("pj:mascote-passeio", sync);
+    return () => window.removeEventListener("pj:mascote-passeio", sync);
   }, []);
 
   useEffect(() => {
@@ -205,9 +205,9 @@ export function MochiStroll() {
 
   if (!on || !show) return null;
   return (
-    <div className="mochi-stroll" ref={box} style={{ transform: `translateX(${x.current}px)` }} aria-hidden="true">
-      <span className="mochi-stroll-body" onPointerDown={tap}>
-        <Mochi size={size} outfit={outfit} mood={mood} walking={walking} gaze={walking ? [dir * 0.9, 0.1] : undefined} />
+    <div className="mascote-stroll" ref={box} style={{ transform: `translateX(${x.current}px)` }} aria-hidden="true">
+      <span className="mascote-stroll-body" onPointerDown={tap}>
+        <Mascote size={size} outfit={outfit} mood={mood} walking={walking} gaze={walking ? [dir * 0.9, 0.1] : undefined} />
       </span>
     </div>
   );

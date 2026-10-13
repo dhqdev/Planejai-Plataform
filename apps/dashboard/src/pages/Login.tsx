@@ -3,8 +3,8 @@ import { api, phoneFmt } from "../api";
 import type { Me } from "../App";
 import { ErrorBox } from "../components";
 import { haptic } from "../touch";
-import { Mochi, type Mood } from "../mochi/Mochi";
-import { FloatingMochis, StageMochi, lookAt } from "../mochi/Parade";
+import { Mascote, type Mood } from "../mascote/Mascote";
+import { FloatingMascotes, StageMascote, lookAt } from "../mascote/Parade";
 
 interface Invite {
   name: string | null;
@@ -22,14 +22,14 @@ const cleanCode = (raw: string) => raw.replace(/[^A-Za-z0-9]/g, "").toUpperCase(
 type Step = "code" | "you" | "access";
 const STEPS: Step[] = ["code", "you", "access"];
 
-/** O que o Mochi diz em cada etapa (no palco do notebook). */
+/** O que o Mascote diz em cada etapa (no palco do notebook). */
 const SAY: Record<Step, string> = {
   code: "Cadê o seu convite?",
   you: "Prazer! Como te chamo?",
   access: "Agora é só criar a senha.",
 };
 
-/** Cara do Mochi conforme o campo em foco: tímido na senha, curioso no WhatsApp. */
+/** Cara do Mascote conforme o campo em foco: tímido na senha, curioso no WhatsApp. */
 const FIELD_MOOD: Record<string, Mood> = { code: "searching", name: "happy", phone: "curious", email: "thinking", password: "shy" };
 
 export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
@@ -169,7 +169,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
   const at = steps.indexOf(step);
   const register = mode === "register" && !done && !challenge;
   const look = register ? lookAt(STEPS.indexOf(step)) : lookAt(0);
-  // a cara do Mochi: erro e espera mandam, depois o campo em foco, depois a da fantasia
+  // a cara do Mascote: erro e espera mandam, depois o campo em foco, depois a da fantasia
   const mood: Mood = error ? "error" : found ? "surprised" : busy ? "working" : done ? "finished" : (focus && FIELD_MOOD[focus]) || (register ? look.mood : "greeting");
   const stageKey = register ? step : mode;
   const say = error ? "Opa, algo não bateu." : found ? "Achei seu convite!" : register ? SAY[step] : mode === "forgot" ? "Acontece com todo mundo." : "Que bom te ver!";
@@ -182,12 +182,12 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
     <div className="auth">
       <section className="auth-hero">
         <div className="brand" style={{ padding: 0 }}>
-          <Mochi size={44} crop mood={busy ? "working" : "greeting"} />
+          <Mascote size={44} crop mood={busy ? "working" : "greeting"} />
           planejai
         </div>
         <div className="auth-hero-stage">
-          <FloatingMochis />
-          <StageMochi step={stageKey} look={look} mood={mood} size={190} say={say} />
+          <FloatingMascotes />
+          <StageMascote step={stageKey} look={look} mood={mood} size={190} say={say} />
         </div>
         <div>
           <h2>Seu assistente no WhatsApp que resolve de verdade.</h2>
@@ -196,10 +196,10 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
         </div>
       </section>
       <section className="auth-form">
-        <FloatingMochis edges />
+        <FloatingMascotes edges />
         <form className="card" onSubmit={submit}>
           <div className="auth-logo">
-            <StageMochi step={stageKey} look={look} mood={mood} size={92} />
+            <StageMascote step={stageKey} look={look} mood={mood} size={92} />
           </div>
           {challenge ? (
             <>

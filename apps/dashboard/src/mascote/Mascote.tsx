@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import "./mochi.css";
+import { MASCOTE } from "./nome";
+import "./mascote.css";
 
 /**
- * Mochi, o mascote do Planejai: uma bolinha branca, fosca e sólida, desenhada em SVG.
+ * Mascote, o mascote do Planejai: uma bolinha branca, fosca e sólida, desenhada em SVG.
  * O corpo fica parado; quem fala são os olhos: seguem o mouse/dedo, passeiam sozinhos, piscam
  * e mudam de forma em cada expressão. Ao tocar, ele amassa e reage.
  */
@@ -947,7 +948,7 @@ const POKES: Mood[] = ["happy", "surprised", "laughing", "wink", "happy", "curio
 const RANGE_X = 6.5;
 const RANGE_Y = 4.5;
 
-export function Mochi({
+export function Mascote({
   mood = "idle",
   outfit = {},
   size = 64,
@@ -1138,12 +1139,12 @@ export function Mochi({
   return (
     <svg
       ref={svg}
-      className={`mochi ${still ? "m-still" : ""} ${walking ? "m-walk" : ""} ${face.scan ? `m-scan-${face.scan}` : ""} ${className ?? ""}`}
+      className={`mascote ${still ? "m-still" : ""} ${walking ? "m-walk" : ""} ${face.scan ? `m-scan-${face.scan}` : ""} ${className ?? ""}`}
       width={size}
       height={crop ? Math.round((size * 80) / 104) : size}
       viewBox={crop ? cropBox : "0 0 120 120"}
       role="img"
-      aria-label={title ?? "Mochi"}
+      aria-label={title ?? MASCOTE}
       style={style}
       onPointerDown={onPoke}
     >
@@ -1212,12 +1213,12 @@ export function Mochi({
   );
 }
 
-/** Mochi num quadrinho escuro, como na grade de expressões. */
-export function MochiTile({ children, active, onClick, label }: { children: ReactNode; active?: boolean; onClick?: () => void; label: string }) {
+/** Mascote num quadrinho escuro, como na grade de expressões. */
+export function MascoteTile({ children, active, onClick, label }: { children: ReactNode; active?: boolean; onClick?: () => void; label: string }) {
   return (
-    <button type="button" className={`mochi-tile ${active ? "active" : ""}`} onClick={onClick} aria-pressed={active}>
-      <span className="mochi-tile-art">{children}</span>
-      <span className="mochi-tile-label">{label}</span>
+    <button type="button" className={`mascote-tile ${active ? "active" : ""}`} onClick={onClick} aria-pressed={active}>
+      <span className="mascote-tile-art">{children}</span>
+      <span className="mascote-tile-label">{label}</span>
     </button>
   );
 }

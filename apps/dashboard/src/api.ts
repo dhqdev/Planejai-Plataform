@@ -6,7 +6,7 @@ export class ApiError extends Error {
 
 export async function api<T = any>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const { json, ...rest } = init;
-  // o Mochi reage quando algo é salvo (trabalhando, pronto ou erro)
+  // o Mascote reage quando algo é salvo (trabalhando, pronto ou erro)
   const loud = !!rest.method && rest.method !== "GET" && !(rest.headers as Record<string, string> | undefined)?.["x-pj-quiet"];
   const mood = (phase: string) => loud && window.dispatchEvent(new CustomEvent("pj:api", { detail: { phase } }));
   mood("start");

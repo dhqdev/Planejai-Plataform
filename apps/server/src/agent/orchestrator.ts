@@ -533,7 +533,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       if (!byPoll) result.text = `${result.text}\n\n${askYesText(what)}`.trim();
     }
     const silent = !result.text || /^\[\[sil[eê]ncio\]\]$/i.test(result.text.trim());
-    // [[gif:busca]] vira um GIF e [[figurinha:nome]] uma figurinha do Mochi, cada um num balão próprio
+    // [[gif:busca]] vira um GIF e [[figurinha:nome]] uma figurinha do Mascote, cada um num balão próprio
     const withGif = silent
       ? ""
       : await placeGifs(result.text, conversationId, gifs ? (q) => fetchGif(q, user.id) : null, (base64) =>

@@ -1,4 +1,4 @@
-/* ---------- Preto e branco; o roxo do Mochi só nos pontos estratégicos ----------
+/* ---------- Preto e branco; o roxo do Mascote só nos pontos estratégicos ----------
    Roxo: ação principal da tela (.btn-brand e o + flutuante), item ativo do menu e da barra, hoje na agenda,
    foco do teclado, o Juvenal no mapa e as bolinhas de novidade (magenta). O resto é tinta sobre branco. */
 .avatar, .cal-mini-grid button.sel { color: var(--on-ink); }
@@ -16,8 +16,8 @@
   .tab.active { color: var(--text); background: var(--violet-soft); box-shadow: none; }
   .tab.active .tab-ico { color: var(--violet); }
 }
-/* marca na barra lateral e no topo do celular: o Mochi num quadrinho branco (nunca sobre cor) */
-.brand > .mochi-badge { padding: 5px; margin: 0; border-radius: 14px; background: #fff; box-shadow: 0 0 0 1px rgba(20, 10, 40, .08), 0 2px 8px rgba(20, 10, 40, .12); }
+/* marca na barra lateral e no topo do celular: o Mascote num quadrinho branco (nunca sobre cor) */
+.brand > .mascote-badge { padding: 5px; margin: 0; border-radius: 14px; background: #fff; box-shadow: 0 0 0 1px rgba(20, 10, 40, .08), 0 2px 8px rgba(20, 10, 40, .12); }
 
 /* ---------- Celular: barra de baixo com 4 botões e o "Mais" organizado por seção ---------- */
 @media (max-width: 767px) {

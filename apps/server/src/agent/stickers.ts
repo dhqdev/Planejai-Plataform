@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** Figurinhas do Mochi (webp 512x512 em assets/stickers) que o CTO pode mandar com [[figurinha:nome]]. */
+/** Figurinhas do Mascote (webp 512x512 em assets/stickers) que o CTO pode mandar com [[figurinha:nome]]. */
 export const STICKERS = [
   "oi", "feliz", "pronto", "rindo", "piscando", "pensando", "surpreso", "curioso", "triste", "festa", "com-sono", "dormindo",
   "coroa", "flor", "laco", "oculos-escuros", "fone", "cachecol", "gorro", "papai-noel", "abobora", "bruxa",

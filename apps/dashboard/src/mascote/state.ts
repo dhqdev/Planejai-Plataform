@@ -1,9 +1,9 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { api } from "../api";
-import type { Mood, Outfit } from "./Mochi";
+import type { Mood, Outfit } from "./Mascote";
 
 /**
- * Humor e roupinha do Mochi, compartilhados pelo app inteiro.
+ * Humor e roupinha do Mascote, compartilhados pelo app inteiro.
  * O humor reage ao que acontece: salvando = trabalhando, deu certo = pronto, deu erro = erro,
  * parado muito tempo = dormindo. A roupinha fica salva na conta (e no aparelho, para abrir já vestido).
  */
@@ -15,6 +15,7 @@ const subscribe = (l: () => void) => {
   return () => listeners.delete(l);
 };
 
+// chave antiga mantida: quem já escolheu roupinha continua vestido
 const KEY = "pj-mochi";
 let outfit: Outfit = read();
 let mood: Mood = "idle";
@@ -54,7 +55,7 @@ export function flashMood(m: Mood, ms = 2200) {
   recompute();
 }
 
-export function useMochiMood() {
+export function useMascoteMood() {
   return useSyncExternalStore(subscribe, () => mood);
 }
 
@@ -79,11 +80,11 @@ export function setOutfit(o: Outfit) {
 }
 
 export function openWardrobe() {
-  window.dispatchEvent(new Event("pj:mochi-open"));
+  window.dispatchEvent(new Event("pj:mascote-open"));
 }
 
-/** Liga o Mochi ao app: chamado uma vez depois do login. */
-export function useMochiLife() {
+/** Liga o Mascote ao app: chamado uma vez depois do login. */
+export function useMascoteLife() {
   useEffect(() => {
     void api<{ outfit?: Outfit } | null>("/api/me/mascot")
       .then((r) => {

@@ -1,36 +1,37 @@
 import { useEffect, useState } from "react";
+import { MASCOTE } from "./nome";
 import { Modal } from "../components";
 import { haptic } from "../touch";
-import { ITEMS, MOODS, Mochi, MochiTile, SLOTS, type Mood, type Outfit } from "./Mochi";
-import { openWardrobe, useMochiLife, useMochiMood, useOutfit } from "./state";
+import { ITEMS, MOODS, Mascote, MascoteTile, SLOTS, type Mood, type Outfit } from "./Mascote";
+import { openWardrobe, useMascoteLife, useMascoteMood, useOutfit } from "./state";
 import { setStrollEnabled, strollEnabled } from "./Stroll";
 
-/** O Mochi do app (barra lateral, topo, menu). Tocar nele abre o guarda-roupa. */
-export function MochiButton({ size = 34 }: { size?: number }) {
-  const mood = useMochiMood();
+/** O Mascote do app (barra lateral, topo, menu). Tocar nele abre o guarda-roupa. */
+export function MascoteButton({ size = 34 }: { size?: number }) {
+  const mood = useMascoteMood();
   const [outfit] = useOutfit();
   return (
-    <button type="button" className="mochi-badge" onClick={() => { haptic(8); openWardrobe(); }} aria-label="Mochi: trocar roupinha" title="Mochi">
-      <Mochi mood={mood} outfit={outfit} size={size} crop />
+    <button type="button" className="mascote-badge" onClick={() => { haptic(8); openWardrobe(); }} aria-label={`${MASCOTE}: trocar roupinha`} title={MASCOTE}>
+      <Mascote mood={mood} outfit={outfit} size={size} crop />
     </button>
   );
 }
 
 /** Só o desenho, vestido e com o humor do momento (para tiles e menus). */
-export function MochiIcon({ size = 40 }: { size?: number }) {
-  const mood = useMochiMood();
+export function MascoteIcon({ size = 40 }: { size?: number }) {
+  const mood = useMascoteMood();
   const [outfit] = useOutfit();
-  return <Mochi mood={mood} outfit={outfit} size={size} crop />;
+  return <Mascote mood={mood} outfit={outfit} size={size} crop />;
 }
 
 /** Guarda-roupa: montado uma vez no app, abre com openWardrobe(). */
 export function WardrobeHost() {
-  useMochiLife();
+  useMascoteLife();
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const on = () => setOpen(true);
-    window.addEventListener("pj:mochi-open", on);
-    return () => window.removeEventListener("pj:mochi-open", on);
+    window.addEventListener("pj:mascote-open", on);
+    return () => window.removeEventListener("pj:mascote-open", on);
   }, []);
   return open ? <Wardrobe onClose={() => setOpen(false)} /> : null;
 }
@@ -53,10 +54,10 @@ function Wardrobe({ onClose }: { onClose: () => void }) {
   const wearing = ITEMS.filter((i) => outfit[i.slot] === i.id).map((i) => i.label);
 
   return (
-    <Modal title="Mochi" onClose={onClose} wide>
-      <div className="mochi-stage">
-        <Mochi mood={preview} outfit={outfit} size={200} />
-        <div className="mochi-stage-label">
+    <Modal title={MASCOTE} onClose={onClose} wide>
+      <div className="mascote-stage">
+        <Mascote mood={preview} outfit={outfit} size={200} />
+        <div className="mascote-stage-label">
           {label}
           <small>{wearing.length ? wearing.join(" · ") : "sem roupinha"}</small>
         </div>
@@ -76,29 +77,29 @@ function Wardrobe({ onClose }: { onClose: () => void }) {
 
       {SLOTS.map((slot) => (
         <div key={slot.id}>
-          <div className="mochi-section">{slot.label}</div>
-          <div className="mochi-grid">
-            <MochiTile label="nada" active={!outfit[slot.id]} onClick={() => wear(slot.id, undefined)}>
-              <span className="mochi-none">∅</span>
-            </MochiTile>
+          <div className="mascote-section">{slot.label}</div>
+          <div className="mascote-grid">
+            <MascoteTile label="nada" active={!outfit[slot.id]} onClick={() => wear(slot.id, undefined)}>
+              <span className="mascote-none">∅</span>
+            </MascoteTile>
             {ITEMS.filter((i) => i.slot === slot.id).map((item) => (
-              <MochiTile key={item.id} label={item.label.toLowerCase()} active={outfit[slot.id] === item.id} onClick={() => wear(slot.id, item.id)}>
-                <Mochi size={74} still outfit={{ ...outfit, [slot.id]: item.id }} />
-              </MochiTile>
+              <MascoteTile key={item.id} label={item.label.toLowerCase()} active={outfit[slot.id] === item.id} onClick={() => wear(slot.id, item.id)}>
+                <Mascote size={74} still outfit={{ ...outfit, [slot.id]: item.id }} />
+              </MascoteTile>
             ))}
           </div>
         </div>
       ))}
 
-      <div className="mochi-section">Expressões</div>
+      <div className="mascote-section">Expressões</div>
       <p className="muted" style={{ margin: "-4px 0 10px", fontSize: 12.5 }}>
         Ele fala com os olhos: procura enquanto salva, sorri quando dá certo e cochila se você some. Toque nele para ver a reação; de vez em quando ele pula, balança, olha em volta ou acena sozinho.
       </p>
-      <div className="mochi-grid">
+      <div className="mascote-grid">
         {MOODS.map((m) => (
-          <MochiTile key={m.id} label={m.label} active={preview === m.id} onClick={() => { haptic(6); setPreview(m.id); }}>
-            <Mochi size={74} mood={m.id} outfit={{ ...outfit, eyes: undefined }} still={preview !== m.id} />
-          </MochiTile>
+          <MascoteTile key={m.id} label={m.label} active={preview === m.id} onClick={() => { haptic(6); setPreview(m.id); }}>
+            <Mascote size={74} mood={m.id} outfit={{ ...outfit, eyes: undefined }} still={preview !== m.id} />
+          </MascoteTile>
         ))}
       </div>
     </Modal>

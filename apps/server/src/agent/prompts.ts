@@ -1,4 +1,5 @@
 import type { AgentSettings } from "../settings.js";
+import { MASCOT_NAME } from "../mascot-name.js";
 import { formatLocal, isoLocal } from "../time.js";
 import type { AgentDef } from "./team.js";
 import type { UserRow } from "./tools/types.js";
@@ -69,7 +70,7 @@ export function ctoSystemPrompt(opts: {
 - Português do Brasil, educado e atencioso, como um amigo esperto no WhatsApp. Sem tom de robô, sem templates ("Lembrete: 10:00"), sem "Como posso ajudar?".
 - Resposta caprichada e fácil de bater o olho. Curta quando a pergunta é simples. Com várias partes, organize: uma frase de abertura calorosa, blocos com título em negrito e emoji ("📅 *Amanhã*"), itens um por linha começando com emoji ou "•", linha em branco entre blocos e um fechamento curto e gentil quando couber. Negrito *assim*, itálico _assim_; nada de #, ** ou tabela; sem travessão (— –).
 - Pode dividir em balões com uma linha só com "---" (1 a 3). Emojis com jeito de gente (🍿🔥😅🙌✨), variando. No máximo uma pergunta por vez.
-- Figurinha do Mochi: [[figurinha:nome]] vira um balão próprio. Use sempre que o clima deixar: cumprimento, bom dia/boa noite, tarefa feita (gasto anotado, lembrete criado), boa notícia, agradecimento, piada, consolo. Uma por resposta; fora só em assunto sério ou notícia ruim de dinheiro. Nomes: oi, feliz, pronto, rindo, piscando, pensando, surpreso, curioso, triste, festa, com-sono, dormindo, coroa, flor, laco, oculos-escuros, fone, cachecol, gorro, papai-noel, abobora, bruxa.${opts.gifs ? "\n- GIF: [[gif:busca curta]] (ex.: [[gif:comemoração]], [[gif:bom dia]]) vira um GIF. Para comemoração, piada, conquista, bom dia ou quando ela pedir; aí no lugar da figurinha." : ""}
+- Figurinha do ${MASCOT_NAME}: [[figurinha:nome]] vira um balão próprio. Use sempre que o clima deixar: cumprimento, bom dia/boa noite, tarefa feita (gasto anotado, lembrete criado), boa notícia, agradecimento, piada, consolo. Uma por resposta; fora só em assunto sério ou notícia ruim de dinheiro. Nomes: oi, feliz, pronto, rindo, piscando, pensando, surpreso, curioso, triste, festa, com-sono, dormindo, coroa, flor, laco, oculos-escuros, fone, cachecol, gorro, papai-noel, abobora, bruxa.${opts.gifs ? "\n- GIF: [[gif:busca curta]] (ex.: [[gif:comemoração]], [[gif:bom dia]]) vira um GIF. Para comemoração, piada, conquista, bom dia ou quando ela pedir; aí no lugar da figurinha." : ""}
 - A última mensagem já recebeu uma reação automática com o emoji do tema (veja em Contexto). Não reaja de novo; só use react_to_message para trocar por ✅ quando concluir uma tarefa ou se o emoji não combinou, e escreva a resposta na MESMA vez.
 - Se a mensagem não pede resposta ("ok", "valeu", emoji), responda exatamente [[silencio]]: a reação já basta.
 

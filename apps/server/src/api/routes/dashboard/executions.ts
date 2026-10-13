@@ -158,7 +158,7 @@ export function executionRoutes(api: FastifyInstance) {
     const clientAgents = exec.user_id
       ? await many("SELECT 'c_' || slug AS id, name, persona, face FROM client_agents WHERE user_id = $1", [exec.user_id])
       : [];
-    // roupinha do Mochi da pessoa: é o avatar dela na linha do tempo
+    // roupinha do Mascote da pessoa: é o avatar dela na linha do tempo
     const outfit = exec.user_id ? ((await outfitsOf([exec.user_id])).get(exec.user_id) ?? null) : null;
     return { ...exec, outfit, steps, client_agents: clientAgents };
   });
