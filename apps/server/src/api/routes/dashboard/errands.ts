@@ -20,7 +20,9 @@ export function errandRoutes(base: FastifyInstance) {
   });
   // personalizar a conversa ou mudar o acompanhamento (auto, on = sem prazo, off = parar)
   base.put<{ Params: { phone: string }; Body: PrefsPatch }>("/api/errands/chats/:phone", async (req, reply) => {
-    const r = await savePrefs(await self(req.account), req.params.phone, req.body ?? {});
+    // corpo precisa ser objeto JSON (texto solto chegava como string e quebrava o "in" do savePrefs)
+    if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) return reply.code(400).send({ error: "Dados inválidos" });
+    const r = await savePrefs(await self(req.account), req.params.phone, req.body);
     return r.ok ? r : reply.code(400).send({ error: r.error });
   });
   // excluir acompanhamento: para, cancela o que estava agendado ou aberto (nada é enviado) e tira da tela

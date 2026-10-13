@@ -164,7 +164,7 @@ export function ErrandsPage() {
       void run(`/api/errands/drafts/${d.id}`, { method: "DELETE" });
   };
 
-  const save = (phone: string, patch: Partial<Prefs>) => run(`/api/errands/chats/${encodeURIComponent(phone)}`, { method: "PUT", body: JSON.stringify(patch) });
+  const save = (phone: string, patch: Partial<Prefs>) => run(`/api/errands/chats/${encodeURIComponent(phone)}`, { method: "PUT", json: patch });
   const setFollow = async (phone: string, name: string, follow: Follow, openErrand: boolean) => {
     if (follow === "off" && openErrand && !(await confirmDialog({ title: `Parar de acompanhar ${name}?`, body: "O recado em andamento é cancelado. Nada é enviado para eles, e as respostas deixam de chegar para você.", confirmLabel: "Parar", cancelLabel: "Voltar", danger: true })))
       return;
@@ -192,10 +192,36 @@ export function ErrandsPage() {
   const match = (...parts: (string | null | undefined)[]) => !term || parts.some((p) => p && norm(p).includes(term));
   // arquivada só aparece no filtro Arquivadas; fixada sobe para o topo da sua seção
   const shelf = (phone: string) => (filter === "arquivadas" ? archivedOf(phone) : !archivedOf(phone));
-  const places = filter === "pessoas" ? [] : byPin(list.filter((e) => shelf(e.phone) && match(e.place, pref(e.phone)?.nickname, e.goal, e.phone)), (e) => Boolean(pref(e.phone)?.pinned));
+  // conversa delegada é com uma pessoa: fica em Pessoas, não em Lugares
+  const placeList = list.filter((e) => e.kind !== "conversa");
+  const talkList = list.filter((e) => e.kind === "conversa");
+  const errandsIn = (src: Errand[]) => byPin(src.filter((e) => shelf(e.phone) && match(e.place, pref(e.phone)?.nickname, e.goal, e.phone)), (e) => Boolean(pref(e.phone)?.pinned));
+  const places = filter === "pessoas" ? [] : errandsIn(placeList);
+  const talks = filter === "lugares" ? [] : errandsIn(talkList);
   const contacts = filter === "lugares" ? [] : byPin(people.filter((c) => shelf(c.phone) && match(c.name, pref(c.phone)?.nickname, c.phone, c.last?.text)), (c) => Boolean(pref(c.phone)?.pinned));
   const showDraftRow = draft && filter !== "pessoas" && filter !== "arquivadas" && match(draft.place, draft.goal);
   const total = list.length + people.length + (draft ? 1 : 0);
+  const errandRow = (e: Errand) => (
+    <button key={e.id} className={`errand-row${e.id === selId ? " active" : ""}`} onClick={() => setPicked(e.id)}>
+      <Avatar name={placeName(e, pref(e.phone))} place={e.kind !== "conversa"} color={pref(e.phone)?.color} />
+      <span className="errand-row-body">
+        <span className="errand-row-top">
+          <strong>
+            {pref(e.phone)?.pinned && <Icon name="bookmark" size={12} className="errand-pin" />}
+            {placeName(e, pref(e.phone))}
+          </strong>
+          <span className={`errand-state ${e.state}`}>{stateLabel(e)}</span>
+        </span>
+        <span className="errand-row-goal">{e.goal}</span>
+        {e.last && (
+          <span className="errand-row-last muted">
+            {e.last.from === "nos" ? "Nós: " : e.last.from === "eles" ? "Eles: " : "Você: "}
+            {e.last.text} · {ago(e.updated_at)}
+          </span>
+        )}
+      </span>
+    </button>
+  );
   const listView = (
     <div className="card errand-list" aria-label="Conversas">
       {total > 0 && (
@@ -206,9 +232,9 @@ export function ErrandsPage() {
                 {f === "tudo"
                   ? "Tudo"
                   : f === "lugares"
-                    ? `Lugares${list.length + (draft ? 1 : 0) ? ` ${list.length + (draft ? 1 : 0)}` : ""}`
+                    ? `Lugares${placeList.length + (draft ? 1 : 0) ? ` ${placeList.length + (draft ? 1 : 0)}` : ""}`
                     : f === "pessoas"
-                      ? `Pessoas${people.length ? ` ${people.length}` : ""}`
+                      ? `Pessoas${people.length + talkList.length ? ` ${people.length + talkList.length}` : ""}`
                       : `Arquivadas ${archivedCount}`}
               </button>
             ))}
@@ -229,29 +255,10 @@ export function ErrandsPage() {
           </span>
         </button>
       )}
-      {filter === "tudo" && places.length > 0 && contacts.length > 0 && <div className="errand-section">Lugares</div>}
-      {places.map((e) => (
-        <button key={e.id} className={`errand-row${e.id === selId ? " active" : ""}`} onClick={() => setPicked(e.id)}>
-          <Avatar name={placeName(e, pref(e.phone))} place color={pref(e.phone)?.color} />
-          <span className="errand-row-body">
-            <span className="errand-row-top">
-              <strong>
-                {pref(e.phone)?.pinned && <Icon name="bookmark" size={12} className="errand-pin" />}
-                {placeName(e, pref(e.phone))}
-              </strong>
-              <span className={`errand-state ${e.state}`}>{stateLabel(e)}</span>
-            </span>
-            <span className="errand-row-goal">{e.goal}</span>
-            {e.last && (
-              <span className="errand-row-last muted">
-                {e.last.from === "nos" ? "Nós: " : e.last.from === "eles" ? "Eles: " : "Você: "}
-                {e.last.text} · {ago(e.updated_at)}
-              </span>
-            )}
-          </span>
-        </button>
-      ))}
-      {filter === "tudo" && places.length > 0 && contacts.length > 0 && <div className="errand-section">Pessoas</div>}
+      {filter === "tudo" && places.length > 0 && contacts.length + talks.length > 0 && <div className="errand-section">Lugares</div>}
+      {places.map(errandRow)}
+      {filter === "tudo" && places.length > 0 && contacts.length + talks.length > 0 && <div className="errand-section">Pessoas</div>}
+      {talks.map(errandRow)}
       {contacts.map((c) => (
         <button key={c.phone} className={`errand-row${`c:${c.phone}` === selId ? " active" : ""}`} onClick={() => setPicked(`c:${c.phone}`)}>
           <Avatar name={contactName(c, pref(c.phone))} color={pref(c.phone)?.color} />
@@ -370,7 +377,7 @@ function ErrandView({ e, p, busy, onCancel, onSave, onFollow, onRemove }: { e: E
     <>
       <div className="errand-head">
         <div className="errand-who">
-          <Avatar name={name} place color={p?.color} />
+          <Avatar name={name} place={e.kind !== "conversa"} color={p?.color} />
           <div>
             <h3>{name}</h3>
             <p className="muted">{p?.nickname ? `${e.place} · ${e.goal}` : e.goal}</p>
@@ -382,7 +389,7 @@ function ErrandView({ e, p, busy, onCancel, onSave, onFollow, onRemove }: { e: E
       </ChatBar>
       <div className="errand-facts">
         <span className={`errand-state ${e.state}`}>{stateLabel(e)}</span>
-        <span>{e.allowed ? `Liberado: ${e.allowed}` : "Só pergunta, não fecha nada"}</span>
+        {e.kind !== "conversa" && <span>{e.allowed ? `Liberado: ${e.allowed}` : "Só pergunta, não fecha nada"}</span>}
         {open && <span>{e.messages_left} mensagem(ns) restante(s)</span>}
       </div>
       <div className="errand-chat">
