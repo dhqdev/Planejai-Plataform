@@ -27,3 +27,8 @@ Subagentes começam sem contexto: o pedido leva o objetivo, os arquivos, as regr
 - Teto apertado: passo cortado pelo `maxTokens` grava `finish_reason: "length"` na saída do passo. `SELECT count(*) FROM execution_steps WHERE output->>'finish_reason' = 'length'` mostra se precisa subir.
 - Custo real de cada execução vem do `usage.cost` do OpenRouter e soma em `usage_daily` (tela Clientes). Troca de modelo boa = mesmo resultado nas Execuções com custo menor.
 - Especialista novo ganha rota própria `agent:<id>`; agentes criados para um cliente usam `agent:cliente`.
+
+## Conversas de referência (IA de verdade)
+- `apps/server/eval/agentes.eval.ts` (`CASES`): mensagens comuns (gasto curto, lembrete, alarme, memória, meta, mensagem só com o sim, texto de fora pedindo envio) com as ferramentas que o time tem que chamar e o que tem que estar no banco. Roda contra o OpenRouter de verdade com as rotas padrão (`ROUTE_DEFAULTS`), não as da tela Modelos.
+- No GitHub: `.github/workflows/eval-agentes.yml`, todo dia às 7h (Brasília) e à mão (Actions > Conversas de referência > Run workflow). Precisa do segredo `OPENROUTER_API_KEY` no repositório; sem ele, não roda. O resumo (tabela por mensagem, se a trava do "fiz" disparou e o custo) sai na página da execução.
+- Local: `EVAL_OPENROUTER_API_KEY=... TEST_DATABASE_URL=... REDIS_URL=... npm run eval -w apps/server` (`EVAL_OPENROUTER_BASE_URL` aponta para outro servidor). Mexeu em prompt, modelo, grupo de ferramentas ou trava: rode antes e depois.
