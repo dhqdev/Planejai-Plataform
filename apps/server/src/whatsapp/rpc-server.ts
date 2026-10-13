@@ -2,6 +2,7 @@ import { BaileysChannel } from "../channels/baileys.js";
 import { query } from "../db/pool.js";
 import { QUEUES, getBoss } from "../queue/boss.js";
 import { PgListen, RPC_DONE, RPC_WAKE, type WaRpcDone, type WaRpcJob, type WaRpcResult, findLocal } from "./rpc.js";
+import { applyProfile } from "./profile.js";
 import { whatsapp } from "./session.js";
 import type { Log } from "./types.js";
 
@@ -67,6 +68,9 @@ async function run(ch: BaileysChannel, req: WaRpcJob): Promise<WaRpcResult> {
       return {};
     case "read":
       await ch.markRead(req.jid, req.messageId);
+      return {};
+    case "profile":
+      await applyProfile(req.profile);
       return {};
     case "exists":
       return { jid: await findLocal(req.variants) };

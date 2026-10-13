@@ -20,7 +20,8 @@ export type WaRpc =
   | { op: "react"; jid: string; messageId: string; emoji: string }
   | { op: "typing"; jid: string; ms: number; kind?: "typing" | "recording" }
   | { op: "read"; jid: string; messageId: string }
-  | { op: "exists"; variants: string[] };
+  | { op: "exists"; variants: string[] }
+  | { op: "profile"; profile: import("./profile.js").WaProfile };
 
 /** pedido na fila: depois do prazo o channel descarta (ninguém está mais esperando) */
 export type WaRpcJob = WaRpc & { deadline: number };

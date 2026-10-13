@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ago, api, phoneFmt } from "../api";
 import { ErrorBox, Loading, PageHead, confirmDialog } from "../components";
@@ -166,6 +166,108 @@ export function WhatsAppPage() {
           </p>
         </div>
       </div>
+      {s.status === "connected" && <ProfileCard currentName={s.name ?? ""} />}
+    </div>
+  );
+}
+
+/** Foto do perfil pronta para o WhatsApp: quadrada 640x640, recortada no centro, JPEG (sem biblioteca no servidor). */
+async function toProfileJpeg(src: string) {
+  const img = new Image();
+  img.src = src;
+  await img.decode();
+  const side = Math.min(img.naturalWidth, img.naturalHeight);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 640;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, 640, 640);
+  ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 640, 640);
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+/** Perfil do número do assistente: nome, recado e foto. Perfil completo passa confiança e ajuda contra bloqueio. */
+function ProfileCard({ currentName }: { currentName: string }) {
+  const [name, setName] = useState(currentName);
+  const [status, setStatus] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const file = useRef<HTMLInputElement>(null);
+
+  const pick = async (src: string) => {
+    setErr(null);
+    try {
+      setPhoto(await toProfileJpeg(src));
+    } catch {
+      setErr("Não consegui abrir essa imagem.");
+    }
+  };
+  const save = async () => {
+    setBusy(true);
+    setErr(null);
+    setSaved(false);
+    try {
+      const body: Record<string, string> = {};
+      if (name.trim() && name.trim() !== currentName) body.name = name.trim();
+      if (status.trim()) body.status = status.trim();
+      if (photo) body.picture = photo.split(",")[1]!;
+      await api("/api/whatsapp/profile", { method: "POST", json: body });
+      setSaved(true);
+      setPhoto(null);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const changed = (name.trim() && name.trim() !== currentName) || status.trim() || photo;
+
+  return (
+    <div className="card card-pad" style={{ marginTop: 16 }}>
+      <h3>Perfil do número</h3>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Nome, recado e foto que as pessoas veem. Um perfil completo passa mais confiança para quem recebe a primeira mensagem e ajuda o WhatsApp a não bloquear o número.
+      </p>
+      <div className="row row-wrap" style={{ alignItems: "flex-start", gap: 16 }}>
+        <div style={{ flex: "1 1 260px" }}>
+          <div className="field">
+            <label htmlFor="wa-name">Nome</label>
+            <input id="wa-name" className="input" maxLength={25} value={name} placeholder="Ex.: Planejai" onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="wa-status">Recado</label>
+            <input id="wa-status" className="input" maxLength={139} value={status} placeholder="Ex.: Assistente virtual do Planejai" onChange={(e) => setStatus(e.target.value)} />
+          </div>
+        </div>
+        <div style={{ flex: "0 1 auto" }}>
+          <div className="field">
+            <label>Foto</label>
+            <div className="row row-wrap" style={{ gap: 10 }}>
+              {photo && <img src={photo} alt="Nova foto do perfil" style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover" }} />}
+              <button className="btn" type="button" disabled={busy} onClick={() => file.current?.click()}>Escolher foto</button>
+              <button className="btn" type="button" disabled={busy} onClick={() => pick("/icons/icon-512.png")}>Usar o ícone do Planejai</button>
+            </div>
+            <input
+              ref={file}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void pick(URL.createObjectURL(f));
+                e.target.value = "";
+              }}
+            />
+          </div>
+        </div>
+      </div>
+      <div className="row row-wrap" style={{ gap: 12 }}>
+        <button className="btn btn-primary" disabled={busy || !changed} onClick={save}>{busy ? "Salvando…" : "Salvar perfil"}</button>
+        {saved && <span className="muted">Perfil atualizado no WhatsApp.</span>}
+      </div>
+      <ErrorBox error={err} />
     </div>
   );
 }

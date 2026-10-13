@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { config } from "../../../config.js";
 import { one, query } from "../../../db/pool.js";
+import { checkProfile, updateProfile, type WaProfile } from "../../../whatsapp/profile.js";
 import { SESSION_ID, sendWaCommand } from "../../../whatsapp/session.js";
 
 /** WhatsApp embutido (Baileys, só super admin): status e comandos para quem segura a conexão. */
@@ -19,6 +20,19 @@ export function whatsappRoutes(api: FastifyInstance) {
   });
   api.post("/api/whatsapp/logout", async () => {
     await sendWaCommand({ action: "logout" });
+    return { ok: true };
+  });
+  // perfil do número (nome, recado, foto): perfil completo passa mais confiança e protege contra bloqueio
+  api.post<{ Body: WaProfile }>("/api/whatsapp/profile", async (req, reply) => {
+    if (config.WHATSAPP_PROVIDER !== "baileys") return reply.code(400).send({ error: "WHATSAPP_PROVIDER não é baileys" });
+    const checked = checkProfile(req.body ?? {});
+    if ("error" in checked) return reply.code(400).send({ error: checked.error });
+    try {
+      await updateProfile(checked.profile);
+    } catch (err) {
+      return reply.code(502).send({ error: `O WhatsApp não aceitou agora: ${(err as Error).message}` });
+    }
+    if (checked.profile.name) await query("UPDATE wa_sessions SET name = $2 WHERE id = $1", [SESSION_ID, checked.profile.name]).catch(() => {});
     return { ok: true };
   });
   api.post("/api/whatsapp/restart", async () => {
