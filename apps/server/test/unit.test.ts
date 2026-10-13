@@ -358,6 +358,30 @@ describe("trava: dizer que fez sem ter feito", () => {
     expect(unmetRequest("anota 30 reais de uber", "Fechado!", new Set())).toBe("lançar gasto ou receita");
     expect(unmetRequest("anota que a reunião é dia 15", "Anotado!", new Set(["save_memory"]))).toBeNull();
   });
+
+  it("pega o jeito curto de pedir e as frases de pronto sem verbo", async () => {
+    const { unbackedClaim, unmetRequest } = await import("../src/agent/claims.js");
+    const none = new Set<string>();
+    for (const t of ["mercado 50", "uber 23,90", "anota padaria 12", "50 no mercado", "[áudio] uber 30"]) expect(unmetRequest(t, "Fechado!", none), t).toBe("lançar gasto ou receita");
+    for (const t of ["amanhã 8h reunião", "lembrar de pagar o boleto sexta"]) expect(unmetRequest(t, "Fechado!", none), t).toBe("agendar lembrete ou evento");
+    for (const t of ["apto 32", "tenho reunião amanhã às 10h", "quanto deu o mercado 50?", "2 pães", "anota que a reunião é dia 15"]) expect(unmetRequest(t, "Ok!", new Set(["save_memory"])), t).toBeNull();
+    expect(unmetRequest("mercado 50", "Anotado ✅", new Set(["add_transaction"]))).toBeNull();
+    const claims: [string, string][] = [
+      ["Prontinho! Coloquei na sua agenda amanhã às 9h ✅", "agendar lembrete ou evento"],
+      ["Feito! Amanhã às 8h você recebe o aviso 😉", "agendar lembrete ou evento"],
+      ["Combinado! Amanhã 8h tô aqui te lembrando", "agendar lembrete ou evento"],
+      ["Tá anotado!", "anotar"],
+      ["Pronto, já está na sua lista de gastos!", "lançar gasto ou receita"],
+      ["Apagado ✅", "apagar ou cancelar"],
+      ["A mensagem pro João já foi ✅", "enviar mensagem"],
+    ];
+    for (const [t, what] of claims) expect(unbackedClaim(t, none), t).toBe(what);
+    // informação, lembrete na hora e leitura não são afirmação de feito
+    for (const t of ["O filme foi removido da Netflix em setembro.", "Oi! Passando pra te lembrar: hoje às 15h tem dentista 🦷", "Prontinho! Achei 3 lugares perto de você ✅"])
+      expect(unbackedClaim(t, none), t).toBeNull();
+    expect(unbackedClaim("Tá na sua agenda: reunião amanhã às 10h.", new Set(["list_reminders"]))).toBeNull();
+    expect(unbackedClaim("Anotado!", new Set(["save_memory"]))).toBeNull();
+  });
 });
 
 describe("confirmação de ação sensível (servidor, sem IA)", () => {
@@ -368,6 +392,17 @@ describe("confirmação de ação sensível (servidor, sem IA)", () => {
     for (const t of ["muda o assunto para Reunião amanhã", "quanto gastei hoje?", "sim mas troca o e-mail para outro@x.com"]) expect(confirmationAnswer([t])).toBeNull();
     // vale a última coisa que ela disse
     expect(confirmationAnswer(["sim", "não, espera"])).toBe("no");
+  });
+
+  it("aceita o sim do jeito que se digita no WhatsApp", async () => {
+    const { confirmationAnswer } = await import("../src/agent/confirm.js");
+    for (const t of ["sim, pode mandar", "Sim 👍", "sim 😊", "simmm", "isso, manda", "pode ser", "uhum", "aham", "sim, pode apagar", "manda bala", "Pode sim, obrigado"])
+      expect(confirmationAnswer([t]), t).toBe("yes");
+    // "sim" e logo depois "valeu" ou um emoji no mesmo lote
+    expect(confirmationAnswer(["sim", "valeu"])).toBe("yes");
+    expect(confirmationAnswer(["sim", "🙏"])).toBe("yes");
+    // pedido novo junto ou pergunta não liberam nada
+    for (const t of ["sim, e anota 50 de uber", "pode ver meu saldo?", "valeu"]) expect(confirmationAnswer([t]), t).toBeNull();
   });
 });
 
