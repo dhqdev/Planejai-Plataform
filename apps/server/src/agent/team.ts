@@ -328,7 +328,7 @@ export const CTO_TOOLS: Tool[] = [
 export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
   {
     id: "mensagens",
-    when: /(?<!\p{L})(mand|envi|mensage|msg|recado|avis[ae] (o|a|pr)|fala (pr|com)|diz(er|e)? (pr|que)|convi|contato|n[uú]mero|whats|zap|agendad)|te mandou|\d{8,}|\(\d{2}\)/iu,
+    when: /(?<!\p{L})(mand|envi|mensage|msg|recado|avis[ae] (o|a|pr)|fala (pr|com)|diz(er|e)? (pr|que)|respond|pergunt[ae] (pr|ao?|à|pa)|encaminh|repass|convi|contato|n[uú]mero|whats|zap|agendad)|te mandou|\d{8,}|\(\d{2}\)/iu,
     tools: [social.sendToContact, direct.sendWhatsapp, direct.contactsSearch, direct.contactSave, direct.directList, direct.directCancel, social.invitePerson],
   },
   {
@@ -343,7 +343,7 @@ export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
   },
   { id: "acompanhamentos", when: /(?<!\p{L})(de olho|acompanh|monitor|avis\w* quando)/iu, tools: [social.watchList, social.watchCancel, social.watchUpdate] },
   { id: "alarmes", when: /(?<!\p{L})(alarme|despert|acord)/iu, tools: [agenda.alarmList, agenda.alarmCancel] },
-  { id: "dinheiro", when: /(?<!\p{L})(limite|or[çc]amento|teto|no m[aá]ximo|fatura|cart[aã]o)/iu, tools: [finance.setBudget, cards.cardInvoicePay] },
+  { id: "dinheiro", when: /(?<!\p{L})(limite|or[çc]amento|teto|no m[aá]ximo|fatura|cart[aã]o|cart[õo]es)/iu, tools: [finance.setBudget, cards.cardList, cards.cardInvoicePay] },
   { id: "categorias", when: /(?<!\p{L})categori/iu, tools: [categoriesTool] },
   { id: "recados", when: /(?<!\p{L})(recado|estabelecimento)/iu, tools: [errands.errandList, errands.errandCancel] },
   { id: "documentos", when: /(?<!\p{L})(apag|exclu|delet|remov)\w*.{0,40}\b(document|arquivo|pdf|contrato)/iu, tools: [documents.documentDelete] },

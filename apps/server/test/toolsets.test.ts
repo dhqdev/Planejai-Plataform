@@ -25,6 +25,8 @@ describe("ferramentas do CTO por assunto", () => {
     expect(ids("no máximo 600 com restaurante")).toContain("dinheiro");
     expect(ids("paguei a fatura do nubank")).toContain("dinheiro");
     expect(ids("apaga o documento do contrato")).toContain("documentos");
+    for (const t of ["responde o Pedro que topo", "pergunta pro João se ele vem", "encaminha isso pro Carlos", "repassa pra Ana o endereço"]) expect(ids(t), t).toContain("mensagens");
+    expect(ids("quero ver meus cartões")).toContain("dinheiro");
     expect(TEAM_TOOLS_WHEN.test("cria um agente pra cuidar do meu treino")).toBe(true);
     expect(TEAM_TOOLS_WHEN.test("quanto tá o dólar?")).toBe(false);
   });
