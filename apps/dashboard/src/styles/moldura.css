@@ -96,3 +96,42 @@
   .frame-link { padding: 0 10px; }
   .frame-role { display: none; }
 }
+
+/* Especialistas: um item só no trilho; ao tocar, abre ao lado o menu com cada agente ligado */
+.nav-chev { display: none; }
+.team-fly { display: none; }
+@media (min-width: 768px) {
+  .nav-chev {
+    display: grid; place-items: center; position: absolute; right: -11px; top: 50%; translate: 0 -50%;
+    color: var(--frame-muted); transition: rotate .2s ease, color .2s;
+  }
+  .nav-chev .ico { width: 10px !important; height: 10px !important; stroke-width: 2.4 !important; }
+  .layout > .sidebar .nav > a.nav-group.open .nav-chev { rotate: 180deg; color: var(--violet); }
+  .layout > .sidebar .nav > a.nav-group.open { color: var(--frame-ink); }
+  .team-fly {
+    display: flex; flex-direction: column; gap: 2px; position: fixed; z-index: 60; left: calc(var(--rail) + 6px);
+    width: 280px; max-height: calc(100dvh - 96px); overflow-y: auto; scrollbar-width: none; padding: 8px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 18px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 18px 44px -12px rgba(20, 10, 40, .28);
+    transform-origin: left top; animation: team-fly-in .2s cubic-bezier(.2, .8, .2, 1);
+  }
+  :root[data-theme="dark"] .team-fly { background: #1b1b1d; border-color: rgba(255, 255, 255, .08); box-shadow: 0 18px 44px -12px rgba(0, 0, 0, .7); }
+  .team-fly-head { padding: 6px 10px 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .team-fly-item, .team-fly-all {
+    display: flex; align-items: center; gap: 11px; width: 100%; padding: 7px 10px; border: 0; border-radius: 12px;
+    background: transparent; color: var(--text); text-align: left; cursor: pointer; font: inherit; transition: background .15s;
+  }
+  .team-fly-item.active, .team-fly-all.active { background: var(--panel-2); }
+  .team-fly-ico { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--panel-2); color: var(--muted); flex-shrink: 0; }
+  .team-fly-text { display: flex; flex-direction: column; min-width: 0; }
+  .team-fly-text strong { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .team-fly-text small { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .team-fly-all { margin-top: 4px; padding: 10px; border-top: 1px solid var(--border); border-radius: 0 0 12px 12px; color: var(--muted); font-size: 13px; font-weight: 550; }
+  .team-fly-all span { flex: 1; }
+  .team-fly-item:focus-visible, .team-fly-all:focus-visible { outline: 2px solid var(--violet); outline-offset: -2px; }
+}
+@media (min-width: 768px) and (hover: hover) and (pointer: fine) {
+  .team-fly-item:hover, .team-fly-all:hover { background: var(--panel-2); color: var(--text); }
+}
+@keyframes team-fly-in { from { opacity: 0; transform: translateX(-6px) scale(.97); } }
+@media (prefers-reduced-motion: reduce) { .team-fly { animation: none; } }

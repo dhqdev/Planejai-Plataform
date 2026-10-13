@@ -1,11 +1,12 @@
-import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { createContext, lazy, useCallback, Suspense, useContext, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { MASCOTE } from "./mascote/nome";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { api } from "./api";
 import { BlockLoader } from "./BlockLoader";
 import { Empty, Loading, Modal } from "./components";
 import { clearApiCache, prefetchApi, useApi } from "./hooks";
+import { AgentFace, type Face } from "./faces";
 import { Icon } from "./icons";
 import { openWardrobe } from "./mascote/state";
 import { UserMascote } from "./mascote/UserMascote";
@@ -355,7 +356,9 @@ export function App() {
 
   // Plataforma (só o super admin) vai para a barra de cima; Avisos e Minha conta descem para o pé do trilho
   const platform = sectionsOf(NAV).find((sec) => sec.title === "Plataforma")?.items ?? [];
-  const rail = NAV.filter((i) => !("to" in i && (platform.includes(i) || i.to === "/notificacoes" || i.to === "/profile")) && !("section" in i && i.section === "Plataforma"));
+  // especialistas ligados ficam juntos dentro do item Especialistas do trilho (abre um menu ao lado)
+  const team = links.filter((l) => l.to.startsWith("/especialistas/"));
+  const rail = NAV.filter((i) => !("to" in i && (platform.includes(i) || team.includes(i) || i.to === "/notificacoes" || i.to === "/profile")) && !("section" in i && i.section === "Plataforma"));
   const logout = async () => {
     await api("/api/auth/logout", { method: "POST" });
     setMenu(false);
@@ -405,7 +408,7 @@ export function App() {
         </div>
       </header>
       <aside className="sidebar">
-        <Nav items={rail} me={me} meTitle={`${me.name ?? me.email} · ${me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · v${__APP_VERSION__}`} />
+        <Nav items={rail} team={team} me={me} meTitle={`${me.name ?? me.email} · ${me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · v${__APP_VERSION__}`} />
       </aside>
       <main className="main" id="conteudo" tabIndex={-1} ref={mainRef}>
         <PullToRefresh target={mainRef} />
@@ -586,8 +589,10 @@ function PendingCount() {
  * Trilho lateral: ícone com o nome curto embaixo, grupos separados por um fio. No pé ficam Avisos e a conta
  * (o mascote da pessoa), como nos apps de trabalho.
  */
-function Nav({ items, me, meTitle }: { items: NavItem[]; me: Me; meTitle: string }) {
+function Nav({ items, team, me, meTitle }: { items: NavItem[]; team: NavLinkItem[]; me: Me; meTitle: string }) {
   const loc = useLocation();
+  const [open, setOpen] = useState<{ top: number } | null>(null);
+  const close = useCallback(() => setOpen(null), []);
   // item do grupo fica marcado também nas telas irmãs (Filas acende Execuções)
   const cls = (to: string) => ({ isActive }: { isActive: boolean }) => (isActive || groupOf(loc.pathname)?.[0]?.to === to ? "active" : "");
   return (
@@ -597,12 +602,31 @@ function Nav({ items, me, meTitle }: { items: NavItem[]; me: Me; meTitle: string
           // fio entre grupos; nada no começo nem antes de um grupo vazio
           i > 0 && items[i + 1] && "to" in items[i + 1]! && <span className="nav-sep" key={i} role="separator" aria-label={item.section} />
         ) : (
-          <NavLink key={item.to} to={item.to} end={item.to === "/"} className={cls(item.to)} title={item.label} onPointerEnter={() => preload(item.to)}>
-            <span className="nav-ico"><Icon name={item.icon} size={22} /></span>
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === "/"}
+            className={(st) => `${cls(item.to)(st)}${item.to === "/especialistas" && team.length ? " nav-group" : ""}${open && item.to === "/especialistas" ? " open" : ""}`}
+            title={item.label}
+            aria-expanded={item.to === "/especialistas" && team.length ? Boolean(open) : undefined}
+            onPointerEnter={() => preload(item.to)}
+            onClick={(e) => {
+              // com especialistas ligados, o item não navega: abre o menu com eles ao lado do trilho
+              if (item.to !== "/especialistas" || !team.length) return;
+              e.preventDefault();
+              haptic(6);
+              setOpen(open ? null : { top: e.currentTarget.getBoundingClientRect().top });
+            }}
+          >
+            <span className="nav-ico">
+              <Icon name={item.icon} size={22} />
+              {item.to === "/especialistas" && team.length > 0 && <span className="nav-chev" aria-hidden><Icon name="chevron-right" size={10} /></span>}
+            </span>
             <span className="label">{item.short ?? item.label}</span>
           </NavLink>
         ),
       )}
+      {open && <TeamFlyout top={open.top} team={team} onClose={close} />}
       <span className="nav-grow" aria-hidden />
       <NavLink to="/notificacoes" className={cls("/notificacoes")} title="Notificações" onPointerEnter={() => preload("/notificacoes")}>
         <span className="nav-ico"><Icon name="bell" size={22} /><UnreadDot className="nav-dot" count /></span>
@@ -613,6 +637,64 @@ function Nav({ items, me, meTitle }: { items: NavItem[]; me: Me; meTitle: string
         <span className="label">Conta</span>
       </NavLink>
     </nav>
+  );
+}
+
+type StoreItem = { slug: string; persona: string; focus: string; active: boolean; face: Face };
+
+/**
+ * Menu dos especialistas, aberto ao lado do trilho: cada agente ligado com o rosto e o assunto, e no fim a
+ * página de todos. Fecha ao escolher, ao clicar fora ou com Esc.
+ */
+function TeamFlyout({ top, team, onClose }: { top: number; team: NavLinkItem[]; onClose: () => void }) {
+  const nav = useNavigate();
+  const loc = useLocation();
+  const box = useRef<HTMLDivElement>(null);
+  const store = useApi<{ items: StoreItem[] }>("/api/store");
+  const bySlug = new Map((store.data?.items ?? []).map((it) => [it.slug, it]));
+  useEffect(() => {
+    const down = (e: PointerEvent) => {
+      const t = e.target as Element;
+      if (!box.current?.contains(t) && !t.closest?.(".nav-group")) onClose();
+    };
+    const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("pointerdown", down);
+    document.addEventListener("keydown", key);
+    box.current?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
+    return () => {
+      document.removeEventListener("pointerdown", down);
+      document.removeEventListener("keydown", key);
+    };
+  }, [onClose]);
+  const go = (to: string) => {
+    onClose();
+    nav(to);
+  };
+  // não passa do pé da tela: sobe o que for preciso
+  const y = Math.max(72, Math.min(top - 8, innerHeight - 24 - (team.length + 1) * 56 - 52));
+  // vai para o body: dentro do trilho ficaria por baixo do painel do conteúdo
+  return createPortal(
+    <div className="team-fly" ref={box} role="menu" aria-label="Especialistas" style={{ top: y }}>
+      <div className="team-fly-head">Seu time</div>
+      {team.map((t) => {
+        const it = bySlug.get(t.to.slice("/especialistas/".length));
+        return (
+          <button key={t.to} role="menuitem" className={`team-fly-item${loc.pathname === t.to ? " active" : ""}`} onPointerEnter={() => preload("/especialistas")} onClick={() => go(t.to)}>
+            {it ? <AgentFace face={it.face} size={36} /> : <span className="team-fly-ico"><Icon name={t.icon} size={18} /></span>}
+            <span className="team-fly-text">
+              <strong>{t.label}</strong>
+              {it?.focus && <small>{it.focus}</small>}
+            </span>
+          </button>
+        );
+      })}
+      <button role="menuitem" className={`team-fly-all${loc.pathname === "/especialistas" ? " active" : ""}`} onClick={() => go("/especialistas")}>
+        <Icon name="sparkle" size={16} />
+        <span>Todos os especialistas</span>
+        <Icon name="chevron-right" size={14} />
+      </button>
+    </div>,
+    document.body,
   );
 }
 
