@@ -103,7 +103,7 @@ export const sendToContact = defineTool<{ contact: string; message: string; at?:
         : `Mandar para ${to.name}: "${preview}"${extra}`;
       const gate = await requireConfirmation(args, summary, { ...ctx, toolCall: { name: ctx.toolCall?.name ?? "send_to_contact", args: file.stored } });
       if (gate) {
-        if (file.att) previewAttachment(ctx, file.att, when.sendAt ? directText(args.message, ctx.user as any) : args.message);
+        if (file.att && "needs_confirmation" in gate) previewAttachment(ctx, file.att, when.sendAt ? directText(args.message, ctx.user as any) : args.message);
         return gate;
       }
     }

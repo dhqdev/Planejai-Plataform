@@ -30,6 +30,12 @@ function fakeOpenRouter(body: any) {
   if (userText.includes("manda o contrato")) {
     return completion(null, [call("send_whatsapp", { phone: "11 95555-4444", name: "Bruna", message: "Oi Bruna, aqui é o David! Segue o contrato assinado.", document_id: docId, in_minutes: 120 })]);
   }
+  if (userText.includes("orçamento pro Léo e pra Lia")) {
+    return completion(null, [
+      call("send_whatsapp", { phone: "11 93333-1111", name: "Léo", message: "Oi Léo, aqui é o David! Segue o orçamento." }),
+      call("send_whatsapp", { phone: "11 93333-2222", name: "Lia", message: "Oi Lia, aqui é o David! Segue o orçamento." }),
+    ]);
+  }
   if (userText.includes("proposta")) {
     return completion(null, [call("send_whatsapp", { phone: "(11) 97777-6666", name: "Rafael", message: "Bom dia, Rafael! Aqui é o David, segue a proposta que combinamos." })]);
   }
@@ -298,5 +304,25 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     expect(await db.many("SELECT agent, note, user_note FROM agent_notes WHERE user_id = $1", [david.id])).toEqual([{ agent: "pesquisador", note: null, user_note: "minha nota" }]);
     // dados dela ficam
     expect((await db.one("SELECT COUNT(*)::int AS n FROM direct_messages WHERE user_id = $1", [david.id])).n).toBeGreaterThan(0);
+  });
+  it("sim com outra coisa junto ou sem texto não solta nem perde o pedido; uma ação por vez", async () => {
+    await say("manda o orçamento pro Léo e pra Lia");
+    const pend = await db.many("SELECT summary FROM pending_actions WHERE conversation_id = $1 AND status = 'pending'", [conv]);
+    // a segunda da mesma resposta não substitui a primeira: espera o sim dela
+    expect(pend).toHaveLength(1);
+    expect(pend[0].summary).toContain("Léo");
+
+    // "sim, mas..." não manda, e o pedido continua de pé (a pergunta volta no fim)
+    const out = await say("sim, e me fala o saldo");
+    expect(out.join("\n")).toMatch(/Responda \*sim\* para eu mandar para Léo/);
+    expect(await db.one("SELECT COUNT(*)::int AS n FROM direct_messages WHERE name = 'Léo'")).toEqual({ n: 0 });
+
+    // respondeu com figurinha: nada sai e nada se perde
+    await db.query("INSERT INTO messages (conversation_id, role, content, external_id, meta) VALUES ($1, 'user', '', $2, $3)", [conv, `d${++seq}`, { kind: "sticker" }]);
+    await mod.processConversation(conv, { trigger: "message", channel: new channels.PlaygroundChannel() });
+    expect(await db.one("SELECT COUNT(*)::int AS n FROM pending_actions WHERE conversation_id = $1 AND status = 'pending'", [conv])).toEqual({ n: 1 });
+
+    await say("Sim, pode mandar 👍");
+    expect(await db.one("SELECT status FROM direct_messages WHERE name = 'Léo'")).toEqual({ status: "sent" });
   });
 });

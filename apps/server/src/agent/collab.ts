@@ -63,6 +63,10 @@ export class TeamRoom {
   partial?: string;
   /** resumos (do servidor) das ações que ficaram esperando o "sim" nesta execução */
   confirmations: string[] = [];
+  /** ferramentas que guardaram um pedido novo de "sim" nesta execução (uma ação por vez) */
+  askedTools = new Set<string>();
+  /** pedido de uma rodada anterior que continua esperando o sim (a pessoa respondeu sem texto ou com "sim, mas...") */
+  keptTool?: string;
   /** quantas vezes o CTO já chamou cada especialista nesta execução */
   asks = new Map<string, number>();
   private locks = new Map<string, Promise<unknown>>();

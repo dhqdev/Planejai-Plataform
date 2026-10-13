@@ -48,7 +48,7 @@ export const sendWhatsapp = defineTool<{ phone: string; message: string; name?: 
       const summary = `mandar para ${who}${sendAt ? ` em ${formatLocal(sendAt, ctx.timezone)}` : " agora"}: "${preview}"${file.label ? ` ${file.label}` : ""}`;
       const gate = await requireConfirmation(args, summary, { ...ctx, toolCall: { name: ctx.toolCall?.name ?? "send_whatsapp", args: file.stored } });
       if (gate) {
-        if (file.att) previewAttachment(ctx, file.att, directText(args.message, ctx.user as any));
+        if (file.att && "needs_confirmation" in gate) previewAttachment(ctx, file.att, directText(args.message, ctx.user as any));
         return gate;
       }
     }

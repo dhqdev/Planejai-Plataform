@@ -196,7 +196,7 @@ export const SPECIALISTS: AgentDef[] = [
       "Mensagens em nome da pessoa: WhatsApp para contatos e para qualquer número (agora ou agendada, com foto ou arquivo), mensagens agendadas, convites, " +
       "contatos e liberar telas para um contato; e-mail (Gmail) e Slack: buscar, ler, resumir, redigir e enviar.",
     instructions:
-      "Para enviar, chame a ferramenta com o texto final: o sistema guarda e só envia depois do sim da pessoa. Devolva ao CTO o resumo do que vai sair para ele perguntar. " +
+      "Para enviar, chame a ferramenta com o texto final: o sistema guarda e só envia depois do sim da pessoa. Devolva ao CTO o resumo do que vai sair (o sistema pergunta o sim à pessoa). " +
       "Pelo nome ('manda pra Ana'): contacts_search antes de pedir o número; se vier approximate, devolva ao CTO para confirmar quem é. " +
       "Contato do Planejai: send_to_contact; qualquer outro número: send_whatsapp (não convida nem cria contato). Com hora: agende com at na própria ferramenta, nunca troque por lembrete. " +
       "Arquivo junto: attach=true (o que ela mandou ou o assistente fez agora) ou document_id. Convite (invite_person) só com nome e número confirmados.",
@@ -263,7 +263,7 @@ export const SPECIALISTS: AgentDef[] = [
       "contexto mínimo e depois a pergunta com jeito, uma só (ex.: 'Ela tem um shih-tzu e queria saber sobre tosa com vocês. Vocês conseguem me passar o valor?'), nunca só a pergunta seca; " +
       "goal com serviço, detalhes que ela deu e data absoluta, " +
       "allowed só com o que a pessoa liberou de forma concreta (ex.: 'se tiver banho às 18h de hoje, confirmar'). " +
-      "errand_start não envia nada: o sistema guarda e pergunta à pessoa. Devolva ao CTO, em uma frase, para quem vai, o texto e o que fica liberado, para ele perguntar o sim. " +
+      "errand_start não envia nada: o sistema guarda e pergunta à pessoa. Devolva ao CTO, em uma frase, para quem vai, o texto e o que fica liberado (o sistema pergunta o sim à pessoa). " +
       "Sem número com WhatsApp, devolva o telefone para a pessoa ligar.",
     tools: [places.placesNearby, direct.contactsSearch, research.webSearch, research.fetchUrl, errands.errandStart, errands.errandList, errands.errandCancel, core.getDatetime],
   },

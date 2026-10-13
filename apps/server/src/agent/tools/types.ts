@@ -102,6 +102,20 @@ export const CONFIRM_PARAM = {};
 export async function requireConfirmation(_args: { confirmed_by_user?: boolean }, summary: string, ctx?: ToolContext) {
   if (ctx?.approvedAction) return null;
   if (ctx?.toolCall && ctx.conversation?.id) {
+    // uma ação por vez: um "sim" libera uma ação só, então a segunda desta resposta espera a primeira sair
+    // (antes a segunda substituía a primeira e o modelo contava que ia fazer as duas)
+    const room = ctx.room;
+    const other = room && (room.askedTools.size > 0 || (room.keptTool && room.keptTool !== ctx.toolCall.name));
+    if (other) {
+      return {
+        ok: false,
+        one_at_a_time: true,
+        error:
+          `Uma ação por vez: já tem "${room.confirmations.at(-1) ?? "outra ação"}" esperando o sim da pessoa. Não chame de novo agora. ` +
+          `Diga em poucas palavras que, depois do sim, você faz a próxima (${summary.slice(0, 200)}).`,
+      };
+    }
+    room?.askedTools.add(ctx.toolCall.name);
     const { confirmed_by_user: _c, ...args } = ctx.toolCall.args as Record<string, unknown>;
     // um pedido por ferramenta: se o agente refez com dados novos, vale o último
     await query("UPDATE pending_actions SET status = 'replaced', resolved_at = now() WHERE conversation_id = $1 AND tool = $2 AND status = 'pending'", [
