@@ -1,4 +1,9 @@
 import type { FastifyInstance } from "fastify";
+import { withSignature, getPrefs } from "../../../chatprefs.js";
+import { config } from "../../../config.js";
+import { one } from "../../../db/pool.js";
+import { createDirect, directText } from "../../../direct.js";
+import { isNewContact, isOptedOut, OPT_OUT_HINT, OPTED_OUT_ERROR } from "../../../outreach.js";
 import { clearPhonebook, deleteContact, importContacts, listPhonebook, parseVcf, renameContact, saveContact } from "../../../phonebook.js";
 import { NOBODY, selfUserId } from "../../../sharing.js";
 import { isUuid } from "./shared.js";
@@ -47,6 +52,36 @@ export function phonebookRoutes(base: FastifyInstance) {
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
+  });
+
+  /**
+   * Mandar mensagem a partir do cartão: sem `confirm` só devolve o texto exato que vai sair (apresentação,
+   * assinatura, aviso do SAIR no primeiro contato); com `confirm` a pessoa já viu e tocou em Enviar no painel,
+   * e sai pelo mesmo caminho da mensagem avulsa (limites, SAIR, ritmo de número novo, resposta volta pra ela).
+   */
+  base.post<{ Params: { id: string }; Body: { message?: string; confirm?: boolean } }>("/api/contatos/:id/mensagem", async (req, reply) => {
+    const uid = await selfUserId(req.account);
+    if (!uid) return reply.code(400).send({ error: "Conta sem WhatsApp ligado" });
+    if (!isUuid(req.params.id)) return reply.code(404).send({ error: "Contato não encontrado" });
+    const c = await one<{ name: string; phone: string }>("SELECT name, phone FROM phonebook WHERE user_id = $1 AND id = $2", [uid, req.params.id]);
+    if (!c) return reply.code(404).send({ error: "Contato não encontrado" });
+    const message = String(req.body?.message ?? "").trim().slice(0, 2000);
+    if (!message) return reply.code(400).send({ error: "Escreva a mensagem." });
+    const user = await one<{ id: string; phone: string; name: string | null; full_name: string | null; timezone: string | null }>(
+      "SELECT id, phone, name, full_name, timezone FROM users WHERE id = $1",
+      [uid],
+    );
+    if (!user) return reply.code(400).send({ error: "Conta sem WhatsApp ligado" });
+    if (await isOptedOut(c.phone)) return reply.code(400).send({ error: OPTED_OUT_ERROR });
+    const name = /[\p{L}\p{N}]/u.test(c.name) ? c.name : null;
+    if (!req.body?.confirm) {
+      const text = withSignature(directText(message, user), (await getPrefs(uid, c.phone))?.signature);
+      const firstTime = (await isNewContact(c.phone)) && !(await one("SELECT 1 FROM users WHERE phone = $1 AND status = 'active'", [c.phone]));
+      return { preview: firstTime ? `${text}\n\n${OPT_OUT_HINT}` : text, to: name ?? `+${c.phone}` };
+    }
+    const r: any = await createDirect({ user, phone: c.phone, name, message, timezone: user.timezone ?? config.DEFAULT_TIMEZONE });
+    if (!r.ok) return reply.code(400).send({ error: r.error ?? "Não deu para mandar." });
+    return { ok: true, queued: Boolean(r.tip && !r.sent_to), tip: r.tip ?? null };
   });
 
   base.delete<{ Params: { id: string } }>("/api/contatos/:id", async (req, reply) => {

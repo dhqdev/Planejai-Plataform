@@ -37,6 +37,10 @@
 .ct-tag { font-size: 11.5px; color: var(--muted); }
 /* copiar e apagar: aparecem ao passar o mouse; no toque, segurar o cartão abre o menu */
 .ct-tools { display: none; }
+.ct-send { flex-shrink: 0; }
+.ct-msg-hint { margin: 0 0 8px; font-size: 13px; }
+.ct-msg-preview { padding: 10px 12px; border-radius: 14px 14px 14px 4px; background: var(--panel-2); font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ct-msg-done { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 14px; line-height: 1.5; }
 .ct-more { display: flex; justify-content: center; padding: 16px 0 12px; }
 
 .ct-card.editing { align-items: flex-start; border-color: var(--ink); }
@@ -46,7 +50,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .ct-card:hover { border-color: color-mix(in srgb, var(--ink) 22%, var(--border)); }
-  .ct-tools { position: absolute; top: 50%; right: 8px; translate: 0 -50%; display: flex; gap: 4px; padding-left: 6px; background: var(--panel); opacity: 0; pointer-events: none; transition: opacity .15s; }
+  .ct-tools { position: absolute; top: 50%; right: 44px; translate: 0 -50%; display: flex; gap: 4px; padding-left: 6px; background: var(--panel); opacity: 0; pointer-events: none; transition: opacity .15s; }
   .ct-card:hover .ct-tools, .ct-card:focus-within .ct-tools { opacity: 1; pointer-events: auto; }
   .ct-info:hover strong { text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; }
 }

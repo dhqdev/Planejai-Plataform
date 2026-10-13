@@ -174,6 +174,42 @@ describe.skipIf(!enabled)("agenda de contatos (e2e)", () => {
     await pb.clearPhonebook(other.id);
   });
 
+  it("mandar mensagem do cartão: mostra o texto final antes; quem pediu SAIR não recebe", async () => {
+    const { config } = await import("../src/config.js");
+    const owners = config.OWNER_PHONES;
+    config.OWNER_PHONES = [user.phone];
+    try {
+      const { buildServer } = await import("../src/api/server.js");
+      const app = await buildServer();
+      const login = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } });
+      const cookie = String(login.headers["set-cookie"]).split(";")[0]!;
+      const saved = await pb.saveContact(user.id, "Carol Dentista", "19 97777-1212");
+      const [carol] = await pb.searchContacts(user.id, "carol");
+      const url = `/api/contatos/${carol!.id}/mensagem`;
+      const prev = await app.inject({ method: "POST", url, headers: { cookie }, payload: { message: "Posso remarcar para sexta?" } });
+      expect(prev.statusCode).toBe(200);
+      expect(prev.json().to).toBe("Carol Dentista");
+      expect(prev.json().preview).toContain("Posso remarcar para sexta?");
+      expect(prev.json().preview).toContain("Rita");
+      expect(prev.json().preview).toContain("SAIR");
+      expect((await app.inject({ method: "POST", url, headers: { cookie }, payload: { message: "  " } })).statusCode).toBe(400);
+      // contato de outra pessoa não aparece
+      await pb.saveContact(other.id, "Outro Fulano", "19 97777-3434");
+      const [alheio] = await pb.searchContacts(other.id, "fulano");
+      expect((await app.inject({ method: "POST", url: `/api/contatos/${alheio!.id}/mensagem`, headers: { cookie }, payload: { message: "oi" } })).statusCode).toBe(404);
+      await db.query("INSERT INTO wa_optouts (phone) VALUES ($1)", [saved.phone]);
+      const blocked = await app.inject({ method: "POST", url, headers: { cookie }, payload: { message: "oi", confirm: true } });
+      expect(blocked.statusCode).toBe(400);
+      expect(blocked.json().error).toMatch(/SAIR/);
+      expect(await db.one("SELECT COUNT(*)::int AS n FROM direct_messages WHERE user_id = $1", [user.id])).toEqual({ n: 0 });
+      await pb.deleteContact(user.id, carol!.id);
+      await pb.clearPhonebook(other.id);
+      await app.close();
+    } finally {
+      config.OWNER_PHONES = owners;
+    }
+  });
+
   it("apagar um e apagar tudo", async () => {
     const [ana] = await pb.searchContacts(user.id, "ana");
     await pb.deleteContact(other.id, ana!.id);

@@ -1,6 +1,6 @@
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { ErrorBox, Loading, PageHead, confirmDialog } from "../components";
+import { ErrorBox, Loading, Modal, PageHead, confirmDialog } from "../components";
 import { FIT_QUERY, useMedia } from "../hooks";
 import { Icon } from "../icons";
 import { useLongPress } from "../ios";
@@ -142,6 +142,7 @@ export function ContactsPage() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  const [writing, setWriting] = useState<Contact | null>(null);
   const file = useRef<HTMLInputElement>(null);
 
   const send = async (json: unknown) => {
@@ -194,6 +195,7 @@ export function ContactsPage() {
       const c = data?.items.find((x) => String(x.id) === el.dataset.id);
       if (!c) return [];
       return [
+        { label: "Mandar mensagem", icon: "send", onSelect: () => setWriting(c) },
         { label: "Copiar número", icon: "copy", onSelect: () => copy(c) },
         { label: named(c.name) ? "Mudar nome" : "Dar nome", icon: "edit", onSelect: () => setEditing(c.id) },
         { label: "Apagar", icon: "trash", danger: true, onSelect: () => void remove(c) },
@@ -312,6 +314,7 @@ export function ContactsPage() {
                         onCancel={() => setEditing(null)}
                         onRename={(name) => rename(c, name)}
                         onCopy={() => copy(c)}
+                        onWrite={() => setWriting(c)}
                         onRemove={() => void remove(c)}
                         press={press}
                       />
@@ -330,7 +333,72 @@ export function ContactsPage() {
           </div>
         </section>
       </div>
+      {writing && <WriteMessage c={writing} onClose={() => setWriting(null)} />}
     </div>
+  );
+}
+
+/**
+ * Mensagem a partir do contato: escreve, vê exatamente como vai sair (com a apresentação e o aviso do SAIR
+ * no primeiro contato) e só então envia. Sai como mensagem avulsa; a resposta volta no WhatsApp e em Recados.
+ */
+function WriteMessage({ c, onClose }: { c: Contact; onClose: () => void }) {
+  const [text, setText] = useState("");
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const who = named(c.name) ? c.name : showPhone(c.phone);
+  const call = async (confirm: boolean) => {
+    setErr(null);
+    setBusy(true);
+    try {
+      const r = await api<{ preview?: string; ok?: boolean; tip?: string | null }>(`/api/contatos/${c.id}/mensagem`, { method: "POST", json: { message: text, confirm } });
+      if (confirm) setDone(r.tip ?? `Mandei para ${who}. Se responder, a resposta chega no seu WhatsApp e aparece em Recados.`);
+      else setPreview(r.preview ?? "");
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={`Mensagem para ${who}`}
+      icon={<Icon name="send" size={18} />}
+      onClose={onClose}
+      footer={(close) =>
+        done ? (
+          <button className="btn btn-primary" onClick={close}>Fechar</button>
+        ) : preview != null ? (
+          <>
+            <button className="btn btn-ghost" disabled={busy} onClick={() => setPreview(null)}>Editar</button>
+            <button className="btn btn-primary" disabled={busy} onClick={() => void call(true)}>{busy ? "Enviando…" : "Enviar"}</button>
+          </>
+        ) : (
+          <>
+            <button className="btn btn-ghost" onClick={close}>Cancelar</button>
+            <button className="btn btn-primary" disabled={busy || !text.trim()} onClick={() => void call(false)}>Continuar</button>
+          </>
+        )
+      }
+    >
+      <ErrorBox error={err} />
+      {done ? (
+        <p className="ct-msg-done"><Icon name="check" size={15} /> {done}</p>
+      ) : preview != null ? (
+        <>
+          <p className="muted ct-msg-hint">Vai sair assim no WhatsApp de {who} ({showPhone(c.phone)}):</p>
+          <div className="ct-msg-preview">{preview}</div>
+        </>
+      ) : (
+        <div className="field">
+          <label htmlFor="ct-msg">O que você quer mandar</label>
+          <textarea id="ct-msg" className="textarea" rows={4} maxLength={2000} autoFocus={!matchMedia("(pointer: coarse)").matches} value={text} onChange={(e) => setText(e.target.value)} placeholder="Oi! Chego às 8, tudo certo?" />
+          <small className="muted">Sai pelo número do Planejai, com uma apresentação dizendo que é seu assistente. Antes de enviar você vê o texto final.</small>
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -341,6 +409,7 @@ function ContactCard({
   onCancel,
   onRename,
   onCopy,
+  onWrite,
   onRemove,
   press,
 }: {
@@ -350,6 +419,7 @@ function ContactCard({
   onCancel: () => void;
   onRename: (name: string) => Promise<void>;
   onCopy: () => void;
+  onWrite: () => void;
   onRemove: () => void;
   press: ReturnType<typeof useLongPress>;
 }) {
@@ -393,6 +463,9 @@ function ContactCard({
               <small className="ct-phone">{showPhone(c.phone)}</small>
               {(c.label || c.approximate) && <small className="ct-tag">{c.approximate ? "nome parecido" : c.label}</small>}
             </span>
+          </button>
+          <button type="button" className="icon-btn sm ct-send" aria-label={`Mandar mensagem para ${ok ? c.name : showPhone(c.phone)}`} title="Mandar mensagem" onClick={onWrite}>
+            <Icon name="send" size={15} />
           </button>
           <div className="ct-tools">
             <button
