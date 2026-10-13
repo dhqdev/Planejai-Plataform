@@ -380,8 +380,7 @@ export function App() {
       {/* notebook e iPad: barra de cima e trilho lateral são uma moldura só; o conteúdo fica num painel encaixado nela */}
       <header className="frame-top">
         <div className="frame-brand">
-          <MascoteButton size={40} />
-          <span className="frame-word">planejai</span>
+          <MascoteButton size={58} />
           {isSuper && <span className="frame-role">Super admin</span>}
         </div>
         <span className="spacer" />
@@ -610,7 +609,7 @@ function Nav({ items, me, meTitle }: { items: NavItem[]; me: Me; meTitle: string
         <span className="label">Avisos</span>
       </NavLink>
       <NavLink to="/profile" className={cls("/profile")} title={meTitle} onPointerEnter={() => preload("/profile")}>
-        <span className="nav-ico nav-me"><UserMascote me name={me.name ?? me.email} size={28} /></span>
+        <span className="nav-ico nav-me"><UserMascote me name={me.name ?? me.email} size={24} /></span>
         <span className="label">Conta</span>
       </NavLink>
     </nav>
