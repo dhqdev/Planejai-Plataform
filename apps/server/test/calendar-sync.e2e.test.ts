@@ -66,7 +66,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("agenda no Google Agenda (e2e)",
     expect(calls.length).toBe(before);
     const { upsertUser, upsertConversation } = await import("../src/ingest.js");
     const other = await upsertUser("5519955555555", "Rui");
-    const octx = { user: other, conversation: await upsertConversation(other.id, "playground", "sem-google"), timezone: tz };
+    const octx: any = { user: other, conversation: await upsertConversation(other.id, "playground", "sem-google"), timezone: tz };
     const r: any = await tools.scheduleReminder.run({ intent: "Pagar luz", in_minutes: 120 }, octx);
     expect(r.ok).toBe(true);
     expect(calls.length).toBe(before);
@@ -75,7 +75,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("agenda no Google Agenda (e2e)",
   it("conectou depois: manda o que já estava agendado", async () => {
     const { upsertUser, upsertConversation } = await import("../src/ingest.js");
     const bia = await upsertUser("5519966666666", "Bia");
-    const bctx = { user: bia, conversation: await upsertConversation(bia.id, "playground", "depois"), timezone: tz };
+    const bctx: any = { user: bia, conversation: await upsertConversation(bia.id, "playground", "depois"), timezone: tz };
     const r: any = await tools.scheduleReminder.run({ intent: "Reunião do condomínio", title: "Condomínio", in_minutes: 300 }, bctx);
     const before = calls.length;
     await (await import("../src/integrations/registry.js")).savePersonalCredentials("google", bia.id, { refresh_token: "r-bia" });
