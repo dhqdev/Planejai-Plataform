@@ -2,7 +2,7 @@ import type { WASocket } from "baileys";
 import { safeFetch } from "../net.js";
 import { callChannel, holdsWhatsApp } from "../whatsapp/rpc.js";
 import { isConnectionError, whatsapp, type WhatsAppSession } from "../whatsapp/session.js";
-import type { Channel, InboundMessage, OutboundImage } from "./types.js";
+import type { Channel, InboundMessage, OutboundImage, OutboundPoll } from "./types.js";
 
 /** quanto um envio espera a conexão voltar (religação em andamento) antes de desistir */
 const SEND_WAIT_MS = 45_000;
@@ -74,6 +74,14 @@ export class BaileysChannel implements Channel {
         : image.kind === "audio"
         ? s.sendMessage(jid, { audio: content, mimetype: image.mimetype ?? "audio/ogg; codecs=opus", ptt: image.ptt ?? true, seconds: image.seconds || undefined })
         : s.sendMessage(jid, { image: content, caption: image.caption, mimetype: image.mimetype }),
+    );
+    return { id: r?.key?.id ?? undefined };
+  }
+
+  async sendPoll(jid: string, poll: OutboundPoll) {
+    if (this.remote) return { id: (await callChannel({ op: "poll", jid, poll }, SEND_WAIT_MS)).id };
+    const r = await this.run((s) =>
+      s.sendMessage(jid, { poll: { name: poll.name, values: poll.values, selectableCount: 1, messageSecret: Buffer.from(poll.secret, "base64") } }),
     );
     return { id: r?.key?.id ?? undefined };
   }

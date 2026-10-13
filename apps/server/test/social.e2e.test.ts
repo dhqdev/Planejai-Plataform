@@ -298,6 +298,28 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     expect(await shared()).toBeUndefined();
   });
 
+  it("no WhatsApp o sim vai como enquete Sim/Não; se a enquete falhar, volta para o texto", async () => {
+    const pg = channels.PlaygroundChannel.prototype as any;
+    const polls: { name: string; values: string[] }[] = [];
+    pg.sendPoll = async (_to: string, poll: { name: string; values: string[] }) => (polls.push(poll), { id: `poll-${polls.length}` });
+    try {
+      const asked = await say("libera minhas finanças pro Giovani");
+      expect(polls.at(-1)).toEqual({ name: "Posso liberar as finanças para Giovani Silva ver no painel?", values: ["Sim", "Não"], secret: expect.any(String) });
+      expect(asked.sent.some((s) => s.text?.includes("Responda *sim*"))).toBe(false);
+      expect(await db.one("SELECT remote_jid, answered_at FROM wa_polls WHERE message_id = 'poll-1'")).toEqual({ remote_jid: "jid-david", answered_at: null });
+      await say("não");
+      pg.sendPoll = async () => {
+        throw new Error("enquete recusada");
+      };
+      const again = await say("libera minhas finanças pro Giovani");
+      expect(again.sent.some((s) => s.text?.includes("Responda *sim* para eu liberar as finanças para Giovani Silva ver no painel"))).toBe(true);
+      await say("não");
+      expect(await db.one("SELECT 1 AS ok FROM shares WHERE owner_id = $1 AND scope = 'finance'", [david.id])).toBeUndefined();
+    } finally {
+      delete pg.sendPoll;
+    }
+  });
+
   it("um sim aprova só a pendência mais recente; a outra cai", async () => {
     const ins = (tool: string, args: unknown, summary: string) =>
       db.one("INSERT INTO pending_actions (conversation_id, user_id, tool, agent, args, summary) VALUES ($1, $2, $3, 'cto', $4, $5) RETURNING id", [davidConv, david.id, tool, JSON.stringify(args), summary]);

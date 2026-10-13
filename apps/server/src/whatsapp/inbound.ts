@@ -1,14 +1,21 @@
-import { downloadMediaMessage, type WAMessage, type WASocket } from "baileys";
+import { downloadMediaMessage, normalizeMessageContent, type WAMessage, type WASocket } from "baileys";
 import pino from "pino";
 import { parseWAMessage } from "../channels/wa-message.js";
 import { query } from "../db/pool.js";
 import { ingest } from "../ingest.js";
+import { pollVoteText } from "./polls.js";
 import { SESSION_ID, type Log } from "./types.js";
 
 const MEDIA_MAX_BYTES = 20 * 1024 * 1024;
 
 /** Mensagem que chegou pelo socket: baixa a mídia e entrega para o ingest. */
 export async function handleIncoming(sock: WASocket, raw: WAMessage, log: Log) {
+  // voto na enquete do "sim": entra como se a pessoa tivesse escrito "sim" ou "não"
+  if (raw.message && !raw.key.fromMe && normalizeMessageContent(raw.message)?.pollUpdateMessage) {
+    const text = await pollVoteText(sock, raw, log);
+    if (!text) return;
+    raw = { ...raw, message: { conversation: text } };
+  }
   const msg = parseWAMessage(raw, "baileys");
   if (!msg) return;
   void query("UPDATE wa_sessions SET last_message_at = now() WHERE id = $1", [SESSION_ID]).catch(() => {});

@@ -1,5 +1,5 @@
 import type pg from "pg";
-import type { OutboundImage } from "../channels/types.js";
+import type { OutboundImage, OutboundPoll } from "../channels/types.js";
 import { pool, query } from "../db/pool.js";
 import { QUEUES, getBoss } from "../queue/boss.js";
 import { runsChannel } from "../roles.js";
@@ -16,6 +16,7 @@ import { whatsapp } from "./session.js";
 export type WaRpc =
   | { op: "text"; jid: string; text: string; quotedId?: string }
   | { op: "media"; jid: string; image: OutboundImage }
+  | { op: "poll"; jid: string; poll: OutboundPoll }
   | { op: "react"; jid: string; messageId: string; emoji: string }
   | { op: "typing"; jid: string; ms: number }
   | { op: "read"; jid: string; messageId: string }

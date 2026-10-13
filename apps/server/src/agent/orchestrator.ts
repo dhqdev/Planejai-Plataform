@@ -28,6 +28,7 @@ import { fetchGif } from "./tools/images.js";
 import { isAckOnly, pickReaction } from "./reaction.js";
 import { matchQuick, quickAnswer } from "./quick.js";
 import { Tracer } from "./trace.js";
+import { POLL_NO, POLL_YES, pollQuestion, sendConfirmPoll } from "../whatsapp/polls.js";
 import { allShort, pushShort, recentShort, redisAlive, type ShortEntry } from "../shortmem.js";
 import { billingAccess, blockedMessage } from "../billing.js";
 import { config } from "../config.js";
@@ -524,9 +525,12 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     }
     // pergunta do "sim" com o resumo do servidor: a pessoa confirma o que está escrito aqui, não a frase do modelo
     const asked = ctx.room.confirmations.at(-1);
-    if (asked) {
-      const what = asked.charAt(0).toLowerCase() + asked.slice(1);
-      result.text = `${result.text.replace(/^\[\[sil[eê]ncio\]\]$/i, "").trim()}\n\n👉 Responda *sim* para eu ${what}`.trim();
+    const what = asked ? asked.charAt(0).toLowerCase() + asked.slice(1) : null;
+    // no WhatsApp (Baileys) a pergunta vai como enquete Sim/Não depois da resposta; nos outros canais, em texto
+    const byPoll = Boolean(what && channel.sendPoll);
+    if (what) {
+      result.text = result.text.replace(/^\[\[sil[eê]ncio\]\]$/i, "").trim();
+      if (!byPoll) result.text = `${result.text}\n\n${askYesText(what)}`.trim();
     }
     const silent = !result.text || /^\[\[sil[eê]ncio\]\]$/i.test(result.text.trim());
     // [[gif:busca]] vira um GIF e [[figurinha:nome]] uma figurinha do Mochi, cada um num balão próprio
@@ -545,6 +549,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     progress.stop();
     const keepInDb = !(await redisAlive());
     await deliver(bubbles, { channel, conversation, outbox, tracer, keepInDb });
+    const askedText = byPoll && what ? await askYes(what, { channel, conversation, tracer, keepInDb }) : null;
     await rememberSentMedia(conversationId, outbox).catch(() => {});
     // A conversa já está no WhatsApp e na memória curta (Redis): com o Redis no ar, a mensagem sai do banco
     // só agora a rodada entra na memória curta: se der erro passageiro e a fila tentar de novo, nada fica duplicado
@@ -560,6 +565,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
         const m = outbox.media.get(b.id);
         return m?.spoken ? [`[áudio] ${m.spoken}`] : m?.kind === "sticker" ? ["[figurinha]"] : m?.gif ? ["[gif]"] : [];
       }),
+      ...(askedText ? [askedText] : []),
     ];
     if (sentTexts.length) await pushShort(conversationId, [{ id: Date.now(), role: "assistant", text: sentTexts.join("\n"), ts: Date.now() }]);
     if (!ctx.room.partial && guard.toolCalls >= guard.maxToolCalls) ctx.room.partial = `Bateu o limite de ${guard.maxToolCalls} ações`;
@@ -642,6 +648,43 @@ async function costLimitHit(userId: string, limitUsd: number) {
   const r = await one("SELECT COALESCE(SUM(cost_usd), 0)::float AS c FROM executions WHERE user_id = $1 AND started_at > now() - interval '24 hours'", [userId]);
   if (r.c >= limitUsd) return { limite: "custo de IA em 24h (US$)", usado: Number(r.c.toFixed(4)), maximo: limitUsd };
   return null;
+}
+
+const askYesText = (what: string) => `👉 Responda *sim* para eu ${what}`;
+
+/**
+ * Pergunta do "sim" por enquete Sim/Não (whatsapp/polls.ts). Se a enquete não sair (WhatsApp recusou, versão
+ * da biblioteca, conexão), manda a mesma pergunta em texto: a pessoa nunca fica sem como confirmar.
+ * Devolve o que foi enviado, para a memória curta.
+ */
+async function askYes(what: string, o: { channel: Channel; conversation: ConversationRow; tracer: Tracer; keepInDb: boolean }) {
+  const jid = o.conversation.remote_jid;
+  const step = await o.tracer.step({ agent: "cto", type: "channel", name: "enviar_enquete", input: { pergunta: pollQuestion(what) } });
+  let sent: { text: string; id?: string } | null = null;
+  try {
+    const r = await sendConfirmPoll(o.channel, jid, what);
+    await step.ok(r);
+    sent = { text: `[enquete] ${r.name} (${POLL_YES} / ${POLL_NO})`, id: r.id };
+  } catch (err) {
+    await step.fail(err);
+    const text = askYesText(what);
+    const fallback = await o.tracer.step({ agent: "cto", type: "channel", name: "enviar_texto", input: { text, motivo: "enquete não saiu" } });
+    try {
+      const r = await o.channel.sendText(jid, text);
+      await fallback.ok(r);
+      sent = { text, id: r.id };
+    } catch (err2) {
+      await fallback.fail(err2);
+    }
+  }
+  if (sent && o.keepInDb) {
+    await query("INSERT INTO messages (conversation_id, role, content, external_id, processed) VALUES ($1, 'assistant', $2, $3, true)", [
+      o.conversation.id,
+      sent.text,
+      sent.id ?? null,
+    ]).catch(() => {});
+  }
+  return sent?.text ?? null;
 }
 
 async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: ConversationRow; outbox: Outbox; tracer: Tracer; keepInDb: boolean }) {

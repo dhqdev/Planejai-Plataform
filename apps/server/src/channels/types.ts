@@ -42,6 +42,14 @@ export interface OutboundImage {
   spoken?: string;
 }
 
+/** Enquete do WhatsApp (uma escolha só): usada para o "sim" das ações sensíveis */
+export interface OutboundPoll {
+  name: string;
+  values: string[];
+  /** chave de 32 bytes em base64 que abre os votos (guardada em wa_polls) */
+  secret: string;
+}
+
 export interface Channel {
   id: string;
   configured(): boolean;
@@ -49,6 +57,8 @@ export interface Channel {
   downloadMedia(msg: InboundMessage): Promise<{ base64: string; mimetype: string } | null>;
   sendText(remoteJid: string, text: string, opts?: { quotedId?: string }): Promise<{ id?: string }>;
   sendImage(remoteJid: string, image: OutboundImage): Promise<{ id?: string }>;
+  /** só canais que mandam enquete (Baileys); sem ele a pergunta vai em texto */
+  sendPoll?(remoteJid: string, poll: OutboundPoll): Promise<{ id?: string }>;
   react(remoteJid: string, messageId: string, emoji: string): Promise<void>;
   setTyping(remoteJid: string, ms: number): Promise<void>;
   markRead(remoteJid: string, messageId: string): Promise<void>;

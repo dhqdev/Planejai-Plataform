@@ -64,6 +64,7 @@ export async function purgeOld(log?: { info: (...a: any[]) => void; error: (...a
   // lembrete que já passou ou foi cancelado não serve mais para nada
   // conversa com contatos da tela Recados: só o último mês
   await query("DELETE FROM contact_messages WHERE created_at < now() - interval '30 days'").catch(() => {});
+  await query("DELETE FROM wa_polls WHERE created_at < now() - interval '1 day'").catch(() => {});
   const rems = await query("DELETE FROM reminders WHERE status IN ('done', 'cancelled') OR (status = 'failed' AND created_at < now() - interval '7 days')");
   const out = { messages: msgs.rowCount ?? 0, logSteps: scrubbed.rowCount ?? 0, executions: execs.rowCount ?? 0, files: files.rowCount ?? 0, reminders: rems.rowCount ?? 0, trashed, movedToStorage };
   log?.info(out, "limpeza de dados antigos");
