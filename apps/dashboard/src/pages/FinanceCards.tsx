@@ -195,7 +195,7 @@ export function CardsTab({ user, readonly, focus, onChanged }: { user: string; r
     <div className="cc-layout">
       <aside className="cc-wallet">
         {cards.map((x) => (
-          <CardArt key={x.id} card={x} selected={x.id === c.id} onClick={() => { haptic(5); setSel(x.id); setMonth(null); }} />
+          <CardArt key={x.id} card={x} selected={x.id === c.id} onClick={() => { haptic(5); if (x.id === c.id && !readonly) setEditing(x); else { setSel(x.id); setMonth(null); } }} />
         ))}
         {!readonly && (
           <button className="cc-add" onClick={() => setEditing("new")}><Icon name="plus" size={18} /> <span>Novo cartão</span></button>
@@ -203,6 +203,13 @@ export function CardsTab({ user, readonly, focus, onChanged }: { user: string; r
       </aside>
 
       <div className="cc-main">
+        <div className="cc-head">
+          <div className="cc-head-text">
+            <h3 className="ellipsis">{c.name}</h3>
+            <small className="muted ellipsis">{[c.brand, c.last4 ? `final ${c.last4}` : null, c.limit != null ? `limite ${brl(c.limit)}` : null].filter(Boolean).join(" · ") || "Sem banco, final ou limite"}</small>
+          </div>
+          {!readonly && <button className="btn btn-ghost btn-sm" onClick={() => setEditing(c)}><Icon name="edit" size={14} /> Editar cartão</button>}
+        </div>
         <div className="card cc-summary">
           <div>
             <small>Próxima a pagar</small>
@@ -227,7 +234,6 @@ export function CardsTab({ user, readonly, focus, onChanged }: { user: string; r
           <div className="cc-cycle">
             <small>Ciclo</small>
             <span className="cc-cycle-days"><b>{c.closing_day}</b><em>fecha</em><i /><b>{c.due_day}</b><em>vence</em></span>
-            {!readonly && <button className="link-btn" onClick={() => setEditing(c)}><Icon name="edit" size={13} /> Ajustar cartão</button>}
           </div>
         </div>
 
@@ -325,7 +331,7 @@ export function CardForm({ initial, onClose }: { initial: CreditCard | null; onC
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const preview: CreditCard = {
+  const preview: CreditCard = initial ? { ...initial, name: f.name || "Apelido", brand: f.brand || null, last4: f.last4.length === 4 ? f.last4 : null, color: f.color } : {
     id: "preview", name: f.name || "Apelido", brand: f.brand || null, last4: f.last4.length === 4 ? f.last4 : null, limit: null, closing_day: f.closing_day, due_day: f.due_day,
     color: f.color, remind_days_before: f.remind_days_before, used: 0, available: null, open: { month: "", total: 0, count: 0, closing: "", due: "", status: "aberta", paid_amount: null }, next: { month: "", total: 0, count: 0, closing: "", due: "", status: "aberta", paid_amount: null }, invoices: [], installments: [],
   };
@@ -350,7 +356,7 @@ export function CardForm({ initial, onClose }: { initial: CreditCard | null; onC
   const days = Array.from({ length: 31 }, (_, i) => i + 1);
   return (
     <Modal
-      title={initial ? "Ajustar cartão" : "Novo cartão"}
+      title={initial ? "Editar cartão" : "Novo cartão"}
       icon={<Icon name="card" />}
       onClose={() => onClose()}
       footer={

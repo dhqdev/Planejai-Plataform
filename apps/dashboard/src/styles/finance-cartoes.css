@@ -57,7 +57,12 @@
 .cc-cycle-days b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .cc-cycle-days em { font-style: normal; font-size: 12px; color: var(--muted); }
 .cc-cycle-days i { width: 14px; height: 1px; background: var(--border-2); align-self: center; }
-.cc-cycle .link-btn { align-self: flex-start; padding-left: 0; }
+/* nome do cartão escolhido com o botão de editar, sempre à vista (no celular também) */
+.cc-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cc-head-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.cc-head-text h3 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+.cc-head-text small { font-size: 12px; }
+.cc-head .btn { flex-shrink: 0; }
 
 .cc-status { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 99px; font-size: 11.5px; font-weight: 650; background: var(--panel-2); color: var(--muted); white-space: nowrap; }
 .cc-status.s-fechada { background: var(--ink); color: var(--on-ink); }
