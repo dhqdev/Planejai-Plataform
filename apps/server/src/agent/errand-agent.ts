@@ -30,7 +30,9 @@ function errandTools(e: Errand, timezone: string, outcome: { kind?: "done" | "as
     const previous = [...e.log].reverse().find((l) => l.from === "nos")?.text;
     const check = await checkErrandText({ place: e.place, goal: e.goal, message, previous }, ctx.tracer, "recados");
     if (!check.ok) return blockedResult(check);
-    const r = await sendToErrand(e.id, message, { sameTurn: Boolean(outcome.kind) });
+    // sameTurn sempre: o runner pode começar errand_done antes desta (ele grava passo no banco antes de rodar cada
+    // ferramenta), e o recado já aparece fechado enquanto o lembrete ainda está sendo criado
+    const r = await sendToErrand(e.id, message, { sameTurn: true });
     if (r.ok && r.sent) e.log.push({ from: "nos", text: r.sent, at: new Date().toISOString() });
     return r;
   };
@@ -100,7 +102,7 @@ function conversaTools(e: Errand, outcome: Outcome): Tool[] {
             await step.ok({ ...check, by: "filtro" });
             return blockedResult(check);
           }
-          const r = await sendToErrand(e.id, args.message, { sameTurn: Boolean(outcome.kind) });
+          const r = await sendToErrand(e.id, args.message, { sameTurn: true });
           if (r.ok && r.sent) e.log.push({ from: "nos", text: r.sent, at: new Date().toISOString() });
           return r;
         })();
