@@ -8,6 +8,7 @@ import { clearApiCache, prefetchApi, useApi } from "./hooks";
 import { Icon } from "./icons";
 import { openWardrobe } from "./mochi/state";
 import { UserMochi } from "./mochi/UserMochi";
+import { MochiStroll } from "./mochi/Stroll";
 import { MochiButton, MochiIcon, WardrobeHost } from "./mochi/Wardrobe";
 import { useUnread } from "./notify";
 import { AuthPage } from "./pages/Login";
@@ -458,6 +459,7 @@ export function App() {
       </main>
 
       <WardrobeHost />
+      <MochiStroll />
       {welcome && <Welcome data={welcome} name={me.name} onDone={() => (setWelcome(null), window.dispatchEvent(new Event("pj:welcome-done")))} />}
 
       {update && (

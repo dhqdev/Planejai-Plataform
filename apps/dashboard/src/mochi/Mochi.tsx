@@ -866,6 +866,83 @@ function Defs({ u }: { u: string }) {
 
 /* ---------------- Comportamento dos olhos ---------------- */
 
+type Gesture = "hop" | "bigHop" | "sway" | "lookAround" | "startle" | "shake";
+/** Gestos do corpo, em px do viewBox, girando/amassando a partir do pé (60,106). [quadros, duração ms] */
+const GESTURES: Record<Gesture, [Keyframe[], number]> = {
+  // agacha, sobe esticado, cai e amassa um pouquinho
+  hop: [
+    [
+      { transform: "translateY(0) scale(1, 1)", offset: 0, easing: "ease-out" },
+      { transform: "translateY(0) scale(1.06, 0.92)", offset: 0.16, easing: "cubic-bezier(.2,.7,.3,1)" },
+      { transform: "translateY(-14px) scale(0.96, 1.06)", offset: 0.45, easing: "cubic-bezier(.5,0,.8,.4)" },
+      { transform: "translateY(0) scale(1.07, 0.92)", offset: 0.72, easing: "ease-out" },
+      { transform: "translateY(0) scale(0.99, 1.02)", offset: 0.86 },
+      { transform: "translateY(0) scale(1, 1)", offset: 1 },
+    ],
+    620,
+  ],
+  bigHop: [
+    [
+      { transform: "translateY(0) scale(1, 1)", offset: 0, easing: "ease-out" },
+      { transform: "translateY(0) scale(1.08, 0.88)", offset: 0.15, easing: "cubic-bezier(.2,.7,.3,1)" },
+      { transform: "translateY(-26px) scale(0.95, 1.08) rotate(-6deg)", offset: 0.45, easing: "cubic-bezier(.5,0,.8,.4)" },
+      { transform: "translateY(0) scale(1.09, 0.9)", offset: 0.74, easing: "ease-out" },
+      { transform: "translateY(0) scale(1, 1)", offset: 1 },
+    ],
+    760,
+  ],
+  sway: [
+    [
+      { transform: "rotate(0deg)", easing: "ease-in-out" },
+      { transform: "rotate(-5deg)", easing: "ease-in-out" },
+      { transform: "rotate(4deg)", easing: "ease-in-out" },
+      { transform: "rotate(-2deg)", easing: "ease-in-out" },
+      { transform: "rotate(0deg)" },
+    ],
+    1300,
+  ],
+  lookAround: [
+    [
+      { transform: "translateX(0) rotate(0deg)", easing: "ease-in-out" },
+      { transform: "translateX(-2px) rotate(-3deg)", offset: 0.25, easing: "ease-in-out" },
+      { transform: "translateX(-2px) rotate(-3deg)", offset: 0.42, easing: "ease-in-out" },
+      { transform: "translateX(2px) rotate(3deg)", offset: 0.65, easing: "ease-in-out" },
+      { transform: "translateX(2px) rotate(3deg)", offset: 0.82, easing: "ease-in-out" },
+      { transform: "translateX(0) rotate(0deg)", offset: 1 },
+    ],
+    1800,
+  ],
+  startle: [
+    [
+      { transform: "translateY(0) scale(1, 1)", easing: "ease-out" },
+      { transform: "translateY(-7px) scale(0.95, 1.07)", offset: 0.3, easing: "ease-in" },
+      { transform: "translateY(0) scale(1.04, 0.96)", offset: 0.65, easing: "ease-out" },
+      { transform: "translateY(0) scale(1, 1)", offset: 1 },
+    ],
+    480,
+  ],
+  shake: [
+    [
+      { transform: "translateX(0)" },
+      { transform: "translateX(-3px)" },
+      { transform: "translateX(3px)" },
+      { transform: "translateX(-2px)" },
+      { transform: "translateX(1px)" },
+      { transform: "translateX(0)" },
+    ],
+    380,
+  ],
+};
+/** sombra encolhe e clareia enquanto ele está no ar */
+const SHADOW_HOP: Keyframe[] = [
+  { transform: "scale(1)", opacity: 1, offset: 0 },
+  { transform: "scale(1.06)", opacity: 1, offset: 0.16 },
+  { transform: "scale(0.72)", opacity: 0.5, offset: 0.45 },
+  { transform: "scale(1.06)", opacity: 1, offset: 0.72 },
+  { transform: "scale(1)", opacity: 1, offset: 1 },
+];
+const calm = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
 const POKES: Mood[] = ["happy", "surprised", "laughing", "wink", "happy", "curious"];
 const RANGE_X = 6.5;
 const RANGE_Y = 4.5;
@@ -880,6 +957,8 @@ export function Mochi({
   className,
   style,
   title,
+  gaze,
+  walking = false,
 }: {
   mood?: Mood;
   outfit?: Outfit;
@@ -893,19 +972,27 @@ export function Mochi({
   className?: string;
   style?: CSSProperties;
   title?: string;
+  /** para onde olhar (passeando, olha para onde vai), em -1..1 */
+  gaze?: [number, number];
+  /** andando: pulinhos curtos no lugar da respiração */
+  walking?: boolean;
 }) {
   void follow;
   const u = "m" + useId().replace(/[^a-zA-Z0-9]/g, "");
   const svg = useRef<SVGSVGElement>(null);
   const look = useRef<SVGGElement>(null);
   const lids = useRef<SVGGElement>(null);
+  const lean = useRef<SVGGElement>(null);
+  const act = useRef<SVGGElement>(null);
+  const shadow = useRef<SVGGElement>(null);
   const [poke, setPoke] = useState<Mood | null>(null);
   const [squish, setSquish] = useState(0);
   const clicks = useRef<number[]>([]);
+  const [wave, setWave] = useState(0);
 
   const shown: Mood = poke ?? mood;
   const face = FACES[shown] ?? FACES.idle;
-  const fixed = face.gaze;
+  const fixed: [number, number] | undefined = gaze ? [gaze[0] * RANGE_X, gaze[1] * RANGE_Y] : face.gaze;
   const scanning = !!face.scan;
 
   // olhar: segue o ponteiro; parado, os olhos passeiam sozinhos (pulinhos rápidos como olhos de verdade)
@@ -938,11 +1025,14 @@ export function Mochi({
         const d = Math.hypot(dx, dy) || 1;
         const k = Math.min(1, d / (r.width * 1.6));
         set((dx / d) * RANGE_X * k, (dy / d) * RANGE_Y * k);
+        // o corpo inclina de leve para o lado do ponteiro, como quem presta atenção
+        if (lean.current) lean.current.style.transform = `rotate(${((dx / d) * k * 4).toFixed(2)}deg)`;
       });
     };
     let t: ReturnType<typeof setTimeout>;
     const wander = () => {
       if (Date.now() - lastMove > 2500 && !document.hidden) {
+        if (lean.current) lean.current.style.transform = "";
         const r = Math.random();
         if (r < 0.3) set(0, 0);
         else set((Math.random() * 2 - 1) * RANGE_X, (Math.random() * 2 - 1) * RANGE_Y * 0.8);
@@ -986,6 +1076,47 @@ export function Mochi({
     return () => clearTimeout(t);
   }, [poke, squish]);
 
+  // gestos: pulinho, aceno, olhar para os lados, balançar. Animam um grupo próprio (Web Animations),
+  // sem brigar com a respiração (CSS) nem com o amassar do toque.
+  const play = (kind: Gesture) => {
+    const g = act.current;
+    if (!g || still || calm()) return;
+    const [frames, ms] = GESTURES[kind];
+    g.animate(frames, { duration: ms, easing: "linear" });
+    const sh = shadow.current;
+    if (sh && (kind === "hop" || kind === "bigHop")) sh.animate(SHADOW_HOP, { duration: ms, easing: "linear" });
+  };
+
+  // humor que pede gesto: oi acena e pula, pronto/feliz pula, surpreso dá um sustinho
+  useEffect(() => {
+    if (still) return;
+    if (shown === "greeting") {
+      play("hop");
+      setWave((n) => n + 1);
+    } else if (shown === "finished" || shown === "happy" || shown === "laughing") play("hop");
+    else if (shown === "surprised") play("startle");
+    else if (shown === "error") play("shake");
+    else if (shown === "searching" || shown === "curious") play("lookAround");
+  }, [shown, still]);
+
+  // parado, de vez em quando ele faz alguma coisa sozinho (pulinho, balança, olha em volta, acena)
+  useEffect(() => {
+    if (still || walking || calm()) return;
+    let t: ReturnType<typeof setTimeout>;
+    const loop = () => {
+      if (!document.hidden && (mood === "idle" || mood === "happy")) {
+        const r = Math.random();
+        if (r < 0.35) play("hop");
+        else if (r < 0.6) play("sway");
+        else if (r < 0.85) play("lookAround");
+        else setWave((n) => n + 1);
+      }
+      t = setTimeout(loop, 9000 + Math.random() * 12000);
+    };
+    t = setTimeout(loop, 5000 + Math.random() * 8000);
+    return () => clearTimeout(t);
+  }, [still, walking, mood]);
+
   const onPoke = () => {
     if (still) return;
     const now = Date.now();
@@ -1007,7 +1138,7 @@ export function Mochi({
   return (
     <svg
       ref={svg}
-      className={`mochi ${still ? "m-still" : ""} ${face.scan ? `m-scan-${face.scan}` : ""} ${className ?? ""}`}
+      className={`mochi ${still ? "m-still" : ""} ${walking ? "m-walk" : ""} ${face.scan ? `m-scan-${face.scan}` : ""} ${className ?? ""}`}
       width={size}
       height={crop ? Math.round((size * 80) / 104) : size}
       viewBox={crop ? cropBox : "0 0 120 120"}
@@ -1017,8 +1148,20 @@ export function Mochi({
       onPointerDown={onPoke}
     >
       <Defs u={u} />
-      <ellipse className="m-shadow" cx={60} cy={108.5} rx={40} ry={4} fill="#000" opacity={0.22} filter={`url(#${u}-shadow)`} />
-      <ellipse className="m-shadow" cx={60} cy={106.4} rx={30} ry={2.4} fill="#000" opacity={0.42} filter={`url(#${u}-contact)`} />
+      <g className="m-shadows" ref={shadow}>
+        <ellipse className="m-shadow" cx={60} cy={108.5} rx={40} ry={4} fill="#000" opacity={0.22} filter={`url(#${u}-shadow)`} />
+        <ellipse className="m-shadow" cx={60} cy={106.4} rx={30} ry={2.4} fill="#000" opacity={0.42} filter={`url(#${u}-contact)`} />
+      </g>
+      <g className="m-lean" ref={lean}>
+      <g className="m-act" ref={act}>
+      <g className="m-life">
+      {!still && (
+        // mãozinhas: escondidas atrás do corpo, aparecem para acenar
+        <g className={wave ? "m-hands m-waving" : "m-hands"} key={wave}>
+          <ellipse className="m-hand m-hand-l" cx={22} cy={90} rx={8.5} ry={7} fill={`url(#${u}-body)`} stroke="#000" strokeOpacity={0.08} strokeWidth={0.8} />
+          <ellipse className="m-hand m-hand-r" cx={98} cy={90} rx={8.5} ry={7} fill={`url(#${u}-body)`} stroke="#000" strokeOpacity={0.08} strokeWidth={0.8} />
+        </g>
+      )}
       <g className={squish ? `m-squish m-squish-${squish % 2}` : "m-squish"}>
         {pumpkin ? (
           <Pumpkin u={u} />
@@ -1061,6 +1204,9 @@ export function Mochi({
           </g>
         )}
         {astronaut && <Helmet u={u} />}
+      </g>
+      </g>
+      </g>
       </g>
     </svg>
   );

@@ -3,6 +3,7 @@ import { Modal } from "../components";
 import { haptic } from "../touch";
 import { ITEMS, MOODS, Mochi, MochiTile, SLOTS, type Mood, type Outfit } from "./Mochi";
 import { openWardrobe, useMochiLife, useMochiMood, useOutfit } from "./state";
+import { setStrollEnabled, strollEnabled } from "./Stroll";
 
 /** O Mochi do app (barra lateral, topo, menu). Tocar nele abre o guarda-roupa. */
 export function MochiButton({ size = 34 }: { size?: number }) {
@@ -37,6 +38,7 @@ export function WardrobeHost() {
 function Wardrobe({ onClose }: { onClose: () => void }) {
   const [outfit, setOutfit] = useOutfit();
   const [preview, setPreview] = useState<Mood>("idle");
+  const [stroll, setStroll] = useState(strollEnabled);
 
   const wear = (slot: keyof Outfit, id: string | undefined) => {
     haptic(10);
@@ -60,6 +62,18 @@ function Wardrobe({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={stroll}
+          onChange={(e) => {
+            setStroll(e.target.checked);
+            setStrollEnabled(e.target.checked);
+          }}
+        />
+        <span>Passear pela tela (ele aparece de vez em quando, acena e vai embora)</span>
+      </label>
+
       {SLOTS.map((slot) => (
         <div key={slot.id}>
           <div className="mochi-section">{slot.label}</div>
@@ -78,7 +92,7 @@ function Wardrobe({ onClose }: { onClose: () => void }) {
 
       <div className="mochi-section">Expressões</div>
       <p className="muted" style={{ margin: "-4px 0 10px", fontSize: 12.5 }}>
-        Ele fala com os olhos: procura enquanto salva, sorri quando dá certo e cochila se você some. Toque nele para ver a reação.
+        Ele fala com os olhos: procura enquanto salva, sorri quando dá certo e cochila se você some. Toque nele para ver a reação; de vez em quando ele pula, balança, olha em volta ou acena sozinho.
       </p>
       <div className="mochi-grid">
         {MOODS.map((m) => (

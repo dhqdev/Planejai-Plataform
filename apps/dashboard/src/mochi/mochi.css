@@ -29,11 +29,54 @@
 @keyframes m-poke2 { 0% { transform: scale(1); } 18% { transform: scale(1.1, 0.86); } 45% { transform: scale(0.96, 1.05); } 70% { transform: scale(1.02, 0.98); } 100% { transform: scale(1); } }
 .mochi:not(.m-still) { cursor: pointer; }
 
+/* corpo vivo: tudo gira e amassa a partir do pé (60,106) */
+.mochi .m-lean, .mochi .m-act, .mochi .m-life, .mochi .m-shadows { transform-box: view-box; transform-origin: 60px 106px; }
+/* inclina de leve para o lado do ponteiro */
+.mochi .m-lean { transition: transform 0.5s cubic-bezier(.3, .7, .3, 1); }
+/* respira devagar */
+.mochi .m-life { animation: m-breathe 3.6s ease-in-out infinite; }
+@keyframes m-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(0.988, 1.022); } }
+/* andando: pulinhos curtos, amassa ao tocar o chão */
+.mochi.m-walk .m-life { animation: m-walk 0.46s cubic-bezier(.4, 0, .6, 1) infinite; }
+@keyframes m-walk {
+  0%, 100% { transform: translateY(0) scale(1.05, 0.95); }
+  20% { transform: translateY(0) scale(1, 1); }
+  50% { transform: translateY(-7px) scale(0.97, 1.04); }
+  80% { transform: translateY(0) scale(1, 1); }
+}
+.mochi.m-walk .m-shadows { animation: m-walk-shadow 0.46s cubic-bezier(.4, 0, .6, 1) infinite; }
+@keyframes m-walk-shadow { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.8); opacity: 0.6; } }
+
+/* mãozinhas: atrás do corpo; no aceno, a da direita sobe e balança e a da esquerda aparece um pouco */
+.mochi .m-hand { transform-box: fill-box; transform-origin: center; transform: translate(0, 0) scale(0.2); opacity: 0; }
+.mochi .m-waving .m-hand-r { animation: m-wave-r 1.7s cubic-bezier(.3, .7, .3, 1) both; }
+.mochi .m-waving .m-hand-l { animation: m-wave-l 1.7s ease-out both; }
+@keyframes m-wave-r {
+  0% { opacity: 0; transform: translate(-10px, 0) scale(0.3); }
+  13% { opacity: 1; transform: translate(12px, -36px) rotate(-22deg) scale(1.1); }
+  25% { transform: translate(16px, -40px) rotate(20deg) scale(1.1); }
+  37% { transform: translate(12px, -36px) rotate(-20deg) scale(1.1); }
+  49% { transform: translate(16px, -40px) rotate(20deg) scale(1.1); }
+  61% { transform: translate(12px, -36px) rotate(-16deg) scale(1.1); }
+  74% { opacity: 1; transform: translate(14px, -38px) rotate(8deg) scale(1.1); }
+  100% { opacity: 0; transform: translate(-10px, 0) scale(0.3); }
+}
+@keyframes m-wave-l {
+  0% { opacity: 0; transform: translate(10px, 0) scale(0.3); }
+  16%, 76% { opacity: 1; transform: translate(-5px, -3px) scale(1); }
+  100% { opacity: 0; transform: translate(10px, 0) scale(0.3); }
+}
+
 .mochi.m-still *, .mochi.m-still { animation: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
   .mochi *, .mochi { animation: none !important; transition: none !important; }
 }
+
+/* ---------- passeando pela tela (Stroll.tsx) ---------- */
+.mochi-stroll { position: fixed; left: 0; bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 40; pointer-events: none; will-change: transform; }
+.mochi-stroll-body { display: block; pointer-events: auto; -webkit-user-select: none; user-select: none; }
+@media (max-width: 767px) { .mochi-stroll { bottom: calc(84px + env(safe-area-inset-bottom)); } }
 
 /* ---------- onde ele aparece ---------- */
 .mochi-badge { appearance: none; border: 0; background: none; padding: 0; margin: -4px 0; cursor: pointer; display: grid; place-items: center; color: var(--muted); -webkit-tap-highlight-color: transparent; transition: transform 0.15s; }
