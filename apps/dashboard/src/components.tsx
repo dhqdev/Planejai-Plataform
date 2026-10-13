@@ -56,26 +56,41 @@ if (typeof window !== "undefined") {
   window.addEventListener("pointerdown", (e) => void (lastPress = { el: e.target as Element, at: performance.now() }), true);
 }
 const ANCHOR = "button, a, [role='button'], [role='tab'], input, select, textarea, label, tr, li, .card.clickable";
-function anchorRect(): DOMRect | null {
+function anchorEl(): Element | null {
   const fresh = lastPress && performance.now() - lastPress.at < 1500 && lastPress.el.isConnected ? lastPress.el : null;
   const focus = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
   const el = (fresh ?? focus)?.closest(ANCHOR) ?? fresh ?? focus;
   if (!el) return null;
   const r = el.getBoundingClientRect();
-  return r.width || r.height ? r : null;
+  return r.width || r.height ? el : null;
 }
-/** Onde a janela entra: embaixo de quem abriu, centrada nele; sem espaço embaixo, sobe só o necessário. */
+/** Altura que a janela teria sem limite (cabeçalho + conteúdo inteiro + rodapé). */
+function naturalHeight(el: HTMLElement) {
+  let h = 0;
+  for (const c of Array.from(el.children) as HTMLElement[]) {
+    const cs = getComputedStyle(c);
+    if (cs.display === "none" || cs.position === "absolute") continue;
+    h += (c.classList.contains("modal-body") ? c.scrollHeight : c.offsetHeight) + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
+  }
+  return h + (el.offsetHeight - el.clientHeight);
+}
+/**
+ * Onde a janela entra: logo embaixo de quem abriu, centrada nele, se couber inteira ali; senão sobe só o
+ * necessário para caber inteira (sem rolar). Só rola quando a janela é maior que a tela.
+ */
 function placeDrop(el: HTMLElement, from: DOMRect | null) {
   const bg = el.parentElement;
   if (!bg) return;
-  const vh = window.visualViewport?.height ?? innerHeight;
+  const vv = window.visualViewport;
+  const vh = vv?.height ?? innerHeight;
+  const vtop = vv?.offsetTop ?? 0;
   const w = el.offsetWidth;
-  const minTop = 12;
-  const h = Math.min(el.scrollHeight, vh - minTop - 12);
-  let top = from ? from.bottom + 8 : Math.min(76, vh * 0.1);
-  if (vh - 12 - top < Math.min(h, 420)) top = Math.max(minTop, vh - 12 - h);
+  const gap = 12;
+  const h = Math.min(naturalHeight(el), vh - gap * 2);
+  const below = from ? from.bottom + 8 : vtop + Math.min(72, vh * 0.09);
+  const top = below + h <= vtop + vh - gap ? below : Math.max(vtop + gap, vtop + vh - gap - h);
   const cx = from ? from.left + from.width / 2 : innerWidth / 2;
-  const left = Math.max(12, Math.min(innerWidth - 12 - w, cx - w / 2));
+  const left = Math.max(gap, Math.min(innerWidth - gap - w, cx - w / 2));
   bg.style.setProperty("--drop-top", `${Math.round(top)}px`);
   bg.style.setProperty("--drop-left", `${Math.round(left)}px`);
 }
@@ -240,30 +255,64 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
   useLayoutEffect(() => {
     const el = sheet.current;
     if (!drop || !el) return;
-    const from = anchorRect();
+    const anchor = anchorEl();
+    const from = anchor?.getBoundingClientRect() ?? null;
     fromRef.current = from;
     placeDrop(el, from);
-    const again = () => !offset.current.x && !offset.current.y && placeDrop(el, null);
+    // conteúdo mudou de tamanho (aba, campo novo, lista carregou) ou o teclado do iPad abriu/fechou:
+    // reposiciona para continuar inteira na tela, deslizando (sem pular). Arrastada pela pessoa, fica onde está.
+    let raf = 0;
+    const again = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (offset.current.x || offset.current.y || !el.isConnected) return;
+        const r = anchor?.isConnected ? anchor.getBoundingClientRect() : null;
+        placeDrop(el, r && (r.width || r.height) ? r : fromRef.current);
+      });
+    };
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(again) : null;
+    const watch = () => {
+      ro?.disconnect();
+      const body = el.querySelector(".modal-body");
+      for (const c of Array.from(body?.children ?? [])) ro?.observe(c);
+      ro?.observe(el);
+    };
+    watch();
+    const mo = new MutationObserver(() => (watch(), again()));
+    const body = el.querySelector(".modal-body");
+    if (body) mo.observe(body, { childList: true });
     window.addEventListener("resize", again);
+    window.visualViewport?.addEventListener("resize", again);
+    // a posição desliza só depois de a janela estar no lugar (a primeira vez entra direto, sem transição)
+    const ready = requestAnimationFrame(() => el.parentElement?.classList.add("placed"));
+    const unwatch = () => {
+      cancelAnimationFrame(raf);
+      cancelAnimationFrame(ready);
+      ro?.disconnect();
+      mo.disconnect();
+      window.removeEventListener("resize", again);
+      window.visualViewport?.removeEventListener("resize", again);
+    };
     if (lessMotion() || typeof el.animate !== "function") {
       el.classList.add("glass-on");
-      return () => window.removeEventListener("resize", again);
+      return unwatch;
     }
     const to = el.getBoundingClientRect();
     const a = from ?? new DOMRect(to.left + to.width * 0.3, to.top, to.width * 0.4, 44);
     const sx = Math.max(0.05, a.width / to.width);
     const sy = Math.max(0.03, a.height / to.height);
-    const r = Math.min(a.height / 2, 22);
+    // só transform e opacidade (rodam na placa de vídeo, sem redesenhar a janela a cada quadro): no iPad
+    // arredondar a borda junto fazia a abertura engasgar
     const shape = el.animate(
       [
-        { transform: `translate(${a.left - to.left}px, ${a.top - to.top}px) scale(${sx}, ${sy})`, borderRadius: `${r / sx}px / ${r / sy}px`, opacity: 0.5 },
-        { opacity: 1, offset: 0.35 },
-        { transform: "none", borderRadius: "" },
+        { transform: `translate(${a.left - to.left}px, ${a.top - to.top}px) scale(${sx}, ${sy})`, opacity: 0 },
+        { opacity: 1, offset: 0.3 },
+        { transform: "none", opacity: 1 },
       ],
-      { duration: 460, easing: "cubic-bezier(.22, 1.18, .36, 1)" },
+      { duration: 380, easing: "cubic-bezier(.25, 1.12, .4, 1)" },
     );
     const inner = Array.from(el.children).map((c) =>
-      (c as HTMLElement).animate([{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: 160, easing: "ease-out", fill: "backwards" }),
+      (c as HTMLElement).animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, delay: 140, easing: "ease-out", fill: "backwards" }),
     );
     morph.current = [shape, ...inner];
     shape.onfinish = () => {
@@ -271,7 +320,7 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
       el.classList.add("glass-on");
     };
     return () => {
-      window.removeEventListener("resize", again);
+      unwatch();
       morph.current.forEach((m) => m.cancel());
       morph.current = [];
     };

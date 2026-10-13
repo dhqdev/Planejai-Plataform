@@ -17,3 +17,7 @@
   .modal-bg.drop.closing .modal-scrim { animation: fade-out .22s ease both; }
 }
 /* a forma (nascer do botão e voltar para ele) é animada em components.tsx (Modal, Web Animations) */
+/* depois de entrar: se o conteúdo cresce ou o teclado abre, a janela desliza para continuar inteira na tela */
+@media (min-width: 768px) {
+  .modal-bg.drop.placed > .modal { transition: top .28s cubic-bezier(.2, .8, .2, 1), left .28s cubic-bezier(.2, .8, .2, 1); }
+}
