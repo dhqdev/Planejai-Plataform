@@ -16,8 +16,7 @@ import { TeamScroll } from "./LandingTeam";
 
 /**
  * Landing pública (quem abre "/" sem estar logado). Curta e minimalista (pedido do David): a conversa do topo,
- * três cartões do que ele faz, a fila do time, um "sim" que dá para tocar com os apps embaixo, planos, perguntas e
- * o convite final. O movimento vem da rolagem: títulos palavra por palavra, blocos subindo, itens em cascata. Tudo aqui é verdade do produto: só cita o que um cliente comum já usa.
+ * três cartões do que ele faz, a fila do time, um "sim" que dá para tocar com os apps embaixo, planos e perguntas. O movimento vem da rolagem: títulos palavra por palavra, blocos subindo, itens em cascata. Tudo aqui é verdade do produto: só cita o que um cliente comum já usa.
  * Efeitos do React Bits em ../reactbits (aviso de licença lá).
  */
 
@@ -142,7 +141,7 @@ const BUDDY: Record<string, { mood: Mood; say: string }> = {
 
 /**
  * Mascote que acompanha a rolagem: assume quando o do topo sai da tela, inclina com a velocidade,
- * pula e muda de cara a cada seção e sai de cena quando chega o Mascote grande do final.
+ * pula e muda de cara a cada seção e sai de cena quando chega o rodapé.
  */
 function Buddy({ root }: { root: RefObject<HTMLDivElement | null> }) {
   const box = useRef<HTMLDivElement>(null);
@@ -153,10 +152,10 @@ function Buddy({ root }: { root: RefObject<HTMLDivElement | null> }) {
     const el = root.current;
     const b = box.current;
     if (!el || !b) return;
-    const end = el.querySelector(".lp-final");
+    const end = el.querySelector(".lp-foot");
     const check = () => {
       const past = el.scrollTop > el.clientHeight * 0.7;
-      const ending = end ? end.getBoundingClientRect().top < el.clientHeight * 0.75 : false;
+      const ending = end ? end.getBoundingClientRect().top < el.clientHeight - 20 : false;
       b.dataset.show = past && !ending ? "1" : "0";
     };
     check();
@@ -615,23 +614,6 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="lp-final">
-          <div className="lp-wrap lp-final-grid" data-reveal>
-            <div>
-              <h2>Manda um oi.</h2>
-              {!closed && (
-                <ClickSpark sparkColor="#ffffff" sparkCount={9} sparkRadius={22}>
-                  <a className="lp-btn big light" href="/login?cadastro=1" onClick={go}>
-                    {cta}
-                  </a>
-                </ClickSpark>
-              )}
-            </div>
-            <div className="lp-final-mascote">
-              <Mascote size={180} mood="greeting" outfit={{ head: "party" }} />
-            </div>
-          </div>
-        </section>
       </main>
 
       <footer className="lp-foot">

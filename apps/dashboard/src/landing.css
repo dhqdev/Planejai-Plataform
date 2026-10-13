@@ -244,15 +244,7 @@
 .lp-q.open .lp-a { grid-template-rows: 1fr; }
 .lp-q.open .lp-a > p { padding-bottom: 22px; }
 
-/* ---------- fim: a noite do Mascote ---------- */
-.lp-final { padding: 120px 0; }
-.lp-final-grid {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 40px; align-items: center; padding: 72px 72px 64px; border-radius: 40px;
-  background: var(--lp-night); color: #f6efff;
-}
-.lp-final h2 { font-size: clamp(36px, 4.8vw, 64px); line-height: 1.02; letter-spacing: -0.045em; font-weight: 600; max-width: 13ch; margin-bottom: 36px; text-wrap: balance; }
-
-.lp-foot { border-top: 1px solid var(--lp-line); }
+.lp-foot { margin-top: 112px; border-top: 1px solid var(--lp-line); }
 .lp-foot-row { display: flex; align-items: center; gap: 28px; min-height: 88px; font-size: 14px; color: var(--lp-muted); }
 .lp-foot-row .lp-logo { font-size: 16px; color: var(--lp-ink); }
 .lp-foot-links { display: flex; gap: 22px; }
@@ -271,7 +263,7 @@
   .lp-hero-bg { padding: 16px 0 40px; }
   .lp-hero-bg::after { width: 90vw; right: -20%; top: 40%; }
   .lp-eyebrow { margin-bottom: 18px; font-size: 13px; }
-  .lp-hero-grid, .lp-safe, .lp-faq-wrap, .lp-final-grid { grid-template-columns: 1fr; }
+  .lp-hero-grid, .lp-safe, .lp-faq-wrap { grid-template-columns: 1fr; }
   .lp-hero-grid { gap: 8px; min-height: 0; }
   .hc-title { font-size: clamp(36px, 10.4vw, 52px); }
   .lp-lead { font-size: 17px; margin-top: 12px; }
@@ -296,11 +288,7 @@
   .lp-chip-btn { flex: 1; }
   .lp-faq-wrap { gap: 20px; }
   .lp-q button { font-size: 17px; padding: 19px 0; }
-  .lp-final { padding: 88px 0; }
-  .lp-final-grid { padding: 44px 26px 32px; border-radius: 28px; gap: 8px; }
-  .lp-final-grid > :last-child { justify-self: end; }
-  .lp-final .rb-spark { width: 100%; }
-  .lp-final .lp-btn { width: 100%; }
+  .lp-foot { margin-top: 80px; }
   .lp-foot-row { flex-wrap: wrap; gap: 14px 22px; padding: 24px 0; }
   .lp-foot-row small { margin-left: 0; width: 100%; }
   .lp-buddy { right: 12px; bottom: 12px; }
@@ -343,10 +331,6 @@
 .lp.reveal-on .lp-words > span > span { translate: 0 105%; transition: translate .9s var(--lp-ease); transition-delay: calc(var(--w, 0) * 60ms); }
 .lp.reveal-on .lp-words[data-in] > span > span { translate: none; }
 
-.lp.reveal-on .lp-final-grid[data-reveal] { translate: 0 60px; scale: .96; transition-property: opacity, translate, scale; }
-.lp.reveal-on .lp-final-grid[data-reveal][data-in] { scale: 1; }
-.lp.reveal-on .lp-final-grid .lp-final-mascote { opacity: 0; translate: 0 80px; rotate: 16deg; transition: opacity .5s, translate .9s var(--lp-spring), rotate .9s var(--lp-spring); transition-delay: .35s; }
-.lp.reveal-on .lp-final-grid[data-in] .lp-final-mascote { opacity: 1; translate: none; rotate: none; }
 
 /* o Mascote que acompanha a rolagem */
 .lp-buddy {
