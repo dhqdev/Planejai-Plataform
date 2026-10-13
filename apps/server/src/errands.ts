@@ -3,7 +3,7 @@ import { MAX_PACE_WAIT_MS, newContactWait, isOptedOut, OPTED_OUT_ERROR } from ".
 import { getPrefs, resumeFollow, withSignature } from "./chatprefs.js";
 import { humanize } from "./agent/humanize.js";
 import { redactSecrets } from "./agent/guard.js";
-import type { InboundMessage } from "./channels/types.js";
+import type { InboundMessage, OutboundImage } from "./channels/types.js";
 import { many, one, query } from "./db/pool.js";
 import { isOwner, phoneVariants } from "./ingest.js";
 import { QUEUES, getBoss } from "./queue/boss.js";
@@ -212,7 +212,7 @@ export async function startErrand(opts: {
 }
 
 /** Mensagem nossa para o estabelecimento, dentro das travas. */
-export async function sendToErrand(errandId: string, text: string, opts: { sameTurn?: boolean } = {}) {
+export async function sendToErrand(errandId: string, text: string, opts: { sameTurn?: boolean; media?: OutboundImage } = {}) {
   const e = await one<Errand>("SELECT * FROM errands WHERE id = $1", [errandId]);
   // sameTurn: o agente fechou (ou levou à pessoa) nesta mesma vez e a despedida ainda está saindo
   const live = e && (OPEN.includes(e.status) || (opts.sameTurn && ["done", "failed"].includes(e.status)));
@@ -220,9 +220,26 @@ export async function sendToErrand(errandId: string, text: string, opts: { sameT
   const limit = messageLimit(e);
   if (e.sent >= limit)
     return { ok: false, error: e.kind === "conversa" ? `Já foram ${limit} mensagens nesta conversa. Despeça-se e encerre com conversa_end.` : `Já foram ${limit} mensagens para eles. Feche com errand_done ou pergunte à pessoa.` };
-  const clean = redactSecrets(humanize(text.trim())).slice(0, MAX_ERRAND_TEXT);
-  if (!clean) return { ok: false, error: "Mensagem vazia" };
-  await outboundChannel().sendText(e.jid, clean);
+  let clean: string;
+  if (opts.media) {
+    // áudio, foto, PDF, figurinha ou GIF (só na conversa delegada): no histórico fica o que foi, para o agente e a tela
+    const m = opts.media;
+    clean =
+      m.kind === "audio"
+        ? `(áudio) ${m.spoken ?? ""}`.trim()
+        : m.kind === "sticker"
+          ? "(figurinha)"
+          : m.gif
+            ? "(GIF)"
+            : m.kind === "document"
+              ? `(arquivo ${m.fileName ?? "PDF"})`
+              : `(imagem)${m.caption ? ` ${m.caption}` : ""}`;
+    await outboundChannel().sendImage(e.jid, m);
+  } else {
+    clean = redactSecrets(humanize(text.trim())).slice(0, MAX_ERRAND_TEXT);
+    if (!clean) return { ok: false, error: "Mensagem vazia" };
+    await outboundChannel().sendText(e.jid, clean);
+  }
   await query(
     // fechar e responder podem vir juntos (em paralelo): mandar não reabre um recado que acabou de fechar
     `UPDATE errands SET sent = sent + 1, log = log || $2::jsonb, updated_at = now(),

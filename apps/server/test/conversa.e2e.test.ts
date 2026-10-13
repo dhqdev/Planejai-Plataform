@@ -34,6 +34,9 @@ function fakeOpenRouter(body: any) {
         call("conversa_end", { summary: "Maria teve dor de cabeça e enjoo, descansou, tomou água e melhorou." }),
       ]);
     }
+    if (userText.includes("Maria: Tô melhorando")) {
+      return completion(null, [call("errand_reply", { message: "Que notícia boa, Maria! [[figurinha:feliz]]\n---\nContinua bebendo água, tá?" })]);
+    }
     if (userText.includes("Maria: Tô com muita dor no peito")) {
       return completion(null, [
         call("errand_reply", { message: "Maria, liga agora para o SAMU, 192. Se tiver alguém perto, pede ajuda." }),
@@ -153,6 +156,21 @@ describe.skipIf(!enabled)("conversa delegada e quem chega de fora (e2e)", () => 
     // o conversa_alert do agente logo depois não manda um segundo aviso (no máximo um a cada 10 min)
     expect(sentTexts().slice(before).filter((t) => t.includes("Atenção com Maria")).length).toBe(1);
     expect((await db.one("SELECT status FROM errands WHERE id = $1", [e.id])).status).toBe("waiting");
+  });
+
+  it("manda figurinha no meio da conversa, em balões separados, e com personalidade no prompt", async () => {
+    const e = await db.one("SELECT id FROM errands WHERE user_id = $1", [david.id]);
+    const before = channels.playground.sent.length;
+    await from(MARIA, "Tô melhorando");
+    const { runErrandTurn } = await import("../src/agent/errand-agent.js");
+    await runErrandTurn(e.id);
+    const out = channels.playground.sent.slice(before);
+    expect(out.map((s) => s.type)).toEqual(["text", "image", "text"]);
+    expect(out[1]!.image).toMatchObject({ kind: "sticker" });
+    const log = (await db.one("SELECT log FROM errands WHERE id = $1", [e.id])).log;
+    expect(log.slice(-2).map((l: any) => l.text)).toEqual(["(figurinha)", "Continua bebendo água, tá?"]);
+    expect(prompts.at(-1)).toMatch(/Seu jeito: calma, carinhosa/);
+    expect(prompts.at(-1)).toMatch(/make_audio/);
   });
 
   it("encerra com resumo para o David", async () => {
