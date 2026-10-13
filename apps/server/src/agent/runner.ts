@@ -227,7 +227,8 @@ export async function runToolLoop(opts: {
         const toolStep = await ctx.tracer.step({
           agent,
           type: isDelegate ? "delegate" : "tool",
-          name: call.function.name,
+          // consult_colega aparece como consult_<colega> em Execuções (o painel tira o colega do nome do passo)
+          name: call.function.name === "consult_colega" && typeof args.colega === "string" ? `consult_${args.colega}` : call.function.name,
           input: args,
           parentId: ctx.parentStepId,
         });

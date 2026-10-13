@@ -148,7 +148,7 @@ docs/operacao.md           segredos, backup/restore, rollback, saúde
 2. Nova rota `agent:<id>` em `ROUTE_DEFAULTS` (`llm/router.ts`) com o modelo mais barato que dá conta (critério em `modelos.md`).
 3. Rótulo em `AGENT_LABEL` (`apps/dashboard/src/components.tsx`).
 4. Apelido e carinha: `persona` e `face` no `team.ts`, e a mesma entrada em `CORE_FACES` (`apps/dashboard/src/faces.tsx`).
-O CTO ganha automaticamente `ask_<id>` e os outros especialistas ganham `consult_<id>`.
+O CTO ganha automaticamente `ask_<id>` e o novo entra na lista da `consult_colega` dos outros especialistas (uma ferramenta só, com o colega como argumento; em Execuções o passo aparece como `consult_<id>`). Especialista com muitas ferramentas pode levar `toolGroups` (como o Financeiro): só o núcleo vai sempre e o resto entra pelo assunto do pedido (`byTopic` em `collab.ts`).
 
 ## Regras do projeto
 - Travas (Configurações > Travas de segurança, chaves em `settings.ts`/`GUARD_LIMITS`): ritmo por minuto no ingest, limite de

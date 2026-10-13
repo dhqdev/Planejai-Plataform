@@ -70,7 +70,7 @@ function fakeOpenRouter(body: any) {
 
   if (system.includes("Você é o Treino")) {
     // agente sob medida conversa com os colegas como qualquer especialista
-    const peers = (body.tools ?? []).map((t: any) => t.function.name).filter((n: string) => n.startsWith("consult_"));
+    const peers = (body.tools ?? []).find((t: any) => t.function.name === "consult_colega")?.function.parameters.properties.colega.enum ?? [];
     if (String(last.content ?? "").includes("amanhã")) return completion("Amanhã: descanso.");
     return completion(`Treino de hoje: 5 km leve. Colegas: ${peers.join(",")}`);
   }
@@ -86,8 +86,8 @@ function fakeOpenRouter(body: any) {
       // a conversa continua: o Financeiro lembra do que já respondeu
       return completion(all.includes("Orçamento: R$ 30") ? "Com pipoca (R$ 20) fica R$ 50." : "Não lembro do orçamento anterior.");
     }
-    if (last.role === "user" && lastText.includes("cinema")) return completion(null, [call("consult_pesquisador", { question: "Preço do ingresso sábado?" })]);
-    if (last.role === "tool" && toolNames.includes("consult_pesquisador")) return completion("Orçamento: R$ 30 do ingresso.");
+    if (last.role === "user" && lastText.includes("cinema")) return completion(null, [call("consult_colega", { colega: "pesquisador", question: "Preço do ingresso sábado?" })]);
+    if (last.role === "tool" && toolNames.includes("consult_colega")) return completion("Orçamento: R$ 30 do ingresso.");
     if (last.role === "tool") return completion("Gasto registrado: R$ 8,20, Alimentação.");
     return completion(null, [call("add_transaction", { kind: "expense", amount: 8.2, category: "Alimentação", description: "Padaria" })]);
   }
@@ -235,7 +235,8 @@ describe.skipIf(!enabled)("time de agentes (e2e)", () => {
     // já fez a primeira tarefa na mesma resposta, enxergando os colegas do time fixo
     const created = steps.find((s) => s.name === "team_create_agent")!.output;
     expect(created.agent).toBe("c_treino");
-    expect(created.report).toMatch(/^Treino de hoje: 5 km leve\. Colegas: .*consult_financeiro/);
+    // colegas dele: só os que não mandam mensagem nem mexem no dinheiro
+    expect(created.report).toBe("Treino de hoje: 5 km leve. Colegas: pesquisador,agenda,compras");
 
     await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'e o treino de amanhã?', 'in7')", [convId]);
     channel = new channels.PlaygroundChannel();

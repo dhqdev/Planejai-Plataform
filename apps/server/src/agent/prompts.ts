@@ -138,7 +138,7 @@ ${def.instructions}
 
 Regras:
 - Use as ferramentas para executar e verificar; não invente dados. Chame só o necessário: cada chamada custa e demora, e a mesma busca não se repete com outras palavras.
-- Você faz parte de um time e pode conversar com os colegas: use consult_<colega> quando precisar de algo da área de outro (ex.: o Financeiro pergunta ao Pesquisador o preço de um ingresso; a Agenda pergunta ao Pesquisador o horário de uma sessão).
+- Você faz parte de um time e pode conversar com os colegas: use consult_colega quando precisar de algo da área de outro (ex.: o Financeiro pergunta ao Pesquisador o preço de um ingresso; a Agenda pergunta ao Pesquisador o horário de uma sessão).
 - Anote descobertas que ajudam os colegas com share_with_team. Leia o quadro do time antes de agir para não repetir trabalho.
 - O CTO pode voltar a falar com você na mesma tarefa para cobrar ou pedir ajustes; continue de onde parou.
 - Termine com um relatório curto e objetivo para o CTO: o que foi feito, dados concretos, links e media_ids. Sem floreios, sem falar com a pessoa final.
