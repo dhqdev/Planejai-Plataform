@@ -23,7 +23,8 @@ import { unbackedClaim, unmetRequest } from "./claims.js";
 import { openPending, resolvePending } from "./confirm.js";
 import { Progress } from "./progress.js";
 import { humanize } from "./humanize.js";
-import { placeStickers } from "./stickers.js";
+import { placeGifs, placeStickers } from "./stickers.js";
+import { fetchGif } from "./tools/images.js";
 import { isAckOnly, pickReaction } from "./reaction.js";
 import { matchQuick, quickAnswer } from "./quick.js";
 import { Tracer } from "./trace.js";
@@ -55,7 +56,7 @@ export function toWhatsApp(text: string) {
     .replace(/\*\*(.+?)\*\*/g, "*$1*")
     .replace(/__(.+?)__/g, "_$1_")
     .replace(/^#{1,6}\s+(.+)$/gm, "*$1*")
-    .replace(/[ \t]*\[\[figurinha:[^\]]*\]\]/gi, "")
+    .replace(/[ \t]*\[\[(?:figurinha|gif):[^\]]*\]\]/gi, "")
     .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, (_m, label, url) => (label === url ? url : `${label}: ${url}`))
     .trim();
   return humanize(out, { bullets: true });
@@ -400,7 +401,9 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     const topicText = `${fresh.map((e) => e.text).join(" ")}\n${lastSaid.slice(-400)}`;
     const groups = ctoGroups(topicText);
     const wantsTeam = TEAM_TOOLS_WHEN.test(topicText);
+    const gifs = (await isConnected("klipy")) || (await isConnected("giphy"));
     const system = ctoSystemPrompt({
+      gifs,
       groups: new Set([...groups.map((g) => g.id), ...(wantsTeam ? ["time"] : [])]),
       settings,
       user,
@@ -526,8 +529,13 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       result.text = `${result.text.replace(/^\[\[sil[eê]ncio\]\]$/i, "").trim()}\n\n👉 Responda *sim* para eu ${what}`.trim();
     }
     const silent = !result.text || /^\[\[sil[eê]ncio\]\]$/i.test(result.text.trim());
-    // [[figurinha:nome]] vira uma figurinha do Mochi num balão próprio
-    const withStickers = silent ? "" : placeStickers(result.text, conversationId, (base64) => outbox.addMedia({ kind: "sticker", base64, mimetype: "image/webp" }));
+    // [[gif:busca]] vira um GIF e [[figurinha:nome]] uma figurinha do Mochi, cada um num balão próprio
+    const withGif = silent
+      ? ""
+      : await placeGifs(result.text, conversationId, gifs ? (q) => fetchGif(q, user.id) : null, (base64) =>
+          outbox.addMedia({ kind: "video", gif: true, base64, mimetype: "video/mp4", fileName: "gif.mp4" }),
+        );
+    const withStickers = silent ? "" : placeStickers(withGif, conversationId, (base64) => outbox.addMedia({ kind: "sticker", base64, mimetype: "image/webp" }));
     const bubbles = silent ? [] : splitBubbles(withStickers);
     // mídia que o CTO não posicionou vai depois do primeiro balão
     const placed = new Set(bubbles.filter((b) => b.type === "media").map((b) => (b as { id: string }).id));

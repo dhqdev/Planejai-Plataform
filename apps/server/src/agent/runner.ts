@@ -38,7 +38,7 @@ export async function availableTools(tools: Tool[], user?: { id: string; phone: 
     const out: Tool[] = [];
     for (const t of tools) {
       if (isOwnerOnly(t) && !owner) continue;
-      if (!t.integration || (await isConnected(t.integration)) || (t.orIntegration && (await isConnected(t.orIntegration)))) out.push(t);
+      if (!t.integration || (await isConnected(t.integration))) out.push(t);
     }
     return out;
   };

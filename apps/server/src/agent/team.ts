@@ -333,8 +333,8 @@ export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
   },
   {
     id: "midia",
-    when: /(?<!\p{L})(imag|foto|figura|desenh|ilustr|mapa mental|tabela|card|pdf|relat[oó]rio|apostila|e-?book|livro|documento|resum|[aá]udio|voz|ouvir|l[eê] (pra|para) mim|gif|passo a passo|cart[aã]z|logo)/iu,
-    tools: [images.makeImage, images.getPicture, images.sendGif, pdf.makePdf, audio.makeAudio],
+    when: /(?<!\p{L})(imag|foto|figura|desenh|ilustr|mapa mental|tabela|card|pdf|relat[oó]rio|apostila|e-?book|livro|documento|resum|[aá]udio|voz|ouvir|l[eê] (pra|para) mim|passo a passo|cart[aã]z|logo)/iu,
+    tools: [images.makeImage, images.getPicture, pdf.makePdf, audio.makeAudio],
   },
   {
     id: "contatos",

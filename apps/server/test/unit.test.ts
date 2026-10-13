@@ -409,6 +409,20 @@ describe("figurinhas do Mochi", () => {
     expect(placeStickers("[[figurinha:oi]]\nBom dia!", conv, add)).toBe("Bom dia!");
     expect(placeStickers("Oi [[figurinha:nada]]", `${conv}-2`, add)).toBe("Oi");
   });
+
+  it("[[gif:busca]] vira balão de GIF sem outra rodada do modelo e tira a figurinha da mesma resposta", async () => {
+    const { placeGifs } = await import("../src/agent/stickers.js");
+    const conv = `g-${Date.now()}`;
+    const asked: string[] = [];
+    const fetch = async (q: string) => (asked.push(q), "AAAA");
+    const add = () => "m9";
+    expect(await placeGifs("Parabéns!! 🎉 [[gif:comemoração]] [[figurinha:festa]] [[gif:outro]]", conv, fetch, add)).toBe("Parabéns!! 🎉\n---\n[[media:m9]]");
+    expect(asked).toEqual(["comemoração"]);
+    // intervalo: logo depois o marcador some e a figurinha fica
+    expect(await placeGifs("Boa! [[gif:high five]] [[figurinha:feliz]]", conv, fetch, add)).toBe("Boa! [[figurinha:feliz]]");
+    // sem provedor de GIF ligado o marcador some
+    expect(await placeGifs("Bom dia [[gif:bom dia]]", `${conv}-2`, null, add)).toBe("Bom dia");
+  });
 });
 
 describe("perguntas de boas-vindas do cadastro", () => {

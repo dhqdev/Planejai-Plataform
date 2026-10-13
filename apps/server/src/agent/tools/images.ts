@@ -186,31 +186,20 @@ export async function searchGifMp4(q: string, userId: string): Promise<string[]>
   return [];
 }
 
-export const sendGif = defineTool<{ search: string }>({
-  name: "send_gif",
-  integration: "klipy",
-  orIntegration: "giphy",
-  description:
-    "GIF de reação num balão próprio. Só em momento leve que pede (comemoração, conquista, bom dia, piada), no máximo um e nunca em assunto sério. " +
-    "search curto (ex.: comemoração, bom dia, high five). Devolve media_id para [[media:ID]].",
-  parameters: obj({ search: { type: "string" } }, ["search"]),
-  async run(args, ctx) {
-    const q = String(args.search ?? "").trim().slice(0, 50);
-    if (!q) return { ok: false, error: "Diga o que buscar." };
-    const urls = await searchGifMp4(q, ctx.user.id).catch(() => []);
-    // um dos primeiros, sorteado: o mesmo pedido não repete sempre o mesmo GIF
-    for (const url of urls.slice(0, 4).sort(() => Math.random() - 0.5)) {
-      try {
-        const r = await safeFetch(url, { signal: AbortSignal.timeout(15_000) });
-        if (!r.ok || !(r.headers.get("content-type") ?? "").includes("mp4")) continue;
-        const data = Buffer.from(await r.arrayBuffer());
-        if (data.length > MAX_GIF_BYTES) continue;
-        const id = ctx.outbox.addMedia({ kind: "video", gif: true, base64: data.toString("base64"), mimetype: "video/mp4", fileName: "gif.mp4" });
-        return { media_id: id, how_to_send: `Coloque [[media:${id}]] num balão próprio.` };
-      } catch {
-        // próximo
-      }
+/** Baixa um dos primeiros GIFs (mp4) da busca, sorteado para não repetir sempre o mesmo; null se nada servir. */
+export async function fetchGif(q: string, userId: string): Promise<string | null> {
+  const query = q.trim().slice(0, 50);
+  if (!query) return null;
+  const urls = await searchGifMp4(query, userId).catch(() => []);
+  for (const url of urls.slice(0, 4).sort(() => Math.random() - 0.5)) {
+    try {
+      const r = await safeFetch(url, { signal: AbortSignal.timeout(15_000) });
+      if (!r.ok || !(r.headers.get("content-type") ?? "").includes("mp4")) continue;
+      const data = Buffer.from(await r.arrayBuffer());
+      if (data.length <= MAX_GIF_BYTES) return data.toString("base64");
+    } catch {
+      // próximo
     }
-    return { ok: false, error: "Não achei GIF para isso. Siga só com o texto." };
-  },
-});
+  }
+  return null;
+}
