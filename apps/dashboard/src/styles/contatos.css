@@ -79,4 +79,7 @@
   .ct-head .seg button { flex: 1; }
   .ct-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .ct-card { padding: 10px 12px; }
+  .ct-side { gap: 8px; }
+  .ct-clear { padding: 2px 4px; min-height: 0; }
+  .ct-actions .btn { flex: 1 1 auto; justify-content: center; }
 }

@@ -143,6 +143,9 @@ export function ContactsPage() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [writing, setWriting] = useState<Contact | null>(null);
+  // celular e iPad em pé: importar e novo contato viram botões numa linha só, e a agenda aparece logo
+  const narrow = useMedia("(max-width: 899px)");
+  const [adding, setAdding] = useState(false);
   const file = useRef<HTMLInputElement>(null);
 
   const send = async (json: unknown) => {
@@ -236,6 +239,11 @@ export function ContactsPage() {
               <button className={`btn ${picker ? "" : "btn-primary"}`} disabled={busy} onClick={() => file.current?.click()}>
                 <Icon name="file" size={15} /> {busy ? "Importando…" : "Enviar arquivo .vcf"}
               </button>
+              {narrow && (
+                <button className="btn" onClick={() => setAdding(true)}>
+                  <Icon name="user-plus" size={15} /> Novo contato
+                </button>
+              )}
               <input ref={file} type="file" accept=".vcf,text/vcard,text/x-vcard" hidden onChange={fromFile} />
             </div>
             {result && (
@@ -254,10 +262,12 @@ export function ContactsPage() {
             </details>
           </section>
 
-          <section className="card card-pad">
-            <h3 className="cp-h"><Icon name="user-plus" size={16} /> Novo contato</h3>
-            <AddContact onSaved={() => void reload()} />
-          </section>
+          {!narrow && (
+            <section className="card card-pad">
+              <h3 className="cp-h"><Icon name="user-plus" size={16} /> Novo contato</h3>
+              <AddContact onSaved={() => void reload()} />
+            </section>
+          )}
 
           {data.total > 0 && (
             <button
@@ -334,6 +344,16 @@ export function ContactsPage() {
         </section>
       </div>
       {writing && <WriteMessage c={writing} onClose={() => setWriting(null)} />}
+      {adding && (
+        <Modal title="Novo contato" icon={<Icon name="user-plus" size={18} />} onClose={() => setAdding(false)}>
+          <AddContact
+            onSaved={() => {
+              setAdding(false);
+              void reload();
+            }}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
