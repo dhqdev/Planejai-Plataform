@@ -1,0 +1,19 @@
+/* ---------- Janelas que descem (iPad e notebook) ----------
+   Em vez de surgir no meio da tela, a janela nasce do botão que a chamou e se estica em vidro líquido
+   (estilo iOS) até abrir logo abaixo dele, crescendo para baixo. Sem espaço embaixo, sobe só o necessário. Teclado do iPad aberto: a altura
+   acompanha a área visível (--vvh), então o campo de cima nunca fica escondido. Celular segue como folha. */
+@media (min-width: 768px) {
+  .modal-bg.drop { display: block; }
+  .modal-bg.drop > .modal {
+    position: absolute; top: var(--drop-top, 76px); left: var(--drop-left, 50%);
+    max-height: max(240px, calc(var(--vvh, 100dvh) + var(--vvtop, 0px) - var(--drop-top, 76px) - 12px));
+    width: min(540px, calc(100vw - 24px)); transform-origin: 0 0;
+    box-shadow: var(--lg-rim), var(--lg-shadow);
+    animation: none; will-change: transform;
+  }
+  .modal-bg.drop > .modal.wide { width: min(760px, calc(100vw - 24px)); }
+  .modal-bg.drop > .modal.confirm { width: min(420px, calc(100vw - 24px)); }
+  .modal-bg.drop.closing > .modal { animation: none; }
+  .modal-bg.drop.closing .modal-scrim { animation: fade-out .22s ease both; }
+}
+/* a forma (nascer do botão e voltar para ele) é animada em components.tsx (Modal, Web Animations) */

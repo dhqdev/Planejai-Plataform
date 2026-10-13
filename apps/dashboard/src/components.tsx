@@ -49,6 +49,37 @@ const FOCUSABLE = "a[href], button:not(:disabled), input:not(:disabled), select:
 /** Janelas abertas, da mais antiga para a mais nova: Esc fecha só a de cima. */
 const openModals: object[] = [];
 
+// iPad e notebook: a janela abre logo abaixo do que foi tocado e cresce para baixo, como um menu que expande.
+// Guarda o último toque (fase de captura, antes do React abrir a janela) para saber de onde ela sai.
+let lastPress: { el: Element; at: number } | null = null;
+if (typeof window !== "undefined") {
+  window.addEventListener("pointerdown", (e) => void (lastPress = { el: e.target as Element, at: performance.now() }), true);
+}
+const ANCHOR = "button, a, [role='button'], [role='tab'], input, select, textarea, label, tr, li, .card.clickable";
+function anchorRect(): DOMRect | null {
+  const fresh = lastPress && performance.now() - lastPress.at < 1500 && lastPress.el.isConnected ? lastPress.el : null;
+  const focus = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+  const el = (fresh ?? focus)?.closest(ANCHOR) ?? fresh ?? focus;
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return r.width || r.height ? r : null;
+}
+/** Onde a janela entra: embaixo de quem abriu, centrada nele; sem espaço embaixo, sobe só o necessário. */
+function placeDrop(el: HTMLElement, from: DOMRect | null) {
+  const bg = el.parentElement;
+  if (!bg) return;
+  const vh = window.visualViewport?.height ?? innerHeight;
+  const w = el.offsetWidth;
+  const minTop = 12;
+  const h = Math.min(el.scrollHeight, vh - minTop - 12);
+  let top = from ? from.bottom + 8 : Math.min(76, vh * 0.1);
+  if (vh - 12 - top < Math.min(h, 420)) top = Math.max(minTop, vh - 12 - h);
+  const cx = from ? from.left + from.width / 2 : innerWidth / 2;
+  const left = Math.max(12, Math.min(innerWidth - 12 - w, cx - w / 2));
+  bg.style.setProperty("--drop-top", `${Math.round(top)}px`);
+  bg.style.setProperty("--drop-left", `${Math.round(left)}px`);
+}
+
 // Folha do celular: mola sem quique (amortecimento crítico, resposta ~0,3 s) que sempre parte da posição
 // e da velocidade atuais, então dá para pegar no meio do caminho e inverter.
 const STIFFNESS = 440;
@@ -96,6 +127,10 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
   const move = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const offset = useRef({ x: 0, y: 0 });
   const [closing, setClosing] = useState(false);
+  const [drop] = useState(() => !isPhone());
+  const fromRef = useRef<DOMRect | null>(null);
+  // animações da forma no iPad/notebook (separadas das da folha do celular, que a mola reaproveita)
+  const morph = useRef<Animation[]>([]);
   const bodyId = useId();
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -158,13 +193,38 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
     if (s.leaving) return;
     s.leaving = true;
     const finish = () => onCloseRef.current();
-    if (!isPhone() || lessMotion() || !sheet.current) {
+    const el = sheet.current;
+    if (el && !isPhone() && !lessMotion() && typeof el.animate === "function") {
+      // volta para dentro do botão que abriu (ou recolhe para cima)
+      morph.current.forEach((a) => a.cancel());
+      morph.current = [];
+      el.classList.remove("glass-on");
+      const to = el.getBoundingClientRect();
+      const from = fromRef.current;
+      const a = from && from.width ? from : new DOMRect(to.left + to.width * 0.3, to.top, to.width * 0.4, 44);
+      const sx = Math.max(0.05, a.width / to.width);
+      const sy = Math.max(0.03, a.height / to.height);
+      const base = { left: to.left - offset.current.x, top: to.top - offset.current.y };
+      const cur = el.style.transform || "none";
+      Array.from(el.children).forEach((c) => (c as HTMLElement).animate([{ opacity: 1 }, { opacity: 0 }], { duration: 110, fill: "forwards" }));
+      el.animate(
+        [
+          { transform: cur, opacity: 1 },
+          { transform: `translate(${a.left - base.left}px, ${a.top - base.top}px) scale(${sx}, ${sy})`, opacity: 0 },
+        ],
+        { duration: 240, easing: "cubic-bezier(.4, 0, .2, 1)", fill: "forwards" },
+      );
+      setClosing(true);
+      s.timer = window.setTimeout(finish, 230);
+      return;
+    }
+    if (!isPhone() || lessMotion() || !el) {
       setClosing(true);
       s.timer = window.setTimeout(finish, 160);
       return;
     }
     stop();
-    s.h = sheet.current.offsetHeight;
+    s.h = el.offsetHeight;
     spring(s.h + 24, finish);
     // aba em segundo plano não roda requestAnimationFrame: fecha mesmo assim
     s.timer = window.setTimeout(() => {
@@ -173,6 +233,49 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
     }, 700);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // iPad e notebook: posiciona embaixo de quem abriu antes de pintar e a janela nasce do próprio botão,
+  // esticando como vidro líquido até o tamanho final (com um leve passar do ponto e voltar, como no iOS).
+  // O conteúdo aparece logo depois; o desfoque do vidro liga quando a forma para.
+  useLayoutEffect(() => {
+    const el = sheet.current;
+    if (!drop || !el) return;
+    const from = anchorRect();
+    fromRef.current = from;
+    placeDrop(el, from);
+    const again = () => !offset.current.x && !offset.current.y && placeDrop(el, null);
+    window.addEventListener("resize", again);
+    if (lessMotion() || typeof el.animate !== "function") {
+      el.classList.add("glass-on");
+      return () => window.removeEventListener("resize", again);
+    }
+    const to = el.getBoundingClientRect();
+    const a = from ?? new DOMRect(to.left + to.width * 0.3, to.top, to.width * 0.4, 44);
+    const sx = Math.max(0.05, a.width / to.width);
+    const sy = Math.max(0.03, a.height / to.height);
+    const r = Math.min(a.height / 2, 22);
+    const shape = el.animate(
+      [
+        { transform: `translate(${a.left - to.left}px, ${a.top - to.top}px) scale(${sx}, ${sy})`, borderRadius: `${r / sx}px / ${r / sy}px`, opacity: 0.5 },
+        { opacity: 1, offset: 0.35 },
+        { transform: "none", borderRadius: "" },
+      ],
+      { duration: 460, easing: "cubic-bezier(.22, 1.18, .36, 1)" },
+    );
+    const inner = Array.from(el.children).map((c) =>
+      (c as HTMLElement).animate([{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: 160, easing: "ease-out", fill: "backwards" }),
+    );
+    morph.current = [shape, ...inner];
+    shape.onfinish = () => {
+      morph.current = [];
+      el.classList.add("glass-on");
+    };
+    return () => {
+      window.removeEventListener("resize", again);
+      morph.current.forEach((m) => m.cancel());
+      morph.current = [];
+    };
+  }, [drop]);
 
   // celular: a folha sobe de baixo. Animação do navegador (não requestAnimationFrame), que segue lisa mesmo
   // com a tela ainda montando; a curva é a mesma de folha do iOS.
@@ -193,7 +296,7 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
         s.open = [];
         el.classList.add("glass-on");
       };
-    } else el?.classList.add("glass-on");
+    } else if (!drop) el?.classList.add("glass-on");
     return () => {
       stop();
       g.current.open.forEach((a) => a.cancel());
@@ -381,10 +484,11 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
   const onHeadMove = (e: React.PointerEvent) => {
     if (!move.current || !sheet.current) return;
     const r = sheet.current.getBoundingClientRect();
-    const maxX = (innerWidth - r.width) / 2 + r.width - 80;
-    const maxY = (innerHeight - r.height) / 2 + r.height - 60;
-    const x = Math.max(-maxX, Math.min(maxX, move.current.ox + e.clientX - move.current.x));
-    const y = Math.max(-((innerHeight - r.height) / 2) - 0, Math.min(maxY, move.current.oy + e.clientY - move.current.y));
+    // posição sem o arrasto: a janela não sai da tela (sobra sempre um pedaço para pegar de volta)
+    const left = r.left - offset.current.x;
+    const top = r.top - offset.current.y;
+    const x = Math.max(80 - left - r.width, Math.min(innerWidth - 80 - left, move.current.ox + e.clientX - move.current.x));
+    const y = Math.max(-top, Math.min(innerHeight - 60 - top, move.current.oy + e.clientY - move.current.y));
     offset.current = { x, y };
     sheet.current.style.animation = "none";
     sheet.current.style.transform = `translate(${x}px, ${y}px)`;
@@ -410,7 +514,7 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
 
   // vai direto no <body>: nada da página (animações, transform) muda a posição do modal
   return createPortal(
-    <div className={`modal-bg ${closing ? "closing" : ""}`}>
+    <div className={`modal-bg${drop ? " drop" : ""}${closing ? " closing" : ""}`}>
       <div className="modal-scrim" ref={scrim} onMouseDown={close} />
       <div
         className={`card modal ${wide ? "wide" : ""} ${className ?? ""}`}
