@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { ago, api, day } from "../api";
 import { Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
@@ -380,22 +380,22 @@ function ErrandView({ e, p, busy, onCancel, onSave, onFollow, onRemove }: { e: E
           <Avatar name={name} place={e.kind !== "conversa"} color={p?.color} />
           <div>
             <h3>{name}</h3>
-            <p className="muted">{p?.nickname ? `${e.place} · ${e.goal}` : e.goal}</p>
+            <Clamp className="muted errand-goal" lines={2}>{p?.nickname ? `${e.place} · ${e.goal}` : e.goal}</Clamp>
           </div>
         </div>
+        <ChatBar name={name} p={p} busy={busy} onSave={onSave}>
+          {open && <button className="btn btn-sm" disabled={busy} onClick={onCancel}>{e.kind === "conversa" ? "Encerrar conversa" : "Cancelar recado"}</button>}
+        </ChatBar>
       </div>
-      <ChatBar name={name} p={p} busy={busy} onSave={onSave}>
-        {open && <button className="btn btn-sm" disabled={busy} onClick={onCancel}>{e.kind === "conversa" ? "Encerrar conversa" : "Cancelar recado"}</button>}
-      </ChatBar>
       <div className="errand-facts">
         <span className={`errand-state ${e.state}`}>{stateLabel(e)}</span>
         {e.kind !== "conversa" && <span>{e.allowed ? `Liberado: ${e.allowed}` : "Só pergunta, não fecha nada"}</span>}
         {open && <span>{e.messages_left} mensagem(ns) restante(s)</span>}
       </div>
-      <div className="errand-chat">
+      <Chat watch={`${e.id}:${e.log.length}:${e.next ? 1 : 0}`}>
         {e.log.map((l, i) => <Bubble key={`${l.at}-${i}`} line={l} />)}
         {e.next && <Bubble line={{ from: "nos", text: e.next.preview, at: e.next.created_at }} next />}
-      </div>
+      </Chat>
       {e.state === "you" && (e.next || e.question) && (
         <p className="errand-note">
           {e.next ? (
@@ -406,11 +406,13 @@ function ErrandView({ e, p, busy, onCancel, onSave, onFollow, onRemove }: { e: E
         </p>
       )}
       {e.outcome && !open && (
-        <p className="errand-note">
-          {e.state === "failed" ? "Não deu certo: " : "Resultado: "}
-          {e.outcome}
-          {e.appointment_at ? ` · marcado para ${day(e.appointment_at)}` : ""}
-        </p>
+        <div className="errand-outcome">
+          <strong>{e.state === "failed" ? "Não deu certo" : "Resultado"}</strong>
+          <Clamp className="errand-note" lines={2}>
+            {e.outcome.replace(/^\s*resultado\s*:\s*/i, "")}
+            {e.appointment_at ? ` · marcado para ${day(e.appointment_at)}` : ""}
+          </Clamp>
+        </div>
       )}
       <FollowBox status={status} follow={follow} busy={busy} onFollow={onFollow} onRemove={onRemove} />
     </>
@@ -423,14 +425,14 @@ function ChatBar({ name, p, busy, member, onSave, children }: { name: string; p?
   const tone = TONES.find((t) => t.id === (p?.tone ?? ""));
   return (
     <div className="errand-bar">
-      <button className={`btn btn-sm${p?.pinned ? " on" : ""}`} disabled={busy} onClick={() => onSave({ pinned: !p?.pinned })} aria-pressed={Boolean(p?.pinned)}>
-        <Icon name="bookmark" size={14} /> {p?.pinned ? "Fixada" : "Fixar"}
+      <button className={`btn btn-sm${p?.pinned ? " on" : ""}`} title={p?.pinned ? "Fixada" : "Fixar"} aria-label={p?.pinned ? "Fixada" : "Fixar"} disabled={busy} onClick={() => onSave({ pinned: !p?.pinned })} aria-pressed={Boolean(p?.pinned)}>
+        <Icon name="bookmark" size={14} /> <span className="lbl">{p?.pinned ? "Fixada" : "Fixar"}</span>
       </button>
-      <button className={`btn btn-sm${p?.archived ? " on" : ""}`} disabled={busy} onClick={() => onSave({ archived: !p?.archived })} aria-pressed={Boolean(p?.archived)}>
-        <Icon name="folder" size={14} /> {p?.archived ? "Arquivada" : "Arquivar"}
+      <button className={`btn btn-sm${p?.archived ? " on" : ""}`} title={p?.archived ? "Arquivada" : "Arquivar"} aria-label={p?.archived ? "Arquivada" : "Arquivar"} disabled={busy} onClick={() => onSave({ archived: !p?.archived })} aria-pressed={Boolean(p?.archived)}>
+        <Icon name="folder" size={14} /> <span className="lbl">{p?.archived ? "Arquivada" : "Arquivar"}</span>
       </button>
-      <button className="btn btn-sm" disabled={busy} onClick={() => setEditing(true)}>
-        <Icon name="edit" size={14} /> Personalizar
+      <button className="btn btn-sm" disabled={busy} onClick={() => setEditing(true)} title="Personalizar" aria-label="Personalizar">
+        <Icon name="edit" size={14} /> <span className="lbl">Personalizar</span>
       </button>
       {children}
       {(p?.tone || p?.signature || p?.note) && (
@@ -530,10 +532,12 @@ function FollowBox({ status, follow, busy, onFollow, onRemove, hideModes }: { st
           </div>
         )}
       </div>
-      <p className="errand-note">{status}</p>
-      <button className="btn btn-sm btn-danger errand-follow-del" disabled={busy} onClick={onRemove}>
-        <Icon name="trash" size={14} /> Excluir acompanhamento
-      </button>
+      <div className="errand-follow-foot">
+        <Clamp className="errand-note" lines={2}>{status}</Clamp>
+        <button className="btn btn-sm btn-danger errand-follow-del" disabled={busy} onClick={onRemove} title="Excluir acompanhamento">
+          <Icon name="trash" size={14} /> <span className="lbl">Excluir</span>
+        </button>
+      </div>
     </section>
   );
 }
@@ -573,9 +577,9 @@ function ContactView({ c, p, busy, onCancel, onSave, onFollow, onRemove }: { c: 
             </p>
           </div>
         </div>
+        <ChatBar name={name} p={p} busy={busy} member={c.member} onSave={onSave} />
       </div>
-      <ChatBar name={name} p={p} busy={busy} member={c.member} onSave={onSave} />
-      <div className="errand-chat">
+      <Chat watch={`${c.phone}:${c.log.length}:${c.scheduled.length}`}>
         {c.log.map((l, i) => <Bubble key={`${l.at}-${i}`} line={l} />)}
         {c.scheduled.map((m) => (
           <div key={m.id} className="errand-bubble ours next">
@@ -585,7 +589,7 @@ function ContactView({ c, p, busy, onCancel, onSave, onFollow, onRemove }: { c: 
           </div>
         ))}
         {!c.log.length && !c.scheduled.length && <p className="errand-note">Nada por aqui ainda.</p>}
-      </div>
+      </Chat>
       <p className="errand-note">
         {c.waiting_you ? <><strong>{first} respondeu.</strong> </> : null}
         Para mandar algo, é só pedir no WhatsApp, por exemplo: "manda pro {name.split(" ")[0]} que eu já tô chegando". Nada sai sem o seu <strong>sim</strong>.
@@ -602,6 +606,60 @@ function Bubble({ line, next }: { line: Line; next?: boolean }) {
       {next && <span className="errand-bubble-tag">Próxima mensagem</span>}
       <span className="errand-bubble-text">{line.text}</span>
       <span className="errand-bubble-time">{next ? "não enviada" : hour(line.at)}</span>
+    </div>
+  );
+}
+
+/** A conversa: ocupa o espaço que sobrar e abre já no fim (a mensagem mais nova à vista). */
+function Chat({ watch, children }: { watch: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    stick.current = true;
+  }, [watch]);
+  // a altura da conversa muda quando o resto da tela abre ou fecha ("Ver tudo"); se estava no fim, continua no fim
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const onScroll = () => (stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40);
+    const ro = new ResizeObserver(() => stick.current && (el.scrollTop = el.scrollHeight));
+    ro.observe(el);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => (ro.disconnect(), el.removeEventListener("scroll", onScroll));
+  }, []);
+  return (
+    <div className="errand-chat" ref={ref}>
+      {children}
+    </div>
+  );
+}
+
+/** Texto longo em poucas linhas, com "Ver tudo" só quando passa do limite. */
+function Clamp({ children, lines, className }: { children: ReactNode; lines: number; className?: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setLong(open || el.scrollHeight > el.clientHeight + 2);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open, children]);
+  return (
+    <div className="clamp">
+      <p ref={ref} className={`${className ?? ""}${open ? "" : " clamped"}`} style={{ ["--lines" as never]: lines }}>
+        {children}
+      </p>
+      {long && (
+        <button type="button" className="clamp-more" onClick={() => setOpen(!open)}>
+          {open ? "Ver menos" : "Ver tudo"}
+        </button>
+      )}
     </div>
   );
 }

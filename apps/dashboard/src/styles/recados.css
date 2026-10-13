@@ -120,3 +120,47 @@
   .errand-follow-top .seg { width: 100%; display: flex; }
   .errand-follow-top .seg button { flex: 1; }
 }
+
+/* conversa em primeiro lugar (2026-10-13, David: "não consigo ver a conversa quando tem muita coisa"):
+   objetivo, resultado e acompanhamento ficam em poucas linhas com "Ver tudo"; ações viram ícones ao lado do nome
+   no notebook; a conversa ocupa o que sobra e abre no fim */
+.clamp { min-width: 0; }
+.clamp > p.clamped { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--lines, 2); line-clamp: var(--lines, 2); overflow: hidden; }
+.clamp-more { padding: 0; margin-top: 2px; border: 0; background: none; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.errand-head > .errand-who { flex: 1 1 auto; min-width: 0; }
+.errand-head > .errand-who > div { min-width: 0; }
+.errand-goal { margin: 2px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.errand-head .errand-bar { flex-shrink: 0; justify-content: flex-end; }
+.errand-outcome { display: flex; gap: 8px; align-items: baseline; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); }
+.errand-outcome > strong { font-size: 13px; flex-shrink: 0; }
+.errand-outcome .clamp { flex: 1; }
+.errand-follow { gap: 6px; padding: 10px 12px; }
+.errand-follow-foot { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
+.errand-follow-foot .clamp { flex: 1; }
+.errand-follow-foot .errand-follow-del { flex-shrink: 0; }
+@media (min-width: 1024px) and (min-height: 680px) {
+  .errands-page.fit .errand-detail { overflow: hidden; gap: 10px; }
+  .errands-page.fit .errand-detail > * { flex-shrink: 0; }
+  .errands-page.fit .errand-detail > .errand-chat { flex: 1 1 auto; min-height: 220px; }
+  /* ações em ícone ao lado do nome; o nome fica no title */
+  .errands-page.fit .errand-head .errand-bar .lbl, .errands-page.fit .errand-head .errand-bar-info { display: none; }
+  .errands-page.fit .errand-head .errand-bar .btn:not(:has(.lbl)) { padding-inline: 12px; }
+  .errands-page.fit .errand-head .errand-bar .btn:has(.lbl) { width: 34px; height: 34px; padding: 0; justify-content: center; }
+}
+/* celular: as ações descem para baixo do nome */
+@media (max-width: 1023px), (max-height: 679px) {
+  .errand-head .errand-bar { flex: 1 1 100%; justify-content: flex-start; }
+  .errand-outcome { flex-direction: column; gap: 2px; }
+}
+/* notebook: acompanhamento numa linha só (título, situação, modo, excluir em ícone) */
+@media (min-width: 1024px) and (min-height: 680px) {
+  .errands-page.fit .errand-follow { flex-direction: row; align-items: center; gap: 12px; padding: 8px 10px 8px 12px; }
+  .errands-page.fit .errand-follow-top, .errands-page.fit .errand-follow-foot { display: contents; }
+  .errands-page.fit .errand-follow > .errand-follow-top > strong { order: 1; flex-shrink: 0; }
+  .errands-page.fit .errand-follow-foot > .clamp { order: 2; flex: 1 1 auto; }
+  .errands-page.fit .errand-follow-foot > .clamp > p.clamped { -webkit-line-clamp: 1; line-clamp: 1; margin: 0; }
+  .errands-page.fit .errand-follow .seg { order: 3; flex-shrink: 0; }
+  .errands-page.fit .errand-follow-del { order: 4; align-self: center; width: 32px; height: 32px; padding: 0; justify-content: center; }
+  .errands-page.fit .errand-follow-del .lbl { display: none; }
+  .errands-page.fit .errand-outcome .clamp > p.clamped { margin: 0; }
+}
