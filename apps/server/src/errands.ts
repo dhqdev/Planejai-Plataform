@@ -106,8 +106,20 @@ const GREETING = new RegExp(`^\\s*((oi|olá|ola|e aí|e ai)${END})?[!,.]*\\s*((b
  * (assistente virtual de quem). Se o texto já se apresenta, só acerta o "bom dia/boa tarde/boa noite".
  * Sem fuso (mensagem direta, que pode ser agendada para outra hora) fica a apresentação curta, sem período do dia.
  */
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Tira "Aqui é a Cida, do time do David 😊" (ou "Sou a Enfermeira Cida...") do texto, até o fim da frase ou do emoji. */
+export function dropSelfIntro(text: string, persona: string) {
+  const name = escapeRe(persona.split(" ").at(-1)!);
+  const re = new RegExp(`(aqui (é|e|quem fala é)|eu sou|sou|quem fala é)\\s+(a |o )?([\\p{L}]+ )?${name}\\b[^.!?\\n\\p{Extended_Pictographic}]*[.!?]*\\s*(\\p{Extended_Pictographic}\\uFE0F?\\s*)*`, "iu");
+  return text.replace(re, "").replace(/\s{2,}/g, " ");
+}
+
 export function introduce(text: string, personName: string | null, timezone?: string, now = new Date(), persona?: string | null) {
-  const t = text.trim();
+  // conversa: a apresentação que o modelo escreveu ("Aqui é a Enfermeira Cida, do time do David 😊") sai, e entra a
+  // padrão, que sempre diz que é assistente virtual
+  const t = (persona ? dropSelfIntro(text, persona) : text).trim();
+  const presented = /assistente/i.test(t);
   // conversa delegada: quem fala é o especialista, com o nome dele ("Aqui é Enfermeira Cida, assistente virtual de David")
   const who = persona ? `${persona}, assistente virtual${personName ? ` de ${personName}` : ""}` : personName ? `o assistente virtual de ${personName}` : "um assistente virtual";
   // "Bom dia, Gio! ..." : o nome de quem recebe fica no cumprimento, não sobra solto depois da apresentação
@@ -115,13 +127,13 @@ export function introduce(text: string, personName: string | null, timezone?: st
   const to = named?.[2] ?? null;
   const cap = (r: string) => `${r.charAt(0).toUpperCase()}${r.slice(1)}`;
   if (!timezone) {
-    if (/assistente/i.test(t)) return t;
+    if (presented) return t;
     if (named) return `${cap(named[1]!)}, ${to}! Aqui é ${who}. ${cap(t.slice(named[0].length))}`.trim();
     const rest = t.replace(/^(oi|olá|ola|bom dia|boa tarde|boa noite)[!,.]?\s*/i, "");
     return `Oi! Aqui é ${who}. ${cap(rest)}`.trim();
   }
   const hello = greetingFor(now, timezone);
-  if (/assistente/i.test(t)) return t.replace(/\b(bom dia|boa tarde|boa noite)\b/i, (m) => (m[0] === "B" ? hello.charAt(0).toUpperCase() + hello.slice(1) : hello));
+  if (presented) return t.replace(/\b(bom dia|boa tarde|boa noite)\b/i, (m) => (m[0] === "B" ? hello.charAt(0).toUpperCase() + hello.slice(1) : hello));
   const rest = named ? t.slice(named[0].length).replace(GREETING, "") : t.replace(GREETING, "");
   return `Oi${to ? `, ${to}` : ""}, ${hello}! Tudo bem? Aqui é ${who}. ${cap(rest)}`.trim();
 }

@@ -100,7 +100,8 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     model: "deepseek/deepseek-v4.1-flash",
     fallbacks: ["xiaomi/mimo-v2.6-flash"],
     temperature: 0,
-    maxTokens: 150,
+    // o raciocínio do modelo conta no limite: com 150 a resposta chegava vazia
+    maxTokens: 500,
   },
   {
     task: "vision",

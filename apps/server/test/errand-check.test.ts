@@ -56,3 +56,13 @@ describe("recados: trava sem IA", () => {
     expect(r.ok === false && r.suggestion).toBeTruthy();
   });
 });
+
+describe("resposta da trava", () => {
+  it("vazia ou sem JSON vira null (e a trava tenta de novo com mais folga)", async () => {
+    const { parseVerdict } = await import("../src/agent/errand-check.js");
+    expect(parseVerdict("")).toBeNull();
+    expect(parseVerdict(null)).toBeNull();
+    expect(parseVerdict("ok")).toBeNull();
+    expect(parseVerdict('```json\n{"ok":true}\n```')).toEqual({ ok: true });
+  });
+});

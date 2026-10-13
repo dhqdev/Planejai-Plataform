@@ -25,7 +25,6 @@ function fakeOpenRouter(body: any) {
   const system: string = body.messages[0].content;
   const last = body.messages.at(-1);
   const userText = String(body.messages.findLast((m: any) => m.role === "user")?.content ?? "");
-  if (system.includes("Você confere a primeira mensagem")) return completion('{"ok":true}');
   if (system.includes("do time do assistente virtual de David")) {
     prompts.push(system);
     if (last.role === "tool") return completion("aguardando");
@@ -52,7 +51,7 @@ function fakeOpenRouter(body: any) {
         call("conversa_start", {
           name: "Maria",
           phone: "(19) 94444-5555",
-          message: "O David me pediu pra falar com você. Como você está se sentindo?",
+          message: "Oi, Maria! Aqui é a Enfermeira Cida, do time do David 😊 Ele me pediu pra falar com você. Como você está se sentindo?",
           goal: "Maria está passando mal (dor de cabeça e enjoo). Acolher e orientar.",
           agent: "saude",
         }),
@@ -120,7 +119,12 @@ describe.skipIf(!enabled)("conversa delegada e quem chega de fora (e2e)", () => 
     await say("sim");
     const e = await db.one("SELECT * FROM errands WHERE user_id = $1", [david.id]);
     expect(e).toMatchObject({ kind: "conversa", agent: "saude", place: "Maria", phone: MARIA, status: "waiting" });
-    expect(sentTexts().find((t) => t.includes("Como você está se sentindo"))).toMatch(/Aqui é Enfermeira Cida, assistente virtual de David\./);
+    const first = sentTexts().find((t) => t.includes("Como você está se sentindo"))!;
+    // a apresentação do modelo sai e entra a padrão, uma vez só, dizendo que é assistente virtual
+    expect(first).toMatch(/^Oi, Maria, (bom dia|boa tarde|boa noite)! Tudo bem\? Aqui é Enfermeira Cida, assistente virtual de David\. Ele me pediu/);
+    expect(first.match(/Cida/g)?.length).toBe(1);
+    // sem chamada de IA para conferir: é pedido do próprio dono, com o sim
+    expect(await db.one("SELECT COUNT(*)::int AS n FROM execution_steps WHERE name LIKE 'trava%'")).toEqual({ n: 0 });
   });
 
   it("a Maria não fica no vácuo e não vira cliente", async () => {

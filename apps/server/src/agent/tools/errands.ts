@@ -1,7 +1,7 @@
 import { one, query } from "../../db/pool.js";
 import { finishErrand, messageLimit, openErrands, sendToErrand, startErrand } from "../../errands.js";
 import { CONVERSA_AGENTS, conversaAgent } from "../conversa.js";
-import { blockedResult, checkErrandText } from "../errand-check.js";
+import { blockedResult, checkErrandText, quickCheck } from "../errand-check.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 export const errandStart = defineTool<{ place: string; phone: string; message: string; goal: string; allowed?: string; hours?: number; confirmed_by_user?: boolean }>({
@@ -61,8 +61,9 @@ export const conversaStart = defineTool<{ name: string; phone: string; message: 
   ),
   async run(args, ctx) {
     const a = conversaAgent(args.agent);
+    // sem IA: é pedido da própria dona, que vê o texto exato e diz o sim; o filtro rápido pega ofensa, spam e repetição
     if (!ctx.approvedAction) {
-      const check = await checkErrandText({ place: args.name, goal: args.goal, message: args.message, kind: "conversa" }, ctx.tracer, ctx.agent);
+      const check = quickCheck(args.message);
       if (!check.ok) return blockedResult(check);
     }
     const hours = Math.min(Math.max(args.hours ?? 24, 1), 72);
