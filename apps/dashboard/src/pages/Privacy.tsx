@@ -88,7 +88,11 @@ export function PrivacyPage() {
           </li>
           <li>
             <b>Contas conectadas</b> (Google Agenda, Gmail e outras que você ligar): usadas só para o que você pedir. As chaves ficam criptografadas e
-            você desconecta quando quiser.
+            você desconecta quando quiser. O uso e a transferência de dados recebidos das APIs do Google seguem a{" "}
+            <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer">
+              Política de Dados do Usuário dos Serviços de API do Google
+            </a>
+            , incluindo os requisitos de Uso Limitado: não vendemos esses dados, não usamos para publicidade e não usamos para treinar modelos de IA.
           </li>
           <li>
             <b>Cookies</b>: só os necessários para manter você logado (7 dias) e reconhecer um navegador já confirmado (1 ano). Nada de publicidade ou
