@@ -162,11 +162,12 @@
   .lt-acts h3 { font-size: 30px; }
   .lt-chat { max-width: none; }
   .lp-section.la-sec { padding-top: 8px; }
-  .la-row { margin-top: 24px; gap: 8px; }
-  .la-row small { width: 100%; }
-  .la-row-logos { flex-wrap: nowrap; gap: 3px; }
-  .la-row-app { width: 29px; height: 29px; flex-shrink: 0; }
-  .la-row-app svg { width: 15px; height: 15px; }
+  .la-row { margin-top: 22px; gap: 8px; }
+  .la-row small { display: none; }
+  /* as 11 marcas numa linha só, encolhendo em tela estreita em vez de alargar o topo */
+  .la-row-logos { display: grid; grid-template-columns: repeat(11, minmax(0, 29px)); gap: 3px; width: 100%; }
+  .la-row-app { width: 100%; height: auto; aspect-ratio: 1; }
+  .la-row-app svg { width: 52%; height: 52%; }
   .la-wrap { grid-template-columns: 1fr; gap: 28px; }
   .la-orbit { width: min(440px, 100%); }
   .la-app { width: 13.5cqw; }

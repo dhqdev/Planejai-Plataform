@@ -260,14 +260,15 @@
   .lp-nav-row { height: 60px; gap: 12px; }
   .lp-nav-cta .lp-btn { height: 38px; padding: 0 16px; font-size: 14px; }
   .lp-nav-main { display: none !important; }
-  .lp-hero-bg { padding: 16px 0 40px; }
+  .lp-hero-bg { padding: 36px 0 40px; }
   .lp-hero-bg::after { width: 90vw; right: -20%; top: 40%; }
-  .lp-eyebrow { margin-bottom: 18px; font-size: 13px; }
+  /* topo no celular: só o título, o botão e as marcas (pedido do David: menos texto, mais limpo) */
+  .lp-eyebrow, .lp-lead, .lp-hero-cta .lp-link { display: none; }
   .lp-hero-grid, .lp-safe, .lp-faq-wrap { grid-template-columns: 1fr; }
   .lp-hero-grid { gap: 8px; min-height: 0; }
   .hc-title { font-size: clamp(36px, 10.4vw, 52px); }
   .lp-lead { font-size: 17px; margin-top: 12px; }
-  .lp-hero-cta { margin-top: 20px; gap: 10px 20px; }
+  .lp-hero-cta { margin-top: 28px; gap: 10px 20px; }
   .lp-hero-cta .rb-spark { flex: 1 1 auto; }
   .lp-hero-cta .lp-btn { width: 100%; height: 52px; }
   .lp-hero-stage { padding: 44px 0 0; }
