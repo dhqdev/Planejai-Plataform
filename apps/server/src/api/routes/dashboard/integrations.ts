@@ -56,7 +56,10 @@ export function integrationRoutes(api: FastifyInstance) {
       if (v != null && v !== "") creds[f.key] = String(v).trim();
       else if (f.required && !current[f.key]) return reply.code(400).send({ error: `${f.label} é obrigatório` });
     }
-    if (def.test) {
+    // OAuth (Google, Mercado Livre) ainda sem autorizar: salva o Client ID/Secret para o botão "Conectar com" aparecer;
+    // o teste só faz sentido depois do refresh_token
+    const awaitingOAuth = Boolean(def.oauth && !{ ...current, ...creds }.refresh_token);
+    if (def.test && !awaitingOAuth) {
       try {
         let message = await def.test({ ...current, ...creds });
         await saveCredentials(def.id, creds);
@@ -67,7 +70,7 @@ export function integrationRoutes(api: FastifyInstance) {
       }
     }
     await saveCredentials(def.id, creds);
-    return { ok: true, message: def.oauth ? "Credenciais salvas. Agora clique em Conectar com Google." : "Salvo" };
+    return { ok: true, message: def.oauth ? `Credenciais salvas. Agora clique em Conectar com ${def.oauth === "google" ? "Google" : "Mercado Livre"}.` : "Salvo" };
   });
 
   // n8n: o que colar no n8n para ele falar com a plataforma
