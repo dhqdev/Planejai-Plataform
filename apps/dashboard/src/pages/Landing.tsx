@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode,
 import { MASCOTES } from "../mascote/nome";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
-import { AgentFace, CORE_FACES } from "../faces";
+import { CORE_FACES } from "../faces";
 import { Mascote, type Mood } from "../mascote/Mascote";
 import { ClickSpark } from "../reactbits/ClickSpark";
 import { CountUp } from "../reactbits/CountUp";
@@ -10,7 +10,9 @@ import { GlareHover } from "../reactbits/GlareHover";
 import { ShinyText } from "../reactbits/ShinyText";
 import { Spotlight } from "../reactbits/Spotlight";
 import "../landing.css";
+import { AppScenes, AppsOrbit } from "./LandingApps";
 import { HeroChat, HeroTitle } from "./LandingHero";
+import { TeamScroll } from "./LandingTeam";
 
 /**
  * Landing pública (quem abre "/" sem estar logado). Curta e minimalista (pedido do David): a conversa do topo,
@@ -132,6 +134,7 @@ function useReveal(root: RefObject<HTMLDivElement | null>) {
 const BUDDY: Record<string, { mood: Mood; say: string }> = {
   "como-funciona": { mood: "curious", say: "Olha só." },
   time: { mood: "happy", say: "Esse é o meu time!" },
+  apps: { mood: "curious", say: "Tudo junto." },
   seguranca: { mood: "wink", say: "Toca no sim." },
   planos: { mood: "finished", say: "Cabe no bolso." },
   perguntas: { mood: "thinking", say: "Ficou dúvida?" },
@@ -220,97 +223,6 @@ function useTap() {
   return { go };
 }
 
-/** O time, um por um: o nome vem de CORE_FACES. */
-const TEAM: { id: keyof typeof CORE_FACES; role: string }[] = [
-  { id: "cto", role: "Conversa com você" },
-  { id: "financeiro", role: "Cuida do dinheiro" },
-  { id: "agenda", role: "Cuida do seu tempo" },
-  { id: "pesquisador", role: "Procura por você" },
-  { id: "recados", role: "Fala com quem precisa" },
-  { id: "comunicacao", role: "E-mail e Slack" },
-  { id: "produtividade", role: "Automatiza o resto" },
-];
-
-/**
- * Apps que ele usa por você. Só o que existe de verdade: as contas pessoais que o cliente conecta em Minha conta
- * (PERSONAL_INTEGRATIONS no servidor) e o que já vem pronto para todo mundo. O n8n é do dono e não entra aqui.
- */
-const APPS = [
-  { id: "agenda", name: "Google Agenda" },
-  { id: "gmail", name: "Gmail" },
-  { id: "notion", name: "Notion" },
-  { id: "slack", name: "Slack" },
-  { id: "github", name: "GitHub" },
-  { id: "linear", name: "Linear" },
-  { id: "mpago", name: "Mercado Pago" },
-  { id: "mlivre", name: "Mercado Livre" },
-  { id: "maps", name: "Google Maps" },
-  { id: "telegram", name: "Telegram" },
-];
-
-/** Marcas simples, de traço, desenhadas aqui (nada de logotipo copiado): sugerem o app sem imitar a marca. */
-const GLYPHS: Record<string, ReactNode> = {
-  agenda: (
-    <>
-      <rect x="3.5" y="5" width="17" height="15.5" rx="3" />
-      <path d="M3.5 10h17M8 3v4M16 3v4M8 14h3v3H8z" />
-    </>
-  ),
-  gmail: (
-    <>
-      <rect x="3" y="5.5" width="18" height="13" rx="3" />
-      <path d="m4 7.5 8 6 8-6" />
-    </>
-  ),
-  notion: (
-    <>
-      <path d="M6 3.5h8.5l4 4v13H6z" />
-      <path d="M14.5 3.5v4h4M9 12h6.5M9 15.5h4.5" />
-    </>
-  ),
-  slack: <path d="M10 4 8 20M16 4l-2 16M5 9.5h15M4 14.5h15" />,
-  github: (
-    <>
-      <circle cx="7" cy="5.5" r="2" />
-      <circle cx="7" cy="18.5" r="2" />
-      <circle cx="17" cy="7.5" r="2" />
-      <path d="M7 7.5v9M17 9.5v.5a4 4 0 0 1-4 4h-2a4 4 0 0 0-4 4" />
-    </>
-  ),
-  linear: (
-    <>
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="m8.5 12.3 2.4 2.4 4.7-5" />
-    </>
-  ),
-  mpago: (
-    <>
-      <rect x="3" y="6" width="18" height="12.5" rx="3" />
-      <path d="M3 10.5h18M7 15h4" />
-    </>
-  ),
-  mlivre: (
-    <>
-      <path d="M4 4.5h7l9 9-6.5 6.5-9-9z" />
-      <circle cx="8.3" cy="8.8" r="1.4" />
-    </>
-  ),
-  maps: (
-    <>
-      <path d="M12 21s-6.5-5.9-6.5-11a6.5 6.5 0 0 1 13 0c0 5.1-6.5 11-6.5 11z" />
-      <circle cx="12" cy="10" r="2.4" />
-    </>
-  ),
-  telegram: <path d="M20.5 4 3.5 10.8l6 2.2 2.2 6.5 3-4.2 4.6 3.4zM9.5 13 20.5 4" />,
-};
-
-function Glyph({ id }: { id: string }) {
-  return (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {GLYPHS[id]}
-    </svg>
-  );
-}
 
 const reply = (typing: boolean, text: string) =>
   typing ? (
@@ -532,6 +444,7 @@ export function LandingPage() {
           <nav className="lp-links" aria-label="Seções">
             <a href="#como-funciona">Como funciona</a>
             <a href="#time">O time</a>
+            <a href="#apps">Apps</a>
             {pricing && <a href="#planos">Planos</a>}
             <a href="#perguntas">Perguntas</a>
           </nav>
@@ -644,15 +557,24 @@ export function LandingPage() {
             <p className="lp-sub" data-reveal style={{ ["--d" as string]: 2 }}>
               Você fala com o {cto}. Ele chama quem precisa.
             </p>
-            <ul className="lp-crew" data-reveal>
-              {TEAM.map((m, i) => (
-                <li key={m.id} style={{ ["--i" as string]: i }}>
-                  <AgentFace face={CORE_FACES[m.id]?.face} size={64} agent={m.id} title={CORE_FACES[m.id]?.persona} />
-                  <b>{CORE_FACES[m.id]?.persona ?? m.id}</b>
-                  <small>{m.role}</small>
-                </li>
-              ))}
-            </ul>
+            <TeamScroll />
+          </div>
+        </section>
+
+        <section id="apps" className="lp-section">
+          <div className="lp-wrap la-wrap">
+            <div className="la-head">
+              <Words className="lp-h2" text="Conecta com o que você já usa." />
+              <p className="lp-sub" data-reveal style={{ ["--d" as string]: 2 }}>
+                Você conecta uma vez. Ele usa quando precisa.
+              </p>
+            </div>
+            <div data-reveal style={{ ["--d" as string]: 1 }}>
+              <AppsOrbit />
+            </div>
+          </div>
+          <div className="lp-wrap">
+            <AppScenes />
           </div>
         </section>
 
@@ -663,15 +585,7 @@ export function LandingPage() {
               <ul className="lp-safe-list" data-reveal style={{ ["--d" as string]: 2 }}>
                 <li>Seus dados são só seus</li>
                 <li>Apague tudo quando quiser</li>
-                <li>Conecta com o que você já usa</li>
-              </ul>
-              <ul className="lp-apps" data-reveal style={{ ["--d" as string]: 3 }} aria-label="Apps que ele usa">
-                {APPS.map((a, i) => (
-                  <li key={a.id} style={{ ["--i" as string]: i }}>
-                    <Glyph id={a.id} />
-                    {a.name}
-                  </li>
-                ))}
+                <li>Tudo à vista no seu painel</li>
               </ul>
             </div>
             <Confirm />
