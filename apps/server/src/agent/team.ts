@@ -60,6 +60,8 @@ export interface AgentDef {
   role: string;
   instructions: string;
   tools: Tool[];
+  /** ferramentas de `tools` que só vão na lista quando o pedido toca no assunto (cada definição é paga em todo passo) */
+  toolGroups?: { when: RegExp; tools: Tool[] }[];
 }
 
 /** Especialistas do time. Cada um tem ferramentas próprias e uma rota de modelo ("agent:<id>"). */
@@ -184,6 +186,21 @@ export const SPECIALISTS: AgentDef[] = [
       ...GOAL_TOOLS,
       categoriesTool,
       core.readDocument,
+    ],
+    // núcleo sempre (lançar, listar, corrigir, apagar, resumo, conta, categorias); o resto pelo assunto do pedido
+    toolGroups: [
+      {
+        when: /cart[aã]o|cart[õo]es|fatura|cr[eé]dito|parcel|\d+ ?x\b|vezes|nubank|ita[uú]|bradesco|santander|inter\b|c6|picpay|final \d/i,
+        tools: [cards.cardSave, cards.cardList, cards.cardInvoice, cards.cardInvoicePay, cards.cardDelete],
+      },
+      {
+        when: /conta(s)? fixa|aluguel|boleto|venc|todo m[eê]s|mensal|internet|\bluz\b|[aá]gua|condom|\bg[aá]s\b|sal[aá]rio|assinatura|netflix|spotify|academia|escola|faculdade|recorrente|paguei (o|a)\b/i,
+        tools: [bills.billSave, bills.billList, bills.billPay, bills.billDelete],
+      },
+      { when: /\bmetas?\b|guard|junt|economiz|poupan|objetiv|reserva|sonho/i, tools: GOAL_TOOLS },
+      { when: /limite|or[çc]amento|teto|no m[aá]ximo|estour|passar de/i, tools: [finance.setBudget, finance.budgetStatusTool] },
+      { when: /gr[aá]fico|chart|visual|pizza|barras|imagem/i, tools: [finance.makeChart] },
+      { when: /link|cobran|cobrar|\bpix\b|mercado ?pago|pagamento/i, tools: [finance.createPaymentLink] },
     ],
   },
   {

@@ -41,4 +41,21 @@ describe("ferramentas do CTO por assunto", () => {
       expect(team.has(t.name) || own.has(t.name), `${t.name} sem especialista`).toBe(true);
     }
   });
+
+  it("Financeiro leva o núcleo sempre e o resto pelo assunto do pedido", async () => {
+    const { byTopic } = await import("../src/agent/collab.js");
+    const fin = SPECIALISTS.find((s) => s.id === "financeiro")!;
+    const names = (text: string) => byTopic(fin, fin.tools, text).shown.map((t) => t.name);
+    const plain = names("anotar gasto de R$ 8,20 na padaria");
+    expect(plain).toContain("add_transaction");
+    expect(plain).toContain("delete_transaction");
+    expect(plain).not.toContain("card_save");
+    expect(plain).not.toContain("bill_save");
+    expect(names("compra de 1200 parcelada em 10x no Nubank")).toContain("card_list");
+    expect(names("paguei o aluguel")).toContain("bill_pay");
+    expect(names("guardei 200 na meta da viagem")).toContain("goal_add");
+    expect(names("no máximo 600 com restaurante")).toContain("set_budget");
+    // escondida continua rodando pelo nome
+    expect(byTopic(fin, fin.tools, "padaria").hidden.map((t) => t.name)).toContain("card_invoice_pay");
+  });
 });
