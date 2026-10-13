@@ -36,6 +36,21 @@ describe("automações no n8n", () => {
     expect(wf.connections["Três"]!.main[0]).toEqual([{ node: "Avisa", type: "main", index: 0 }]);
   });
 
+  it("HTTP de cliente não segue redirecionamento nem usa proxy", async () => {
+    const { buildWorkflow } = await import("../src/agent/tools/automations.js");
+    const wf = await buildWorkflow({
+      ...base,
+      owner: false,
+      nodes: [
+        { name: "T", type: "scheduleTrigger", parameters: { rule: { interval: [{ field: "hours", hoursInterval: 6 }] } } },
+        { name: "H", type: "httpRequest", parameters: { url: "https://example.com/api", options: { proxy: "http://10.0.0.1:8080", timeout: 5000 } } },
+      ],
+      connections: [{ from: "T", to: "H" }],
+    });
+    const h: any = wf.nodes[1];
+    expect(h.parameters.options).toEqual({ timeout: 5000, redirect: { redirect: { followRedirects: false, maxRedirects: 0 } } });
+  });
+
   it("recusa para cliente: código, segredos da instância, URL calculada e fluxo sem gatilho", async () => {
     const { buildWorkflow } = await import("../src/agent/tools/automations.js");
     const trig = { name: "T", type: "scheduleTrigger", parameters: {} };

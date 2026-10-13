@@ -210,6 +210,12 @@ export async function buildWorkflow(input: { nodes: ShortNode[]; connections: Sh
         }
       }
       node = { type: `n8n-nodes-base.${short}`, typeVersion: VERSIONS[short], parameters: { ...params } };
+      if (!owner && short === "httpRequest") {
+        // a URL conferida é a primeira: sem redirecionamento (um endereço público que redireciona para um interno passaria)
+        // e sem proxy (que levaria a chamada para outro lugar)
+        const { proxy: _proxy, ...options } = ((params.options as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+        (node.parameters as Record<string, unknown>).options = { ...options, redirect: { redirect: { followRedirects: false, maxRedirects: 0 } } };
+      }
       if (short === "webhook") {
         const path = String(params.path ?? "").replace(/[^a-z0-9-]/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "gatilho";
         (node.parameters as any).path = owner ? path : `${input.webhookPrefix}-${path}`;
