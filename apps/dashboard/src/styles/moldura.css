@@ -1,0 +1,97 @@
+/* ---------- Moldura do painel (notebook e iPad) ----------
+   A barra de cima e o trilho lateral são uma peça só, na mesma cor; o conteúdo fica num painel
+   arredondado encaixado no canto de dentro. O mascote ocupa o canto de cima, onde ficaria a logo.
+   Trilho: ícone com o nome curto embaixo. Plataforma (super admin) fica na barra de cima.
+   Vem por último na cascata para vencer as regras antigas do menu lateral flutuante. */
+.frame-top { display: none; }
+
+@media (min-width: 768px) {
+  :root {
+    --frame: #efeef3; --frame-line: rgba(24, 16, 48, .08); --frame-ink: #141414; --frame-muted: #66656e;
+    --frame-hover: rgba(24, 16, 48, .05); --frame-pill: #ffffff; --frame-pill-shadow: 0 1px 2px rgba(24, 16, 48, .08), 0 0 0 .5px rgba(24, 16, 48, .06);
+    --top-h: 58px; --rail: 84px; --panel-r: 22px;
+  }
+  :root[data-theme="dark"] {
+    --frame: #0a0a0b; --frame-line: rgba(255, 255, 255, .07); --frame-ink: #f1f1ee; --frame-muted: #8f8f8a;
+    --frame-hover: rgba(255, 255, 255, .05); --frame-pill: rgba(255, 255, 255, .09); --frame-pill-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+  }
+
+  .layout {
+    display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: var(--top-h) minmax(0, 1fr);
+    height: 100%; background: var(--frame);
+  }
+
+  /* barra de cima */
+  .frame-top { grid-area: 1 / 1 / 2 / 3; display: flex; align-items: center; gap: 12px; padding: 0 14px 0 calc((var(--rail) - 44px) / 2); min-width: 0; user-select: none; -webkit-user-select: none; }
+  .frame-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .frame-brand .mascote-badge { width: 44px; height: 44px; display: grid; place-items: center; flex-shrink: 0; }
+  .frame-word { font-weight: 700; font-size: 18px; letter-spacing: -.03em; color: var(--frame-ink); }
+  .frame-role { font-size: 12px; font-weight: 550; color: var(--frame-muted); padding: 3px 9px; border-radius: 99px; box-shadow: inset 0 0 0 1px var(--frame-line); white-space: nowrap; }
+  .frame-links { display: flex; align-items: center; gap: 2px; min-width: 0; }
+  .frame-link {
+    position: relative; display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 11px; border-radius: 11px;
+    color: var(--frame-muted); font-size: 13px; font-weight: 550; white-space: nowrap; transition: background .15s, color .15s;
+  }
+  .frame-link.active { background: var(--frame-pill); box-shadow: var(--frame-pill-shadow); color: var(--frame-ink); }
+  .frame-link.active .ico { color: var(--violet); }
+  .frame-link .count { min-width: 17px; height: 17px; padding: 0 5px; border-radius: 99px; background: var(--magenta); color: #fff; font-size: 10.5px; font-weight: 650; display: grid; place-items: center; }
+  .frame-acts { display: flex; align-items: center; gap: 2px; padding-left: 8px; margin-left: 4px; border-left: 1px solid var(--frame-line); }
+  .frame-links:empty + .frame-acts, .spacer + .frame-acts { border-left: none; }
+  .frame-act { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 11px; background: transparent; color: var(--frame-muted); cursor: pointer; transition: background .15s, color .15s; }
+  .frame-act:focus-visible, .frame-link:focus-visible { outline: 2px solid var(--violet); outline-offset: 1px; }
+
+  /* trilho lateral: mesma cor da barra de cima, sem cartão nem sombra */
+  .layout > .sidebar {
+    grid-area: 2 / 1 / 3 / 2; width: auto; margin: 0; padding: 2px 6px 12px; border: 0; border-radius: 0;
+    background: transparent; box-shadow: none; align-items: stretch; overflow-y: auto; scrollbar-width: none;
+  }
+  .layout > .sidebar .nav { flex: 1 0 auto; display: flex; flex-direction: column; gap: 2px; }
+  .layout > .sidebar .nav > a {
+    flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: auto; height: auto;
+    padding: 8px 2px 7px; border-radius: 14px; color: var(--frame-muted); font-weight: 550; scale: none; transform-origin: center;
+  }
+  .layout > .sidebar .nav > a .label {
+    display: block; max-width: 100%; font-size: 10.5px; line-height: 1.15; letter-spacing: -.01em; font-weight: 550;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .nav-ico { position: relative; display: grid; place-items: center; width: 24px; height: 24px; }
+  .layout > .sidebar .nav > a .ico { width: 22px; height: 22px; stroke-width: 1.75; transform: none; color: inherit; }
+  .layout > .sidebar .nav > a.active { color: var(--frame-ink); font-weight: 650; background: transparent; }
+  .layout > .sidebar .nav > a.active .label { font-weight: 650; }
+  .layout > .sidebar .nav > a.active .ico { color: var(--violet); stroke-width: 2; transform: none; }
+  .layout > .sidebar .nav > a::before { display: none; }
+  .nav-sep { height: 1px; margin: 6px 16px; background: var(--frame-line); flex-shrink: 0; }
+  .nav-grow { flex: 1 0 8px; }
+  .nav-me .user-mascote { width: 28px; height: 28px; }
+  .layout > .sidebar .nav-dot { position: absolute; top: -1px; right: -2px; width: 8px; height: 8px; border-radius: 50%; background: var(--magenta); box-shadow: 0 0 0 2px var(--frame); }
+
+  /* pastilha que desliza até o item ativo: embaixo do item, branca no claro e vidro fraco no escuro */
+  .layout > .sidebar .nav[data-seg]::before,
+  :root[data-theme="dark"] .layout > .sidebar .nav[data-seg]::before {
+    z-index: 0; border-radius: 14px; background: var(--frame-pill); box-shadow: var(--frame-pill-shadow);
+    -webkit-backdrop-filter: none; backdrop-filter: none; scale: none;
+  }
+  .layout > .sidebar .nav[data-seg] > a { z-index: 1; }
+  :root[data-theme="dark"] .layout > .sidebar .nav > a.active, :root[data-theme="dark"] .layout > .sidebar .nav > a.active .label { color: #fff; }
+
+  /* painel do conteúdo encaixado no canto da moldura */
+  .layout > .main {
+    grid-area: 2 / 2 / 3 / 3; min-height: 0; background: var(--bg);
+    border-top: 1px solid var(--frame-line); border-left: 1px solid var(--frame-line); border-top-left-radius: var(--panel-r);
+  }
+}
+@media (min-width: 768px) and (hover: hover) and (pointer: fine) {
+  .layout > .sidebar .nav > a:not(.active):hover { background: var(--frame-hover); background-image: none; color: var(--frame-ink); }
+  .frame-link:not(.active):hover, .frame-act:hover { background: var(--frame-hover); color: var(--frame-ink); }
+}
+/* telas mais baixas: itens um pouco mais justos para o trilho caber sem rolar */
+@media (min-width: 768px) and (max-height: 820px) {
+  .layout > .sidebar .nav > a { padding: 6px 2px 5px; gap: 4px; }
+  .nav-sep { margin: 4px 16px; }
+}
+/* iPad e notebook estreito: a Plataforma da barra de cima fica só com os ícones */
+@media (min-width: 768px) and (max-width: 1100px) {
+  .frame-link .label { display: none; }
+  .frame-link { padding: 0 10px; }
+  .frame-role { display: none; }
+}

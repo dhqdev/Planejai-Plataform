@@ -353,6 +353,14 @@ export function App() {
   if (!me && loc.pathname === "/") return <Suspense fallback={<BlockLoader />}><Landing /></Suspense>;
   if (!me) return <AuthPage onLogin={setMe} />;
 
+  // Plataforma (só o super admin) vai para a barra de cima; Avisos e Minha conta descem para o pé do trilho
+  const platform = sectionsOf(NAV).find((sec) => sec.title === "Plataforma")?.items ?? [];
+  const rail = NAV.filter((i) => !("to" in i && (platform.includes(i) || i.to === "/notificacoes" || i.to === "/profile")) && !("section" in i && i.section === "Plataforma"));
+  const logout = async () => {
+    await api("/api/auth/logout", { method: "POST" });
+    setMenu(false);
+    setMe(null);
+  };
   const has = (m: string) => isSuper || (tabs.data?.modules ?? []).includes(m);
   // barra do celular: 3 abas fixas e o "Mais" (ativo no modal ou em qualquer outra tela)
   const phoneTabs = links.filter((t) => PHONE_TABS.includes(t.to));
@@ -369,41 +377,36 @@ export function App() {
         <BellButton />
         <button className="icon-btn" onClick={toggleTheme} aria-label="Trocar tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button>
       </header>
+      {/* notebook e iPad: barra de cima e trilho lateral são uma moldura só; o conteúdo fica num painel encaixado nela */}
+      <header className="frame-top">
+        <div className="frame-brand">
+          <MascoteButton size={40} />
+          <span className="frame-word">planejai</span>
+          {isSuper && <span className="frame-role">Super admin</span>}
+        </div>
+        <span className="spacer" />
+        {platform.length > 0 && (
+          <nav className="frame-links" aria-label="Plataforma">
+            {platform.map((item) => (
+              <NavLink key={item.to} to={item.to} className={isOn(loc.pathname, item.to) ? "frame-link active" : "frame-link"} title={item.label} onPointerEnter={() => preload(item.to)}>
+                <Icon name={item.icon} size={17} />
+                <span className="label">{item.short ?? item.label}</span>
+                {item.badge === "clients" && <PendingCount />}
+              </NavLink>
+            ))}
+          </nav>
+        )}
+        <div className="frame-acts">
+          <button className="frame-act" onClick={toggleTheme} aria-label={theme === "dark" ? "Tema claro" : "Tema escuro"} title={theme === "dark" ? "Tema claro" : "Tema escuro"}>
+            <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
+          </button>
+          <button className="frame-act" onClick={logout} aria-label="Sair" title="Sair">
+            <Icon name="logout" size={18} />
+          </button>
+        </div>
+      </header>
       <aside className="sidebar">
-        <div className="brand">
-          <MascoteButton size={42} />
-          <div>
-            planejai
-            <small>{isSuper ? "Super admin" : "Painel"}</small>
-          </div>
-        </div>
-        <Nav items={NAV} isSuper={isSuper} />
-        <div className="sidebar-foot">
-          {/* um cartão só: quem está logado à esquerda, tema e sair como ícones à direita */}
-          <div className="me me-card">
-            <UserMascote me name={me.name ?? me.email} size={34} />
-            <div className="me-text">
-              <div className="me-name">{me.name ?? me.email}</div>
-              <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · <span className="app-version">v{__APP_VERSION__}</span></div>
-            </div>
-            <div className="me-actions">
-              <button className="me-act" onClick={toggleTheme} aria-label={theme === "dark" ? "Tema claro" : "Tema escuro"} title={theme === "dark" ? "Tema claro" : "Tema escuro"}>
-                <Icon name={theme === "dark" ? "sun" : "moon"} size={17} />
-              </button>
-              <button
-                className="me-act"
-                onClick={async () => {
-                  await api("/api/auth/logout", { method: "POST" });
-                  setMe(null);
-                }}
-                aria-label="Sair"
-                title="Sair"
-              >
-                <Icon name="logout" size={17} />
-              </button>
-            </div>
-          </div>
-        </div>
+        <Nav items={rail} me={me} meTitle={`${me.name ?? me.email} · ${me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · v${__APP_VERSION__}`} />
       </aside>
       <main className="main" id="conteudo" tabIndex={-1} ref={mainRef}>
         <PullToRefresh target={mainRef} />
@@ -534,7 +537,7 @@ export function App() {
                         <Icon name={theme === "dark" ? "sun" : "moon"} size={24} />
                         <span>{theme === "dark" ? "Tema claro" : "Tema escuro"}</span>
                       </button>
-                      <button className="more-tile" onClick={async () => { await api("/api/auth/logout", { method: "POST" }); setMenu(false); setMe(null); }}>
+                      <button className="more-tile" onClick={logout}>
                         <Icon name="logout" size={24} />
                         <span>Sair</span>
                       </button>
@@ -573,28 +576,43 @@ function titleFor(path: string, items: NavItem[]) {
   return hit?.label ?? groupOf(path)?.find((t) => t.to === base)?.label ?? "Planejai";
 }
 
-function Nav({ items, isSuper }: { items: NavItem[]; isSuper: boolean }) {
+/** Pendentes de aprovação em Pessoas (só o super admin consulta). */
+function PendingCount() {
+  const clients = useApi<any[]>("/api/clients", { poll: 60000 });
+  const pending = (clients.data ?? []).filter((c) => c.status === "pending" || c.account_status === "pending").length;
+  return pending > 0 ? <span className="count">{pending}</span> : null;
+}
+
+/**
+ * Trilho lateral: ícone com o nome curto embaixo, grupos separados por um fio. No pé ficam Avisos e a conta
+ * (o mascote da pessoa), como nos apps de trabalho.
+ */
+function Nav({ items, me, meTitle }: { items: NavItem[]; me: Me; meTitle: string }) {
   const loc = useLocation();
   // item do grupo fica marcado também nas telas irmãs (Filas acende Execuções)
-  const inGroup = (to: string) => Boolean(groupOf(loc.pathname)?.[0]?.to === to);
-  const clients = useApi<any[]>(isSuper ? "/api/clients" : null, { poll: 60000 });
-  const pending = (clients.data ?? []).filter((c) => c.status === "pending" || c.account_status === "pending").length;
+  const cls = (to: string) => ({ isActive }: { isActive: boolean }) => (isActive || groupOf(loc.pathname)?.[0]?.to === to ? "active" : "");
   return (
     <nav className="nav">
       {items.map((item, i) =>
         "section" in item ? (
-          <div className="nav-section" key={i}>
-            {item.section}
-          </div>
+          // fio entre grupos; nada no começo nem antes de um grupo vazio
+          i > 0 && items[i + 1] && "to" in items[i + 1]! && <span className="nav-sep" key={i} role="separator" aria-label={item.section} />
         ) : (
-          <NavLink key={item.to} to={item.to} end={item.to === "/"} className={({ isActive }) => (isActive || inGroup(item.to) ? "active" : "")} title={item.label} onPointerEnter={() => preload(item.to)} data-count={item.badge === "clients" && pending > 0 ? pending : undefined}>
-            <Icon name={item.icon} />
-            <span className="label">{item.label}</span>
-            {item.badge === "clients" && pending > 0 && <span className="count">{pending}</span>}
-            {item.badge === "notif" && <UnreadDot className="nav-dot" count />}
+          <NavLink key={item.to} to={item.to} end={item.to === "/"} className={cls(item.to)} title={item.label} onPointerEnter={() => preload(item.to)}>
+            <span className="nav-ico"><Icon name={item.icon} size={22} /></span>
+            <span className="label">{item.short ?? item.label}</span>
           </NavLink>
         ),
       )}
+      <span className="nav-grow" aria-hidden />
+      <NavLink to="/notificacoes" className={cls("/notificacoes")} title="Notificações" onPointerEnter={() => preload("/notificacoes")}>
+        <span className="nav-ico"><Icon name="bell" size={22} /><UnreadDot className="nav-dot" count /></span>
+        <span className="label">Avisos</span>
+      </NavLink>
+      <NavLink to="/profile" className={cls("/profile")} title={meTitle} onPointerEnter={() => preload("/profile")}>
+        <span className="nav-ico nav-me"><UserMascote me name={me.name ?? me.email} size={28} /></span>
+        <span className="label">Conta</span>
+      </NavLink>
     </nav>
   );
 }
