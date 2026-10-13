@@ -85,7 +85,8 @@ async function googleSearch(key: string, body: Record<string, unknown>, fields: 
 export async function geocode(address: string): Promise<Point | null> {
   const g = await getCredentials("google_maps");
   if (g?.api_key) {
-    const [p] = await googleSearch(g.api_key, { textQuery: address, maxResultCount: 1 }, "places.location,places.formattedAddress");
+    // cota do dia esgotada (429) ou Google fora do ar: segue pelo OpenStreetMap em vez de falhar
+    const [p] = await googleSearch(g.api_key, { textQuery: address, maxResultCount: 1 }, "places.location,places.formattedAddress").catch(() => []);
     if (p?.location) return { lat: p.location.latitude, lng: p.location.longitude, label: p.formattedAddress ?? address };
   }
   const [r] = await nominatim({ q: address, limit: "1" });

@@ -73,6 +73,22 @@ describe("places_nearby", () => {
     expect(bodies[1].rankPreference).toBe("DISTANCE");
   });
 
+  it("com a cota do Google esgotada cai no OpenStreetMap em vez de dar erro", async () => {
+    creds.google_maps = { api_key: "k" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.startsWith("https://places.googleapis.com/")) return json({ error: { message: "Quota exceeded" } }, 429);
+        const q = new URL(url).searchParams.get("q");
+        if (q?.startsWith("Rua")) return json([{ lat: "-22.9000", lon: "-47.0600", display_name: "Rua X, Campinas" }]);
+        return json([{ lat: "-22.9030", lon: "-47.0600", name: "PetCamp", address: { road: "Av. Baden Powell", city: "Campinas" }, extratags: {} }]);
+      }),
+    );
+    const r: any = await nearbyPlaces("petshop", "Rua X, 460, Campinas");
+    expect(r.source).toBe("openstreetmap");
+    expect(r.places[0].name).toBe("PetCamp");
+  }, 15_000);
+
   it("endereço que não existe vira erro claro", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => json([])));
     const r: any = await nearbyPlaces("petshop", "lugar nenhum");
