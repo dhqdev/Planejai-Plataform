@@ -609,7 +609,7 @@ function Nav({ items, me, meTitle }: { items: NavItem[]; me: Me; meTitle: string
         <span className="label">Avisos</span>
       </NavLink>
       <NavLink to="/profile" className={cls("/profile")} title={meTitle} onPointerEnter={() => preload("/profile")}>
-        <span className="nav-ico nav-me"><UserMascote me name={me.name ?? me.email} size={24} /></span>
+        <span className="nav-ico nav-me"><UserMascote me name={me.name ?? me.email} size={30} /></span>
         <span className="label">Conta</span>
       </NavLink>
     </nav>

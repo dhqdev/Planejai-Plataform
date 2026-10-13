@@ -16,4 +16,4 @@
 
 /* o Mascote de quem está logado (canto de baixo do menu e folha "Mais" no celular) fica solto, sem a bolinha,
    igual ao Mascote lá de cima */
-.sidebar-foot .me .user-mascote, .more-sheet .more-me .user-mascote { background: none; box-shadow: none; border-radius: 0; overflow: visible; }
+.sidebar-foot .me .user-mascote, .more-sheet .more-me .user-mascote, :root .layout .nav-me .user-mascote { background: none; box-shadow: none; border-radius: 0; overflow: visible; }

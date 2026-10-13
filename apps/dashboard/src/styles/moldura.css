@@ -61,7 +61,7 @@
   .layout > .sidebar .nav > a::before { display: none; }
   .nav-sep { height: 1px; margin: 6px 20px; background: var(--frame-line); flex-shrink: 0; }
   .nav-grow { flex: 1 0 8px; }
-  .layout > .sidebar .nav-ico.nav-me { height: 24px; }
+  .layout > .sidebar .nav-ico.nav-me { height: 28px; width: 32px; }
   .layout > .sidebar .nav-dot { position: absolute; top: -1px; right: -2px; width: 8px; height: 8px; border-radius: 50%; background: var(--magenta); box-shadow: 0 0 0 2px var(--frame); }
 
   /* pastilha que desliza até o item ativo: embaixo do item, branca no claro e vidro fraco no escuro */
