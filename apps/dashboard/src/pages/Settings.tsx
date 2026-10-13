@@ -232,6 +232,11 @@ export function SettingsPage() {
               </select>
               <div className="help">Só por convite: a pessoa entra pelo link do convite ou respondendo SIM no WhatsApp. Quem entra vê só os próprios dados. Liberar na hora deixa qualquer número usar o assistente (gasta sua chave do OpenRouter).</div>
             </div>
+            <div className="field">
+              <label>Mensagem para quem não é cliente</label>
+              <textarea className="textarea" placeholder="Vazio: apresenta o Planejai e manda o link do site para assinar." value={form.strangerMessage ?? ""} onChange={(e) => setForm({ ...form, strangerMessage: e.target.value })} />
+              <div className="help">Sai sem IA para quem manda mensagem sem ser cliente, uma vez por semana por número. Quem você pôs para conversar com um agente não recebe isso.</div>
+            </div>
           </Section>
 
           <Section id="travas" icon="shield" title="Travas de segurança" desc='Limites que evitam gasto e loop. Valem para todo mundo, menos para os números de dono. Quando uma trava age, aparece em Execuções como "trava: …".'>

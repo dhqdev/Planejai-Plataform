@@ -89,3 +89,34 @@ export async function handleOptOut(msg: InboundMessage): Promise<boolean> {
   }
   return true;
 }
+
+/** Quem não é cliente recebe a mensagem fixa no máximo uma vez nesse intervalo (não insiste com quem só mandou "oi"). */
+export const STRANGER_NOTICE_DAYS = 7;
+
+/** Mensagem fixa para quem chega sem ser cliente (sem IA). O dono troca o texto em Configurações > Assistente. */
+export function strangerText(custom?: string | null) {
+  const own = custom?.trim();
+  if (own) return own.slice(0, 1000);
+  const url = config.PUBLIC_URL.replace(/\/+$/, "");
+  return `Oi! Aqui é o Planejai, um assistente pessoal no WhatsApp que cuida da sua agenda, dos seus gastos e dos seus lembretes. 🙂\n\nEsse número atende só quem assina. Para conhecer e assinar: ${url}/`;
+}
+
+/**
+ * Alguém de fora (não é cliente, não tem convite, recado nem conversa, e nunca falamos com ele por um cliente) mandou mensagem: em vez de deixar no
+ * vácuo, manda a mensagem fixa para assinar. Uma vez por número a cada STRANGER_NOTICE_DAYS; grupo e quem pediu SAIR, nunca.
+ */
+export async function noticeStranger(msg: InboundMessage, custom?: string | null): Promise<boolean> {
+  if (!msg.phone || isOwner(msg.phone) || msg.kind === "reaction" || /@g\.us$/.test(msg.remoteJid)) return false;
+  const phone = normalizePhone(msg.phone);
+  // quem pediu SAIR, e quem já recebeu recado ou mensagem nossa a pedido de um cliente (não é "de fora": não leva propaganda)
+  if ((await isOptedOut(phone)) || !(await isNewContact(phone))) return false;
+  const fresh = await one(
+    `INSERT INTO stranger_notices (phone) VALUES ($1)
+     ON CONFLICT (phone) DO UPDATE SET sent_at = now() WHERE stranger_notices.sent_at < now() - make_interval(days => $2)
+     RETURNING phone`,
+    [phone, STRANGER_NOTICE_DAYS],
+  );
+  if (!fresh) return false;
+  await getChannel(msg.channel).sendText(msg.remoteJid, strangerText(custom)).catch(() => {});
+  return true;
+}

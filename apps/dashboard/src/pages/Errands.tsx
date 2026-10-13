@@ -25,6 +25,9 @@ type Errand = {
   last: Line | null;
   log: Line[];
   next: { preview: string; allowed: string | null; created_at: string } | null;
+  /** conversa: um agente do time conversando com uma pessoa a pedido seu */
+  kind?: "recado" | "conversa";
+  agent?: string | null;
 };
 type Draft = { id: string; place: string; phone: string; goal: string; allowed: string | null; preview: string; created_at: string };
 type ContactChat = {
@@ -83,6 +86,7 @@ const phoneLabel = (p: string) => {
   return m ? `(${m[1]}) ${m[2]}-${m[3]}` : `+${p}`;
 };
 const contactName = (c: ContactChat, p?: Prefs) => p?.nickname || c.name || phoneLabel(c.phone);
+const stateLabel = (e: Errand) => (e.kind === "conversa" && e.state === "them" ? "Conversando" : LABEL[e.state]);
 const placeName = (e: Errand, p?: Prefs) => p?.nickname || e.place;
 const byPin = <T,>(list: T[], pin: (x: T) => boolean) => [...list.filter(pin), ...list.filter((x) => !pin(x))];
 const initials = (name: string) => {
@@ -139,7 +143,16 @@ export function ErrandsPage() {
     }
   };
   const cancel = async (e: Errand) => {
-    if (await confirmDialog({ title: `Cancelar o recado com ${e.place}?`, body: "Nada é enviado para eles; o assistente só para de acompanhar.", confirmLabel: "Cancelar recado", cancelLabel: "Voltar", danger: true }))
+    const talk = e.kind === "conversa";
+    if (
+      await confirmDialog({
+        title: talk ? `Encerrar a conversa com ${e.place}?` : `Cancelar o recado com ${e.place}?`,
+        body: talk ? "Nada é enviado; o agente só para de responder." : "Nada é enviado para eles; o assistente só para de acompanhar.",
+        confirmLabel: talk ? "Encerrar conversa" : "Cancelar recado",
+        cancelLabel: "Voltar",
+        danger: true,
+      })
+    )
       void run(`/api/errands/${e.id}/cancel`, { method: "POST" });
   };
   const cancelScheduled = async (c: ContactChat, id: string) => {
@@ -226,7 +239,7 @@ export function ErrandsPage() {
                 {pref(e.phone)?.pinned && <Icon name="bookmark" size={12} className="errand-pin" />}
                 {placeName(e, pref(e.phone))}
               </strong>
-              <span className={`errand-state ${e.state}`}>{LABEL[e.state]}</span>
+              <span className={`errand-state ${e.state}`}>{stateLabel(e)}</span>
             </span>
             <span className="errand-row-goal">{e.goal}</span>
             {e.last && (
@@ -365,10 +378,10 @@ function ErrandView({ e, p, busy, onCancel, onSave, onFollow, onRemove }: { e: E
         </div>
       </div>
       <ChatBar name={name} p={p} busy={busy} onSave={onSave}>
-        {open && <button className="btn btn-sm" disabled={busy} onClick={onCancel}>Cancelar recado</button>}
+        {open && <button className="btn btn-sm" disabled={busy} onClick={onCancel}>{e.kind === "conversa" ? "Encerrar conversa" : "Cancelar recado"}</button>}
       </ChatBar>
       <div className="errand-facts">
-        <span className={`errand-state ${e.state}`}>{LABEL[e.state]}</span>
+        <span className={`errand-state ${e.state}`}>{stateLabel(e)}</span>
         <span>{e.allowed ? `Liberado: ${e.allowed}` : "Só pergunta, não fecha nada"}</span>
         {open && <span>{e.messages_left} mensagem(ns) restante(s)</span>}
       </div>

@@ -1,5 +1,6 @@
 import { one, query } from "../../db/pool.js";
-import { MAX_ERRAND_MESSAGES, finishErrand, openErrands, sendToErrand, startErrand } from "../../errands.js";
+import { finishErrand, messageLimit, openErrands, sendToErrand, startErrand } from "../../errands.js";
+import { CONVERSA_AGENTS, conversaAgent } from "../conversa.js";
 import { blockedResult, checkErrandText } from "../errand-check.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
@@ -40,6 +41,54 @@ export const errandStart = defineTool<{ place: string; phone: string; message: s
   },
 });
 
+export const conversaStart = defineTool<{ name: string; phone: string; message: string; goal: string; agent?: string; hours?: number; confirmed_by_user?: boolean }>({
+  name: "conversa_start",
+  description:
+    "Põe um agente do time para CONVERSAR de verdade com uma pessoa pelo WhatsApp a pedido da dona (ex.: 'a Maria tá passando mal, conversa com ela'): " +
+    "manda a primeira mensagem e o agente responde a pessoa sozinho até resolver, avisa a dona na hora se for sério e manda um resumo no fim. " +
+    "Só para quando ela pede que alguém converse; recado de ida (só avisar algo) é send_whatsapp/send_to_contact. É mensagem para terceiro: só sai depois do sim.",
+  parameters: obj(
+    {
+      name: { type: "string", description: "Nome da pessoa" },
+      phone: { type: "string", description: "WhatsApp da pessoa, com DDD" },
+      message: { type: "string", description: "Primeira mensagem, calorosa, dizendo que a dona pediu para conversar e perguntando como a pessoa está (o sistema apresenta o agente)" },
+      goal: { type: "string", description: "O que está acontecendo e como ajudar, com o que a dona contou" },
+      agent: { type: "string", enum: CONVERSA_AGENTS.map((a) => a.slug), description: "Quem conversa: saude para quem está doente; geral se nenhum combina" },
+      hours: { type: "number", description: "Por quanto tempo conversar, padrão 24h (máx. 72)" },
+      ...CONFIRM_PARAM,
+    },
+    ["name", "phone", "message", "goal"],
+  ),
+  async run(args, ctx) {
+    const a = conversaAgent(args.agent);
+    if (!ctx.approvedAction) {
+      const check = await checkErrandText({ place: args.name, goal: args.goal, message: args.message, kind: "conversa" }, ctx.tracer, ctx.agent);
+      if (!check.ok) return blockedResult(check);
+    }
+    const hours = Math.min(Math.max(args.hours ?? 24, 1), 72);
+    const gate = await requireConfirmation(
+      args,
+      `pôr ${a.persona} (${a.name}) para conversar com ${args.name} (${args.phone}) no WhatsApp por até ${hours}h, começando com: "${args.message}". ` +
+        "Eu te aviso na hora se for algo sério e te mando um resumo no fim",
+      ctx,
+    );
+    if (gate) return gate;
+    return startErrand({
+      user: ctx.user,
+      conversationId: ctx.conversation.id,
+      place: args.name,
+      phone: args.phone,
+      message: args.message,
+      goal: args.goal,
+      hours,
+      timezone: ctx.timezone,
+      kind: "conversa",
+      agent: a.slug,
+      persona: a.persona,
+    });
+  },
+});
+
 export const errandContinue = defineTool<{ errand_id: string; message: string; allowed?: string; confirmed_by_user?: boolean }>({
   name: "errand_continue",
   description:
@@ -66,19 +115,20 @@ export const errandContinue = defineTool<{ errand_id: string; message: string; a
 
 export const errandList = defineTool<Record<string, never>>({
   name: "errand_list",
-  description: "Recados em andamento com estabelecimentos (com quem, o objetivo e se está esperando a pessoa decidir).",
+  description: "Recados com estabelecimentos e conversas que o time está tendo com alguém a pedido da pessoa, em andamento (com quem, o objetivo e se está esperando a pessoa decidir).",
   parameters: obj({}),
   async run(_args, ctx) {
     const list = await openErrands(ctx.user.id);
     return {
       errands: list.map((e) => ({
         id: e.id,
+        kind: e.kind,
         place: e.place,
         goal: e.goal,
         allowed: e.allowed,
         status: e.status === "asking" ? `esperando a pessoa: ${e.question}` : "esperando eles",
         last: e.log.slice(-3).map((l) => `${l.from === "nos" ? "nós" : l.from}: ${l.text}`),
-        messages_left: MAX_ERRAND_MESSAGES - e.sent,
+        messages_left: messageLimit(e) - e.sent,
       })),
     };
   },
@@ -86,7 +136,7 @@ export const errandList = defineTool<Record<string, never>>({
 
 export const errandCancel = defineTool<{ errand_id: string }>({
   name: "errand_cancel",
-  description: "Para de acompanhar um recado (não manda nada para o estabelecimento).",
+  description: "Para de acompanhar um recado ou encerra uma conversa que o time está tendo com alguém (não manda nada para eles).",
   parameters: obj({ errand_id: { type: "string" } }, ["errand_id"]),
   async run(args, ctx) {
     const e = await one("SELECT id FROM errands WHERE id::text = $1 AND user_id = $2", [args.errand_id, ctx.user.id]);

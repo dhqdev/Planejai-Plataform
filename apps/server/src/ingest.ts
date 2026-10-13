@@ -72,7 +72,14 @@ export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; re
     const channel = getChannel(msg.channel);
     if (await handleInviteReply({ user, text: msg.text, channel, remoteJid: msg.remoteJid })) return { queued: false, reason: "convite" };
   }
-  if (user.status !== "active") return { queued: false, reason: `contato ${user.status}` };
+  if (user.status !== "active") {
+    // quem chega de fora sem ser cliente não fica no vácuo: mensagem fixa para assinar (sem IA, uma vez por semana)
+    if (user.status === "pending") {
+      const { noticeStranger } = await import("./outreach.js");
+      if (await noticeStranger(msg, (await getSettings()).strangerMessage)) return { queued: false, reason: "convite para assinar" };
+    }
+    return { queued: false, reason: `contato ${user.status}` };
+  }
   // "apague todos os meus dados" (LGPD): tratado aqui, sem IA
   if (msg.kind === "text") {
     const { handleEraseRequest } = await import("./privacy.js");

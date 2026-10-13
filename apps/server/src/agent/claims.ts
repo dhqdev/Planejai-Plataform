@@ -98,7 +98,7 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; sameSentence?: boole
   {
     what: "enviar mensagem",
     says: /\b(mandei|enviei|encaminhei)\b/i,
-    tools: ["send_to_contact", "send_whatsapp", "make_audio", "gmail_send", "slack_send_message", "errand_start", "errand_continue", "invite_person", "contact_owner"],
+    tools: ["send_to_contact", "send_whatsapp", "make_audio", "gmail_send", "slack_send_message", "errand_start", "errand_continue", "conversa_start", "invite_person", "contact_owner"],
   },
   {
     what: "avisar o responsável",

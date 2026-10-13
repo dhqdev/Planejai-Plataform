@@ -22,6 +22,8 @@ export interface AgentSettings {
   dailyCostLimitUsd: number;
   /** tamanho máximo de uma mensagem de texto lida pelo agente */
   maxMessageChars: number;
+  /** Mensagem fixa para quem manda mensagem sem ser cliente (vazio = texto padrão com o link do site) */
+  strangerMessage: string;
   /** Cobrança por grãos (créditos) no Asaas: desligada, ninguém é cobrado nem travado */
   billingEnabled: boolean;
   /** quando a cobrança foi ligada; preenchido sozinho */
@@ -140,6 +142,7 @@ const defaults = (): AgentSettings => ({
   timezone: config.DEFAULT_TIMEZONE,
   language: "pt-BR",
   signupMode: "invite",
+  strangerMessage: "",
   maxExecutionMinutes: 8,
   maxToolCalls: 40,
   rateLimitPerMinute: 10,
@@ -182,6 +185,7 @@ export async function saveSettings(patch: Partial<AgentSettings>, opts: { unchec
   }
   if (rest.billingPlans !== undefined) rest.billingPlans = cleanPlans(rest.billingPlans);
   if (rest.billingPacks !== undefined) rest.billingPacks = cleanPacks(rest.billingPacks);
+  if (rest.strangerMessage !== undefined) rest.strangerMessage = String(rest.strangerMessage ?? "").trim().slice(0, 1000);
   for (const k of ["legalName", "legalDocument", "privacyEmail", "legalCity"] as const) {
     if (rest[k] !== undefined) rest[k] = String(rest[k] ?? "").trim().slice(0, 120);
   }

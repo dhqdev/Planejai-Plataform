@@ -211,12 +211,14 @@ export const SPECIALISTS: AgentDef[] = [
     icon: "mail",
     role:
       "Mensagens em nome da pessoa: WhatsApp para contatos e para qualquer número (agora ou agendada, com foto ou arquivo), mensagens agendadas, convites, " +
+      "pôr um agente do time para conversar com alguém (conversa_start), " +
       "contatos e liberar telas para um contato; e-mail (Gmail) e Slack: buscar, ler, resumir, redigir e enviar.",
     instructions:
       "Para enviar, chame a ferramenta com o texto final: o sistema guarda e só envia depois do sim da pessoa. Devolva ao CTO o resumo do que vai sair (o sistema pergunta o sim à pessoa). " +
       "Pelo nome ('manda pra Ana'): contacts_search antes de pedir o número; se vier approximate, devolva ao CTO para confirmar quem é. " +
       "Contato do Planejai: send_to_contact; qualquer outro número: send_whatsapp (não convida nem cria contato). Com hora: agende com at na própria ferramenta, nunca troque por lembrete. " +
-      "Arquivo junto: attach=true (o que ela mandou ou o assistente fez agora) ou document_id. Convite (invite_person) só com nome e número confirmados.",
+      "Arquivo junto: attach=true (o que ela mandou ou o assistente fez agora) ou document_id. Convite (invite_person) só com nome e número confirmados. " +
+      "Ela quer que alguém CONVERSE com a pessoa (não só avisar): conversa_start com o agente do assunto (saude para quem está doente; geral se nenhum combina).",
     tools: [
       direct.contactsSearch,
       social.sendToContact,
@@ -224,6 +226,7 @@ export const SPECIALISTS: AgentDef[] = [
       direct.contactSave,
       direct.directList,
       direct.directCancel,
+      errands.conversaStart,
       social.invitePerson,
       social.listContactsTool,
       social.shareScreen,
@@ -345,8 +348,8 @@ export const CTO_TOOLS: Tool[] = [
 export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
   {
     id: "mensagens",
-    when: /(?<!\p{L})(mand|envi|mensage|msg|recado|avis[ae] (o|a|pr)|fala (pr|com)|diz(er|e)? (pr|que)|respond|pergunt[ae] (pr|ao?|à|pa)|encaminh|repass|convi|contato|n[uú]mero|whats|zap|agendad)|te mandou|\d{8,}|\(\d{2}\)/iu,
-    tools: [social.sendToContact, direct.sendWhatsapp, direct.contactsSearch, direct.contactSave, direct.directList, direct.directCancel, social.invitePerson],
+    when: /(?<!\p{L})(mand|envi|mensage|msg|recado|avis[ae] (o|a|pr)|fala (pr|com)|convers\w* com|diz(er|e)? (pr|que)|respond|pergunt[ae] (pr|ao?|à|pa)|encaminh|repass|convi|contato|n[uú]mero|whats|zap|agendad)|te mandou|\d{8,}|\(\d{2}\)/iu,
+    tools: [social.sendToContact, direct.sendWhatsapp, errands.conversaStart, direct.contactsSearch, direct.contactSave, direct.directList, direct.directCancel, social.invitePerson],
   },
   {
     id: "midia",
@@ -362,7 +365,7 @@ export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
   { id: "alarmes", when: /(?<!\p{L})(alarme|despert|acord)/iu, tools: [agenda.alarmList, agenda.alarmCancel] },
   { id: "dinheiro", when: /(?<!\p{L})(limite|or[çc]amento|teto|no m[aá]ximo|fatura|cart[aã]o|cart[õo]es)/iu, tools: [finance.setBudget, cards.cardList, cards.cardInvoicePay] },
   { id: "categorias", when: /(?<!\p{L})categori/iu, tools: [categoriesTool] },
-  { id: "recados", when: /(?<!\p{L})(recado|estabelecimento)/iu, tools: [errands.errandList, errands.errandCancel] },
+  { id: "recados", when: /(?<!\p{L})(recado|estabelecimento|conversa)/iu, tools: [errands.errandList, errands.errandCancel] },
   { id: "documentos", when: /(?<!\p{L})(apag|exclu|delet|remov)\w*.{0,40}\b(document|arquivo|pdf|contrato)/iu, tools: [documents.documentDelete] },
 ];
 

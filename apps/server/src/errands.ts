@@ -26,9 +26,15 @@ import { MAX_ERRAND_TEXT } from "./agent/errand-check.js";
  *   e um agente pequeno, com só três ferramentas, decide: responder a eles, fechar ou perguntar à pessoa.
  * - Travas no servidor: só fala com aquele número, no máximo MAX_ERRAND_MESSAGES mensagens, vence em `hours`,
  *   e dinheiro ou dado pessoal sempre volta para a pessoa.
+ *
+ * Conversa delegada (kind = 'conversa'): a mesma estrutura, mas para uma PESSOA com quem o dono pediu que o time
+ * converse de verdade ("a Maria tá passando mal, põe a Saúde pra conversar com ela"). Quem fala é o especialista
+ * escolhido (`agent`, ver agent/conversa.ts), com mais mensagens (MAX_CONVERSA_MESSAGES), resumo para o dono no fim
+ * e aviso na hora quando aparece sinal de urgência (emergencySign, sem IA).
  */
 
 export const MAX_ERRAND_MESSAGES = 6;
+export const MAX_CONVERSA_MESSAGES = 30;
 export const MAX_OPEN_ERRANDS = 3;
 export const MAX_ERRANDS_PER_DAY = 10;
 const OPEN = ["waiting", "asking"];
@@ -59,6 +65,29 @@ export interface Errand {
   outcome: string | null;
   appointment_at: string | null;
   expires_at: string;
+  /** recado (estabelecimento) ou conversa (pessoa, com um especialista do time) */
+  kind: "recado" | "conversa";
+  /** conversa: slug do especialista que fala (agent/conversa.ts) */
+  agent: string | null;
+  alerted_at: string | null;
+}
+
+/** Quantas mensagens nossas cabem neste recado ou conversa. */
+export const messageLimit = (e: Pick<Errand, "kind">) => (e.kind === "conversa" ? MAX_CONVERSA_MESSAGES : MAX_ERRAND_MESSAGES);
+
+/**
+ * Sinal de urgência na fala da pessoa numa conversa delegada: avisa o dono na hora, sem esperar a IA.
+ * Largo de propósito (aviso a mais custa pouco; aviso a menos pode custar caro).
+ */
+const EMERGENCY =
+  /\b(dor no peito|aperto no peito|falta de ar|nao consigo respirar|sem ar|desmai\w*|convuls\w*|sangr\w* muito|muito sangue|hemorragia|infarto|avc|derrame|boca torta|rosto torto|fala enrolada|nao sinto (o |a |meu |minha )?(braco|perna|lado)|overdose|envenen\w*|tomei (todos|varios|muitos) (os )?(remedios|comprimidos)|me matar|quero morrer|suicid\w*|acabar com (a minha|minha) vida|nao aguento mais viver|samu|192|emergencia|socorro)\b/;
+
+export function emergencySign(text: string) {
+  const t = text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  return EMERGENCY.test(t);
 }
 
 const firstName = (u: { full_name?: string | null; name?: string | null }) => (u.full_name || u.name || "").split(" ")[0] || null;
@@ -77,9 +106,10 @@ const GREETING = new RegExp(`^\\s*((oi|olá|ola|e aí|e ai)${END})?[!,.]*\\s*((b
  * (assistente virtual de quem). Se o texto já se apresenta, só acerta o "bom dia/boa tarde/boa noite".
  * Sem fuso (mensagem direta, que pode ser agendada para outra hora) fica a apresentação curta, sem período do dia.
  */
-export function introduce(text: string, personName: string | null, timezone?: string, now = new Date()) {
+export function introduce(text: string, personName: string | null, timezone?: string, now = new Date(), persona?: string | null) {
   const t = text.trim();
-  const who = personName ? `o assistente virtual de ${personName}` : "um assistente virtual";
+  // conversa delegada: quem fala é o especialista, com o nome dele ("Aqui é Enfermeira Cida, assistente virtual de David")
+  const who = persona ? `${persona}, assistente virtual${personName ? ` de ${personName}` : ""}` : personName ? `o assistente virtual de ${personName}` : "um assistente virtual";
   // "Bom dia, Gio! ..." : o nome de quem recebe fica no cumprimento, não sobra solto depois da apresentação
   const named = t.match(/^([Oo]i|[Oo]l[áa]|[Bb]om dia|[Bb]oa tarde|[Bb]oa noite),?\s+(\p{Lu}\p{L}+(?:\s\p{Lu}\p{L}+)?)\s*[!.,]+\s*/u);
   const to = named?.[2] ?? null;
@@ -113,6 +143,10 @@ export async function startErrand(opts: {
   allowed?: string | null;
   hours?: number;
   timezone?: string;
+  kind?: "recado" | "conversa";
+  /** conversa: slug e nome do especialista que fala */
+  agent?: string | null;
+  persona?: string | null;
 }) {
   const phone = normalizePhone(opts.phone);
   if (phone.length < 12 || phone.length > 13) return { ok: false, error: `Telefone inválido: ${opts.phone}. Precisa do DDD.` };
@@ -121,9 +155,10 @@ export async function startErrand(opts: {
   const member = await one("SELECT id FROM users WHERE phone = ANY($1) AND status = 'active'", [variants]);
   if (member) return { ok: false, error: "Esse número é de alguém que usa o Planejai: use send_to_contact ou invite_person." };
   const busy = await one(`SELECT user_id FROM errands WHERE phone = ANY($1) AND status = ANY($2) AND expires_at > now()`, [variants, OPEN]);
-  if (busy && busy.user_id !== opts.user.id) return { ok: false, error: "Já tem outro recado em andamento com esse número. Tente de novo mais tarde." };
+  if (busy && busy.user_id !== opts.user.id) return { ok: false, error: "Já tem outro recado ou conversa em andamento com esse número. Tente de novo mais tarde." };
   if (busy) await query(`UPDATE errands SET status = 'cancelled', updated_at = now() WHERE user_id = $1 AND phone = ANY($2) AND status = ANY($3)`, [opts.user.id, variants, OPEN]);
-  if ((await openErrands(opts.user.id)).length >= MAX_OPEN_ERRANDS) return { ok: false, error: `Já tem ${MAX_OPEN_ERRANDS} recados em andamento. Espere um terminar ou cancele um (errand_cancel).` };
+  if ((await openErrands(opts.user.id)).length >= MAX_OPEN_ERRANDS)
+    return { ok: false, error: `Já tem ${MAX_OPEN_ERRANDS} recados ou conversas em andamento. Espere um terminar ou encerre um (errand_cancel).` };
   const today = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM errands WHERE user_id = $1 AND created_at > now() - interval '24 hours'", [opts.user.id]);
   if ((today?.n ?? 0) >= MAX_ERRANDS_PER_DAY) return { ok: false, error: "Limite de recados por dia atingido. Amanhã dá de novo." };
 
@@ -136,15 +171,20 @@ export async function startErrand(opts: {
   if (wait) await new Promise((r) => setTimeout(r, wait));
   const channel = outboundChannel();
   const jid = exists ?? (await jidFor(phone, channel));
-  const text = withSignature(redactSecrets(humanize(introduce(opts.message, firstName(opts.user), opts.timezone ?? config.DEFAULT_TIMEZONE))), (await getPrefs(opts.user.id, phone))?.signature);
+  const kind = opts.kind ?? "recado";
+  const persona = kind === "conversa" ? opts.persona : null;
+  const text = withSignature(
+    redactSecrets(humanize(introduce(opts.message, firstName(opts.user), opts.timezone ?? config.DEFAULT_TIMEZONE, new Date(), persona))),
+    (await getPrefs(opts.user.id, phone))?.signature,
+  );
   await channel.sendText(jid, text);
   await resumeFollow(opts.user.id, phone);
   const hours = Math.min(Math.max(opts.hours ?? 24, 1), 72);
   const log: ErrandLogEntry[] = [{ from: "nos", text, at: new Date().toISOString() }];
   const row = await one<{ id: string }>(
-    `INSERT INTO errands (user_id, conversation_id, place, phone, jid, goal, allowed, log, sent, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, now() + make_interval(hours => $9)) RETURNING id`,
-    [opts.user.id, opts.conversationId, opts.place.slice(0, 120), phone, jid, opts.goal.slice(0, 1000), opts.allowed?.slice(0, 500) || null, JSON.stringify(log), hours],
+    `INSERT INTO errands (user_id, conversation_id, place, phone, jid, goal, allowed, log, sent, expires_at, kind, agent)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, now() + make_interval(hours => $9), $10, $11) RETURNING id`,
+    [opts.user.id, opts.conversationId, opts.place.slice(0, 120), phone, jid, opts.goal.slice(0, 1000), opts.allowed?.slice(0, 500) || null, JSON.stringify(log), hours, kind, kind === "conversa" ? opts.agent ?? null : null],
   );
   return {
     ok: true,
@@ -152,7 +192,10 @@ export async function startErrand(opts: {
     sent_to: `${opts.place} (+${phone})`,
     message: text,
     waiting_hours: hours,
-    tip: `Conte em uma linha que dá para acompanhar a conversa em ${followUrl()}`,
+    tip:
+      kind === "conversa"
+        ? `Conte em uma linha que ${persona ?? "o time"} já está conversando, que você recebe um resumo no fim (ou na hora, se for algo sério) e que dá para acompanhar ou encerrar em ${followUrl()}`
+        : `Conte em uma linha que dá para acompanhar a conversa em ${followUrl()}`,
   };
 }
 
@@ -162,7 +205,9 @@ export async function sendToErrand(errandId: string, text: string, opts: { sameT
   // sameTurn: o agente fechou (ou levou à pessoa) nesta mesma vez e a despedida ainda está saindo
   const live = e && (OPEN.includes(e.status) || (opts.sameTurn && ["done", "failed"].includes(e.status)));
   if (!e || !live) return { ok: false, error: "Esse recado já terminou." };
-  if (e.sent >= MAX_ERRAND_MESSAGES) return { ok: false, error: `Já foram ${MAX_ERRAND_MESSAGES} mensagens para eles. Feche com errand_done ou pergunte à pessoa.` };
+  const limit = messageLimit(e);
+  if (e.sent >= limit)
+    return { ok: false, error: e.kind === "conversa" ? `Já foram ${limit} mensagens nesta conversa. Despeça-se e encerre com conversa_end.` : `Já foram ${limit} mensagens para eles. Feche com errand_done ou pergunte à pessoa.` };
   const clean = redactSecrets(humanize(text.trim())).slice(0, MAX_ERRAND_TEXT);
   if (!clean) return { ok: false, error: "Mensagem vazia" };
   await outboundChannel().sendText(e.jid, clean);
@@ -174,7 +219,7 @@ export async function sendToErrand(errandId: string, text: string, opts: { sameT
      WHERE id = $1`,
     [errandId, JSON.stringify([{ from: "nos", text: clean, at: new Date().toISOString() }]), Boolean(opts.sameTurn)],
   );
-  return { ok: true, sent: clean, messages_left: MAX_ERRAND_MESSAGES - e.sent - 1 };
+  return { ok: true, sent: clean, messages_left: limit - e.sent - 1 };
 }
 
 /**
@@ -192,8 +237,24 @@ export async function handleErrandInbound(msg: InboundMessage): Promise<boolean>
   const entry: ErrandLogEntry = { from: "eles", text: msg.text ?? "", at: new Date().toISOString(), kind: msg.kind, external_id: msg.externalId };
   if (msg.media && msg.kind !== "text") entry.media = msg.media;
   await query("UPDATE errands SET log = log || $2::jsonb, updated_at = now() WHERE id = $1", [e.id, JSON.stringify([entry])]);
+  if (e.kind === "conversa" && msg.text && emergencySign(msg.text)) await alertOwner(e, `escreveu: "${msg.text.slice(0, 300)}"`).catch(() => {});
   const boss = await getBoss();
-  await boss.send(QUEUES.errand, { errandId: e.id }, { singletonKey: e.id, startAfter: 15, retryLimit: 1, retryDelay: 30, expireInSeconds: 600 });
+  // pessoa conversando espera resposta mais rápido que estabelecimento (que costuma mandar várias mensagens seguidas)
+  await boss.send(QUEUES.errand, { errandId: e.id }, { singletonKey: e.id, startAfter: e.kind === "conversa" ? 8 : 15, retryLimit: 1, retryDelay: 30, expireInSeconds: 600 });
+  return true;
+}
+
+/**
+ * Aviso urgente ao dono numa conversa delegada (sem IA, direto no WhatsApp dele). No máximo um a cada 10 minutos por
+ * conversa, para não virar enxurrada; o agente continua a conversa e já orienta a pessoa a procurar o SAMU (192).
+ */
+export async function alertOwner(e: Pick<Errand, "id" | "user_id" | "place" | "phone">, what: string) {
+  const fresh = await one("UPDATE errands SET alerted_at = now() WHERE id = $1 AND (alerted_at IS NULL OR alerted_at < now() - interval '10 minutes') RETURNING id", [e.id]);
+  if (!fresh) return false;
+  await notifyUser(
+    e.user_id,
+    `⚠️ *Atenção com ${e.place}*\n\nNa conversa que você me pediu, ${e.place} ${what}\n\nEu continuo com ${e.place} e já orientei a ligar para o SAMU (192) se for urgente. Se puder, liga você também: +${e.phone}`,
+  );
   return true;
 }
 
@@ -239,6 +300,15 @@ export async function expireErrands() {
   );
   for (const e of rows) {
     const answered = e.log.some((l) => l.from === "eles");
+    if (e.kind === "conversa") {
+      await notifyUser(
+        e.user_id,
+        answered
+          ? `A conversa com ${e.place} chegou ao fim do prazo e eu encerrei. Se quiser que eu continue, é só pedir de novo.`
+          : `${e.place} não respondeu, então encerrei a conversa. Se quiser, dá para ligar: +${e.phone}`,
+      ).catch(() => {});
+      continue;
+    }
     await notifyUser(
       e.user_id,
       answered
@@ -252,8 +322,10 @@ export async function expireErrands() {
 /** Uma linha por recado aberto, para o CTO saber do que a pessoa está falando. */
 export function errandsContext(list: Errand[]) {
   return list
-    .map(
-      (e) =>
+    .map((e) =>
+      e.kind === "conversa"
+        ? `Conversa com ${e.place} (id ${e.id}, o time está conversando com essa pessoa a pedido dela): ${e.goal}`
+        :
         `${e.place} (id ${e.id}): ${e.goal}` +
         (e.status === "asking" && e.question ? ` · ESPERANDO A PESSOA DECIDIR: ${e.question}` : " · esperando resposta deles") +
         (e.allowed ? ` · já liberado: ${e.allowed}` : ""),
@@ -328,7 +400,9 @@ export async function listErrands(userId: string) {
         question: OPEN.includes(e.status) ? e.question : null,
         outcome: e.outcome,
         appointment_at: e.appointment_at,
-        messages_left: Math.max(0, MAX_ERRAND_MESSAGES - e.sent),
+        messages_left: Math.max(0, messageLimit(e) - e.sent),
+        kind: e.kind,
+        agent: e.agent,
         expires_at: e.expires_at,
         created_at: e.created_at,
         updated_at: e.updated_at,

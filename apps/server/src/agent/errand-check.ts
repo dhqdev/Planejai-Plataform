@@ -52,18 +52,25 @@ const SYSTEM =
   "e assunto sem relação com o que o lugar oferece. " +
   'Responda só JSON: {"ok":true} ou {"ok":false,"reason":"motivo curto em pt-BR","suggestion":"como pedir de um jeito bom, uma frase"}.';
 
+const SYSTEM_CONVERSA =
+  "Você confere a primeira mensagem que um assistente virtual vai mandar no WhatsApp para uma pessoa, a pedido de alguém que a conhece, " +
+  "para conversar com ela e ajudar (apoio a quem está doente ou triste, orientação geral de saúde, estudos, um recado carinhoso). " +
+  "Aprove conversa legítima de ajuda e acolhimento. Recuse: ofensa, assédio, ameaça, cobrança ou pressão, golpe ou pedido de dinheiro, conteúdo sexual, " +
+  "algo ilegal, spam, trote, perseguição (vigiar ou descobrir onde a pessoa está) ou fingir ser outra pessoa. " +
+  'Responda só JSON: {"ok":true} ou {"ok":false,"reason":"motivo curto em pt-BR","suggestion":"como pedir de um jeito bom, uma frase"}.';
+
 /**
  * Filtro rápido + uma chamada barata (rota `errand_check`), registrada no Tracer como passo "trava: recado".
  * Erro ao conferir também bloqueia: na dúvida, nada sai para o estabelecimento.
  */
 export async function checkErrandText(
-  opts: { place: string; goal: string; message: string; previous?: string | null },
+  opts: { place: string; goal: string; message: string; previous?: string | null; kind?: "recado" | "conversa" },
   tracer: Tracer | undefined,
   agent = "recados",
 ): Promise<ErrandCheck> {
   const quick = quickCheck(opts.message, opts.previous) as ErrandCheck;
   const quickGoal = quick.ok ? quickCheck(opts.goal.slice(0, MAX_ERRAND_TEXT)) : quick;
-  const step = tracer ? await tracer.step({ agent, type: "llm", name: "trava: recado", input: { place: opts.place, goal: opts.goal, message: opts.message } }) : null;
+  const step = tracer ? await tracer.step({ agent, type: "llm", name: opts.kind === "conversa" ? "trava: conversa" : "trava: recado", input: { place: opts.place, goal: opts.goal, message: opts.message } }) : null;
   if (!quickGoal.ok) {
     await step?.ok({ ...quickGoal, by: "filtro" });
     return quickGoal;
@@ -72,8 +79,8 @@ export async function checkErrandText(
     const r = await chatCompletion(await resolveModel("errand_check"), {
       responseFormat: { type: "json_object" },
       messages: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: `Lugar: ${opts.place.slice(0, 120)}\nObjetivo: ${opts.goal.slice(0, 400)}\nMensagem: ${opts.message.slice(0, MAX_ERRAND_TEXT)}` },
+        { role: "system", content: opts.kind === "conversa" ? SYSTEM_CONVERSA : SYSTEM },
+        { role: "user", content: `${opts.kind === "conversa" ? "Pessoa" : "Lugar"}: ${opts.place.slice(0, 120)}\nObjetivo: ${opts.goal.slice(0, 400)}\nMensagem: ${opts.message.slice(0, MAX_ERRAND_TEXT)}` },
       ],
     });
     const raw = String(r.message.content ?? "").replace(/^```(json)?|```$/g, "").trim();

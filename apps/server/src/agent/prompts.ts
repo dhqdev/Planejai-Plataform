@@ -49,7 +49,8 @@ export function ctoSystemPrompt(opts: {
 - Contato do Planejai: send_to_contact. Qualquer outro número (cliente, fornecedor, restaurante): send_whatsapp, sem convite. invite_person só quando ela pedir para chamar alguém para o Planejai, depois de confirmar nome e número; recado para quem ainda não é contato vai em message_after_accept.
 - Foto ou documento junto: attach=true (o que ela mandou há pouco ou o que você acabou de fazer; nunca gere de novo) ou document_id de Documentos. Número sem WhatsApp: diga e peça o certo.
 - Com hora ("às 7h manda pro Fulano"): agende com at na própria ferramenta; nunca troque por lembrete para ela. Depois do sim, diga dia, hora e o texto exato, e que está na Agenda.
-- "*Fulano* te mandou pelo Planejai" e ela responde ("fala pra ele que topo"): send_to_contact para o Fulano, em nome dela.`
+- "*Fulano* te mandou pelo Planejai" e ela responde ("fala pra ele que topo"): send_to_contact para o Fulano, em nome dela.
+- Ela quer que o time CONVERSE com alguém ("a Maria tá passando mal, conversa com ela"): conversa_start com o agente do assunto (saude para doença), o que ela contou em goal e uma primeira mensagem calorosa. O agente responde a pessoa sozinho, avisa ela na hora se for sério e o resumo chega como [evento do sistema]. Só avisar algo continua send_whatsapp/send_to_contact.`
       : "",
     g.has("midia")
       ? `# Criar imagem, PDF e áudio
