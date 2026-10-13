@@ -45,3 +45,12 @@
 @keyframes welcome-in { from { opacity: 0; transform: translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { .welcome-body { animation: none; } }
 
+/* seta de voltar para a landing, no canto de cima do formulário */
+.auth-form { position: relative; }
+.auth-back {
+  position: absolute; z-index: 2; top: calc(16px + env(safe-area-inset-top)); left: 16px; display: inline-flex; align-items: center; gap: 4px;
+  height: 38px; padding: 0 14px 0 10px; border-radius: 99px; background: var(--panel); border: 1px solid var(--border);
+  color: var(--text); font-size: 14px; font-weight: 550; text-decoration: none; transition: background .15s;
+}
+.auth-back:hover { background: var(--panel-2); }
+.auth-back:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }

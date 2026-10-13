@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, phoneFmt } from "../api";
 import type { Me } from "../App";
 import { ErrorBox } from "../components";
+import { Icon } from "../icons";
 import { haptic } from "../touch";
 import { Mascote, type Mood } from "../mascote/Mascote";
 import { FloatingMascotes, StageMascote, lookAt } from "../mascote/Parade";
@@ -196,6 +197,11 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
         </div>
       </section>
       <section className="auth-form">
+        {/* volta para a página de apresentação (quem caiu aqui pelo link e quer ler antes) */}
+        <a className="auth-back" href="/" aria-label="Voltar para a página inicial" title="Voltar">
+          <Icon name="chevron-left" size={20} />
+          <span>Voltar</span>
+        </a>
         <FloatingMascotes edges />
         <form className="card" onSubmit={submit}>
           <div className="auth-logo">
