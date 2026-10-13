@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { clearPhonebook, deleteContact, importContacts, listPhonebook, parseVcf, saveContact } from "../../../phonebook.js";
+import { clearPhonebook, deleteContact, importContacts, listPhonebook, parseVcf, renameContact, saveContact } from "../../../phonebook.js";
 import { NOBODY, selfUserId } from "../../../sharing.js";
 import { isUuid } from "./shared.js";
 
@@ -10,8 +10,14 @@ import { isUuid } from "./shared.js";
 export function phonebookRoutes(base: FastifyInstance) {
   const self = async (a: Parameters<typeof selfUserId>[0]) => (await selfUserId(a)) ?? NOBODY;
 
-  base.get<{ Querystring: { q?: string; offset?: string } }>("/api/contatos", async (req) =>
-    listPhonebook(await self(req.account), String(req.query.q ?? "").slice(0, 60), 100, Math.max(0, Number(req.query.offset) || 0)),
+  base.get<{ Querystring: { q?: string; offset?: string; limit?: string; sem_nome?: string } }>("/api/contatos", async (req) =>
+    listPhonebook(
+      await self(req.account),
+      String(req.query.q ?? "").slice(0, 60),
+      Math.min(300, Math.max(1, Number(req.query.limit) || 100)),
+      Math.max(0, Number(req.query.offset) || 0),
+      req.query.sem_nome === "1",
+    ),
   );
 
   base.post<{ Body: { vcf?: string; contacts?: unknown } }>("/api/contatos/importar", async (req, reply) => {
@@ -29,6 +35,15 @@ export function phonebookRoutes(base: FastifyInstance) {
     if (!uid) return reply.code(400).send({ error: "Conta sem WhatsApp ligado" });
     try {
       return await saveContact(uid, String(req.body?.name ?? ""), String(req.body?.phone ?? ""), "manual");
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  base.patch<{ Params: { id: string }; Body: { name?: string } }>("/api/contatos/:id", async (req, reply) => {
+    if (!isUuid(req.params.id)) return reply.code(404).send({ error: "Contato não encontrado" });
+    try {
+      return await renameContact(await self(req.account), req.params.id, String(req.body?.name ?? ""));
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }

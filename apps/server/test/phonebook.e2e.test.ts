@@ -46,6 +46,42 @@ describe("agenda: arquivo e números", () => {
     expect(list[2]!.phones.map((p) => p.number)).toEqual(["011 98888-7777", "+1 415 555 0100"]);
   });
 
+  it("nome sem FN vem do N na ordem certa; QP quebrado em linhas, latin1, apelido, empresa e e-mail; ';;;;' não é nome", async () => {
+    const { parseVcf } = await import("../src/phonebook.js");
+    const vcf = [
+      // só N (sem FN): antes virava "Souza;Ana Paula;;;"
+      "BEGIN:VCARD", "VERSION:3.0", "N:Souza;Ana Paula;;;", "TEL;TYPE=CELL:19 99111-0001", "END:VCARD",
+      // Android 2.1: QP longo com quebra suave e foto em base64 terminando em "="
+      "BEGIN:VCARD", "VERSION:2.1",
+      "N;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:;=4D=61=72=69=61=20=64=61=20=43=6F=6E=63=65=69=C3=A7=C3=A3=",
+      "=6F;;;",
+      "FN;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:=4D=61=72=69=61=20=64=61=20=43=6F=6E=63=65=69=C3=A7=C3=A3=",
+      "=6F",
+      "PHOTO;ENCODING=BASE64;JPEG:/9j/4AAQ=",
+      "TEL;CELL:19 99111-0002", "END:VCARD",
+      // celular antigo em latin1
+      "BEGIN:VCARD", "VERSION:2.1", "FN;CHARSET=ISO-8859-1;ENCODING=QUOTED-PRINTABLE:Jos=E9", "TEL;CELL:19 99111-0003", "END:VCARD",
+      // sem nome, com apelido / empresa / e-mail
+      "BEGIN:VCARD", "VERSION:3.0", "N:;;;;", "FN:", "NICKNAME:Tio Beto", "TEL:19 99111-0004", "END:VCARD",
+      "BEGIN:VCARD", "VERSION:3.0", "N:;;;;", "ORG:Clínica Sorriso;Recepção", "TEL:19 99111-0005", "END:VCARD",
+      "BEGIN:VCARD", "VERSION:3.0", "N:;;;;", "EMAIL:carla.mendes@x.com", "TEL:19 99111-0006", "END:VCARD",
+      // nada de nome: fica de fora
+      "BEGIN:VCARD", "VERSION:3.0", "N:;;;;", "FN:;;;;", "TEL:19 99111-0007", "END:VCARD",
+      // escape no FN
+      "BEGIN:VCARD", "VERSION:3.0", "FN:Lima\\, Pedro", "TEL:19 99111-0008", "END:VCARD",
+    ].join("\r\n");
+    expect(parseVcf(vcf).map((c) => c.name)).toEqual([
+      "Ana Paula Souza",
+      "Maria da Conceição",
+      "José",
+      "Tio Beto",
+      "Clínica Sorriso - Recepção",
+      "carla mendes",
+      "Lima, Pedro",
+    ]);
+    expect(parseVcf(vcf)[1]!.phones.map((p) => p.number)).toEqual(["19 99111-0002"]);
+  });
+
   it("número de WhatsApp: com DDI, sem DDI, com 0 do DDD; 0800 e curto ficam de fora", async () => {
     const { cleanContactPhone } = await import("../src/phonebook.js");
     expect(cleanContactPhone("+55 (19) 99123-4567")).toBe("5519991234567");
@@ -115,6 +151,27 @@ describe.skipIf(!enabled)("agenda de contatos (e2e)", () => {
     expect((await pb.searchContacts(user.id, "jaoo"))[0]).toMatchObject({ name: expect.stringMatching(/^João/), approximate: true });
     expect(await pb.searchContacts(user.id, "pedro")).toEqual([]);
     await pb.deleteContact(user.id, (await pb.searchContacts(user.id, "mae zera"))[0]!.id);
+  });
+
+  it("nomes da importação antiga: N cru é remontado, ';;;;' fica no fim como sem nome e dá para renomear", async () => {
+    const { readFileSync } = await import("node:fs");
+    await db.query("INSERT INTO phonebook (user_id, name, name_key, phone, source) VALUES ($1, 'Souza;Ana Ninguém;;;', 'x', '5519900000001', 'vcf'), ($1, ';;;;', ';;;;', '5519900000002', 'vcf')", [other.id]);
+    await db.query(readFileSync(new URL("../src/db/migrations/060_contatos_nome_do_vcf.sql", import.meta.url), "utf8"));
+    const list = await pb.listPhonebook(other.id, "");
+    expect(list).toMatchObject({ total: 2, noname: 1 });
+    expect(list.items.map((c: any) => c.name)).toEqual(["Ana Ninguém Souza", ";;;;"]);
+    expect((await pb.searchContacts(other.id, "ninguem"))[0]).toMatchObject({ phone: "5519900000001" });
+    const only = await pb.listPhonebook(other.id, "", 100, 0, true);
+    expect(only.items.map((c: any) => c.phone)).toEqual(["5519900000002"]);
+    await expect(pb.renameContact(other.id, only.items[0]!.id, " ;; ")).rejects.toThrow();
+    await expect(pb.renameContact(user.id, only.items[0]!.id, "Zé")).rejects.toThrow();
+    await pb.renameContact(other.id, only.items[0]!.id, "Zé da Padaria");
+    expect(await pb.listPhonebook(other.id, "")).toMatchObject({ noname: 0 });
+    expect((await pb.searchContacts(other.id, "padaria"))[0]).toMatchObject({ name: "Zé da Padaria" });
+    // reimportar com nome certo atualiza pelo número; nome vazio não estraga o que tem
+    await pb.importContacts(other.id, [{ name: ";;;;", phones: [{ number: "19 90000-0001" }] }], "vcf");
+    expect((await pb.searchContacts(other.id, "ninguem"))[0]).toMatchObject({ name: "Ana Ninguém Souza" });
+    await pb.clearPhonebook(other.id);
   });
 
   it("apagar um e apagar tudo", async () => {

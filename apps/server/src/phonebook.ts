@@ -38,53 +38,95 @@ export function cleanContactPhone(raw: string): string | null {
   return intl ? d : normalizePhone(d);
 }
 
-function unfold(vcf: string) {
-  // linhas dobradas do vCard começam com espaço ou tab; quoted-printable termina com "="
-  return vcf.replace(/\r\n/g, "\n").replace(/\n[ \t]/g, "").replace(/=\n/g, "");
+/** Tem letra ou número? ";;;;", "-" e "()" não são nome. */
+export const hasName = (s: string) => /[\p{L}\p{N}]/u.test(s);
+
+const isQp = (params: string) => /ENCODING=QUOTED-PRINTABLE|(?:^|;)QUOTED-PRINTABLE(?:;|$)/i.test(params);
+
+/**
+ * Junta as linhas de cada campo: dobra do vCard (linha seguinte começa com espaço ou tab) e quebra "suave" do
+ * quoted-printable (linha termina com "=" e o campo é QP). Base64 de foto também termina com "=", e não pode juntar.
+ */
+export function vcfLines(vcf: string) {
+  const out: string[] = [];
+  let qpOpen = false;
+  for (const raw of vcf.replace(/^\uFEFF/, "").split(/\r\n|\r|\n/)) {
+    if (out.length && (qpOpen || /^[ \t]/.test(raw))) {
+      out[out.length - 1] = qpOpen ? out[out.length - 1]!.slice(0, -1) + raw : out[out.length - 1]! + raw.slice(1);
+    } else out.push(raw);
+    const cur = out[out.length - 1]!;
+    const head = cur.slice(0, cur.indexOf(":") + 1);
+    qpOpen = cur.endsWith("=") && isQp(head);
+  }
+  return out;
 }
+
+/** Divide em ";" que não está escapado (N e ORG têm partes). */
+const splitParts = (v: string) => v.split(/(?<!\\);/);
 
 function decodeValue(params: string, value: string) {
   let v = value;
-  if (/ENCODING=QUOTED-PRINTABLE/i.test(params)) {
+  if (isQp(params)) {
     const bytes: number[] = [];
     for (let i = 0; i < v.length; i++) {
       if (v[i] === "=" && /^[0-9A-F]{2}$/i.test(v.slice(i + 1, i + 3))) {
         bytes.push(Number.parseInt(v.slice(i + 1, i + 3), 16));
         i += 2;
-      } else bytes.push(v.charCodeAt(i));
+      } else {
+        const ch = String.fromCodePoint(v.codePointAt(i)!);
+        bytes.push(...Buffer.from(ch, "utf8"));
+        i += ch.length - 1;
+      }
     }
-    v = Buffer.from(bytes).toString("utf8");
+    const buf = Buffer.from(bytes);
+    const latin = /CHARSET=(?:ISO-8859-1|WINDOWS-1252|LATIN1)/i.test(params);
+    const utf = buf.toString("utf8");
+    // sem charset dito e com byte que não é UTF-8, é latin1 (celular antigo)
+    v = latin || utf.includes("\uFFFD") ? buf.toString("latin1") : utf;
+  } else if (/ENCODING=(?:B|BASE64)(?:;|$)/i.test(params)) {
+    v = Buffer.from(v, "base64").toString("utf8");
   }
-  return v.replace(/\\,/g, ",").replace(/\;/g, ";").replace(/\\n/gi, " ").trim();
+  return v
+    .replace(/\\n/gi, " ")
+    .replace(/\\([,;:\\])/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 const LABELS: Record<string, string> = { cell: "celular", mobile: "celular", work: "trabalho", home: "casa", main: "principal", iphone: "celular" };
 
-/** Lê um arquivo .vcf (iPhone, Android, Google). Sem número, o contato fica de fora. */
+/**
+ * Lê um arquivo .vcf (iPhone, Android, Google, Samsung). O nome vem do FN; sem ele, do N (nome + sobrenome),
+ * do apelido, da empresa ou do e-mail. Sem número, o contato fica de fora; sem nome nenhum também.
+ */
 export function parseVcf(vcf: string): ContactInput[] {
   const out: ContactInput[] = [];
-  for (const card of unfold(vcf).split(/BEGIN:VCARD/i).slice(1)) {
-    let fn = "";
-    let n = "";
-    let org = "";
-    const phones: ContactInput["phones"] = [];
-    for (const line of card.split("\n")) {
-      const m = line.match(/^(?:item\d+\.)?([A-Za-z-]+)((?:;[^:]*)?):(.*)$/);
-      if (!m) continue;
-      const [, key, params, value] = m as unknown as [string, string, string, string];
-      const k = key.toUpperCase();
-      if (k === "FN") fn = decodeValue(params, value);
-      else if (k === "N") {
-        const [last = "", first = "", middle = ""] = decodeValue(params, value.replace(/\;/g, "\u0000")).split(";").map((p) => p.replace(/\u0000/g, ";").trim());
-        n = [first, middle, last].filter(Boolean).join(" ");
-      } else if (k === "ORG") org = decodeValue(params, value).split(";")[0]!.trim();
-      else if (k === "TEL") {
-        const type = params.match(/TYPE=([^;:]+)/i)?.[1]?.split(",")[0]?.toLowerCase() ?? params.replace(/^;/, "").split(";")[0]?.toLowerCase();
-        phones.push({ number: value.replace(/^tel:/i, "").trim(), label: type ? LABELS[type] : undefined });
-      }
+  let card: { fn: string; n: string; nick: string; org: string; email: string; phones: ContactInput["phones"] } | null = null;
+  for (const line of vcfLines(vcf)) {
+    const m = line.match(/^(?:[A-Za-z0-9-]+\.)?([A-Za-z-]+)((?:;[^:]*)?):(.*)$/);
+    if (!m) continue;
+    const [, key, params, value] = m as unknown as [string, string, string, string];
+    const k = key.toUpperCase();
+    if (k === "BEGIN" && /^VCARD$/i.test(value.trim())) {
+      card = { fn: "", n: "", nick: "", org: "", email: "", phones: [] };
+      continue;
     }
-    const name = (fn || n || org).slice(0, 80);
-    if (name && phones.length) out.push({ name, phones });
+    if (!card) continue;
+    if (k === "END" && /^VCARD$/i.test(value.trim())) {
+      const name = [card.fn, card.n, card.nick, card.org, card.email].find(hasName) ?? "";
+      if (name && card.phones.length) out.push({ name: name.slice(0, 80), phones: card.phones });
+      card = null;
+    } else if (k === "FN") card.fn = decodeValue(params, value);
+    else if (k === "N") {
+      const [last = "", first = "", middle = "", prefix = "", suffix = ""] = splitParts(value).map((p) => decodeValue(params, p));
+      card.n = [prefix, first, middle, last, suffix].filter(hasName).join(" ");
+    } else if (k === "NICKNAME") card.nick = decodeValue(params, value).split(",")[0]!.trim();
+    else if (k === "ORG") card.org = splitParts(value).map((p) => decodeValue(params, p)).filter(hasName).join(" - ");
+    else if (k === "EMAIL" && !card.email) card.email = decodeValue(params, value).split("@")[0]!.replace(/[._]+/g, " ").trim();
+    else if (k === "TEL") {
+      const type = params.match(/TYPE=([^;:]+)/i)?.[1]?.split(",")[0]?.toLowerCase() ?? params.replace(/^;/, "").split(";")[0]?.toLowerCase();
+      card.phones.push({ number: decodeValue("", value.replace(/^tel:/i, "")), label: type ? LABELS[type] : undefined });
+    }
   }
   return out;
 }
@@ -96,7 +138,7 @@ export async function importContacts(userId: string, list: ContactInput[], sourc
   for (const c of list.slice(0, MAX_CONTACTS * 2)) {
     const name = String(c?.name ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
     const phones = Array.isArray(c?.phones) ? c.phones.slice(0, 6) : [];
-    if (!name || !phones.length) {
+    if (!hasName(name) || !phones.length) {
       skipped++;
       continue;
     }
@@ -133,7 +175,7 @@ export async function saveContact(userId: string, name: string, phone: string, s
   const p = cleanContactPhone(phone);
   if (!p) throw new Error("Número inválido: mande com DDD.");
   const n = String(name ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
-  if (!n) throw new Error("Falta o nome.");
+  if (!hasName(n)) throw new Error("Falta o nome.");
   const r = await importContacts(userId, [{ name: n, phones: [{ number: phone }] }], source);
   if (!r.saved) throw new Error(`A agenda chegou no limite de ${MAX_CONTACTS} contatos.`);
   return { name: n, phone: p };
@@ -230,12 +272,30 @@ export async function hasContactPhone(userId: string, phone: string) {
   return p ? Boolean(await one("SELECT 1 FROM phonebook WHERE user_id = $1 AND phone = $2", [userId, p])) : false;
 }
 
-export async function listPhonebook(userId: string, q: string, limit = 100, offset = 0) {
-  const total = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM phonebook WHERE user_id = $1", [userId]);
+/** Sem letra nem número no nome (";;;;" de importação antiga): vai para o fim e aparece como "Sem nome". */
+const NO_NAME_SQL = "name !~ '[[:alnum:]]'";
+
+export async function listPhonebook(userId: string, q: string, limit = 100, offset = 0, onlyNoName = false) {
+  const counts = await one<{ n: number; noname: number }>(
+    `SELECT COUNT(*)::int AS n, COUNT(*) FILTER (WHERE ${NO_NAME_SQL})::int AS noname FROM phonebook WHERE user_id = $1`,
+    [userId],
+  );
   const items = q.trim()
     ? await searchContacts(userId, q, limit)
-    : await many("SELECT id, name, phone, label FROM phonebook WHERE user_id = $1 ORDER BY name_key LIMIT $2 OFFSET $3", [userId, limit, offset]);
-  return { total: total?.n ?? 0, items };
+    : await many(
+        `SELECT id, name, phone, label FROM phonebook WHERE user_id = $1${onlyNoName ? ` AND ${NO_NAME_SQL}` : ""} ORDER BY (${NO_NAME_SQL}), name_key, phone LIMIT $2 OFFSET $3`,
+        [userId, limit, offset],
+      );
+  return { total: counts?.n ?? 0, noname: counts?.noname ?? 0, items };
+}
+
+/** Troca o nome de um contato (na tela Contatos). */
+export async function renameContact(userId: string, id: string, name: string) {
+  const n = String(name ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!hasName(n)) throw new Error("Escreva o nome.");
+  const row = await one("UPDATE phonebook SET name = $3, name_key = $4, updated_at = now() WHERE user_id = $1 AND id = $2 RETURNING id", [userId, id, n, nameKey(n)]);
+  if (!row) throw new Error("Contato não encontrado");
+  return { id, name: n };
 }
 
 export async function deleteContact(userId: string, id: string) {
