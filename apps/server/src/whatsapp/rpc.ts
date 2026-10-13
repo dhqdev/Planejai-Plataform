@@ -18,7 +18,7 @@ export type WaRpc =
   | { op: "media"; jid: string; image: OutboundImage }
   | { op: "poll"; jid: string; poll: OutboundPoll }
   | { op: "react"; jid: string; messageId: string; emoji: string }
-  | { op: "typing"; jid: string; ms: number }
+  | { op: "typing"; jid: string; ms: number; kind?: "typing" | "recording" }
   | { op: "read"; jid: string; messageId: string }
   | { op: "exists"; variants: string[] };
 

@@ -60,6 +60,7 @@ export interface Channel {
   /** só canais que mandam enquete (Baileys); sem ele a pergunta vai em texto */
   sendPoll?(remoteJid: string, poll: OutboundPoll): Promise<{ id?: string }>;
   react(remoteJid: string, messageId: string, emoji: string): Promise<void>;
-  setTyping(remoteJid: string, ms: number): Promise<void>;
+  /** "digitando..." ou, antes de um áudio, "gravando áudio..." */
+  setTyping(remoteJid: string, ms: number, kind?: "typing" | "recording"): Promise<void>;
   markRead(remoteJid: string, messageId: string): Promise<void>;
 }

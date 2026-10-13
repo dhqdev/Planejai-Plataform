@@ -63,7 +63,7 @@ async function run(ch: BaileysChannel, req: WaRpcJob): Promise<WaRpcResult> {
       await ch.react(req.jid, req.messageId, req.emoji);
       return {};
     case "typing":
-      await ch.setTyping(req.jid, req.ms);
+      await ch.setTyping(req.jid, req.ms, req.kind);
       return {};
     case "read":
       await ch.markRead(req.jid, req.messageId);

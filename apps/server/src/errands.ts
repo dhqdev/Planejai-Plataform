@@ -1,4 +1,5 @@
 import { normalizePhone } from "./accounts.js";
+import { MAX_PACE_WAIT_MS, newContactWait, isOptedOut, OPTED_OUT_ERROR } from "./outreach.js";
 import { getPrefs, resumeFollow, withSignature } from "./chatprefs.js";
 import { humanize } from "./agent/humanize.js";
 import { redactSecrets } from "./agent/guard.js";
@@ -126,8 +127,13 @@ export async function startErrand(opts: {
   const today = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM errands WHERE user_id = $1 AND created_at > now() - interval '24 hours'", [opts.user.id]);
   if ((today?.n ?? 0) >= MAX_ERRANDS_PER_DAY) return { ok: false, error: "Limite de recados por dia atingido. Amanhã dá de novo." };
 
+  if (await isOptedOut(phone)) return { ok: false, error: OPTED_OUT_ERROR };
   const exists = await onWhatsApp(phone);
   if (exists === null) return { ok: false, error: `O número ${phone} não tem WhatsApp. Sugira à pessoa ligar: +${phone}.`, no_whatsapp: true };
+  // primeiro contato com número novo: espaçado dos outros do servidor (protege o número)
+  const wait = await newContactWait(phone);
+  if (wait > MAX_PACE_WAIT_MS) return { ok: false, error: "Muitas mensagens para números novos agora. Tente de novo em alguns minutos." };
+  if (wait) await new Promise((r) => setTimeout(r, wait));
   const channel = outboundChannel();
   const jid = exists ?? (await jidFor(phone, channel));
   const text = withSignature(redactSecrets(humanize(introduce(opts.message, firstName(opts.user), opts.timezone ?? config.DEFAULT_TIMEZONE))), (await getPrefs(opts.user.id, phone))?.signature);

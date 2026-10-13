@@ -92,7 +92,8 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     expect(d).toMatchObject({ phone: CLIENT, name: "Rafael", status: "sent" });
     const out = sentTexts().slice(before);
     // texto dela, como está (já diz quem manda), e nada de convite
-    expect(out).toContain("Bom dia, Rafael! Aqui é o David, segue a proposta que combinamos.");
+    // primeira mensagem para o número: leva como parar de receber (SAIR)
+    expect(out).toContain("Bom dia, Rafael! Aqui é o David, segue a proposta que combinamos.\n\n_Se não quiser receber mensagens daqui, responda SAIR._");
     expect(out.join("\n")).not.toMatch(/convid|Planejai\*|Responda \*SIM\*/);
     expect(await db.one("SELECT COUNT(*)::int AS n FROM invites")).toEqual({ n: 0 });
 
@@ -134,7 +135,7 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     await runOutboundJob({ type: "direct", directId: d.id });
     expect(channels.playground.sent.slice(before)[0]).toMatchObject({
       type: "image",
-      image: { kind: "document", fileName: "Contrato.pdf", mimetype: "application/pdf", base64: pdf.toString("base64"), caption: "Oi Bruna, aqui é o David! Segue o contrato assinado." },
+      image: { kind: "document", fileName: "Contrato.pdf", mimetype: "application/pdf", base64: pdf.toString("base64"), caption: "Oi Bruna, aqui é o David! Segue o contrato assinado.\n\n_Se não quiser receber mensagens daqui, responda SAIR._" },
     });
     expect(await db.one("SELECT media FROM direct_messages WHERE id = $1", [d.id])).toEqual({ media: null });
   });
@@ -175,7 +176,7 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     // quando vence: sai e avisa a pessoa
     const { runOutboundJob } = await import("../src/api/routes/internal.js");
     await runOutboundJob({ type: "direct", directId: r.id });
-    expect(sentTexts()).toContain("Oi, aqui é o David, confirmo a mesa para 4 amanhã.");
+    expect(sentTexts()).toContain("Oi, aqui é o David, confirmo a mesa para 4 amanhã.\n\n_Se não quiser receber mensagens daqui, responda SAIR._");
     expect(sentTexts().at(-1)).toMatch(/Mandei para Restaurante/);
     expect(((await sendDirect(r.id)) as any).ok).toBe(false); // não manda duas vezes
     // já saiu: excluir só tira da agenda, o status continua 'sent' (a resposta do contato segue voltando)
@@ -191,6 +192,41 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     // o próprio número não
     expect(((await createDirect({ user: u, phone: david.phone, message: "oi", timezone: TZ })) as any).ok).toBe(false);
   });
+  it("quem não é cliente responde SAIR e para de receber; VOLTAR libera; cliente que diz sair segue para o assistente", async () => {
+    const { createDirect } = await import("../src/direct.js");
+    const { ingest } = await import("../src/ingest.js");
+    const { handleOptOut, isOptedOut } = await import("../src/outreach.js");
+    const u = { id: david.id, phone: david.phone, name: "David" };
+    const PHONE = "5511922221111";
+    const from = (phone: string, text: string) => ({ channel: "playground", remoteJid: `${phone}@s.whatsapp.net`, phone, externalId: `o${++seq}`, kind: "text" as const, text, timestamp: new Date(), raw: {} });
+    const later = await createDirect({ user: u, phone: PHONE, name: "Loja", message: "Oi, aqui é o David, passo amanhã.", sendAt: new Date(Date.now() + 3600_000), timezone: TZ });
+    expect((later as any).ok).toBe(true);
+
+    expect(await ingest(from(PHONE, "SAIR"))).toEqual({ queued: false, reason: "SAIR" });
+    expect(await isOptedOut(PHONE)).toBe(true);
+    expect(sentTexts().some((t) => t.includes("não vai mais receber mensagens por aqui"))).toBe(true);
+    // o agendado cai e quem mandou fica sabendo
+    expect(await db.one("SELECT status FROM direct_messages WHERE id = $1", [(later as any).id])).toEqual({ status: "cancelled" });
+    expect(sentTexts().some((t) => t.includes("Loja pediu para não receber mais mensagens"))).toBe(true);
+    const blocked: any = await createDirect({ user: u, phone: PHONE, message: "Oi de novo", timezone: TZ });
+    expect(blocked).toMatchObject({ ok: false, error: expect.stringContaining("SAIR") });
+
+    expect(await ingest(from(PHONE, "voltar"))).toEqual({ queued: false, reason: "SAIR" });
+    expect(await isOptedOut(PHONE)).toBe(false);
+    // "voltar" de quem não saiu e "sair" de cliente não são tratados aqui
+    expect(await handleOptOut(from(PHONE, "voltar"))).toBe(false);
+    expect(await handleOptOut(from(david.phone, "sair"))).toBe(false);
+  });
+
+  it("primeiros contatos com números novos saem espaçados no servidor todo", async () => {
+    const { reserveSlot } = await import("../src/shortmem.js");
+    const key = `teste-ritmo-${Date.now()}`;
+    expect(await reserveSlot(key, 20_000)).toBe(0);
+    const second = (await reserveSlot(key, 20_000))!;
+    expect(second).toBeGreaterThan(19_000);
+    expect((await reserveSlot(key, 20_000))!).toBeGreaterThan(second + 19_000);
+  });
+
   it("Recados: apelido e assinatura por conversa; acompanhar sem prazo, parar e excluir o acompanhamento", async () => {
     const { createDirect, listContactChats } = await import("../src/direct.js");
     const { savePrefs, removeChat, prefsFor } = await import("../src/chatprefs.js");
@@ -204,7 +240,7 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     await savePrefs(david.id, PHONE, { tone: "formal" });
     const r: any = await createDirect({ user: u, phone: PHONE, name: "João", message: "Oi João, aqui é o David! Amanhã passo aí.", timezone: TZ });
     expect(r.ok).toBe(true);
-    expect(sentTexts().at(-1)).toBe("Oi João, aqui é o David! Amanhã passo aí.\n\nAbraço, David");
+    expect(sentTexts().at(-1)).toBe("Oi João, aqui é o David! Amanhã passo aí.\n\nAbraço, David\n\n_Se não quiser receber mensagens daqui, responda SAIR._");
 
     // resposta dentro das 72h chega com o apelido
     expect((await reply("Combinado!")).reason).toBe("resposta de mensagem avulsa");

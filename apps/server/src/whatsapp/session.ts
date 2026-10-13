@@ -10,6 +10,7 @@ import { handleIncoming } from "./inbound.js";
 import { SessionLease } from "./lease.js";
 import { pingSocket, Waiters } from "./outbound.js";
 import { isPaired, Pairing } from "./pairing.js";
+import { rememberSent, sentMessage } from "./sent-cache.js";
 import { SessionStatus } from "./status.js";
 import { DEFAULT_TIMINGS, SESSION_ID, type Log, type Status, type WaCommand, type WaTimings } from "./types.js";
 
@@ -310,6 +311,8 @@ export class WhatsAppSession {
       keepAliveIntervalMs: this.t.keepAliveMs,
       connectTimeoutMs: 30_000,
       defaultQueryTimeoutMs: 60_000,
+      // celular que não abriu uma mensagem nossa pede reenvio: sem isso ela se perdia ("Aguardando mensagem")
+      getMessage: sentMessage,
     });
     this.sock = sock;
     this.open = false;
@@ -369,6 +372,7 @@ export class WhatsAppSession {
 
     sock.ev.on("messages.upsert", async ({ messages, type }) => {
       if (this.sock === sock) this.lastRecvAt = Date.now();
+      for (const m of messages) if (m.key?.fromMe) void rememberSent(m).catch(() => {});
       if (type !== "notify") return;
       for (const raw of messages) {
         try {

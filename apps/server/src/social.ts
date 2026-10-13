@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { isOptedOut } from "./outreach.js";
 import { fuzzyOk, nameScore } from "./phonebook.js";
 import { normalizePhone } from "./accounts.js";
 import { redactSecrets } from "./agent/guard.js";
@@ -182,6 +183,11 @@ export async function sendInvite(inviteId: string) {
     [inviteId],
   );
   if (!inv || inv.status !== "pending" || inv.sent_at) return;
+  if (await isOptedOut(inv.phone)) {
+    await query("UPDATE invites SET status = 'declined', responded_at = now() WHERE id = $1", [inviteId]);
+    if (inv.inviter_user_id) await notifyUser(inv.inviter_user_id, `Não mandei o convite: ${inv.name ?? `+${inv.phone}`} pediu para não receber mensagens do Planejai.`).catch(() => {});
+    return;
+  }
   // Proteção do número: convite vai para quem ainda não salvou o contato, o tipo de mensagem que mais leva a
   // denúncia e banimento. Espaça os envios e respeita um teto diário; o que passar espera a próxima hora.
   const pace = await one(

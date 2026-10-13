@@ -94,11 +94,11 @@ export class BaileysChannel implements Channel {
   /** um "paused" pendente por conversa: chamar de novo renova o "digitando..." em vez de piscar */
   private pauseTimers = new Map<string, NodeJS.Timeout>();
 
-  async setTyping(jid: string, ms: number) {
-    if (this.remote) return void (await callChannel({ op: "typing", jid, ms }, EXTRA_WAIT_MS));
+  async setTyping(jid: string, ms: number, kind: "typing" | "recording" = "typing") {
+    if (this.remote) return void (await callChannel({ op: "typing", jid, ms, kind }, EXTRA_WAIT_MS));
     const s = await this.session.ready(EXTRA_WAIT_MS);
     clearTimeout(this.pauseTimers.get(jid));
-    await s.sendPresenceUpdate("composing", jid);
+    await s.sendPresenceUpdate(kind === "recording" ? "recording" : "composing", jid);
     const t = setTimeout(() => {
       this.pauseTimers.delete(jid);
       void s.sendPresenceUpdate("paused", jid).catch(() => {});

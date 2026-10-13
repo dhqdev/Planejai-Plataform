@@ -92,6 +92,8 @@ const schema = z.object({
   INVITES_PER_DAY: z.coerce.number().int().min(1).default(40),
   // Intervalo mínimo (s) entre dois convites enviados
   INVITE_GAP_SECONDS: z.coerce.number().min(0).default(45),
+  /** intervalo mínimo entre primeiros contatos com números novos (mensagem avulsa, recado); 0 desliga */
+  NEW_CONTACT_GAP_SECONDS: z.coerce.number().min(0).default(15),
   // API interna (n8n): teto de envios em 24h e intervalo mínimo (s) entre envios para número que não é cliente
   INTERNAL_SEND_PER_DAY: z.coerce.number().int().min(1).default(300),
   INTERNAL_UNKNOWN_GAP_SECONDS: z.coerce.number().min(0).default(30),

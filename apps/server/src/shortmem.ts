@@ -168,6 +168,30 @@ export async function countInWindow(key: string, windowSeconds: number): Promise
   }
 }
 
+/**
+ * Reserva a próxima vaga de uma fila com intervalo mínimo entre eventos (todos os processos juntos).
+ * Devolve quantos ms esperar até a vaga; null = Redis indisponível.
+ */
+export async function reserveSlot(key: string, gapMs: number): Promise<number | null> {
+  const r = redis();
+  if (!r) return null;
+  try {
+    const now = Date.now();
+    const at = Number(
+      await r.eval(
+        "local last = tonumber(redis.call('GET', KEYS[1]) or '0'); local at = math.max(tonumber(ARGV[1]), last + tonumber(ARGV[2])); redis.call('SET', KEYS[1], at, 'PX', 3600000); return at",
+        1,
+        `pj:slot:${key}`,
+        now,
+        Math.round(gapMs),
+      ),
+    );
+    return Math.max(0, at - now);
+  } catch {
+    return null;
+  }
+}
+
 /** Lê a contagem atual da janela sem somar (null = Redis indisponível). */
 export async function peekCount(key: string): Promise<number | null> {
   const r = redis();

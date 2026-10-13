@@ -153,8 +153,8 @@ export class TelegramChannel implements Channel {
     await this.call("setMessageReaction", { chat_id: chatId, message_id: Number(messageId), reaction: [{ type: "emoji", emoji }] }).catch(() => {});
   }
 
-  async setTyping(chatId: string) {
-    await this.call("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
+  async setTyping(chatId: string, _ms?: number, kind?: "typing" | "recording") {
+    await this.call("sendChatAction", { chat_id: chatId, action: kind === "recording" ? "record_voice" : "typing" }).catch(() => {});
   }
 
   async markRead() {}

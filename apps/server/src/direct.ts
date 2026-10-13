@@ -1,4 +1,5 @@
 import { normalizePhone } from "./accounts.js";
+import { isNewContact, isOptedOut, MAX_PACE_WAIT_MS, newContactWait, OPT_OUT_HINT, OPTED_OUT_ERROR } from "./outreach.js";
 import { humanize } from "./agent/humanize.js";
 import { describeMessage, preprocessMedia } from "./agent/media.js";
 import { Tracer } from "./agent/trace.js";
@@ -83,6 +84,7 @@ export async function createDirect(opts: {
   const variants = phoneVariants(phone);
   if (variants.some((v) => phoneVariants(opts.user.phone).includes(v))) return { ok: false, error: "Esse número é da própria pessoa." };
   if (isOwner(phone) && !isOwner(opts.user.phone)) return { ok: false, error: "Para falar com o dono do Planejai, use contact_owner." };
+  if (await isOptedOut(phone)) return { ok: false, error: OPTED_OUT_ERROR };
   // assinatura combinada para esse número na tela Recados (mesmo texto que a pessoa vê depois)
   const text = withSignature(directText(opts.message, opts.user), (await getPrefs(opts.user.id, phone))?.signature);
   if (!opts.message.trim()) return { ok: false, error: "Mensagem vazia" };
@@ -123,6 +125,7 @@ export async function createDirect(opts: {
     return { ok: true, id, scheduled_for: formatLocal(sendAt, opts.timezone), to: who, message: text, ...withFile, tip: "Fica na Agenda do painel, onde dá para cancelar." };
   }
   const r = await sendDirect(id);
+  if (r.ok && "queued" in r) return { ok: true, id, to: who, message: text, ...withFile, tip: r.tip };
   return r.ok ? { ok: true, id, sent_to: who, message: text, ...withFile } : r;
 }
 
@@ -133,6 +136,23 @@ export async function sendDirect(id: string, opts: { notify?: boolean } = {}) {
     [id],
   );
   if (!d) return { ok: false, error: "Essa mensagem já foi enviada ou cancelada." };
+  if (await isOptedOut(d.phone)) {
+    await query("UPDATE direct_messages SET status = 'cancelled', media = NULL WHERE id = $1", [id]);
+    if (opts.notify) await notifyUser(d.user_id, `Não mandei a mensagem agendada: ${d.name ?? `+${d.phone}`} pediu para não receber mensagens do Planejai.`).catch(() => {});
+    return { ok: false, error: OPTED_OUT_ERROR };
+  }
+  // primeiro contato com número novo: espaçado dos outros do servidor; se a fila estiver longa, sai daqui a pouco
+  const wait = await newContactWait(d.phone);
+  if (wait > MAX_PACE_WAIT_MS) {
+    const at = new Date(Date.now() + wait);
+    await query("UPDATE direct_messages SET status = 'scheduled', send_at = $2 WHERE id = $1", [id, at]);
+    await (await getBoss()).send(QUEUES.outbound, { type: "direct", directId: id }, { startAfter: at, retryLimit: 2, retryDelay: 60, singletonKey: `direct:${id}:${at.getTime()}` });
+    return { ok: true, queued: true, tip: `Sai em ${Math.ceil(wait / 60_000)} min: mensagens para números novos saem espaçadas para proteger o WhatsApp.` };
+  }
+  if (wait) await new Promise((r) => setTimeout(r, wait));
+  // primeira mensagem para quem não usa o Planejai: diz como parar de receber (quem não tem saída bloqueia e denuncia)
+  const firstTime = (await isNewContact(d.phone)) && !(await one("SELECT 1 AS ok FROM users WHERE phone = ANY($1) AND status = 'active'", [phoneVariants(d.phone)]));
+  if (firstTime) d.text = `${d.text}\n\n${OPT_OUT_HINT}`;
   try {
     const exists = await findOnWhatsApp(phoneVariants(d.phone));
     if (exists === null) throw new Error(`O número +${d.phone} não tem WhatsApp.`);

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { isOptedOut } from "../../outreach.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { hashPassword, normalizePhone } from "../../accounts.js";
 import { parseAmount } from "../../agent/tools/finance.js";
@@ -159,6 +160,7 @@ export async function registerInternalRoutes(app: FastifyInstance) {
       if ((await hit("internal:send:day", DAY)) > config.INTERNAL_SEND_PER_DAY)
         return reply.code(429).header("Retry-After", "3600").send({ error: `limite de ${config.INTERNAL_SEND_PER_DAY} envios em 24h (INTERNAL_SEND_PER_DAY)` });
       if (!u) {
+        if (await isOptedOut(b.phone!)) return bad(reply, "esse número respondeu SAIR e não recebe mais mensagens", 409);
         if (config.INTERNAL_UNKNOWN_GAP_SECONDS > 0 && (await hit("internal:send:unknown:gap", config.INTERNAL_UNKNOWN_GAP_SECONDS)) > 1)
           return reply.code(429).header("Retry-After", String(config.INTERNAL_UNKNOWN_GAP_SECONDS)).send({ error: `espere ${config.INTERNAL_UNKNOWN_GAP_SECONDS}s entre mensagens para números que não são clientes` });
         if ((await hit("internal:send:unknown:day", DAY)) > config.INVITES_PER_DAY)

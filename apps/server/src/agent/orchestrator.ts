@@ -712,6 +712,12 @@ async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: C
       } else {
         const img = o.outbox.media.get(b.id);
         if (!img) throw new Error(`media ${b.id} não existe`);
+        // áudio de voz: "gravando áudio..." um instante antes, como uma pessoa faria (e não "digitando")
+        if (img.kind === "audio" && img.ptt !== false) {
+          const ms = Math.min(3000, 1000 + (img.seconds ?? 0) * 100);
+          o.channel.setTyping(o.conversation.remote_jid, ms, "recording").catch(() => {});
+          await sleep(o.channel.id === "playground" ? 0 : ms);
+        }
         const r = await o.channel.sendImage(o.conversation.remote_jid, img);
         if (o.keepInDb) await query(
           "INSERT INTO messages (conversation_id, role, content, external_id, media, processed) VALUES ($1, 'assistant', $2, $3, $4, true)",
