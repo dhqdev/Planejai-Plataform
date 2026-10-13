@@ -78,3 +78,13 @@
   .cal-page.fit .cal-week-body { flex: 1; max-height: none; min-height: 0; }
 }
 
+
+/* Finanças, visão geral (2026-10-13, David: "Últimos meses está muito comprida, encurte junto com os outros"):
+   cada cartão do tamanho do que tem dentro, sem esticar até a altura da coluna mais alta */
+@media (min-width: 1024px) and (min-height: 680px) {
+  .fin-page.fit .fin-overview { align-items: start; }
+  .fin-page.fit .fin-col, .fin-page.fit .fin-col-donut { min-height: 0; }
+  .fin-page.fit .fin-trend { flex: 0 0 auto; min-height: 0; }
+  .fin-page.fit .fin-trend .fin-months { flex: none; height: 96px; }
+  .fin-page.fit .fin-donut-card, .fin-page.fit .fin-side-card { flex: 0 0 auto; }
+}
