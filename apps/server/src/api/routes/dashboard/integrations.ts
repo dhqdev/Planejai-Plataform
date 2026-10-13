@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { config } from "../../../config.js";
 import { internalKey } from "../../../events.js";
+import { ownerUserIds, syncAllFor } from "../../../calendar-sync.js";
 import { googleAuthUrl, googleExchangeCode, googleRedirectUri } from "../../../integrations/google.js";
 import { mercadolivreAuthUrl, mercadolivreExchangeCode } from "../../../integrations/mercadolivre.js";
 import { disconnect, getCredentials, getDef, isConnected, listIntegrations, rawCredentials, saveCredentials, setEnabled } from "../../../integrations/registry.js";
@@ -18,6 +19,8 @@ export function integrationCallbackRoutes(app: FastifyInstance) {
     if (req.query.error) return reply.redirect(`${page}?error=${encodeURIComponent(req.query.error)}`);
     try {
       await googleExchangeCode(req.query.code ?? "", userId ?? undefined);
+      // o que já estava na agenda do Planejai vai para o Google (sem segurar a volta para o painel)
+      void (userId ? Promise.resolve([userId]) : ownerUserIds()).then(syncAllFor).catch(() => {});
       return reply.redirect(`${page}?connected=google`);
     } catch (err) {
       return reply.redirect(`${page}?error=${encodeURIComponent((err as Error).message)}`);

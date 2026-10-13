@@ -21,7 +21,8 @@ export const scheduleReminder = defineTool<{
   name: "schedule_reminder",
   description:
     "Lembrete ou mensagem proativa: na hora o CTO escreve a mensagem a partir do intent. in_minutes, at (data/hora) ou cron (recorrente). " +
-    "Compromisso: title curto, tag do assunto e event_at se o aviso sai antes. O resultado mostra o que já tem no dia.",
+    "Compromisso: title curto, tag do assunto e event_at se o aviso sai antes. O resultado mostra o que já tem no dia. " +
+    "Com Google Agenda conectado, o lembrete único já vai para lá sozinho: não chame calendar_create_event junto.",
   parameters: obj(
     {
       intent: {

@@ -3,6 +3,7 @@ import { many, one, query } from "./db/pool.js";
 import { QUEUES, getBoss } from "./queue/boss.js";
 import { cronTooFrequent } from "./cron-limits.js";
 import { formatLocal } from "./time.js";
+import { quietly, syncReminder, unsyncReminder } from "./calendar-sync.js";
 
 /** Lembrete recorrente dispara no máximo a cada 15 min: cada disparo roda o CTO inteiro. */
 export const MIN_REMINDER_INTERVAL_MIN = 15;
@@ -60,16 +61,19 @@ export async function createReminder(opts: {
     ],
   );
   await enqueue(row!.id, first);
+  // Google Agenda conectado: o compromisso aparece lá também
+  if (!opts.cron) await quietly(syncReminder(row!.id));
   return { id: row!.id, dueAt: first, cron: opts.cron ?? null };
 }
 
 export async function cancelReminder(id: string, userId?: string) {
   const r = await one(
-    `UPDATE reminders SET status = 'cancelled' WHERE id = $1 AND status = 'scheduled' ${userId ? "AND user_id = $2" : ""} RETURNING job_id`,
+    `UPDATE reminders SET status = 'cancelled' WHERE id = $1 AND status = 'scheduled' ${userId ? "AND user_id = $2" : ""} RETURNING job_id, user_id, google_event_id`,
     userId ? [id, userId] : [id],
   );
   if (!r) return false;
   if (r.job_id) await (await getBoss()).cancel(QUEUES.reminder, r.job_id).catch(() => {});
+  await quietly(unsyncReminder(r));
   return true;
 }
 
@@ -90,6 +94,7 @@ export async function rescheduleReminder(id: string, at: Date, userId?: string) 
   if (r.job_id) await (await getBoss()).cancel(QUEUES.reminder, r.job_id).catch(() => {});
   await enqueue(id, due);
   if (r.event_at) await query("UPDATE reminders SET event_at = $2 WHERE id = $1", [id, at]);
+  await quietly(syncReminder(id));
   return true;
 }
 
@@ -103,7 +108,8 @@ export async function updateReminderLook(id: string, userId: string, look: { tit
     sets.push(`${col} = $${vals.length}`);
   }
   if (!sets.length) return true;
-  const r = await one(`UPDATE reminders SET ${sets.join(", ")} WHERE id = $1 AND user_id = $2 AND status = 'scheduled' RETURNING id`, vals);
+  const r = await one(`UPDATE reminders SET ${sets.join(", ")} WHERE id = $1 AND user_id = $2 AND status = 'scheduled' RETURNING id, cron`, vals);
+  if (r && !r.cron && look.title !== undefined) await quietly(syncReminder(id));
   return Boolean(r);
 }
 

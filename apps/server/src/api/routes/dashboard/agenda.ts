@@ -95,7 +95,10 @@ export function agendaRoutes(base: FastifyInstance) {
       try {
         const params = new URLSearchParams({ timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "250" });
         const j = await asPerson(person, () => googleApi(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`));
+        // evento que o próprio Planejai mandou para o Google já aparece como lembrete: não duplica
+        const mirrored = new Set(events.map((e) => e.reminderId));
         for (const e of j.items ?? []) {
+          if (mirrored.has(e.extendedProperties?.private?.planejai)) continue;
           const allDay = !e.start?.dateTime;
           events.push({
             id: `g:${e.id}`,
