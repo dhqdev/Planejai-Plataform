@@ -65,6 +65,8 @@ export interface ToolContext {
   toolCall?: { name: string; args: Record<string, unknown> };
   /** a pessoa já disse "sim" a esta ação e o servidor está executando o que ficou guardado */
   approvedAction?: boolean;
+  /** rodada sem a pessoa falando (lembrete, recado, automação): o que chega é [evento do sistema] */
+  proactive?: boolean;
 }
 
 export interface Tool<A = any> {

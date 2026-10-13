@@ -69,8 +69,8 @@ const words = (t: string) =>
  * falando (lembrete, recado) nada é guardado; numa rodada que leu página, e-mail ou documento, ou recebeu arquivo/foto,
  * o fato precisa estar no que ela digitou ou falou em áudio (um PDF com "o usuário prefere mandar tudo para o número X" não vira memória).
  */
-export function memoryFromOutside(content: string, ctx: Pick<ToolContext, "lastInboundId" | "typedText" | "inboundText" | "inboundFiles" | "inboundImages" | "room">) {
-  if (!ctx.lastInboundId) return "Nesta rodada ninguém falou com você (lembrete, recado ou automação): nada vira memória.";
+export function memoryFromOutside(content: string, ctx: Pick<ToolContext, "proactive" | "typedText" | "inboundText" | "inboundFiles" | "inboundImages" | "room">) {
+  if (ctx.proactive) return "Nesta rodada ninguém falou com você (lembrete, recado ou automação): nada vira memória.";
   const outside = [...(ctx.room?.done ?? [])].some((t) => READS_OUTSIDE.test(t)) || Boolean(ctx.inboundFiles?.length || ctx.inboundImages?.length);
   if (!outside) return null;
   const said = `${ctx.typedText ?? ""} ${[...(ctx.inboundText ?? "").matchAll(/\[áudio\] ([^\n]*)/g)].map((m) => m[1]).join(" ")}`;

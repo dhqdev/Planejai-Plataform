@@ -119,10 +119,11 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; sameSentence?: boole
 ];
 
 /** O que a resposta diz ter feito sem a ferramenta ter confirmado (null = tudo certo). */
-export function unbackedClaim(text: string, done: Set<string>): string | null {
+export function unbackedClaim(text: string, done: Set<string>, opts: { event?: boolean } = {}): string | null {
   // pergunta ou condicional ("quer que eu anote?", "se quiser eu apago") não é afirmação
   const sentences = text.split(/(?<=[.!?\n])\s+/).filter((s) => !/\?\s*$/.test(s) && !/\b(se quiser|quer que|posso)\b/i.test(s));
-  const anyAction = [...done].some((t) => !READ_ONLY.test(t));
+  // rodada de [evento do sistema] (recado fechado, lembrete): o "Marcado!" conta o que o sistema já fez
+  const anyAction = opts.event || [...done].some((t) => !READ_ONLY.test(t));
   for (const c of CLAIMS) {
     const hit = sentences.some((s) => c.says.test(s) && (!c.about || c.about.test(s) || (!c.sameSentence && c.about.test(text))));
     if (hit && !c.tools.some((t) => (t === ANY ? anyAction : done.has(t)))) return c.what;

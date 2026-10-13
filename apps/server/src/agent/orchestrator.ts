@@ -436,6 +436,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       typedText: userMsgs.filter((m) => !m.media && (!m.meta?.kind || m.meta.kind === "text")).map((m) => m.content ?? "").join("\n"),
       // lembrete agendado não ganha "já vou ver": a pessoa não perguntou nada agora
       progress: proactive ? undefined : progress,
+      proactive,
     };
     // "manda essa foto pro João" pode vir na mensagem seguinte: a última mídia fica um tempo no Redis
     await rememberInboundMedia(conversationId, ctx.inboundFiles);
@@ -463,7 +464,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     // e "me lembra amanhã às 8h" respondido sem agendar nada (o "combinado" pode não ter verbo de ação nenhum)
     const claim =
       result.text && !result.timedOut
-        ? (unbackedClaim(result.text, ctx.room.done) ??
+        ? (unbackedClaim(result.text, ctx.room.done, { event: proactive }) ??
           (!proactive ? unmetRequest(ctx.inboundText ?? "", result.text, ctx.room.done) : null))
         : null;
     if (claim && !guard.expired) {
@@ -486,7 +487,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
         ],
       }).catch(() => null);
       const still = retry?.text
-        ? (unbackedClaim(retry.text, ctx.room.done) ?? (!proactive ? unmetRequest(ctx.inboundText ?? "", retry.text, ctx.room.done) : null))
+        ? (unbackedClaim(retry.text, ctx.room.done, { event: proactive }) ?? (!proactive ? unmetRequest(ctx.inboundText ?? "", retry.text, ctx.room.done) : null))
         : claim;
       await step.ok({ refeito: Boolean(retry?.text) && !still });
       result.text = retry?.text && !still ? retry.text : `Não consegui concluir isso agora (${claim}), então nada foi feito. Pode me pedir de novo?`;
