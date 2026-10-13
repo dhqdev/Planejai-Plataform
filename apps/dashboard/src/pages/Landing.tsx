@@ -10,7 +10,7 @@ import { GlareHover } from "../reactbits/GlareHover";
 import { ShinyText } from "../reactbits/ShinyText";
 import { Spotlight } from "../reactbits/Spotlight";
 import "../landing.css";
-import { AppScenes, AppsOrbit } from "./LandingApps";
+import { AppScenes, AppsOrbit, AppsRow } from "./LandingApps";
 import { HeroChat, HeroTitle } from "./LandingHero";
 import { TeamScroll } from "./LandingTeam";
 
@@ -441,9 +441,9 @@ export function LandingPage() {
             <span>Planejai</span>
           </a>
           <nav className="lp-links" aria-label="Seções">
+            <a href="#apps">Apps</a>
             <a href="#como-funciona">Como funciona</a>
             <a href="#time">O time</a>
-            <a href="#apps">Apps</a>
             {pricing && <a href="#planos">Planos</a>}
             <a href="#perguntas">Perguntas</a>
           </nav>
@@ -479,12 +479,30 @@ export function LandingPage() {
                     Já tenho conta
                   </a>
                 </div>
+                <AppsRow />
               </div>
               <div className="lp-hero-stage">
                 <HeroChat scene={scene} onScene={setScene} />
               </div>
             </div>
           </Spotlight>
+        </section>
+
+        <section id="apps" className="lp-section la-sec">
+          <div className="lp-wrap la-wrap">
+            <div className="la-head">
+              <Words className="lp-h2" text="Conecta com o que você já usa." />
+              <p className="lp-sub" data-reveal style={{ ["--d" as string]: 2 }}>
+                Você conecta uma vez. Ele usa quando precisa.
+              </p>
+            </div>
+            <div data-reveal style={{ ["--d" as string]: 1 }}>
+              <AppsOrbit />
+            </div>
+          </div>
+          <div className="lp-wrap">
+            <AppScenes />
+          </div>
         </section>
 
         <section id="como-funciona" className="lp-section">
@@ -557,23 +575,6 @@ export function LandingPage() {
               Você fala com o {cto}. Ele chama quem precisa.
             </p>
             <TeamScroll />
-          </div>
-        </section>
-
-        <section id="apps" className="lp-section">
-          <div className="lp-wrap la-wrap">
-            <div className="la-head">
-              <Words className="lp-h2" text="Conecta com o que você já usa." />
-              <p className="lp-sub" data-reveal style={{ ["--d" as string]: 2 }}>
-                Você conecta uma vez. Ele usa quando precisa.
-              </p>
-            </div>
-            <div data-reveal style={{ ["--d" as string]: 1 }}>
-              <AppsOrbit />
-            </div>
-          </div>
-          <div className="lp-wrap">
-            <AppScenes />
           </div>
         </section>
 
