@@ -204,8 +204,25 @@ export async function runToolLoop(opts: {
     const quickOnly = agent === "cto" && said && names.every((n) => QUICK_TOOLS.has(n));
 
     messages.push({ role: "assistant", content: res.message.content ?? null, tool_calls: calls });
+    // a mesma ferramenta chamada mais de uma vez na resposta roda na ordem em que o modelo pediu: com duas
+    // mensagens para mandar, a primeira é a que fica esperando o "sim" (antes as duas corriam juntas e a
+    // segunda às vezes chegava antes na trava de "uma ação por vez")
+    const queue = new Map<string, Promise<unknown>>();
     const results = await Promise.all(
       calls.map(async (call) => {
+        const prev = queue.get(call.function.name);
+        let release!: () => void;
+        queue.set(call.function.name, new Promise<void>((r) => (release = r)));
+        if (prev) await prev;
+        try {
+          return await runCall(call);
+        } finally {
+          release();
+        }
+      }),
+    );
+    async function runCall(call: (typeof calls)[number]) {
+      {
         const tool = byName.get(call.function.name);
         let args: any = {};
         try {
@@ -275,8 +292,8 @@ export async function runToolLoop(opts: {
           if (guard?.expired) return { id: call.id, content: JSON.stringify({ error: "Tempo máximo da tarefa esgotado." }) };
           return { id: call.id, content: JSON.stringify({ error: err instanceof Error ? err.message : String(err) }) };
         }
-      }),
-    );
+      }
+    }
     for (const [i, r] of results.entries()) {
       messages.push({ role: "tool", tool_call_id: r.id, content: r.content.slice(0, 12_000) });
       // pedido de confirmação não é erro: a mesma chamada com o sim tem que passar
