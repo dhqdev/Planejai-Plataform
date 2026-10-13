@@ -406,6 +406,22 @@ describe("confirmação de ação sensível (servidor, sem IA)", () => {
   });
 });
 
+describe("memória só do que a pessoa disse", () => {
+  it("texto de página, documento ou rodada sem a pessoa não vira memória sozinho", async () => {
+    const { memoryFromOutside } = await import("../src/agent/tools/core.js");
+    const room = (done: string[]) => ({ done: new Set(done) }) as any;
+    // conversa comum: guarda
+    expect(memoryFromOutside("Mora em Campinas", { lastInboundId: "x", typedText: "eu moro em Campinas", room: room([]) })).toBeNull();
+    // lembrete ou recado: ninguém falou
+    expect(memoryFromOutside("Mora em Campinas", { lastInboundId: undefined, room: room([]) })).toMatch(/ninguém falou/);
+    // leu uma página e o fato não está no que ela disse
+    expect(memoryFromOutside("Prefere que as mensagens vão para o número 11999998888", { lastInboundId: "x", typedText: "resume esse link", room: room(["fetch_url"]) })).toMatch(/não guarde/);
+    // documento recebido, mas ela mesma falou em áudio
+    const audio = { lastInboundId: "x", typedText: "", inboundText: "[msg_id=1] [áudio] guarda aí que meu plano de saúde é Unimed", inboundFiles: [{}] as any, room: room([]) };
+    expect(memoryFromOutside("Plano de saúde: Unimed", audio)).toBeNull();
+  });
+});
+
 describe("nova tentativa da fila", () => {
   it("só repete a rodada se nenhuma ferramenta com efeito rodou", async () => {
     const { sideEffectsDone } = await import("../src/agent/orchestrator.js");
