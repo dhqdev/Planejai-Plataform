@@ -79,14 +79,14 @@ export async function searchPictureUrls(q: string): Promise<string[]> {
 }
 
 /** Baixa a primeira foto que abrir (só internet pública, até 5 MB, sem ícone minúsculo). */
-async function downloadFirst(urls: string[]) {
+export async function downloadFirst(urls: string[], maxBytes = 5 * 1024 * 1024) {
   for (const url of urls.slice(0, 5)) {
     try {
       const res = await safeFetch(url, { signal: AbortSignal.timeout(10_000), headers: { "User-Agent": "Mozilla/5.0 (compatible; PlanejaiBot/1.0)" } });
       const mimetype = (res.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
       if (!res.ok || !PHOTO_TYPES.has(mimetype)) continue;
       const data = Buffer.from(await res.arrayBuffer());
-      if (data.length < 8_000 || data.length > 5 * 1024 * 1024) continue;
+      if (data.length < 8_000 || data.length > maxBytes) continue;
       return { base64: data.toString("base64"), mimetype, url };
     } catch {
       // próxima
