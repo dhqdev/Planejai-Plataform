@@ -20,6 +20,7 @@ const completion = (content: string | null, tool_calls?: unknown[]) => ({
 });
 
 function fakeOpenRouter(body: any) {
+  if (JSON.stringify(body.messages).includes("input_audio")) return completion("Fechado, chego lá às três");
   const last = body.messages.at(-1);
   const userText = String(body.messages.findLast((m: any) => m.role === "user")?.content ?? "");
   if (last.role === "tool") return completion(String(last.content).includes("confirm") ? "Posso mandar para o Rafael?" : "Pronto!");
@@ -107,6 +108,14 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     expect(chat).toMatchObject({ name: "Rafael", member: false, waiting_you: true });
     expect(chat.log.map((l) => l.from)).toEqual(["nos", "eles"]);
     expect(chat.log[1]!.text).toBe("Recebi, obrigado!");
+
+    // resposta em áudio: chega transcrita, não só "mandou um áudio"
+    await ingest({
+      channel: "playground", remoteJid: `${CLIENT}@s.whatsapp.net`, phone: CLIENT, externalId: `c${++seq}`, kind: "audio", text: "",
+      media: { mimetype: "audio/ogg; codecs=opus", base64: Buffer.from("fake-ogg").toString("base64") }, timestamp: new Date(), raw: {},
+    });
+    expect(sentTexts().at(-1)).toMatch(/\*Rafael\* respondeu:\s+🎤 _áudio:_ Fechado, chego lá às três/);
+    expect(await db.one("SELECT trigger FROM executions WHERE trigger = 'recado' LIMIT 1")).toEqual({ trigger: "recado" });
   });
 
   it("documento de Documentos vai junto numa mensagem agendada e sai como arquivo com legenda", async () => {

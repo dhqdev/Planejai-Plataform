@@ -179,7 +179,7 @@ const audioFormat = (mimetype: string) =>
  * (com extração de comprovantes), documento vira texto (local, sem token) e vídeo vira quadros + fala.
  * O resultado fica em meta e o arquivo pesado sai do banco.
  */
-export async function preprocessMedia(pending: any[], channel: Channel, tracer: Tracer, remoteJid: string) {
+export async function preprocessMedia(pending: any[], channel: Channel, tracer: Tracer, remoteJid: string, opts: { persist?: boolean } = {}) {
   for (const m of pending) {
     const kind = m.meta?.kind;
     if (!m.media || !["audio", "image", "document", "video"].includes(kind)) continue;
@@ -261,6 +261,8 @@ export async function preprocessMedia(pending: any[], channel: Channel, tracer: 
     // o arquivo só serve até aqui; não guarda mídia pesada no banco
     const { base64: _drop, ...mediaMeta } = m.media;
     m.media = mediaMeta;
+    // mídia de quem não está na tabela messages (recado, resposta de contato) não grava no banco
+    if (opts.persist === false) continue;
     if (m.meta.doc_text) await cacheSet(`doc:${m.conversation_id}:${m.id}`, m.meta.doc_text, DOC_CACHE_SECONDS);
     await query("UPDATE messages SET meta = $2, media = $3 WHERE id = $1", [m.id, m.meta, mediaMeta]);
   }

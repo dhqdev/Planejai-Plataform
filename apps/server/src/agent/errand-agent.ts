@@ -122,7 +122,7 @@ export async function runErrandTurn(errandId: string) {
     const withMedia = e.log.map((l, i) => ({ l, i })).filter(({ l }) => l.from === "eles" && l.media);
     if (withMedia.length) {
       const fake = withMedia.map(({ l, i }) => ({ id: `${e.id}:${i}`, role: "user", media: l.media, external_id: l.external_id, content: l.text, meta: { kind: l.kind } }));
-      await preprocessMedia(fake, outboundChannel(), tracer, e.jid);
+      await preprocessMedia(fake, outboundChannel(), tracer, e.jid, { persist: false });
       for (const [k, { i }] of withMedia.entries()) {
         e.log[i] = { ...e.log[i]!, text: describeMessage(fake[k]), media: undefined };
       }

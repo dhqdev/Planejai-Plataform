@@ -1,5 +1,7 @@
 import { normalizePhone } from "./accounts.js";
 import { humanize } from "./agent/humanize.js";
+import { describeMessage, preprocessMedia } from "./agent/media.js";
+import { Tracer } from "./agent/trace.js";
 import { redactSecrets } from "./agent/guard.js";
 import type { InboundMessage } from "./channels/types.js";
 import { many, one, query } from "./db/pool.js";
@@ -208,11 +210,33 @@ export async function handleDirectReply(msg: InboundMessage): Promise<boolean> {
   if (!d) return false;
   if (msg.externalId && (await markSeen(`direct:${msg.channel}:${msg.externalId}`, 48 * 3600)) === false) return true;
   const who = nickname || d.name || msg.pushName || `+${d.phone}`;
-  const body =
-    msg.kind === "text" ? msg.text : msg.text?.trim() ? `${msg.text}\n[mandou ${msg.kind === "image" ? "uma foto" : "um arquivo"} também]` : `[mandou ${msg.kind === "audio" ? "um áudio" : msg.kind === "image" ? "uma foto" : "um arquivo"}]`;
+  const body = msg.kind === "text" ? msg.text : await describeInbound(msg, d.user_id);
   await logContactMessage(d.user_id, d.phone, d.name || msg.pushName || null, "in", String(body ?? ""));
   await notifyUser(d.user_id, `*${who}* respondeu:\n\n${String(body ?? "").slice(0, 2000)}`, undefined, { from: who });
   return true;
+}
+
+/**
+ * Áudio, foto, vídeo ou documento de quem respondeu: transcreve/descreve uma vez (mesmo caminho das mensagens
+ * da pessoa, com custo em Execuções) para o recado chegar legível. Se não der, diz o que veio.
+ */
+async function describeInbound(msg: InboundMessage, userId: string): Promise<string> {
+  const label = msg.kind === "audio" ? "um áudio" : msg.kind === "image" ? "uma foto" : msg.kind === "video" ? "um vídeo" : msg.kind === "sticker" ? "uma figurinha" : "um arquivo";
+  const fallback = msg.text?.trim() ? `${msg.text}\n[mandou ${label} também]` : `[mandou ${label}]`;
+  if (!msg.media || !["audio", "image", "video", "document"].includes(msg.kind)) return fallback;
+  const tracer = await Tracer.start({ trigger: "recado", userId, input: `Resposta com ${label}` });
+  try {
+    const fake = { id: `direct:${msg.externalId}`, role: "user", media: msg.media, external_id: msg.externalId, content: msg.text ?? "", meta: { kind: msg.kind, fileName: msg.media.fileName } };
+    await preprocessMedia([fake], outboundChannel(), tracer, msg.remoteJid, { persist: false });
+    const meta = fake.meta as Record<string, unknown>;
+    const ok = meta.transcript || meta.image_description || meta.video_description || meta.doc_text;
+    const text = ok ? describeMessage(fake).replace(/^\[áudio\] /, "🎤 _áudio:_ ") : fallback;
+    await tracer.finish(text.slice(0, 500));
+    return text;
+  } catch (err) {
+    await tracer.finish(null, (err as Error).message);
+    return fallback;
+  }
 }
 
 /** Resumo para a pessoa, usado no resultado das ferramentas. */
