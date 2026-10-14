@@ -116,3 +116,9 @@
 :root[data-theme="light"] .mascote-tile-label { color: #74746f; }
 :root[data-theme="light"] .mascote-tile.active .mascote-tile-label { color: #141414; }
 :root[data-theme="light"] .mascote-none { color: #b0b0aa; }
+
+/* mascote pequeno (avatar, Conta, listas): sem respirar o tempo todo. Cada respiração redesenha o SVG
+   inteiro (com sombras desfocadas) a cada quadro; com vários na tela o iPad engasgava (2026-10-14) */
+.mascote.m-small:not(.m-walk) .m-life { animation: none; }
+/* contorno nítido no Safari (sem arredondar para o pixel mais próximo durante animações) */
+.mascote { shape-rendering: geometricPrecision; }

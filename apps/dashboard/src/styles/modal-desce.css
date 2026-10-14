@@ -9,7 +9,7 @@
     max-height: max(240px, calc(var(--vvh, 100dvh) + var(--vvtop, 0px) - var(--drop-top, 76px) - 12px));
     width: min(540px, calc(100vw - 24px)); transform-origin: 0 0;
     box-shadow: var(--lg-rim), var(--lg-shadow);
-    animation: none; will-change: transform;
+    animation: none;
   }
   .modal-bg.drop > .modal.wide { width: min(760px, calc(100vw - 24px)); }
   .modal-bg.drop > .modal.confirm { width: min(420px, calc(100vw - 24px)); }

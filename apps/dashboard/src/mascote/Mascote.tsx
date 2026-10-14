@@ -1139,7 +1139,7 @@ export function Mascote({
   return (
     <svg
       ref={svg}
-      className={`mascote ${still ? "m-still" : ""} ${walking ? "m-walk" : ""} ${face.scan ? `m-scan-${face.scan}` : ""} ${className ?? ""}`}
+      className={`mascote ${still ? "m-still" : ""} ${size < 48 ? "m-small" : ""} ${walking ? "m-walk" : ""} ${face.scan ? `m-scan-${face.scan}` : ""} ${className ?? ""}`}
       width={size}
       height={crop ? Math.round((size * 80) / 104) : size}
       viewBox={crop ? cropBox : "0 0 120 120"}
