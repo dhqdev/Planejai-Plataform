@@ -30,6 +30,7 @@ export async function chatCompletion(choice: ModelChoice, req: ChatRequest, atte
   }
   // raciocínio longo é saída cara: baixo em toda chamada, inclusive no último passo (sem ferramentas)
   if (req.modalities) body.modalities = req.modalities;
+  else if (req.reasoning === "off") body.reasoning = { enabled: false, exclude: true };
   else body.reasoning = { effort: "low", exclude: true };
   const temperature = req.temperature ?? choice.temperature;
   if (temperature != null) body.temperature = temperature;

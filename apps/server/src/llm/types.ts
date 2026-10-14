@@ -30,6 +30,8 @@ export interface ChatRequest {
   responseFormat?: Record<string, unknown>;
   /** saídas pedidas ao modelo, ex.: ["image", "text"] para gerar imagem (rota "image") */
   modalities?: string[];
+  /** "off": sem raciocínio (texto longo do redator; o raciocínio comia o teto de saída e o texto voltava vazio) */
+  reasoning?: "off";
   /** cancela a chamada (prazo máximo da execução) */
   signal?: AbortSignal;
 }

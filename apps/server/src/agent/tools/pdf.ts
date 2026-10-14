@@ -110,7 +110,7 @@ function parseChart(t: string): PdfSection["chart"] | undefined {
 /** Escreve as seções numa chamada própria (writeLong): o agente manda só título e brief. */
 async function writeSections(args: PdfArgs, ctx: ToolContext): Promise<PdfSpec> {
   const ask = [`Título: ${args.title}`, args.subtitle && `Subtítulo: ${args.subtitle}`, args.brief && `Pedido: ${args.brief}`].filter(Boolean).join("\n");
-  const spec = { ...parseWriterText(await writeLong(ctx, { name: "texto do PDF", system: WRITER, ask, maxTokens: 6000 })), title: args.title };
+  const spec = { ...parseWriterText(await writeLong(ctx, { name: "texto do PDF", system: WRITER, ask, maxTokens: 8000 })), title: args.title };
   return { ...spec, subtitle: args.subtitle || spec.subtitle, author: args.author, coverImage: args.coverImage || spec.coverImage };
 }
 
