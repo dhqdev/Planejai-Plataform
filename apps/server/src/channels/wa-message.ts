@@ -41,6 +41,13 @@ export function parseWAMessage(d: any, channel: string): InboundMessage | null {
     kind = "document";
     text = doc.caption ?? "";
     media = { mimetype: doc.mimetype ?? "application/octet-stream", fileName: doc.fileName };
+  } else if (m.contactMessage || m.contactsArrayMessage) {
+    // cartão de contato compartilhado: vira texto com nome e número para o assistente poder salvar
+    const cards: any[] = m.contactMessage ? [m.contactMessage] : (m.contactsArrayMessage.contacts ?? []);
+    const lines = cards.slice(0, 50).map(contactCardLine).filter(Boolean);
+    if (!lines.length) return null;
+    kind = "text";
+    text = `[cartão de contato compartilhado]\n${lines.join("\n")}`;
   } else if (m.stickerMessage) {
     kind = "sticker";
   } else if (m.locationMessage) {
@@ -72,4 +79,21 @@ export function parseWAMessage(d: any, channel: string): InboundMessage | null {
     timestamp: d.messageTimestamp ? new Date(Number(d.messageTimestamp?.toNumber?.() ?? d.messageTimestamp) * 1000) : new Date(),
     raw: d,
   };
+}
+
+/** "Marcos: +5519996726445" a partir do cartão (vCard) que o WhatsApp manda; o waid é o número do WhatsApp. */
+export function contactCardLine(card: any): string {
+  const vcard = String(card?.vcard ?? "");
+  const fn = vcard.match(/^FN[^:\r\n]*:(.*)$/m)?.[1]?.trim();
+  const name = String(card?.displayName ?? fn ?? "").trim().slice(0, 80);
+  const phones = new Set<string>();
+  for (const l of vcard.split(/\r?\n/)) {
+    if (!/^(item\d+\.)?TEL/i.test(l)) continue;
+    const waid = l.match(/waid=(\d{8,15})/i)?.[1];
+    const tel = (l.split(":").slice(1).join(":") || "").trim();
+    const num = waid ? `+${waid}` : tel;
+    if (num.replace(/\D/g, "").length >= 8) phones.add(num);
+  }
+  if (!phones.size) return "";
+  return `${name || "(sem nome)"}: ${[...phones].slice(0, 3).join(", ")}`;
 }

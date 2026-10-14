@@ -151,6 +151,10 @@ describe.skipIf(!enabled)("agenda de contatos (e2e)", () => {
     expect((await pb.searchContacts(user.id, "jaoo"))[0]).toMatchObject({ name: expect.stringMatching(/^João/), approximate: true });
     expect(await pb.searchContacts(user.id, "pedro")).toEqual([]);
     await pb.deleteContact(user.id, (await pb.searchContacts(user.id, "mae zera"))[0]!.id);
+    // vários de uma vez pelo chat; o inválido volta em failed sem travar os outros
+    const many: any = await contactSave.run({ contacts: [{ name: "Marcos Vidraceiro", phone: "19 99672-6445" }, { name: "Zuleica", phone: "11 97777-6666" }, { name: "Sem Número", phone: "12" }] }, ctx);
+    expect(many).toMatchObject({ ok: true, saved: [{ phone: "5519996726445" }, { phone: "5511977776666" }], failed: [{ name: "Sem Número" }] });
+    for (const q of ["marcos vidraceiro", "zuleica"]) await pb.deleteContact(user.id, (await pb.searchContacts(user.id, q))[0]!.id);
   });
 
   it("nomes da importação antiga: N cru é remontado, ';;;;' fica no fim como sem nome e dá para renomear", async () => {

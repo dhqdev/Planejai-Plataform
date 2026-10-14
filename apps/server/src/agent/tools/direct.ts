@@ -105,15 +105,35 @@ export const contactsSearch = defineTool<{ query: string }>({
   },
 });
 
-export const contactSave = defineTool<{ name: string; phone: string }>({
+export const contactSave = defineTool<{ name?: string; phone?: string; contacts?: { name: string; phone: string }[] }>({
   name: "contact_save",
-  description: "Cadastra ou corrige um contato na agenda da pessoa (nome e WhatsApp com DDD) quando ela pede (\"salva o número da Ana\") ou passa um número novo. Não precisa de sim.",
-  parameters: obj({ name: { type: "string" }, phone: { type: "string" } }, ["name", "phone"]),
+  description:
+    "Cadastra ou corrige contatos na agenda da pessoa (nome e WhatsApp com DDD) quando ela pede (\"salva o número da Ana\", \"guarda esse contato como Marcos\"), " +
+    "passa um número novo ou compartilha um cartão de contato. Vários de uma vez: use contacts. Não precisa de sim.",
+  parameters: obj({
+    name: { type: "string" },
+    phone: { type: "string" },
+    contacts: {
+      type: "array",
+      description: "para salvar vários de uma vez",
+      items: obj({ name: { type: "string" }, phone: { type: "string" } }, ["name", "phone"]),
+    },
+  }),
   async run(args, ctx) {
-    try {
-      return { ok: true, ...(await saveContact(ctx.user.id, args.name, args.phone)) };
-    } catch (err) {
-      return { ok: false, error: (err as Error).message };
+    const list = [...(args.name || args.phone ? [{ name: args.name ?? "", phone: args.phone ?? "" }] : []), ...(Array.isArray(args.contacts) ? args.contacts : [])].slice(0, 50);
+    if (!list.length) return { ok: false, error: "Faltou o nome e o número." };
+    const saved: { name: string; phone: string }[] = [];
+    const failed: { name: string; phone: string; error: string }[] = [];
+    // um por vez: o mesmo número duas vezes fica com o último nome
+    for (const c of list) {
+      try {
+        saved.push(await saveContact(ctx.user.id, c.name, c.phone));
+      } catch (err) {
+        failed.push({ name: String(c.name ?? ""), phone: String(c.phone ?? ""), error: (err as Error).message });
+      }
     }
+    if (!saved.length) return { ok: false, error: failed.map((f) => `${f.name || f.phone}: ${f.error}`).join("; ") };
+    if (list.length === 1) return { ok: true, ...saved[0]! };
+    return { ok: true, saved, ...(failed.length ? { failed } : {}) };
   },
 });

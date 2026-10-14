@@ -93,7 +93,7 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; sameSentence?: boole
   {
     what: "guardar documento ou nota",
     says: /\b(salvei|guardei)\b/i,
-    tools: ["document_save", "save_memory", "automation_save", "set_budget", "add_transaction", "bill_save", "bill_pay", "card_save"],
+    tools: ["document_save", "save_memory", "contact_save", "shop_save", "automation_save", "set_budget", "add_transaction", "bill_save", "bill_pay", "card_save"],
   },
   {
     what: "enviar mensagem",
@@ -146,6 +146,13 @@ const REQUESTS: { what: string; asks: RegExp; unless: RegExp; tools: string[] }[
     asks: /\b(gastei|paguei|comprei|recebi|ganhei|torrei|guardei)\b[^?\n]{0,60}\d|\b(anot[ae]|lan[cç]a|registr[ae])\b[^?\n]{0,60}(R\$\s?\d|\d\s?(reais|conto|pila)\b)/i,
     unless: /\b(quanto|quais|qual|cad[êe]|mostr\w*|lista\w*|apag\w*|exclu\w*|remov\w*|cancel\w*|corrig\w*|n[ãa]o (anot|lan[cç]))\b/i,
     tools: ["add_transaction", "update_transaction", "bill_pay", "bill_save", "card_invoice_pay", "card_save", "goal_add", "goal_update", "shop_update", "list_transactions", "finance_summary"],
+  },
+  {
+    // "salva o número da Ana", "guarde esse contato como Marcos", "adiciona o João nos contatos"
+    what: "salvar contato",
+    asks: /\b(salv|guard|cadastr|adicion)\w*\b[^?\n]{0,60}\b(contatos?|n[uú]meros?|telefones?|whats(app)?|zap)\b|\b(contatos?|n[uú]meros?)\b[^?\n]{0,40}\b(salv|guard|cadastr|adicion)\w*/i,
+    unless: /\b(apag\w*|exclu\w*|remov\w*|tir[ae]|quais|qual|cad[êe]|lista\w*|mostr\w*|n[ãa]o (salv|guard))\b/i,
+    tools: ["contact_save", "contacts_search"],
   },
 ];
 

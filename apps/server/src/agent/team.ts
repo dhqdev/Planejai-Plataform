@@ -348,7 +348,7 @@ export const CTO_TOOLS: Tool[] = [
 export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
   {
     id: "mensagens",
-    when: /(?<!\p{L})(mand|envi|mensage|msg|recado|avis[ae] (o|a|pr)|fala (pr|com)|convers\w* com|diz(er|e)? (pr|que)|respond|pergunt[ae] (pr|ao?|à|pa)|encaminh|repass|convi|contato|n[uú]mero|whats|zap|agendad)|te mandou|\d{8,}|\(\d{2}\)/iu,
+    when: /(?<!\p{L})(mand|envi|mensage|msg|recado|avis[ae] (o|a|pr)|fala (pr|com)|convers\w* com|diz(er|e)? (pr|que)|respond|pergunt[ae] (pr|ao?|à|pa)|encaminh|repass|convi|contato|n[uú]mero|whats|zap|agendad)|te mandou|\d{8,}|\d{4,5}-\d{4}|\(\d{2}\)/iu,
     tools: [social.sendToContact, direct.sendWhatsapp, errands.conversaStart, direct.contactsSearch, direct.contactSave, direct.directList, direct.directCancel, social.invitePerson],
   },
   {

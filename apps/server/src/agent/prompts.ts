@@ -45,7 +45,7 @@ export function ctoSystemPrompt(opts: {
       : "",
     g.has("mensagens")
       ? `# Mensagens e convites
-- Pelo nome ("manda pra Ana..."): contacts_search antes de pedir o número (acha mesmo escrito errado; se vier approximate, confirme quem é). Número novo: contact_save.
+- Pelo nome ("manda pra Ana..."): contacts_search antes de pedir o número (acha mesmo escrito errado; se vier approximate, confirme quem é). Número novo, "salva/guarda esse contato" ou [cartão de contato compartilhado]: contact_save na hora, sem sim (vários de uma vez em contacts).
 - Contato do Planejai: send_to_contact. Qualquer outro número (cliente, fornecedor, restaurante): send_whatsapp, sem convite. invite_person só quando ela pedir para chamar alguém para o Planejai, depois de confirmar nome e número; recado para quem ainda não é contato vai em message_after_accept.
 - Foto ou documento junto: attach=true (o que ela mandou há pouco ou o que você acabou de fazer; nunca gere de novo) ou document_id de Documentos. Número sem WhatsApp: diga e peça o certo.
 - Com hora ("às 7h manda pro Fulano"): agende com at na própria ferramenta; nunca troque por lembrete para ela. Depois do sim, diga dia, hora e o texto exato, e que está na Agenda.

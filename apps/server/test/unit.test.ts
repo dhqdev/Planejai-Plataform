@@ -313,6 +313,32 @@ describe("compactOldToolResults", () => {
 });
 
 describe("trava: dizer que fez sem ter feito", () => {
+  it("salvar contato pelo chat: o salvei vale com contact_save e o pedido cobra o salvamento", async () => {
+    const { unbackedClaim, unmetRequest } = await import("../src/agent/claims.js");
+    // 14/10: "19 99672-6445 guarde esse contato como marcos" salvou e mesmo assim caiu em "nada foi feito"
+    expect(unbackedClaim("Salvei o Marcos nos seus contatos ✅", new Set(["contact_save"]))).toBeNull();
+    expect(unbackedClaim("Salvei o Marcos nos seus contatos ✅", new Set())).toBe("guardar documento ou nota");
+    const asked = "19 99672-6445 guarde esse contato como marcos";
+    expect(unmetRequest(asked, "Pode deixar 👍", new Set())).toBe("salvar contato");
+    expect(unmetRequest(asked, "Salvei ✅", new Set(["contact_save"]))).toBeNull();
+    expect(unmetRequest("salva o número da Ana: 11 98888-7777", "Ok", new Set())).toBe("salvar contato");
+    expect(unmetRequest("quais contatos eu tenho salvos?", "Você tem 3", new Set())).toBeNull();
+    expect(unmetRequest("apaga o contato do Marcos", "Ok", new Set())).toBeNull();
+  });
+
+  it("cartão de contato do WhatsApp vira texto com nome e número", async () => {
+    const { parseWAMessage } = await import("../src/channels/wa-message.js");
+    const vcard = "BEGIN:VCARD\nVERSION:3.0\nN:;Marcos;;;\nFN:Marcos\nitem1.TEL;waid=5519996726445:+55 19 99672-6445\nitem1.X-ABLabel:Celular\nEND:VCARD";
+    const one = parseWAMessage({ key: { id: "1", remoteJid: "5511999999999@s.whatsapp.net" }, message: { contactMessage: { displayName: "Marcos", vcard } } }, "baileys");
+    expect(one?.kind).toBe("text");
+    expect(one?.text).toContain("Marcos: +5519996726445");
+    const many = parseWAMessage(
+      { key: { id: "2", remoteJid: "5511999999999@s.whatsapp.net" }, message: { contactsArrayMessage: { contacts: [{ displayName: "Marcos", vcard }, { displayName: "Ana", vcard: "BEGIN:VCARD\nFN:Ana\nTEL;TYPE=CELL:(11) 98888-7777\nEND:VCARD" }] } } },
+      "baileys",
+    );
+    expect(many?.text.split("\n")).toEqual(["[cartão de contato compartilhado]", "Marcos: +5519996726445", "Ana: (11) 98888-7777"]);
+  });
+
   it("pega afirmação sem ferramenta e libera quando a ferramenta rodou ou é pergunta", async () => {
     const { unbackedClaim } = await import("../src/agent/claims.js");
     expect(unbackedClaim("Anotei os 4 ✅ Padaria R$ 8,20", new Set())).toBe("lançar gasto ou receita");
