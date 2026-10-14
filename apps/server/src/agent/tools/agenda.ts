@@ -1,7 +1,7 @@
 import { describeDirect, listDirect } from "../../direct.js";
 import { googleApi } from "../../integrations/google.js";
 import { resolveTag } from "../../agenda-tags.js";
-import { cancelReminder, createReminder, listReminders, reminderOccurrences, rescheduleReminder } from "../../reminders.js";
+import { cancelReminder, createReminder, listReminders, reminderOccurrences, retimeReminder } from "../../reminders.js";
 import { formatLocal, parseLocalDateTime } from "../../time.js";
 import { cancelAlarm, createAlarm, listAlarms } from "../../alarms.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
@@ -16,12 +16,13 @@ export const scheduleReminder = defineTool<{
   cron?: string;
   title?: string;
   event_at?: string;
+  before_minutes?: number;
   tag?: string;
 }>({
   name: "schedule_reminder",
   description:
     "Lembrete ou mensagem proativa: na hora o CTO escreve a mensagem a partir do intent. in_minutes, at (data/hora) ou cron (recorrente). " +
-    "Compromisso: title curto, tag do assunto e event_at se o aviso sai antes. O resultado mostra o que já tem no dia. " +
+    "Compromisso: title curto, tag do assunto, event_at e before_minutes se o aviso sai antes. O resultado mostra o que já tem no dia. " +
     "Com Google Agenda conectado, o lembrete único já vai para lá sozinho: não chame calendar_create_event junto.",
   parameters: obj(
     {
@@ -34,6 +35,7 @@ export const scheduleReminder = defineTool<{
       cron: { type: "string", description: "5 campos, fuso da pessoa, ex.: 0 8 * * 1-5" },
       title: { type: "string", description: "Nome na agenda, 2 a 5 palavras (ex.: Veterinário do Thor)" },
       event_at: { type: "string", description: "Hora do compromisso, se diferente do aviso" },
+      before_minutes: { type: "number", description: "Avisar quantos minutos antes do event_at (no lugar de at)" },
       tag: { type: "string", description: "Assunto em 1 palavra (Saúde, Trabalho, Pet...); reaproveita as da pessoa" },
     },
     ["intent"],
@@ -43,6 +45,7 @@ export const scheduleReminder = defineTool<{
     if (args.in_minutes != null) dueAt = new Date(Date.now() + args.in_minutes * 60_000);
     else if (args.at) dueAt = parseLocalDateTime(args.at, ctx.timezone);
     const eventAt = args.event_at && !args.cron ? parseLocalDateTime(args.event_at, ctx.timezone) : null;
+    if (eventAt && args.before_minutes != null && args.before_minutes > 0) dueAt = new Date(eventAt.getTime() - args.before_minutes * 60_000);
     if (!dueAt && eventAt) dueAt = eventAt;
     const tag = await resolveTag(ctx.user.id, args.tag, `${args.title ?? ""} ${args.intent}`).catch(() => null);
     const r = await createReminder({
@@ -111,17 +114,28 @@ export const cancelReminderTool = defineTool<{ id: string }>({
   },
 });
 
-export const rescheduleReminderTool = defineTool<{ id: string; at: string }>({
+export const rescheduleReminderTool = defineTool<{ id: string; at?: string; before_minutes?: number }>({
   name: "reschedule_reminder",
-  description: "Muda o horário de um lembrete único (id de list_reminders). Recorrente: cancele e crie de novo com o cron novo.",
+  description:
+    "Muda um lembrete único (id de list_reminders): at move o compromisso (o aviso anda junto); before_minutes muda só a antecedência do aviso " +
+    '("me lembra 1h antes" = 60, sem mexer no compromisso). Confirme com o que o resultado devolver. Recorrente: cancele e crie de novo.',
   parameters: obj(
-    { id: { type: "string" }, at: { type: "string", description: "Nova data/hora local AAAA-MM-DDTHH:MM (do compromisso, se tiver; o aviso anda junto)" } },
-    ["id", "at"],
+    {
+      id: { type: "string" },
+      at: { type: "string", description: "Nova data/hora local AAAA-MM-DDTHH:MM do compromisso (ou do lembrete, se não tiver)" },
+      before_minutes: { type: "number", description: "Avisar quantos minutos antes do compromisso (0 = na hora)" },
+    },
+    ["id"],
   ),
   async run(args, ctx) {
-    const at = parseLocalDateTime(args.at, ctx.timezone);
-    const ok = await rescheduleReminder(args.id, at, ctx.user.id);
-    return ok ? { ok, next_local: formatLocal(at, ctx.timezone) } : { ok, error: "Lembrete não encontrado ou já disparado" };
+    if (!args.at && args.before_minutes == null) return { ok: false, error: "Diga o novo horário (at) ou a antecedência (before_minutes)" };
+    const at = args.at ? parseLocalDateTime(args.at, ctx.timezone) : undefined;
+    const r = await retimeReminder(args.id, ctx.user.id, { at, beforeMin: args.before_minutes });
+    if (!r) return { ok: false, error: "Lembrete não encontrado ou já disparado" };
+    // o que ficou gravado: a confirmação fala isso, não o pedido
+    return r.beforeMin > 0
+      ? { ok: true, event_local: formatLocal(r.eventAt, ctx.timezone), remind_local: formatLocal(r.dueAt, ctx.timezone), minutes_before: r.beforeMin }
+      : { ok: true, remind_local: formatLocal(r.dueAt, ctx.timezone) };
   },
 });
 

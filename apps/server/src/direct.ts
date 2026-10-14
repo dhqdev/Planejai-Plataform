@@ -193,6 +193,18 @@ export async function hideDirect(userId: string, id: string) {
   return r ? { ok: true } : { ok: false, error: "Não achei essa mensagem." };
 }
 
+/** Muda o dia e a hora de uma mensagem agendada (agenda do painel): cancela o envio antigo na fila e agenda o novo. */
+export async function rescheduleDirect(userId: string, id: string, at: Date) {
+  if (at.getTime() < Date.now() + 60_000) return { ok: false as const, error: "Escolha um horário daqui a pelo menos 1 minuto." };
+  const r = await one("UPDATE direct_messages SET send_at = $3 WHERE id::text = $1 AND user_id = $2 AND status = 'scheduled' RETURNING id", [id, userId, at]);
+  if (!r) return { ok: false as const, error: "Não achei essa mensagem agendada (já saiu ou foi cancelada)." };
+  const boss = await getBoss();
+  const old = await many<{ id: string }>("SELECT id FROM pgboss.job WHERE name = $1 AND data->>'directId' = $2 AND state IN ('created', 'retry')", [QUEUES.outbound, r.id]);
+  for (const j of old) await boss.cancel(QUEUES.outbound, j.id).catch(() => {});
+  await boss.send(QUEUES.outbound, { type: "direct", directId: r.id }, { startAfter: at, retryLimit: 2, retryDelay: 60, singletonKey: `direct:${r.id}:${at.getTime()}` });
+  return { ok: true as const };
+}
+
 export async function cancelDirect(userId: string, id: string) {
   const r = await one("UPDATE direct_messages SET status = 'cancelled', media = NULL WHERE id::text = $1 AND user_id = $2 AND status = 'scheduled' RETURNING id", [id, userId]);
   return r ? { ok: true } : { ok: false, error: "Não achei essa mensagem agendada (já saiu ou foi cancelada)." };

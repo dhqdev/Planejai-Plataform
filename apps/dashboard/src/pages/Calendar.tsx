@@ -796,6 +796,21 @@ function MessageDetail({ ev, onClose, onChanged }: { ev: Ev; onClose: () => void
   const s = new Date(ev.start);
   const [busy, setBusy] = useState(false);
   const scheduled = ev.status === "scheduled";
+  const [when, setWhen] = useState({ date: key(s), time: hhmm(s) });
+  const [error, setError] = useState<string | null>(null);
+  const moved = when.date !== key(s) || when.time !== hhmm(s);
+  const reschedule = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/direct/${ev.directId}`, { method: "PATCH", json: { at: new Date(`${when.date}T${when.time}:00`).toISOString() } });
+      haptic(12);
+      onChanged();
+    } catch (e) {
+      setBusy(false);
+      setError((e as Error).message);
+    }
+  };
   const cancel = async () => {
     const ok = await confirmDialog(
       scheduled
@@ -819,42 +834,117 @@ function MessageDetail({ ev, onClose, onChanged }: { ev: Ev; onClose: () => void
       onClose={onClose}
       footer={
         ev.status === "sending" ? undefined : (
-          <button className="btn btn-danger" disabled={busy} onClick={cancel}><Icon name="trash" size={16} /> {scheduled ? "Cancelar envio" : "Excluir"}</button>
+          <>
+            <button className="btn btn-danger" disabled={busy} onClick={cancel}><Icon name="trash" size={16} /> {scheduled ? "Cancelar envio" : "Excluir"}</button>
+            {moved && <button className="btn btn-primary" disabled={busy} onClick={reschedule}>{busy ? "Salvando…" : "Salvar"}</button>}
+          </>
         )
       }
     >
+      <ErrorBox error={error} />
       <dl className="kv">
         <dt>Para</dt>
         <dd>{ev.person}</dd>
-        <dt>Quando</dt>
-        <dd>{cap(s.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }))}, {hhmm(s)}</dd>
+        {!scheduled && (<><dt>Quando</dt><dd>{cap(s.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }))}, {hhmm(s)}</dd></>)}
       </dl>
+      {scheduled && (
+        <div className="grid grid-2" style={{ gap: 10 }}>
+          <div className="field"><label htmlFor="msg-date">Dia</label><DateField id="msg-date" title="Dia do envio" value={when.date} onChange={(date) => setWhen({ ...when, date })} /></div>
+          <div className="field"><label htmlFor="msg-time">Hora</label><TimeField id="msg-time" title="Hora do envio" value={when.time} onChange={(time) => setWhen({ ...when, time })} /></div>
+        </div>
+      )}
       <p className="cal-msg-text">{ev.intent}</p>
     </Modal>
   );
 }
 
+const LEADS = [0, 10, 30, 60, 1440];
+const leadLabel = (m: number) => (m === 0 ? "Na hora" : m % 1440 === 0 ? `${m / 1440} dia${m > 1440 ? "s" : ""} antes` : m % 60 === 0 ? `${m / 60} h antes` : `${m} min antes`);
+const PANEL_SUFFIX = " (criado pelo painel)";
+
+/** Lembrete, compromisso ou evento do Google: tudo editável (dia, hora, aviso, nome, detalhes, tag) e dá para excluir. */
 function EventDetail({ ev, tags, readonly, onClose, onChanged }: { ev: Ev; tags: Tag[]; readonly: boolean; onClose: () => void; onChanged: () => void }) {
   const s = new Date(ev.start);
+  const e = ev.end ? new Date(ev.end) : new Date(s.getTime() + 3600_000);
   const [busy, setBusy] = useState(false);
-  const editable = ev.kind === "reminder" && !readonly;
-  const [look, setLook] = useState({ title: ev.title, tag: ev.tag ?? "", color: ev.color ?? null });
-  const dirty = look.title.trim() !== ev.title || look.tag.trim() !== (ev.tag ?? "") || look.color !== (ev.color ?? null);
+  const [error, setError] = useState<string | null>(null);
+  const isReminder = ev.kind === "reminder" && !!ev.reminderId;
+  const isGoogle = ev.kind === "google" && ev.id.startsWith("g:");
+  const editable = !readonly && (isReminder || isGoogle);
+  const details = (ev.intent ?? "").endsWith(PANEL_SUFFIX) ? ev.intent!.slice(0, -PANEL_SUFFIX.length) : ev.intent ?? "";
+  const lead0 = ev.remindAt ? Math.max(0, Math.round((s.getTime() - new Date(ev.remindAt).getTime()) / 60_000)) : 0;
+  const init = {
+    title: ev.title,
+    details: details !== ev.title ? details : "",
+    date: key(s),
+    time: hhmm(s),
+    end: hhmm(e),
+    lead: lead0,
+    location: ev.location ?? "",
+    tag: ev.tag ?? "",
+    color: ev.color ?? null,
+  };
+  const [f, setF] = useState(init);
+  const dirty = (Object.keys(init) as (keyof typeof init)[]).some((k) => (typeof f[k] === "string" ? (f[k] as string).trim() : f[k]) !== init[k]);
+  const when = (date: string, time: string) => new Date(`${date}T${time}:00`);
   const save = async () => {
     setBusy(true);
+    setError(null);
     try {
-      const json: Record<string, unknown> = {};
-      if (look.title.trim() !== ev.title) json.title = look.title.trim();
-      if (look.tag.trim() !== (ev.tag ?? "")) json.tag = look.tag.trim() || null;
-      if (look.color && look.color !== ev.color) json.color = look.color;
-      await api(`/api/reminders/${ev.reminderId}`, { method: "PATCH", json });
+      if (isReminder) {
+        const json: Record<string, unknown> = {};
+        if (f.title.trim() !== init.title) json.title = f.title.trim();
+        if (f.details.trim() !== init.details) {
+          // sem detalhes, o próprio título vira o texto que o assistente lê na hora do aviso
+          const text = f.details.trim() || f.title.trim();
+          json.intent = (ev.intent ?? "").endsWith(PANEL_SUFFIX) ? text + PANEL_SUFFIX : text;
+        } else if (!init.details && f.title.trim() !== init.title && (ev.intent ?? "").endsWith(PANEL_SUFFIX)) json.intent = f.title.trim() + PANEL_SUFFIX;
+        if (f.tag.trim() !== init.tag) json.tag = f.tag.trim() || null;
+        if (f.color && f.color !== init.color) json.color = f.color;
+        if (f.date !== init.date || f.time !== init.time) json.at = when(f.date, f.time).toISOString();
+        if (f.lead !== init.lead) json.before_min = f.lead;
+        await api(`/api/reminders/${ev.reminderId}`, { method: "PATCH", json });
+      } else {
+        const json: Record<string, unknown> = { title: f.title.trim(), location: f.location.trim() };
+        if (ev.allDay) Object.assign(json, { allDay: true, date: f.date });
+        else {
+          const start = when(f.date, f.time);
+          let end = when(f.date, f.end);
+          if (end <= start) end = new Date(end.getTime() + 86400_000); // terminou depois da meia-noite
+          Object.assign(json, { start: start.toISOString(), end: end.toISOString() });
+        }
+        await api(`/api/calendar/google/${encodeURIComponent(ev.id.slice(2))}`, { method: "PATCH", json });
+      }
       haptic(12);
       onChanged();
-    } catch (e) {
+    } catch (err) {
       setBusy(false);
-      void alertDialog("Não deu para salvar", (e as Error).message);
+      setError((err as Error).message);
     }
   };
+  const remove = async () => {
+    const ok = await confirmDialog(
+      isGoogle
+        ? { title: "Excluir este evento?", body: `“${ev.title}” some também do seu Google Agenda.`, confirmLabel: "Excluir", cancelLabel: "Manter", danger: true }
+        : {
+            title: ev.recurring ? "Excluir todas as repetições?" : "Excluir este lembrete?",
+            body: ev.recurring ? `“${ev.title}” deixa de repetir e nenhum aviso futuro é enviado.` : `“${ev.title}” não será mais enviado no WhatsApp.`,
+            confirmLabel: "Excluir",
+            cancelLabel: "Manter",
+            danger: true,
+          },
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await api(isGoogle ? `/api/calendar/google/${encodeURIComponent(ev.id.slice(2))}` : `/api/reminders/${ev.reminderId}`, { method: "DELETE" });
+      onChanged();
+    } catch (err) {
+      setBusy(false);
+      void alertDialog("Não deu para excluir", (err as Error).message);
+    }
+  };
+  const leads = LEADS.includes(lead0) ? LEADS : [...LEADS, lead0].sort((a, b) => a - b);
   return (
     <Modal
       title={ev.kind === "google" ? "Evento" : ev.kind === "holiday" ? "Feriado" : ev.remindAt ? "Compromisso" : "Lembrete"}
@@ -863,31 +953,11 @@ function EventDetail({ ev, tags, readonly, onClose, onChanged }: { ev: Ev; tags:
       footer={
         editable ? (
           <>
-            <button
-              className="btn btn-danger"
-              disabled={busy}
-              onClick={async () => {
-                const ok = await confirmDialog({
-                  title: ev.recurring ? "Excluir todas as repetições?" : "Excluir este lembrete?",
-                  body: ev.recurring ? `“${ev.title}” deixa de repetir e nenhum aviso futuro é enviado.` : `“${ev.title}” não será mais enviado no WhatsApp.`,
-                  confirmLabel: "Excluir",
-                  cancelLabel: "Manter",
-                  danger: true,
-                });
-                if (!ok) return;
-                setBusy(true);
-                try {
-                  await api(`/api/reminders/${ev.reminderId}`, { method: "DELETE" });
-                  onChanged();
-                } catch (e) {
-                  setBusy(false);
-                  void alertDialog("Não deu para excluir", (e as Error).message);
-                }
-              }}
-            >
+            <button className="btn btn-danger" disabled={busy} onClick={remove}>
               <Icon name="trash" size={16} /> Excluir
             </button>
-            {dirty && <button className="btn btn-primary" disabled={busy || !look.title.trim()} onClick={save}>{busy ? "Salvando…" : "Salvar"}</button>}
+            {isGoogle && ev.link && !dirty && <a className="btn" href={ev.link} target="_blank" rel="noreferrer"><Icon name="external" size={16} /> Abrir no Google</a>}
+            {dirty && <button className="btn btn-primary" disabled={busy || !f.title.trim()} onClick={save}>{busy ? "Salvando…" : "Salvar"}</button>}
           </>
         ) : ev.link ? (
           <a className="btn" href={ev.link} target="_blank" rel="noreferrer"><Icon name="external" size={16} /> Abrir no Google</a>
@@ -895,30 +965,67 @@ function EventDetail({ ev, tags, readonly, onClose, onChanged }: { ev: Ev; tags:
       }
     >
       {editable ? (
-        <div className="field">
-          <label htmlFor="ev-title">Título</label>
-          <input id="ev-title" name="title" className="input" maxLength={80} value={look.title} onChange={(e) => setLook({ ...look, title: e.target.value })} />
-        </div>
+        <>
+          <ErrorBox error={error} />
+          <div className="field">
+            <label htmlFor="ev-title">{isGoogle ? "Nome" : "Título"}</label>
+            <input id="ev-title" name="title" className="input" maxLength={isGoogle ? 200 : 80} value={f.title} onChange={(x) => setF({ ...f, title: x.target.value })} />
+          </div>
+          {isReminder && (
+            <div className="field">
+              <label htmlFor="ev-details">Detalhes</label>
+              <textarea id="ev-details" name="details" className="input" rows={2} maxLength={1000} value={f.details} placeholder="O que o assistente precisa saber na hora do aviso" onChange={(x) => setF({ ...f, details: x.target.value })} />
+            </div>
+          )}
+          {ev.recurring ? (
+            <p className="muted" style={{ fontSize: 13, margin: 0 }}>Este lembrete repete. Para mudar a repetição ou o horário, peça no WhatsApp.</p>
+          ) : (
+            <div className="grid grid-2" style={{ gap: 10 }}>
+              <div className="field"><label htmlFor="ev-date">Dia</label><DateField id="ev-date" title="Dia" value={f.date} onChange={(date) => setF({ ...f, date })} /></div>
+              {!ev.allDay && <div className="field"><label htmlFor="ev-time">{isGoogle ? "Começa" : "Hora"}</label><TimeField id="ev-time" title="Hora" value={f.time} onChange={(time) => setF({ ...f, time })} /></div>}
+              {isGoogle && !ev.allDay && <div className="field"><label htmlFor="ev-end">Termina</label><TimeField id="ev-end" title="Termina" value={f.end} onChange={(end) => setF({ ...f, end })} /></div>}
+            </div>
+          )}
+          {isReminder && !ev.recurring && (
+            <div className="field">
+              <span className="errand-custom-label">Aviso no WhatsApp</span>
+              <div className="seg" role="radiogroup" aria-label="Aviso no WhatsApp" style={{ flexWrap: "wrap" }}>
+                {leads.map((m) => (
+                  <button type="button" key={m} role="radio" aria-checked={f.lead === m} className={f.lead === m ? "active" : ""} onClick={() => { haptic(5); setF({ ...f, lead: m }); }}>
+                    {leadLabel(m)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {isGoogle && (
+            <div className="field">
+              <label htmlFor="ev-loc">Local</label>
+              <input id="ev-loc" name="location" className="input" maxLength={300} value={f.location} onChange={(x) => setF({ ...f, location: x.target.value })} />
+            </div>
+          )}
+          {isReminder && <TagPicker tags={tags} tag={f.tag} color={f.color} onChange={(tag, color) => setF({ ...f, tag, color })} />}
+        </>
       ) : (
-        <p className="cal-detail-title">
-          {ev.color && <span className="tag-dot" style={{ background: ev.color }} />} {ev.title}
-        </p>
+        <>
+          <p className="cal-detail-title">
+            {ev.color && <span className="tag-dot" style={{ background: ev.color }} />} {ev.title}
+          </p>
+          <dl className="kv">
+            <dt>Quando</dt>
+            <dd>
+              {cap(s.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }))}
+              {ev.allDay ? ", dia todo" : `, ${hhmm(s)}${ev.end && ev.kind === "reminder" ? ` a ${hhmm(new Date(ev.end))}` : ""}`}
+            </dd>
+            {ev.remindAt && (<><dt>Aviso</dt><dd>no WhatsApp às {hhmm(new Date(ev.remindAt))}{sameDay(new Date(ev.remindAt), s) ? "" : ` de ${new Date(ev.remindAt).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}`}</dd></>)}
+            {ev.recurring && (<><dt>Repete</dt><dd>sim, esta é a próxima</dd></>)}
+            {ev.tag && (<><dt>Tag</dt><dd>{ev.tag}</dd></>)}
+            {ev.person && (<><dt>Pessoa</dt><dd>{ev.person}</dd></>)}
+            {ev.location && (<><dt>Local</dt><dd>{ev.location}</dd></>)}
+            {details && details !== ev.title && (<><dt>Detalhes</dt><dd>{details}</dd></>)}
+          </dl>
+        </>
       )}
-      <dl className="kv">
-        <dt>Quando</dt>
-        <dd>
-          {cap(s.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }))}
-          {ev.allDay ? ", dia todo" : `, ${hhmm(s)}${ev.end && ev.kind === "reminder" ? ` a ${hhmm(new Date(ev.end))}` : ""}`}
-        </dd>
-        {ev.remindAt && (<><dt>Aviso</dt><dd>no WhatsApp às {hhmm(new Date(ev.remindAt))}{sameDay(new Date(ev.remindAt), s) ? "" : ` de ${new Date(ev.remindAt).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}`}</dd></>)}
-        {ev.recurring && (<><dt>Repete</dt><dd>sim, esta é a próxima</dd></>)}
-        {!editable && ev.tag && (<><dt>Tag</dt><dd>{ev.tag}</dd></>)}
-        {ev.person && (<><dt>Pessoa</dt><dd>{ev.person}</dd></>)}
-        {ev.location && (<><dt>Local</dt><dd>{ev.location}</dd></>)}
-        {ev.intent && ev.intent !== ev.title && (<><dt>Detalhes</dt><dd>{ev.intent.replace(/ \(criado pelo painel\)$/, "")}</dd></>)}
-      </dl>
-      {editable && <TagPicker tags={tags} tag={look.tag} color={look.color} onChange={(tag, color) => setLook({ ...look, tag, color })} />}
-      {editable && !ev.recurring && <p className="muted" style={{ fontSize: 13, margin: 0 }}>Para mudar o horário, arraste no calendário (no celular, segure e arraste).</p>}
     </Modal>
   );
 }

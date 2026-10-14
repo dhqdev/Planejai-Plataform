@@ -420,7 +420,7 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(created.statusCode).toBe(200);
     const later = new Date(at.getTime() + 3600_000);
     const moved = await app.inject({ method: "PATCH", url: `/api/reminders/${created.json().id}`, headers: { cookie: adm }, payload: { at: later.toISOString() } });
-    expect(moved.json()).toEqual({ ok: true });
+    expect(moved.json()).toMatchObject({ ok: true, beforeMin: 0 });
     const range = `from=${new Date().toISOString()}&to=${new Date(Date.now() + 7 * 86400_000).toISOString()}`;
     const cal = (await app.inject({ method: "GET", url: `/api/calendar?${range}`, headers: { cookie: adm } })).json();
     const ev = cal.events.find((e: any) => e.title.startsWith("Levar o cachorro"));

@@ -78,38 +78,55 @@ export async function cancelReminder(id: string, userId?: string) {
 }
 
 /**
- * Muda o horário de um lembrete único (arrastar no calendário). `at` é o horário que aparece na agenda: o do
- * compromisso quando ele tem um; o aviso anda junto, com a mesma antecedência.
+ * Muda o horário de um lembrete único. `at` é o horário que aparece na agenda (o do compromisso, quando tem um);
+ * `beforeMin` é a antecedência do aviso no WhatsApp (0 = avisa na hora). O que não vier fica como estava:
+ * mudar só `at` leva o aviso junto, com a mesma antecedência; mudar só `beforeMin` não mexe no compromisso.
+ * Devolve o que ficou gravado, para a confirmação mostrar exatamente isso.
  */
-export async function rescheduleReminder(id: string, at: Date, userId?: string) {
-  if (at.getTime() < Date.now() - 60_000) throw new Error("Esse horário já passou");
+export async function retimeReminder(id: string, userId: string | undefined, ch: { at?: Date; beforeMin?: number }) {
   const r = await one(
     `SELECT job_id, cron, due_at, event_at FROM reminders WHERE id = $1 AND status = 'scheduled' ${userId ? "AND user_id = $2" : ""}`,
     userId ? [id, userId] : [id],
   );
-  if (!r) return false;
-  if (r.cron) throw new Error("Lembrete recorrente: peça a mudança no WhatsApp");
-  const lead = r.event_at ? Math.max(0, new Date(r.event_at).getTime() - new Date(r.due_at).getTime()) : 0;
-  const due = new Date(Math.max(at.getTime() - lead, Date.now() + 5_000));
+  if (!r) return null;
+  if (r.cron) throw new Error("Lembrete que repete: o horário muda pelo WhatsApp (peça para trocar a repetição)");
+  const event = ch.at ?? new Date(r.event_at ?? r.due_at);
+  if (Number.isNaN(event.getTime())) throw new Error("Data inválida");
+  if (event.getTime() < Date.now() - 60_000) throw new Error("Esse horário já passou");
+  const lead =
+    ch.beforeMin != null
+      ? Math.round(Math.max(0, Math.min(ch.beforeMin, 7 * 24 * 60))) * 60_000
+      : r.event_at
+        ? Math.max(0, new Date(r.event_at).getTime() - new Date(r.due_at).getTime())
+        : 0;
+  // aviso que cairia no passado sai daqui a pouco (ex.: "1h antes" faltando 20 min)
+  const due = new Date(Math.max(event.getTime() - lead, Date.now() + 5_000));
   if (r.job_id) await (await getBoss()).cancel(QUEUES.reminder, r.job_id).catch(() => {});
   await enqueue(id, due);
-  if (r.event_at) await query("UPDATE reminders SET event_at = $2 WHERE id = $1", [id, at]);
+  const eventAt = lead > 0 ? event : null;
+  await query("UPDATE reminders SET event_at = $2 WHERE id = $1", [id, eventAt]);
   await quietly(syncReminder(id));
-  return true;
+  return { eventAt: eventAt ?? due, dueAt: due, beforeMin: eventAt ? Math.round((eventAt.getTime() - due.getTime()) / 60_000) : 0 };
 }
 
-/** Troca título, tag ou cor de um compromisso (tela da agenda). */
-export async function updateReminderLook(id: string, userId: string, look: { title?: string | null; tag?: string | null; color?: string | null }) {
+/** Arrastar no calendário: muda o horário da agenda e o aviso anda junto. */
+export async function rescheduleReminder(id: string, at: Date, userId?: string) {
+  return Boolean(await retimeReminder(id, userId, { at }));
+}
+
+/** Troca título, detalhes, tag ou cor de um lembrete (tela da agenda). */
+export async function updateReminderLook(id: string, userId: string, look: { title?: string | null; intent?: string; tag?: string | null; color?: string | null }) {
   const sets: string[] = [];
   const vals: unknown[] = [id, userId];
   for (const [col, v] of Object.entries(look)) {
     if (v === undefined) continue;
-    vals.push(v === null ? null : col === "title" ? String(v).trim().slice(0, 80) || null : v);
+    if (col === "intent" && !String(v ?? "").trim()) continue;
+    vals.push(v === null ? null : col === "title" ? String(v).trim().slice(0, 80) || null : col === "intent" ? String(v).trim().slice(0, 1000) : v);
     sets.push(`${col} = $${vals.length}`);
   }
   if (!sets.length) return true;
   const r = await one(`UPDATE reminders SET ${sets.join(", ")} WHERE id = $1 AND user_id = $2 AND status = 'scheduled' RETURNING id, cron`, vals);
-  if (r && !r.cron && look.title !== undefined) await quietly(syncReminder(id));
+  if (r && !r.cron && (look.title !== undefined || look.intent !== undefined)) await quietly(syncReminder(id));
   return Boolean(r);
 }
 

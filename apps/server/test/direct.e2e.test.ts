@@ -195,6 +195,16 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     await runOutboundJob({ type: "direct", directId: r2.id });
     expect(await db.one("SELECT status FROM direct_messages WHERE id = $1", [r2.id])).toEqual({ status: "cancelled" });
 
+    // mudar o horário pela agenda: o envio antigo sai da fila e o novo fica no horário escolhido
+    const { rescheduleDirect } = await import("../src/direct.js");
+    const r3: any = await createDirect({ user: u, phone: "11 96666-5555", message: "Oi, aqui é o David, chego às 20h", sendAt: at, timezone: TZ });
+    const later = new Date(at.getTime() + 2 * 3600_000);
+    expect(await rescheduleDirect(david.id, r3.id, later)).toEqual({ ok: true });
+    const jobs = await db.many("SELECT state, start_after FROM pgboss.job WHERE data->>'directId' = $1 ORDER BY created_on", [r3.id]);
+    expect(jobs.map((j: any) => j.state)).toEqual(["cancelled", "created"]);
+    expect(new Date(jobs[1].start_after).getTime()).toBe(later.getTime());
+    expect((await rescheduleDirect(david.id, r3.id, new Date())).ok).toBe(false);
+
     // o próprio número não
     expect(((await createDirect({ user: u, phone: david.phone, message: "oi", timezone: TZ })) as any).ok).toBe(false);
   });

@@ -68,6 +68,29 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("agenda com tags (e2e)", () => {
     expect(new Date(row.event_at).getTime()).toBe(moved.getTime());
     expect(moved.getTime() - new Date(row.due_at).getTime()).toBe(3600_000);
 
+    // "me lembra 1h antes" de um lembrete simples: o bloco fica onde estava e só o aviso adianta
+    const pay = new Date(day.getTime() + 86400_000);
+    const plain: any = await tools.scheduleReminder.run({ intent: "Pagar o boleto da escola", title: "Boleto da escola", at: local(pay) }, ctx);
+    const before: any = await tools.rescheduleReminderTool.run({ id: plain.id, before_minutes: 60 }, ctx);
+    expect(before).toMatchObject({ ok: true, event_local: expect.stringContaining("18:00"), remind_local: expect.stringContaining("17:00"), minutes_before: 60 });
+    const p1 = await db.one("SELECT due_at, event_at FROM reminders WHERE id = $1", [plain.id]);
+    expect(new Date(p1.event_at).getTime()).toBe(pay.getTime());
+    expect(new Date(p1.due_at).getTime()).toBe(pay.getTime() - 3600_000);
+    // de volta para "na hora"
+    expect(await tools.rescheduleReminderTool.run({ id: plain.id, before_minutes: 0 }, ctx)).toMatchObject({ ok: true, remind_local: expect.stringContaining("18:00") });
+    expect((await db.one("SELECT event_at FROM reminders WHERE id = $1", [plain.id])).event_at).toBeNull();
+    // novo compromisso já com a antecedência
+    const dent: any = await tools.scheduleReminder.run({ intent: "Dentista", title: "Dentista", event_at: local(pay), before_minutes: 30 }, ctx);
+    expect(dent.first_fire_local).toContain("17:30");
+
+    // edição completa pelo painel: texto, dia/hora e aviso de uma vez
+    const { retimeReminder, updateReminderLook } = await import("../src/reminders.js");
+    expect(await updateReminderLook(plain.id, user.id, { title: "Boleto", intent: "Pagar o boleto da escola do Léo" })).toBe(true);
+    const next = new Date(pay.getTime() + 86400_000);
+    expect(await retimeReminder(plain.id, user.id, { at: next, beforeMin: 1440 })).toMatchObject({ eventAt: next, beforeMin: 1440 });
+    expect(await db.one("SELECT title, intent FROM reminders WHERE id = $1", [plain.id])).toEqual({ title: "Boleto", intent: "Pagar o boleto da escola do Léo" });
+    await expect(retimeReminder(plain.id, user.id, { at: new Date(Date.now() - 3600_000) })).rejects.toThrow(/já passou/);
+
     const list: any = await tools.listRemindersTool.run({} as never, ctx);
     expect(list.find((r: any) => r.id === first.id)).toMatchObject({ title: "Veterinário do Thor", tag: "Pet" });
   });

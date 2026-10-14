@@ -1,12 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { config } from "../../../config.js";
 import { many, one } from "../../../db/pool.js";
-import { attachmentLabel, cancelDirect, hideDirect } from "../../../direct.js";
+import { attachmentLabel, cancelDirect, hideDirect, rescheduleDirect } from "../../../direct.js";
 import { googleApi } from "../../../integrations/google.js";
 import { asPerson } from "../../../integrations/person.js";
 import { isConnected } from "../../../integrations/registry.js";
 import { isColor, listTags, resolveTag } from "../../../agenda-tags.js";
-import { cancelReminder, createReminder, listReminders, reminderOccurrences, rescheduleReminder, updateReminderLook } from "../../../reminders.js";
+import { cancelReminder, createReminder, listReminders, reminderOccurrences, retimeReminder, updateReminderLook } from "../../../reminders.js";
 import { NOBODY, personalUser, selfUserId } from "../../../sharing.js";
 import { parseLocalDateTime } from "../../../time.js";
 import { conversationOf } from "../../../social.js";
@@ -53,27 +53,35 @@ export function agendaRoutes(base: FastifyInstance) {
     }
   });
 
-  // mover (at) ou trocar título, tag e cor
-  base.patch<{ Params: { id: string }; Body: { at?: string; title?: string; tag?: string | null; color?: string } }>("/api/reminders/:id", async (req, reply) => {
+  // editar pela agenda: horário (at, o do compromisso), antecedência do aviso (before_min), título, detalhes, tag e cor
+  base.patch<{
+    Params: { id: string };
+    Body: { at?: string; before_min?: number | null; title?: string; intent?: string; tag?: string | null; color?: string };
+  }>("/api/reminders/:id", async (req, reply) => {
     const b = req.body ?? {};
     const me = await self(req.account);
-    if (b.title !== undefined || b.tag !== undefined || b.color !== undefined) {
+    const at = b.at ? new Date(b.at) : undefined;
+    if (at && Number.isNaN(at.getTime())) return reply.code(400).send({ error: "Data inválida" });
+    if (b.before_min != null && (typeof b.before_min !== "number" || !Number.isFinite(b.before_min) || b.before_min < 0))
+      return reply.code(400).send({ error: "Antecedência inválida" });
+    if (b.intent !== undefined && !String(b.intent).trim()) return reply.code(400).send({ error: "Diga o que lembrar" });
+    if (b.title !== undefined || b.intent !== undefined || b.tag !== undefined || b.color !== undefined) {
       if (b.color !== undefined && !isColor(b.color)) return reply.code(400).send({ error: "Cor inválida" });
       const tag = b.tag ? await resolveTag(me, b.tag, "", { color: b.color, exact: true }) : null;
       if (b.tag && !tag) return reply.code(400).send({ error: "Limite de tags atingido" });
       const ok = await updateReminderLook(req.params.id, me, {
         title: b.title,
+        intent: b.intent,
         tag: b.tag === undefined ? undefined : tag?.name ?? null,
         // trocar a tag leva a cor dela, a não ser que a cor também tenha vindo
         color: b.color ?? (b.tag === undefined ? undefined : tag?.color ?? null),
       });
       if (!ok) return reply.code(404).send({ error: "Lembrete não encontrado ou já enviado" });
-      if (!b.at) return { ok };
     }
-    const at = b.at ? new Date(b.at) : null;
-    if (!at || Number.isNaN(at.getTime())) return reply.code(400).send({ error: "Data inválida" });
+    if (!at && b.before_min == null) return { ok: true };
     try {
-      return { ok: await rescheduleReminder(req.params.id, at, me) };
+      const r = await retimeReminder(req.params.id, me, { at, beforeMin: b.before_min ?? undefined });
+      return r ? { ok: true, ...r } : reply.code(404).send({ error: "Lembrete não encontrado ou já enviado" });
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
@@ -138,6 +146,64 @@ export function agendaRoutes(base: FastifyInstance) {
     // agendada: cancela (não sai); já enviada ou falhou: só some da agenda
     const r = (await cancelDirect(me, req.params.id)).ok ? { ok: true } : await hideDirect(me, req.params.id);
     return r.ok ? r : reply.code(404).send({ error: r.error });
+  });
+
+  // mensagem agendada: só muda o dia e a hora (o texto foi o que a pessoa aprovou com o "sim")
+  base.patch<{ Params: { id: string }; Body: { at?: string } }>("/api/direct/:id", async (req, reply) => {
+    const at = new Date(req.body?.at ?? "");
+    if (Number.isNaN(at.getTime())) return reply.code(400).send({ error: "Data inválida" });
+    const r = await rescheduleDirect(await self(req.account), req.params.id, at);
+    return r.ok ? r : reply.code(400).send({ error: r.error });
+  });
+
+  // evento do Google Agenda da própria pessoa: editar e excluir pela agenda do painel
+  const googleEvent = async (req: { account: Parameters<typeof selfUserId>[0] }, id: string, init: RequestInit) => {
+    const person = { userId: await self(req.account), owner: req.account.owner };
+    if (!(await asPerson(person, () => isConnected("google")).catch(() => false))) throw new Error("Google Agenda não está conectado");
+    return asPerson(person, () =>
+      googleApi(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(id)}`, { ...init, signal: AbortSignal.timeout(10_000) }),
+    );
+  };
+  base.patch<{ Params: { id: string }; Body: { title?: string; date?: string; start?: string; end?: string; allDay?: boolean; location?: string } }>(
+    "/api/calendar/google/:id",
+    async (req, reply) => {
+      const b = req.body ?? {};
+      const body: Record<string, unknown> = {};
+      if (b.title !== undefined) {
+        if (!b.title.trim()) return reply.code(400).send({ error: "Dê um nome ao evento" });
+        body.summary = b.title.trim().slice(0, 200);
+      }
+      if (b.location !== undefined) body.location = b.location.trim().slice(0, 300);
+      if (b.allDay) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(b.date ?? "")) return reply.code(400).send({ error: "Data inválida" });
+        const next = new Date(`${b.date}T12:00:00Z`);
+        next.setUTCDate(next.getUTCDate() + 1);
+        body.start = { date: b.date };
+        body.end = { date: next.toISOString().slice(0, 10) };
+      } else if (b.start !== undefined) {
+        const start = new Date(b.start);
+        const end = new Date(b.end ?? "");
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return reply.code(400).send({ error: "Data inválida" });
+        if (end <= start) return reply.code(400).send({ error: "O fim tem que ser depois do começo" });
+        body.start = { dateTime: start.toISOString() };
+        body.end = { dateTime: end.toISOString() };
+      }
+      try {
+        await googleEvent(req, req.params.id, { method: "PATCH", body: JSON.stringify(body) });
+        return { ok: true };
+      } catch (err) {
+        return reply.code(400).send({ error: `Não deu para salvar no Google: ${(err as Error).message.slice(0, 200)}` });
+      }
+    },
+  );
+  base.delete<{ Params: { id: string } }>("/api/calendar/google/:id", async (req, reply) => {
+    try {
+      await googleEvent(req, req.params.id, { method: "DELETE" });
+      return { ok: true };
+    } catch (err) {
+      if (/Google API 410|Google API 404/.test((err as Error).message)) return { ok: true };
+      return reply.code(400).send({ error: `Não deu para excluir no Google: ${(err as Error).message.slice(0, 200)}` });
+    }
   });
 
   // ---------- Acompanhamentos (o agente fica de olho e avisa sozinho) ----------
