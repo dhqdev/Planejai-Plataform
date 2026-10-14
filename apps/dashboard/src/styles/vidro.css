@@ -172,3 +172,66 @@
 :is(.seg, .subtabs, .fin-tabs, .cal-pills, .sidebar .nav)[data-seg="on"]::before {
   transition: transform .42s cubic-bezier(.32, .72, 0, 1), width .42s cubic-bezier(.32, .72, 0, 1), height .42s cubic-bezier(.32, .72, 0, 1), opacity .2s;
 }
+
+/* ---------- Vidro sem cor, como espelho (pedido do David, 2026-10-13) ----------
+   O Liquid Glass não tem cor própria: quase não tinge, deixa passar e realça (saturação alta) a cor do
+   que está atrás e a borda reflete a luz como espelho (mais forte em cima à esquerda e embaixo à direita).
+   Menos desfoque nos menus para o que passa atrás aparecer. Vale no claro e principalmente no escuro, onde
+   antes o vidro era preto chapado. Modais continuam um pouco mais tingidos para o texto ler bem. */
+:root {
+  --lg-tint: rgba(255, 255, 255, .26);
+  --lg-tint-strong: rgba(255, 255, 255, .62);
+  --lg-sheen: linear-gradient(180deg, rgba(255, 255, 255, .35), rgba(255, 255, 255, 0) 45%);
+  /* a borda espelhada: luz forte em cima à esquerda, reflexo embaixo à direita, fio fino em volta */
+  --lg-rim: inset 1px 1px 0 rgba(255, 255, 255, .9), inset -1px -1px 0 rgba(255, 255, 255, .5), inset 0 0 0 .5px rgba(255, 255, 255, .45), 0 0 0 .5px rgba(0, 0, 0, .07);
+}
+:root[data-theme="dark"] {
+  --lg-tint: rgba(18, 18, 20, .14);
+  --lg-tint-strong: rgba(16, 16, 18, .5);
+  --lg-sheen: linear-gradient(180deg, rgba(255, 255, 255, .09), rgba(255, 255, 255, 0) 45%);
+  --lg-rim: inset 1px 1px 0 rgba(255, 255, 255, .28), inset -1px -1px 0 rgba(255, 255, 255, .14), inset 0 0 0 .5px rgba(255, 255, 255, .1), 0 0 0 .5px rgba(0, 0, 0, .5);
+}
+.lg, .ctx-menu, .update-pill, .modal-bg .modal.glass-on {
+  background: var(--lg-sheen), linear-gradient(var(--lg-tint), var(--lg-tint));
+  -webkit-backdrop-filter: blur(16px) saturate(210%) brightness(1.04); backdrop-filter: blur(16px) saturate(210%) brightness(1.04);
+}
+.modal-bg .modal { background: var(--lg-sheen), linear-gradient(var(--lg-solid), var(--lg-solid)); }
+.modal-bg .modal.glass-on {
+  background: var(--lg-sheen), linear-gradient(var(--lg-tint-strong), var(--lg-tint-strong));
+  -webkit-backdrop-filter: blur(24px) saturate(210%); backdrop-filter: blur(24px) saturate(210%);
+}
+:root[data-theme="dark"] :is(.lg, .ctx-menu, .update-pill) {
+  -webkit-backdrop-filter: blur(16px) saturate(230%) brightness(1.12); backdrop-filter: blur(16px) saturate(230%) brightness(1.12);
+}
+:root[data-theme="dark"] .modal-bg .modal.glass-on {
+  -webkit-backdrop-filter: blur(24px) saturate(230%) brightness(1.08); backdrop-filter: blur(24px) saturate(230%) brightness(1.08);
+}
+@media (max-width: 767px) {
+  .modal-bg .modal.more-sheet { background: var(--lg-sheen), linear-gradient(var(--lg-solid), var(--lg-solid)); }
+  .modal-bg .modal.more-sheet.glass-on { background: var(--lg-sheen), linear-gradient(var(--lg-tint-strong), var(--lg-tint-strong)); }
+  .tabbar-pill {
+    background: var(--lg-sheen), linear-gradient(var(--lg-tint), var(--lg-tint));
+    -webkit-backdrop-filter: blur(12px) saturate(210%) brightness(1.04); backdrop-filter: blur(12px) saturate(210%) brightness(1.04);
+  }
+  :root[data-theme="dark"] .tabbar-pill {
+    -webkit-backdrop-filter: blur(12px) saturate(230%) brightness(1.15); backdrop-filter: blur(12px) saturate(230%) brightness(1.15);
+  }
+  /* o degradê atrás da barra escondia o conteúdo: agora só um véu fraco abaixo dela, e a cápsula mostra o que passa */
+  .tabbar::before { height: calc(36px + env(safe-area-inset-bottom)); opacity: .7; }
+}
+
+/* botões comuns e de ícone no escuro: o mesmo vidro sem cor (antes era vidro preto) */
+:root[data-theme="dark"] :is(.btn:not(.btn-primary):not(.btn-brand):not(.btn-danger-solid):not(.btn-ghost), .icon-btn) {
+  border-color: transparent;
+  background: var(--lg-sheen), linear-gradient(rgba(255, 255, 255, .04), rgba(255, 255, 255, .04));
+  box-shadow: var(--lg-rim), 0 4px 14px -6px rgba(0, 0, 0, .7);
+  -webkit-backdrop-filter: blur(10px) saturate(230%) brightness(1.12); backdrop-filter: blur(10px) saturate(230%) brightness(1.12);
+}
+@media (hover: hover) and (pointer: fine) {
+  :root[data-theme="dark"] :is(.btn:not(.btn-primary):not(.btn-brand):not(.btn-danger-solid):not(.btn-ghost), .icon-btn):hover {
+    background: var(--lg-sheen), linear-gradient(rgba(255, 255, 255, .08), rgba(255, 255, 255, .08));
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .lg, .ctx-menu, .update-pill, .modal-bg .modal, .modal-bg .modal.glass-on, .tabbar-pill { background: var(--panel) !important; }
+}
