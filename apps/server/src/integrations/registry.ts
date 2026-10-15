@@ -121,7 +121,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         type: "password",
         required: true,
         placeholder: "github_pat_...",
-        help: "Settings > Developer settings > Fine-grained tokens. Escolha os repositórios e dê Issues: Read and write e Pull requests: Read-only (Metadata: Read-only vem junto).",
+        help: "Settings > Developer settings > Fine-grained tokens. Escolha os repositórios e dê Issues: Read and write e Pull requests: Read-only (Metadata: Read-only vem junto). Para a Esteira usar este token: Contents e Pull requests: Read and write, e Actions: Read-only.",
       },
       { key: "default_repo", label: "Repositório padrão (opcional)", type: "text", placeholder: "dono/repositorio", help: "Usado quando você pede uma issue sem dizer o repositório." },
     ],

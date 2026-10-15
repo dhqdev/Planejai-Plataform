@@ -28,7 +28,7 @@ export class Github {
   constructor(private readonly token: string, readonly repo: RepoRef) {}
 
   private async call<T = any>(method: string, path: string, body?: unknown, opts: { raw?: boolean } = {}): Promise<T> {
-    const url = path.startsWith("/repos/") || path === "/graphql" ? `${API}${path}` : `${API}/repos/${this.repo.owner}/${this.repo.name}${path}`;
+    const url = path === "/graphql" ? `${API}${path}` : `${API}/repos/${this.repo.owner}/${this.repo.name}${path}`;
     const res = await fetch(url, {
       method,
       headers: { ...GH_HEADERS(this.token), ...(body ? { "Content-Type": "application/json" } : {}) },
@@ -42,6 +42,31 @@ export class Github {
     const json: any = await res.json().catch(() => ({}));
     if (!res.ok) throw new GithubError(`GitHub ${method} ${path} respondeu ${res.status}: ${String(json?.message ?? "").slice(0, 200)}`, res.status);
     return json as T;
+  }
+
+  /**
+   * Confere o que a esteira precisa e devolve cada problema em português, com o que marcar no token.
+   * Vazio = pode ler, escrever no repositório, abrir PR e ler o CI.
+   */
+  async problems(): Promise<string[]> {
+    const full = `${this.repo.owner}/${this.repo.name}`;
+    let repo: any;
+    try {
+      repo = await this.call("GET", "");
+    } catch (err) {
+      if (err instanceof GithubError && err.status === 401) return ["O token do GitHub foi recusado (vencido ou apagado). Gere outro e salve de novo."];
+      if (err instanceof GithubError && err.status === 404) return [`O token não enxerga ${full}. No token fine-grained, em Repository access, inclua esse repositório.`];
+      throw err;
+    }
+    const out: string[] = [];
+    if (!repo.permissions?.push) out.push(`O token lê ${full} mas não pode escrever: dê Contents: Read and write e Pull requests: Read and write.`);
+    try {
+      await this.call("GET", "/actions/runs?per_page=1");
+    } catch (err) {
+      if (err instanceof GithubError && (err.status === 403 || err.status === 404)) out.push("O token não lê o CI: dê Actions: Read-only.");
+      else throw err;
+    }
+    return out;
   }
 
   async branchSha(branch: string): Promise<string> {

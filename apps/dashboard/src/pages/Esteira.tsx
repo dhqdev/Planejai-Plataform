@@ -12,14 +12,26 @@ import { haptic } from "../touch";
  * a linha do tempo com o que cada etapa viu, decidiu e custou.
  */
 
+interface Agent {
+  name: string;
+  role: string;
+  route: string;
+}
 interface Status {
   ready: boolean;
-  missing?: string;
+  missing?: string | null;
+  problems: string[];
+  tokenFrom: string | null;
+  needRepo: boolean;
   repo?: string;
   base?: string;
   costCap?: number;
   stages: Record<string, string>;
+  agents: Record<string, Agent>;
+  stageAgent: Record<string, string>;
+  settings: { repo?: string; base_branch?: string; cost_cap?: string };
 }
+type Msg = { agent: string; to: string; text: string };
 interface Ticket {
   id: number;
   title: string;
@@ -34,12 +46,16 @@ interface Ticket {
   cost_usd: number;
   created_at: string;
   stage_started_at: string;
+  last_msg?: Msg | null;
 }
 interface Step {
   id: number;
   stage: string;
   name: string;
   status: string;
+  kind: string;
+  agent: string | null;
+  to_agent: string | null;
   model: string | null;
   tokens_in: number;
   tokens_out: number;
@@ -76,12 +92,28 @@ const WORKING = new Set(["fila", "entendendo", "planejando", "codando", "revisan
 const STOPPED = new Set(["precisa_de_voce", "falhou", "cancelado"]);
 const KIND: Record<string, string> = { bug: "Bug", melhoria: "Melhoria", nova: "Coisa nova" };
 
-const COLUMNS: { key: string; label: string; has: (s: string) => boolean }[] = [
-  { key: "fila", label: "Na fila", has: (s) => s === "fila" },
-  { key: "andando", label: "Andando", has: (s) => WORKING.has(s) && s !== "fila" },
-  { key: "pronto", label: "Pronto para revisar", has: (s) => s === "pronto" },
-  { key: "parado", label: "Parado", has: (s) => STOPPED.has(s) },
-];
+/** Cada agente tem uma cor fixa: avatar da coluna, recados no card e na conversa. */
+const AGENT_TONE: Record<string, string> = { lia: "#c2410c", beto: "#2563eb", caio: "#7c3aed", vera: "#0f766e", tito: "#b45309", dono: "#52525b" };
+
+/** Colunas: fila, um agente por etapa (o card fica com quem está trabalhando nele) e o fim. */
+function columnsOf(st: Status): { key: string; label: string; agent?: string; has: (s: string) => boolean }[] {
+  return [
+    { key: "fila", label: "Na fila", has: (s) => s === "fila" },
+    ...Object.keys(st.agents).map((id) => ({ key: id, label: st.agents[id]!.name, agent: id, has: (s: string) => st.stageAgent[s] === id })),
+    { key: "pronto", label: "Pronto para revisar", has: (s) => s === "pronto" },
+    { key: "parado", label: "Parado", has: (s) => STOPPED.has(s) },
+  ];
+}
+
+function AgentDot({ id, agents, size = 26 }: { id: string; agents: Record<string, Agent>; size?: number }) {
+  const name = id === "dono" ? "Você" : agents[id]?.name ?? id;
+  return (
+    <span className="dev-agent" style={{ width: size, height: size, background: AGENT_TONE[id] ?? "#71717a", fontSize: size * 0.46 }} title={name} aria-hidden>
+      {name.slice(0, 1)}
+    </span>
+  );
+}
+const who = (id: string | null | undefined, agents: Record<string, Agent>) => (id === "dono" ? "você" : id ? agents[id]?.name ?? id : "");
 
 function progress(stage: string, failed: string | null) {
   const at = stage === "corrigindo" ? "testando" : STOPPED.has(stage) ? failed ?? "entendendo" : stage;
@@ -130,23 +162,14 @@ export function EsteiraPage() {
     <div className="page page-wide dev-page">
       <PageHead
         title="Esteira"
-        subtitle={status.data.ready ? `Chamados viram PR sozinhos em ${status.data.repo} (base ${status.data.base}). Você só revisa e mescla.` : "Chamados viram branch, código, teste e PR sozinhos. Você só revisa e mescla."}
+        subtitle={`Cada coluna é um agente: a Lia entende, o Beto planeja, o Caio coda, a Vera revisa e o Tito testa${status.data.ready ? ` em ${status.data.repo}` : ""}. Eles conversam no card e você só revisa e mescla o PR.`}
         actions={
           <button className="btn btn-primary" onClick={() => { haptic(); setCreating(true); }} disabled={!status.data.ready}>
             <Icon name="plus" size={16} /> Novo chamado
           </button>
         }
       />
-      {!status.data.ready && (
-        <div className="card card-pad dev-setup">
-          <Icon name="github" size={20} />
-          <div>
-            <strong>Falta ligar o GitHub da esteira</strong>
-            <p className="muted">{status.data.missing}</p>
-          </div>
-          <Link className="btn btn-sm" to="/integrations">Abrir Integrações</Link>
-        </div>
-      )}
+      {!status.data.ready && <Setup st={status.data} onSaved={(d) => status.setData(d)} />}
 
       {!tickets.length ? (
         <div className="card">
@@ -154,12 +177,23 @@ export function EsteiraPage() {
         </div>
       ) : (
         <div className="dev-board">
-          {COLUMNS.map((col) => {
+          {columnsOf(status.data).map((col) => {
             const items = tickets.filter((t) => col.has(t.stage));
+            const a = col.agent ? status.data!.agents[col.agent] : null;
             return (
-              <section key={col.key} className="dev-col">
+              <section key={col.key} className={`dev-col${a ? " dev-col-agent" : ""}`}>
                 <header>
-                  <span>{col.label}</span>
+                  {a ? (
+                    <span className="dev-col-who">
+                      <AgentDot id={col.agent!} agents={status.data!.agents} />
+                      <span>
+                        <strong>{a.name}</strong>
+                        <small className="muted">{a.role}</small>
+                      </span>
+                    </span>
+                  ) : (
+                    <span>{col.label}</span>
+                  )}
                   <span className="muted">{items.length}</span>
                 </header>
                 {items.map((t) => (
@@ -172,6 +206,12 @@ export function EsteiraPage() {
                     </div>
                     <strong className="dev-card-title">{titleOf(t)}</strong>
                     <Flow stage={t.stage} failed={t.failed_stage} />
+                    {t.last_msg && (
+                      <div className="dev-card-msg">
+                        <AgentDot id={t.last_msg.agent} agents={status.data!.agents} size={18} />
+                        <span><b>{who(t.last_msg.agent, status.data!.agents)} → {who(t.last_msg.to, status.data!.agents)}:</b> {t.last_msg.text}</span>
+                      </div>
+                    )}
                     <div className="dev-card-foot">
                       <StageBadge stage={t.stage} label={labels[t.stage] ?? t.stage} />
                       {t.pr_number && <span className="muted">PR #{t.pr_number}</span>}
@@ -188,7 +228,62 @@ export function EsteiraPage() {
       )}
 
       {creating && <NewTicket onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); void list.reload(); openTicket(id); }} />}
-      {open && <TicketModal id={open} labels={labels} onClose={() => openTicket(null)} onChange={() => void list.reload()} />}
+      {open && <TicketModal id={open} labels={labels} agents={status.data.agents} onClose={() => openTicket(null)} onChange={() => void list.reload()} />}
+    </div>
+  );
+}
+
+/** Sem GitHub pronto: diz exatamente o que falta e deixa escolher o repositório aqui mesmo. */
+function Setup({ st, onSaved }: { st: Status; onSaved: (s: Status) => void }) {
+  const [repo, setRepo] = useState(st.settings.repo || st.repo || "");
+  const [base, setBase] = useState(st.settings.base_branch || "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async (save: boolean) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      onSaved(save ? await api<Status>("/api/dev/settings", { method: "PUT", json: { repo, base_branch: base } }) : await api<Status>("/api/dev/status?fresh=1"));
+      haptic();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const problems = st.problems.length ? st.problems : st.missing ? [st.missing] : [];
+  return (
+    <div className="card card-pad dev-setup">
+      <div className="dev-setup-head">
+        <Icon name="github" size={20} />
+        <div>
+          <strong>{st.tokenFrom ? "Quase lá: falta acertar o GitHub da esteira" : "Falta conectar o GitHub"}</strong>
+          <p className="muted">{st.tokenFrom ? `Usando o token de ${st.tokenFrom}.` : "A esteira usa o token do GitHub que você conecta em Integrações."}</p>
+        </div>
+      </div>
+      <ul className="dev-setup-list">{problems.map((p) => <li key={p}>{p}</li>)}</ul>
+      {st.tokenFrom ? (
+        <div className="dev-setup-form">
+          <div className="field">
+            <label htmlFor="dev-repo">Repositório</label>
+            <input id="dev-repo" className="input" value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="dono/repositorio" autoComplete="off" />
+          </div>
+          <div className="field">
+            <label htmlFor="dev-base">Branch base</label>
+            <input id="dev-base" className="input" value={base} onChange={(e) => setBase(e.target.value)} placeholder="main" autoComplete="off" />
+          </div>
+          <div className="dev-setup-acts">
+            <button className="btn btn-primary" disabled={busy || !repo.trim()} onClick={() => run(true)}>{busy ? "Conferindo…" : "Salvar e conferir"}</button>
+            <Link className="btn" to="/integrations">Trocar o token</Link>
+          </div>
+        </div>
+      ) : (
+        <div className="dev-setup-acts">
+          <Link className="btn btn-primary" to="/integrations">Abrir Integrações</Link>
+          <button className="btn" disabled={busy} onClick={() => run(false)}>Conferir de novo</button>
+        </div>
+      )}
+      {err && <ErrorBox error={err} />}
     </div>
   );
 }
@@ -243,7 +338,7 @@ function NewTicket({ onClose, onCreated }: { onClose: () => void; onCreated: (id
   );
 }
 
-function TicketModal({ id, labels, onClose, onChange }: { id: number; labels: Record<string, string>; onClose: () => void; onChange: () => void }) {
+function TicketModal({ id, labels, agents, onClose, onChange }: { id: number; labels: Record<string, string>; agents: Record<string, Agent>; onClose: () => void; onChange: () => void }) {
   const { data, error, reload } = useApi<Detail>(`/api/dev/tickets/${id}`, { poll: 4000 });
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
@@ -312,6 +407,28 @@ function TicketModal({ id, labels, onClose, onChange }: { id: number; labels: Re
           )}
           {err && <ErrorBox error={err} />}
 
+          {t.steps.some((s) => s.kind === "msg") && (
+            <section className="dev-sec">
+              <h4>Conversa do time</h4>
+              <ol className="dev-talk">
+                {t.steps.filter((s) => s.kind === "msg").map((s) => (
+                  <li key={s.id} className={s.to_agent === "dono" ? "to-you" : ""}>
+                    <AgentDot id={s.agent ?? ""} agents={agents} size={28} />
+                    <div className="dev-bubble">
+                      <div className="dev-bubble-who">
+                        <b>{who(s.agent, agents)}</b>
+                        <span className="muted">{s.agent && agents[s.agent] ? agents[s.agent]!.role.toLowerCase() : ""} → {who(s.to_agent, agents)}</span>
+                        <span className="spacer" />
+                        <span className="muted">{ago(s.created_at)}</span>
+                      </div>
+                      <p>{s.summary}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+
           {t.spec?.problema && (
             <section className="dev-sec">
               <h4>Como a esteira entendeu</h4>
@@ -364,13 +481,13 @@ function TicketModal({ id, labels, onClose, onChange }: { id: number; labels: Re
           <section className="dev-sec">
             <h4>Linha do tempo</h4>
             <ol className="dev-steps">
-              {t.steps.map((s) => (
+              {t.steps.filter((s) => s.kind !== "msg").map((s) => (
                 <li key={s.id} className={s.status === "error" ? "bad" : ""}>
                   <span className="dev-step-dot" />
                   <div className="dev-step-main">
                     <div className="dev-step-top">
                       <strong>{s.name}</strong>
-                      <span className="muted">{labels[s.stage] ?? s.stage}</span>
+                      <span className="muted">{s.agent ? `${who(s.agent, agents)} · ` : ""}{labels[s.stage] ?? s.stage}</span>
                       <span className="spacer" />
                       {s.cost_usd > 0 && <span className="mono">{usd(s.cost_usd)}</span>}
                     </div>
@@ -403,6 +520,7 @@ interface Costs {
   total: { cost: number; tokens_in: number; tokens_out: number; calls: number; tickets: number };
   done: { ready: number; failed: number; avg_ready: number };
   byStage: { stage: string; label: string; cost: number; calls: number; tickets: number; avg_ms: number }[];
+  byAgent: { agent: string; name: string; role: string; cost: number; calls: number }[];
   byModel: { model: string; cost: number; calls: number; tokens_in: number; tokens_out: number }[];
   byDay: { day: string; cost: number }[];
   top: { id: number; title: string; stage: string; pr_number: number | null; cost: number }[];
@@ -460,6 +578,22 @@ export function EsteiraCustosPage() {
         ) : (
           <Empty>Sem gasto no período.</Empty>
         )}
+      </div>
+
+      <div className="card card-pad dev-cost-agents">
+        <div className="costs-label">Por agente</div>
+        <div className="dev-agent-costs">
+          {data.byAgent.map((a) => (
+            <div key={a.agent} className="dev-agent-cost">
+              <span className="dev-agent" style={{ width: 30, height: 30, background: AGENT_TONE[a.agent] ?? "#71717a", fontSize: 14 }} aria-hidden>{a.name.slice(0, 1)}</span>
+              <div>
+                <strong>{a.name}</strong> <span className="muted">{a.role}</span>
+                <div className="mono">{usd(a.cost)} <span className="muted">· {a.calls} chamadas</span></div>
+              </div>
+            </div>
+          ))}
+          {!data.byAgent.length && <Empty>Nada ainda.</Empty>}
+        </div>
       </div>
 
       <div className="dev-cost-grid">

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { answerTicket, cancelTicket, costOverview, createTicket, devConfig, getTicket, listTickets, retryTicket, STAGE_LABEL } from "../../../devpipeline/pipeline.js";
+import { answerTicket, cancelTicket, costOverview, createTicket, devStatus, getTicket, listTickets, retryTicket, saveDevSettings } from "../../../devpipeline/pipeline.js";
 
 /** Só o dono da stack (não basta ser super admin): a esteira escreve no repositório dele. */
 async function requireOwner(req: FastifyRequest, reply: FastifyReply) {
@@ -13,11 +13,14 @@ export async function devPipelineRoutes(api: FastifyInstance) {
   await api.register(async (dev) => {
     dev.addHook("preHandler", requireOwner);
 
-    dev.get("/api/dev/status", async () => {
-      const cfg = await devConfig();
-      return "missing" in cfg
-        ? { ready: false, missing: cfg.missing, stages: STAGE_LABEL }
-        : { ready: true, repo: `${cfg.gh.repo.owner}/${cfg.gh.repo.name}`, base: cfg.base, costCap: cfg.costCap, stages: STAGE_LABEL };
+    dev.get<{ Querystring: { fresh?: string } }>("/api/dev/status", async (req) => devStatus(req.query.fresh === "1"));
+
+    /** Repositório, branch base e limite de custo, salvos na própria tela (o token vem de Integrações). */
+    dev.put<{ Body: { repo?: string; base_branch?: string; cost_cap?: string } }>("/api/dev/settings", async (req, reply) => {
+      const repo = String(req.body?.repo ?? "").trim();
+      if (repo && !/^[\w.-]+\/[\w.-]+$/.test(repo.replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, ""))) return reply.code(400).send({ error: "Repositório no formato dono/repositorio." });
+      await saveDevSettings({ repo: repo.replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, ""), base_branch: req.body?.base_branch, cost_cap: req.body?.cost_cap });
+      return devStatus(true);
     });
 
     dev.get("/api/dev/tickets", async () => listTickets());

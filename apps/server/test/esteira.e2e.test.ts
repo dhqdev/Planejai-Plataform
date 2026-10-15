@@ -13,7 +13,19 @@ vi.mock("../src/llm/openrouter.js", async (orig) => ({
   ...(await orig<typeof import("../src/llm/openrouter.js")>()),
   chatCompletion: vi.fn(async (_choice: any, req: any) => {
     const sys = String(req.messages[0].content);
-    const key = sys.includes("analista") ? "refine" : sys.includes("planeja") ? "plan" : sys.includes("revisa") ? "review" : sys.includes("conserta") ? "fix" : "code";
+    const key = sys.startsWith("Você é a Lia")
+      ? "refine"
+      : sys.startsWith("Você é o Beto, arquiteto da esteira: você planeja")
+        ? "plan"
+        : sys.startsWith("Você é o Beto")
+          ? "answer"
+          : sys.startsWith("Você é a Vera")
+            ? "review"
+            : sys.startsWith("Você é o Tito")
+              ? "qa"
+              : sys.includes("conserta")
+                ? "fix"
+                : "code";
     const content = replies[key]?.shift() ?? "{}";
     return { message: { content }, model: `fake/${key}`, tokensIn: 1000, tokensOut: 200, costUsd: 0.01, finishReason: "stop" };
   }),
@@ -31,6 +43,7 @@ const gh = {
   pulls: [] as any[],
   comments: [] as string[],
   ready: false,
+  readOnly: false,
   ci: [] as ("failure" | "success")[],
   ciBySha: new Map<string, string>(),
   n: 0,
@@ -45,6 +58,7 @@ async function fakeGithub(url: string, init: RequestInit = {}) {
   const body = init.body ? JSON.parse(String(init.body)) : null;
   const path = decodeURIComponent(u.pathname.replace(/^\/repos\/dono\/app/, ""));
   let m: RegExpMatchArray | null;
+  if (path === "") return ok({ full_name: "dono/app", permissions: { push: !gh.readOnly } });
   if ((m = path.match(/^\/git\/ref\/heads\/(.+)$/))) return gh.refs.has(m[1]!) ? ok({ object: { sha: gh.refs.get(m[1]!) } }) : ok({ message: "Not Found" }, 404);
   if ((m = path.match(/^\/git\/trees\/(\w+)$/)) && method === "GET") return ok({ tree: Object.entries(gh.commits.get(m[1]!)!).map(([p, c]) => ({ path: p, type: "blob", size: c.length })) });
   if ((m = path.match(/^\/contents\/(.+)$/))) {
@@ -88,6 +102,7 @@ async function fakeGithub(url: string, init: RequestInit = {}) {
     gh.comments.push(body.body);
     return ok({});
   }
+  if (path === "/actions/runs" && !u.searchParams.get("head_sha")) return ok({ workflow_runs: [] });
   if (path === "/actions/runs") {
     const sha = u.searchParams.get("head_sha")!;
     if (!gh.ciBySha.has(sha)) gh.ciBySha.set(sha, gh.ci.shift() ?? "success");
@@ -134,6 +149,24 @@ describe.skipIf(!enabled)("esteira de desenvolvimento (e2e)", () => {
     expect((await app.inject({ method: "GET", url: "/api/dev/tickets" })).statusCode).toBe(401);
   });
 
+  it("sem a integração da esteira, usa o token do GitHub e pede o repositório na tela; token sem escrita não fica pronto", async () => {
+    const reg = await import("../src/integrations/registry.js");
+    const owner = cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } }));
+    const creds = vi.mocked(reg.getCredentials);
+    creds.mockImplementation(async (id: string) => (id === "github" ? { token: "ghp_only_read" } : null));
+    let st = (await app.inject({ method: "GET", url: "/api/dev/status", headers: { cookie: owner } })).json();
+    expect(st).toMatchObject({ ready: false, needRepo: true, tokenFrom: "Integrações > GitHub" });
+    gh.readOnly = true;
+    st = (await app.inject({ method: "PUT", url: "/api/dev/settings", headers: { cookie: owner }, payload: { repo: "https://github.com/dono/app" } })).json();
+    expect(st.ready).toBe(false);
+    expect(st.repo).toBe("dono/app");
+    expect(st.problems[0]).toMatch(/Contents: Read and write/);
+    gh.readOnly = false;
+    st = (await app.inject({ method: "GET", url: "/api/dev/status?fresh=1", headers: { cookie: owner } })).json();
+    expect(st.ready).toBe(true);
+    creds.mockImplementation(async (id: string) => (id === "esteira" ? { token: "ghp_test", repo: "dono/app" } : null));
+  });
+
   it("chamado vira PR, o CI vermelho é consertado e fica pronto sem tocar na main", async () => {
     const owner = cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } }));
     const status = await app.inject({ method: "GET", url: "/api/dev/status", headers: { cookie: owner } });
@@ -142,10 +175,14 @@ describe.skipIf(!enabled)("esteira de desenvolvimento (e2e)", () => {
     replies.refine = [JSON.stringify({ titulo: "Soma certa", problema: "soma subtrai", esperado: "soma soma", criterios: ["soma(1,3) = 4"], arquivos: ["src/soma.ts", "inventado.ts"], bloqueado: false })];
     replies.plan = [JSON.stringify({ passos: ["trocar - por +"], arquivos: [{ path: "src/soma.ts", o_que: "operador" }], ler: ["src/soma.test.ts"], testes: "soma.test.ts" })];
     replies.code = [
-      // 1ª: trecho que não existe → volta com o erro
+      // dúvida para o Beto: ele responde e o Caio segue
+      JSON.stringify({ pergunta: "Troco o operador ou reescrevo a função?" }),
+      // trecho que não existe → volta com o erro
       JSON.stringify({ resumo: "x", commit: "x", arquivos: [{ path: "src/soma.ts", action: "edit", edits: [{ search: "a * b", replace: "a + b" }] }] }),
       JSON.stringify({ resumo: "Troca o operador", commit: "Soma soma", arquivos: [{ path: "src/soma.ts", action: "edit", edits: [{ search: "a - b", replace: "a + b + 0" }] }] }),
     ];
+    replies.answer = [JSON.stringify({ resposta: "Só troque o operador." })];
+    replies.qa = [JSON.stringify({ recado: "O teste da soma esperava 4 e veio 3: o operador em src/soma.ts." })];
     replies.review = [JSON.stringify({ aprovado: true, problemas: [] })];
     replies.fix = [JSON.stringify({ resumo: "Tira o + 0", commit: "Conserta a soma", arquivos: [{ path: "src/soma.ts", action: "edit", edits: [{ search: "a + b + 0", replace: "a + b" }] }] })];
     gh.ci = ["failure", "success"];
@@ -175,23 +212,29 @@ describe.skipIf(!enabled)("esteira de desenvolvimento (e2e)", () => {
     expect(gh.ready).toBe(true);
     expect(gh.comments.at(-1)).toMatch(/Pronto para revisar \(CI verde\)/);
 
-    // 6 chamadas de modelo (refine, plan, code x2, review, fix) x US$ 0,01; a troca recusada e o CI viram passos sem custo
+    // 9 chamadas de modelo (refine, plan, code x3, answer, review, qa, fix) x US$ 0,01; a troca recusada e o CI viram passos sem custo
     const detail = (await app.inject({ method: "GET", url: `/api/dev/tickets/${id}`, headers: { cookie: owner } })).json();
-    expect(detail.cost_usd).toBeCloseTo(0.06, 5);
+    expect(detail.cost_usd).toBeCloseTo(0.09, 5);
+    // a conversa do time fica no card, na ordem
+    const talk = detail.steps.filter((s: any) => s.kind === "msg").map((s: any) => `${s.agent}>${s.to_agent}`);
+    expect(talk).toEqual(["lia>beto", "beto>caio", "caio>beto", "beto>caio", "caio>vera", "vera>tito", "tito>dono", "tito>caio", "caio>tito", "tito>dono"]);
+    expect(detail.steps.find((s: any) => s.agent === "beto" && s.to_agent === "caio" && s.summary === "Só troque o operador.")).toBeTruthy();
+    expect(detail.steps.find((s: any) => s.name === "escrever o código").agent).toBe("caio");
     expect(detail.steps.map((s: any) => s.name)).toContain("escrever o código: trocas recusadas");
     expect(detail.steps.find((s: any) => s.name === "testes" && s.status === "error").detail.log).toContain("expected 3 to be 4");
     expect(detail.files[0].path).toBe("src/soma.ts");
 
     const costs = (await app.inject({ method: "GET", url: "/api/dev/costs?days=7", headers: { cookie: owner } })).json();
-    expect(costs.total.cost).toBeCloseTo(0.06, 5);
+    expect(costs.total.cost).toBeCloseTo(0.09, 5);
+    expect(costs.byAgent.find((a: any) => a.agent === "caio")).toMatchObject({ name: "Caio", calls: 4 });
     expect(costs.total.tickets).toBe(1);
     expect(costs.done.ready).toBe(1);
-    expect(costs.byStage.find((s: any) => s.stage === "codando")).toMatchObject({ calls: 2, label: "Escrevendo o código" });
-    expect(costs.byModel.map((m: any) => m.model).sort()).toEqual(["fake/code", "fake/fix", "fake/plan", "fake/refine", "fake/review"]);
+    expect(costs.byStage.find((s: any) => s.stage === "codando")).toMatchObject({ calls: 4, label: "Escrevendo o código" });
+    expect(costs.byModel.map((m: any) => m.model).sort()).toEqual(["fake/answer", "fake/code", "fake/fix", "fake/plan", "fake/qa", "fake/refine", "fake/review"]);
 
     // aparece em Execuções com o gatilho da esteira, sem cobrar grão de ninguém
     const execs = await db.many("SELECT trigger, user_id FROM executions WHERE trigger = 'esteira'");
-    expect(execs.length).toBe(5);
+    expect(execs.length).toBe(6);
     expect(execs.every((e) => e.user_id === null)).toBe(true);
   });
 

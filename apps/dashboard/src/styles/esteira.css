@@ -1,16 +1,40 @@
 /* Esteira de desenvolvimento (pages/Esteira.tsx, só o dono): quadro de chamados, detalhe e custos. */
-.dev-setup { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
-.dev-setup p { margin: 2px 0 0; font-size: 13px; }
-.dev-setup > div { flex: 1; min-width: 0; }
+.dev-setup { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.dev-setup-head { display: flex; align-items: flex-start; gap: 12px; }
+.dev-setup-head p { margin: 2px 0 0; font-size: 13px; }
+.dev-setup-list { margin: 0; padding-left: 20px; font-size: 13.5px; display: flex; flex-direction: column; gap: 4px; }
+.dev-setup-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 12px; align-items: end; }
+.dev-setup-form .field { margin: 0; }
+.dev-setup-acts { display: flex; gap: 8px; flex-wrap: wrap; }
 
-.dev-board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: start; }
+/* quadro: uma coluna por agente, rola de lado como um kanban */
+.dev-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(236px, 1fr); gap: 12px; align-items: start; overflow-x: auto; padding-bottom: 10px; scroll-snap-type: x proximity; overscroll-behavior-x: contain; }
+.dev-col { scroll-snap-align: start; background: var(--panel-2); border-radius: 18px; padding: 10px; min-height: 120px; }
+.dev-col > header { align-items: center; padding: 2px 4px 6px; }
+.dev-col-who { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.dev-col-who > span { display: flex; flex-direction: column; line-height: 1.15; }
+.dev-col-who strong { font-size: 13px; }
+.dev-col-who small { font-size: 11.5px; font-weight: 500; }
+.dev-agent { display: inline-grid; place-items: center; flex-shrink: 0; border-radius: 50%; color: #fff; font-weight: 700; line-height: 1; }
+.dev-card-msg { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; color: var(--muted); line-height: 1.35; }
+.dev-card-msg > span:last-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.dev-card-msg b { color: var(--text); font-weight: 600; }
+.dev-talk { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.dev-talk > li { display: flex; gap: 10px; align-items: flex-start; }
+.dev-bubble { flex: 1; min-width: 0; background: var(--panel-2); border-radius: 4px 14px 14px 14px; padding: 8px 12px; }
+.dev-talk > li.to-you .dev-bubble { background: var(--violet-soft, var(--panel-2)); }
+.dev-bubble-who { display: flex; gap: 6px; align-items: baseline; font-size: 12px; flex-wrap: wrap; }
+.dev-bubble p { margin: 3px 0 0; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dev-agent-costs { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 10px; }
+.dev-agent-cost { display: flex; gap: 10px; align-items: center; font-size: 13px; }
+.dev-cost-agents { margin-bottom: 14px; }
 .dev-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.dev-col > header { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 4px 2px; text-transform: none; }
+.dev-col > header { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: none; }
 .dev-col-empty { font-size: 12px; padding: 14px; border: 1px dashed var(--border); border-radius: 14px; text-align: center; }
 .dev-card { display: flex; flex-direction: column; gap: 8px; width: 100%; text-align: left; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; cursor: pointer; transition: border-color .15s, transform .15s; }
 @media (hover: hover) and (pointer: fine) { .dev-card:hover { border-color: var(--border-2); } }
 .dev-card:active { transform: scale(.99); }
-.dev-card-top, .dev-card-foot { display: flex; align-items: center; gap: 8px; font-size: 12px; min-width: 0; }
+.dev-card-top, .dev-card-foot { display: flex; align-items: center; gap: 6px 8px; font-size: 12px; min-width: 0; flex-wrap: wrap; white-space: nowrap; }
 .dev-card-title { font-size: 14px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 .dev-live { animation: dev-pulse 1.4s ease-in-out infinite; }
 @keyframes dev-pulse { 50% { opacity: .35; } }
@@ -63,9 +87,7 @@
 .dev-cost-grid .costs-row, .dev-page a.costs-row { cursor: default; text-decoration: none; }
 .dev-page a.costs-row { cursor: pointer; }
 
-@media (max-width: 1100px) { .dev-board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 767px) {
-  .dev-board { grid-template-columns: minmax(0, 1fr); }
-  .dev-setup { flex-wrap: wrap; }
-  .dev-setup > svg { display: none; }
+  .dev-board { grid-auto-columns: 84%; scroll-snap-type: x mandatory; margin: 0 -16px; padding: 0 16px 10px; scroll-padding: 0 16px; }
+  .dev-setup-form { grid-template-columns: minmax(0, 1fr); }
 }

@@ -189,8 +189,17 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
   },
   {
     task: "dev:refine",
-    label: "Esteira: analista e planejador",
-    why: "Esteira de desenvolvimento (só o dono): reescreve o chamado com critérios de aceite e planeja onde mexer. Lê muito código e escreve pouco: entrada barata do DeepSeek Flash.",
+    label: "Esteira: Lia (analista)",
+    why: "Esteira de desenvolvimento (só o dono): reescreve o chamado com critérios de aceite e aponta os arquivos. Lê muito e escreve pouco: entrada barata do DeepSeek Flash.",
+    model: "deepseek/deepseek-v4.1-flash",
+    fallbacks: ["google/gemini-3.8-flash"],
+    temperature: 0.2,
+    maxTokens: 4000,
+  },
+  {
+    task: "dev:plan",
+    label: "Esteira: Beto (arquiteto)",
+    why: "Lê os arquivos que a Lia apontou, decide o passo a passo e responde as dúvidas do Caio. Muita entrada, pouca saída.",
     model: "deepseek/deepseek-v4.1-flash",
     fallbacks: ["google/gemini-3.8-flash"],
     temperature: 0.2,
@@ -198,7 +207,7 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
   },
   {
     task: "dev:code",
-    label: "Esteira: desenvolvedor",
+    label: "Esteira: Caio (desenvolvedor)",
     why: "Escreve as trocas no código e conserta o CI vermelho. É onde a qualidade mais pesa: troque aqui por um modelo de código mais forte se os PRs vierem fracos (o custo aparece por etapa na tela Esteira).",
     model: "google/gemini-3.8-flash",
     fallbacks: ["deepseek/deepseek-v4.1-flash"],
@@ -207,12 +216,21 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
   },
   {
     task: "dev:review",
-    label: "Esteira: revisor",
+    label: "Esteira: Vera (revisora)",
     why: "Lê o diff contra os critérios de aceite antes de abrir o PR e devolve uma vez para o desenvolvedor se achar problema real.",
     model: "deepseek/deepseek-v4.1-flash",
     fallbacks: ["google/gemini-3.8-flash"],
     temperature: 0,
     maxTokens: 2000,
+  },
+  {
+    task: "dev:qa",
+    label: "Esteira: Tito (testes)",
+    why: "Quando o CI fica vermelho, lê o log e explica ao Caio o que quebrou em até 3 frases. O mais barato que lê log.",
+    model: "deepseek/deepseek-v4.1-flash",
+    fallbacks: ["xiaomi/mimo-v2.6-flash"],
+    temperature: 0,
+    maxTokens: 800,
   },
 ];
 
