@@ -1,0 +1,39 @@
+/* ---------- Roxo em pontos estratégicos (David, 2026-10-15) ----------
+   O dia a dia segue em tinta (preto no claro, branco no escuro); o roxo do mascote marca só o que importa:
+   a ação principal de cada tela, onde você está (item ativo do menu), o dia de hoje, o campo em foco e o
+   progresso. Sem degradê e sem ícone em quadradinho colorido. A barra de baixo do celular e as abas
+   continuam neutras, como ele pediu antes. Último da cascata. */
+:root { --act: var(--violet); --act-hover: #5408c4; --on-act: #ffffff; --act-ring: rgba(101, 16, 224, .16); }
+:root[data-theme="dark"] { --act: #7a35f5; --act-hover: #8c4bff; --act-ring: rgba(140, 75, 255, .28); --nav-act: #b48cff; }
+
+/* ação principal: botões, + flutuantes e Criar da agenda */
+.btn-primary, .btn-brand, :root[data-theme="dark"] .btn-primary, :root[data-theme="dark"] .btn-brand { background: var(--act); border-color: var(--act); color: var(--on-act); }
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:not(:disabled):hover, .btn-brand:not(:disabled):hover { background: var(--act-hover); border-color: var(--act-hover); opacity: 1; }
+}
+.fab.ink, .cal-fab { background: var(--act); color: var(--on-act); }
+.cal-create .ico, .cal-create svg { color: var(--violet); }
+
+/* onde você está: nome do item ativo no menu lateral e na barra de cima (o ícone já era roxo) */
+@media (min-width: 768px) {
+  .layout > .sidebar .nav > a.active, .layout > .sidebar .nav > a.active .label,
+  :root[data-theme="dark"] .layout > .sidebar .nav > a.active, :root[data-theme="dark"] .layout > .sidebar .nav > a.active .label { color: var(--nav-act, var(--violet)); }
+  :root[data-theme="dark"] .layout > .sidebar .nav > a.active .ico, :root[data-theme="dark"] .frame-link.active .ico { color: var(--nav-act); }
+  .frame-link.active { color: var(--nav-act, var(--violet)); }
+}
+
+/* hoje e o dia escolhido na agenda */
+.cal-cell.today .cal-num, .cal-week-day.today strong, .cal-list-date.today strong, .cal-mini-grid button.sel { background: var(--act); color: var(--on-act); }
+.cal-mini-grid button.today:not(.sel) { color: var(--violet); font-weight: 700; }
+
+/* campo em foco e caixas de marcar */
+.input:focus, .select:focus, .textarea:focus { border-color: var(--violet); box-shadow: 0 0 0 3px var(--act-ring); }
+.ct-search:focus-within { border-color: var(--violet); box-shadow: 0 0 0 3px var(--act-ring); }
+:root { accent-color: var(--violet); }
+:focus-visible { outline-color: var(--violet); }
+
+/* números que contam a história: mês escolhido e gasto nas barras de Finanças, limite e parcelas do cartão */
+.fin-page .bars .bar.spent, .fin-months button.active .fin-month-bar i, .cc-month.active .cc-month-bar i, .cc-limit-bar i, .cc-plan-bar i, .progress > div, .fin-insight-bar i, .goal-row:not(.done) .goal-bar i, .costs-track i { background: var(--violet); }
+
+/* carregando: os bloquinhos na cor do mascote */
+.pj-loader .block { background: var(--violet); }
