@@ -1,0 +1,49 @@
+/* ---------- Padrão único de botões (2026-10-15) ----------
+   Fica por último na cascata: todo .btn e .icon-btn do painel segue estes tamanhos e este formato.
+   Três alturas (pequeno 32, normal 40, grande 48; no toque 36/44/48), formato pílula, ícone redondo.
+   Quatro jeitos: principal (roxo, um por tela), normal (contorno fino), fantasma (sem contorno) e perigo.
+   Passar o mouse só escurece de leve o fundo; apertar encolhe um tiquinho. Sem sombra, sem pulo.
+   Janelas, menus e seletores que um botão abre seguem a mesma abertura: nascem de quem chamou (ver modal-desce.css). */
+:root {
+  --btn-h-sm: 32px; --btn-h: 40px; --btn-h-lg: 48px;
+  --btn-r: 999px;
+  --open-dur: .3s; --open-ease: cubic-bezier(.25, 1.12, .4, 1);
+}
+@media (pointer: coarse) { :root { --btn-h-sm: 36px; --btn-h: 44px; } }
+
+.btn {
+  min-height: var(--btn-h); padding: 0 16px; gap: 8px; border-radius: var(--btn-r);
+  font-size: 14px; font-weight: 550; line-height: 1.2; box-shadow: none;
+}
+.btn-sm { min-height: var(--btn-h-sm); padding: 0 12px; gap: 6px; font-size: 13px; }
+.btn-lg { min-height: var(--btn-h-lg); padding: 0 22px; font-size: 15px; }
+.btn-pill { border-radius: var(--btn-r); padding: 0 16px; font-weight: 550; }
+.icon-btn { width: var(--btn-h); height: var(--btn-h); border-radius: 50%; }
+.icon-btn.sm { width: var(--btn-h-sm); height: var(--btn-h-sm); }
+
+/* passar o mouse: só o fundo muda */
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled), .btn-primary:hover:not(:disabled), .btn-brand:hover:not(:disabled) { transform: none; box-shadow: none; }
+  .btn:not(.btn-primary):not(.btn-brand):not(.btn-danger-solid):not(.btn-ghost):hover:not(:disabled) { background: var(--panel-2); border-color: var(--border); }
+  .btn:hover:not(:disabled) .ico { transform: none; }
+}
+.btn-brand, .btn-primary { box-shadow: none; background-image: none; }
+.btn:active:not(:disabled) { transform: scale(.97); }
+.icon-btn:active:not(:disabled) { transform: scale(.94); }
+
+/* rodapé das janelas no celular: botão grande, do mesmo formato */
+@media (max-width: 767px) {
+  .modal-foot .btn { min-height: var(--btn-h-lg); border-radius: var(--btn-r); }
+}
+.welcome-actions .btn, .signup-actions .btn, .docs-actions .btn { height: auto; min-height: var(--btn-h-lg); border-radius: var(--btn-r); }
+.dash-actions .btn { border-radius: var(--btn-r); }
+
+/* abrir: menu de toque longo e seletor de data crescem de quem chamou, na mesma curva das janelas */
+.pk-pop, .pk-pop.up, .ctx-menu { animation: open-in var(--open-dur) var(--open-ease) both; }
+@keyframes open-in { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .pk-pop, .pk-pop.up, .ctx-menu { animation: fade-in .15s ease both; } }
+
+/* barra de Finanças no celular: setas, relatório e + no mesmo círculo */
+@media (max-width: 767px) {
+  .fin-top .fin-period .icon-btn, .fin-top .fin-report-btn.icon-btn, .fin-top .fin-add.btn { width: var(--btn-h); height: var(--btn-h); min-height: var(--btn-h); padding: 0; border-radius: 50%; }
+}
