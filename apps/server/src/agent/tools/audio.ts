@@ -1,8 +1,9 @@
+import { promptText } from "../prompt-overrides.js";
 import { synthesize, TTS_MAX_CHARS } from "../tts.js";
 import { writeLong } from "../writer.js";
 import { defineTool, obj } from "./types.js";
 
-const SPOKEN = `Você escreve o texto de uma mensagem de voz em português do Brasil, a partir do pedido. Responda só o texto que vai ser falado:
+export const SPOKEN = `Você escreve o texto de uma mensagem de voz em português do Brasil, a partir do pedido. Responda só o texto que vai ser falado:
 corrido, natural, como alguém contando, sem lista, título, link, emoji ou marcação, até ${Math.floor(TTS_MAX_CHARS * 0.9)} caracteres. Não invente dados.`;
 
 export const makeAudio = defineTool<{ text?: string; brief?: string }>({
@@ -19,7 +20,7 @@ export const makeAudio = defineTool<{ text?: string; brief?: string }>({
   ),
   async run(args, ctx) {
     let text = String(args.text ?? "").trim();
-    if (!text && args.brief?.trim()) text = await writeLong(ctx, { name: "texto do áudio", system: SPOKEN, ask: args.brief.trim() });
+    if (!text && args.brief?.trim()) text = await writeLong(ctx, { name: "texto do áudio", system: await promptText("redator_audio", SPOKEN), ask: args.brief.trim() });
     if (!text) return { ok: false, error: "Mande text (o que vai ser falado) ou brief (o que o áudio deve dizer)." };
     if (text.length > TTS_MAX_CHARS) {
       // texto longo demais: corta na última frase que cabe em vez de devolver erro (o modelo repetia a chamada)

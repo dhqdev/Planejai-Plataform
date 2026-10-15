@@ -121,7 +121,7 @@ const WIDGETS: Record<string, WidgetDef> = {
     sizes: ["l", "xl"],
     render: ({ isSuper }) => (
       <Box title="Mapa do time" icon="graph" to={isSuper ? "/agents" : undefined}>
-        <TeamMap />
+        <TeamMap expandTo={isSuper ? "/agents/mapa" : undefined} />
       </Box>
     ),
   },

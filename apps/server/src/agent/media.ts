@@ -1,3 +1,4 @@
+import { promptText } from "./prompt-overrides.js";
 import { createHash } from "node:crypto";
 import { cacheGet, cacheSet } from "../shortmem.js";
 import { execFile } from "node:child_process";
@@ -23,7 +24,7 @@ const MEDIA_CACHE_SECONDS = 30 * 86400;
 /** texto de documento fica 24h para read_document (a mensagem em si não é guardada) */
 const DOC_CACHE_SECONDS = 86400;
 
-const VISION_PROMPT =
+export const VISION_PROMPT =
   "Descreva esta imagem em português, objetivo e completo, para um assistente que não pode vê-la. " +
   "Transcreva todo texto visível (valores, datas, nomes, códigos). " +
   "Se for comprovante, Pix, nota fiscal, cupom, recibo, fatura ou boleto, comece com a linha " +
@@ -120,12 +121,12 @@ async function transcribe(base64: string, format: string) {
   });
 }
 
-async function describeImages(images: { base64: string; mimetype: string }[], prompt = VISION_PROMPT) {
+async function describeImages(images: { base64: string; mimetype: string }[], prompt?: string) {
   return chatCompletion(await resolveModel("vision"), {
     messages: [
       {
         role: "user",
-        content: [{ type: "text", text: prompt }, ...images.map((i) => ({ type: "image_url" as const, image_url: { url: `data:${i.mimetype};base64,${i.base64}` } }))],
+        content: [{ type: "text", text: prompt ?? (await promptText("visao", VISION_PROMPT)) }, ...images.map((i) => ({ type: "image_url" as const, image_url: { url: `data:${i.mimetype};base64,${i.base64}` } }))],
       },
     ],
   });
@@ -138,7 +139,7 @@ async function ocrPdf(base64: string, fileName: string) {
       {
         role: "user",
         content: [
-          { type: "text", text: `Transcreva o conteúdo deste documento. ${VISION_PROMPT}` },
+          { type: "text", text: `Transcreva o conteúdo deste documento. ${await promptText("visao", VISION_PROMPT)}` },
           { type: "file", file: { filename: fileName, file_data: `data:application/pdf;base64,${base64}` } },
         ] as any,
       },

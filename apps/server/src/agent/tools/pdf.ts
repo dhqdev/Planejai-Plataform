@@ -1,3 +1,4 @@
+import { promptText } from "../prompt-overrides.js";
 import { saveDocument } from "../../documents.js";
 import { PDF_LIMITS, type PdfImages, type PdfSection, type PdfSpec, chartNumber, normalizePdfSpec, pdfFileName, renderPdf } from "../../pdf.js";
 import { downloadFirst, searchPictureUrls } from "./images.js";
@@ -10,7 +11,7 @@ const hasContent = (spec: PdfSpec) => spec.sections.some((s) => s.text || s.item
 
 // Texto simples em vez de JSON: no JSON uma aspa sem escape ou um corte no fim perdia o documento inteiro
 // ("Expected ',' or ']'..."). Aqui cada linha vale sozinha e um corte só perde o fim.
-const WRITER = `Você escreve o conteúdo de um PDF A4 em português do Brasil, a partir do pedido. Responda só o texto, neste formato:
+export const WRITER = `Você escreve o conteúdo de um PDF A4 em português do Brasil, a partir do pedido. Responda só o texto, neste formato:
 SUBTÍTULO: uma linha
 CAPA: busca curta da foto da capa (algo concreto que aparece em foto: o livro, o lugar, o prato, o esporte)
 ## Título da seção
@@ -110,7 +111,7 @@ function parseChart(t: string): PdfSection["chart"] | undefined {
 /** Escreve as seções numa chamada própria (writeLong): o agente manda só título e brief. */
 async function writeSections(args: PdfArgs, ctx: ToolContext): Promise<PdfSpec> {
   const ask = [`Título: ${args.title}`, args.subtitle && `Subtítulo: ${args.subtitle}`, args.brief && `Pedido: ${args.brief}`].filter(Boolean).join("\n");
-  const spec = { ...parseWriterText(await writeLong(ctx, { name: "texto do PDF", system: WRITER, ask, maxTokens: 8000 })), title: args.title };
+  const spec = { ...parseWriterText(await writeLong(ctx, { name: "texto do PDF", system: await promptText("redator_pdf", WRITER), ask, maxTokens: 8000 })), title: args.title };
   return { ...spec, subtitle: args.subtitle || spec.subtitle, author: args.author, coverImage: args.coverImage || spec.coverImage };
 }
 

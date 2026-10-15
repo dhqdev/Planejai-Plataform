@@ -3,6 +3,7 @@ import { one, query } from "../db/pool.js";
 import type { BrowserSession } from "./browser.js";
 import { getSettings } from "../settings.js";
 import { specialistSystemPrompt } from "./prompts.js";
+import { promptOverrides } from "./prompt-overrides.js";
 import { availableTools, isOwnerOnly, runToolLoop } from "./runner.js";
 import { isOwner } from "../ingest.js";
 import { SPECIALISTS, type AgentDef } from "./team.js";
@@ -167,6 +168,7 @@ async function systemFor(def: AgentDef, ctx: ToolContext, own: Tool[]) {
       timezone: ctx.timezone,
       user: ctx.user,
       settings,
+      teamRules: (await promptOverrides()).get("_time")?.instructions,
       note: noteText(await one("SELECT note, user_note FROM agent_notes WHERE user_id = $1 AND agent = $2", [ctx.user.id, def.id]).catch(() => null)),
     }) +
     (missing.length ? `\n\n(Integrações não conectadas para você: ${missing.join(", ")})` : "")

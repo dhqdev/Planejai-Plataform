@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
+import { Link } from "react-router-dom";
 import { CLIENT_DOING, ROLE_DOING } from "./agentProps";
 import { Modal } from "./components";
 import { AgentFace, type Face } from "./faces";
@@ -89,7 +90,8 @@ const doingOf = (id: string) => {
   return list[Math.floor(Math.random() * list.length)]!;
 };
 
-export function TeamMap() {
+/** expandTo: link da tela cheia com os prompts (só o dono recebe). */
+export function TeamMap({ expandTo }: { expandTo?: string } = {}) {
   const { data } = useApi<Graph>("/api/graph", { poll: 30000 });
   const box = useRef<HTMLDivElement>(null);
   const [saved, setSaved] = useState<Record<string, Pt>>(loadSaved);
@@ -382,6 +384,11 @@ export function TeamMap() {
           <button className="icon-btn" aria-label="Enquadrar todos" onClick={() => { touched.current = false; fit(); }}>
             <Icon name="resize" size={15} />
           </button>
+          {expandTo && (
+            <Link className="icon-btn" to={expandTo} aria-label="Tela cheia: prompts e conversas" title="Tela cheia: prompts e conversas">
+              <Icon name="external" size={15} />
+            </Link>
+          )}
           {moved && (
             <button
               className="icon-btn"

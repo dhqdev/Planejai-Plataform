@@ -24,6 +24,7 @@ import { applyUpdate, onUpdateAvailable } from "./update";
 // Cada tela é um pedaço à parte: baixa só quando abre (o app inicia leve no celular)
 const load = {
   agents: () => import("./pages/Agents"),
+  studio: () => import("./pages/TeamStudio"),
   billing: () => import("./pages/Billing"),
   calendar: () => import("./pages/Calendar"),
   clients: () => import("./pages/Clients"),
@@ -68,6 +69,7 @@ function PageUnavailable() {
 }
 
 const AgentsPage = page(() => load.agents().then((m) => m.AgentsPage));
+const TeamStudioPage = page(() => load.studio().then((m) => m.TeamStudioPage));
 const BillingPage = page(() => load.billing().then((m) => m.BillingPage));
 const ClientsPage = page(() => load.clients().then((m) => m.ClientsPage));
 const DashboardPage = page(() => load.dashboard().then((m) => m.DashboardPage));
@@ -432,6 +434,7 @@ export function App() {
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/whatsapp" element={<WhatsAppPage />} />
               <Route path="/agents" element={<AgentsPage />} />
+              <Route path="/agents/mapa" element={<TeamStudioPage />} />
               <Route path="/integrations" element={<IntegrationsPage />} />
               <Route path="/models" element={<ModelsPage />} />
               <Route path="/settings" element={<SettingsPage />} />

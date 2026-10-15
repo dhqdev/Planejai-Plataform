@@ -517,6 +517,36 @@ describe("perguntas de boas-vindas do cadastro", () => {
   });
 });
 
+describe("prompts editados no Mapa do time", () => {
+  it("o editado entra no lugar do padrão e vazio volta ao código", async () => {
+    const { withPrompt } = await import("../src/agent/prompt-overrides.js");
+    const { CTO_RULES, ctoSystemPrompt, specialistSystemPrompt, TEAM_RULES } = await import("../src/agent/prompts.js");
+    const def = { id: "agenda", name: "Agenda", role: "lembretes", instructions: "padrão", tools: [] } as any;
+    const row = (role: string | null, instructions: string | null) => new Map([["agenda", { role, instructions, base_hash: null, updated_at: "" }]]);
+    expect(withPrompt(def, row("só alarmes", null))).toMatchObject({ role: "só alarmes", instructions: "padrão" });
+    expect(withPrompt(def, row("  ", "novo jeito"))).toMatchObject({ role: "lembretes", instructions: "novo jeito" });
+    expect(withPrompt(def, new Map())).toBe(def);
+
+    const user = { id: "u", phone: "5519900000000", name: "Ana", status: "active", timezone: null, profile: {} };
+    const settings = { assistantName: "Bolinho", persona: "" } as any;
+    const base = { settings, user, timezone: "America/Sao_Paulo", memories: [], summary: null, specialists: [], disconnected: [] };
+    const padrao = ctoSystemPrompt(base);
+    expect(padrao).toContain("Você é Bolinho, assistente pessoal no WhatsApp.");
+    expect(padrao).not.toContain("{assistente}");
+    expect(CTO_RULES).toContain("{assistente}");
+    const editado = ctoSystemPrompt({ ...base, rules: "Você é {assistente}. Responda curto." });
+    expect(editado.startsWith("Você é Bolinho. Responda curto.")).toBe(true);
+    expect(editado).not.toContain("# Estilo");
+    expect(editado).toContain("# Contexto");
+    expect(ctoSystemPrompt({ ...base, gifs: true })).toContain("[[gif:busca curta]]");
+
+    const sp = (teamRules?: string) => specialistSystemPrompt(def, { timezone: "America/Sao_Paulo", user, settings, teamRules });
+    expect(sp()).toContain(TEAM_RULES);
+    expect(sp("Regras: seja breve.")).toContain("Regras: seja breve.");
+    expect(sp("Regras: seja breve.")).not.toContain("consult_colega");
+  });
+});
+
 describe("comprovante na foto vira despesa sozinho", async () => {
   const { parseReceipt, receiptDate } = await import("../src/agent/receipts.js");
   it("lê a linha FINANCEIRO de comprovante pago", () => {

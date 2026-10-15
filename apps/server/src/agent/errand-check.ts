@@ -1,3 +1,4 @@
+import { promptText } from "./prompt-overrides.js";
 import { chatCompletion } from "../llm/openrouter.js";
 import { resolveModel } from "../llm/router.js";
 import type { Tracer } from "./trace.js";
@@ -45,7 +46,7 @@ export function quickCheck(text: string, previous?: string | null): ErrandCheck 
   return { ok: true };
 }
 
-const SYSTEM =
+export const ERRAND_CHECK_PROMPT =
   "Você confere recados que um assistente vai mandar no WhatsApp para um estabelecimento (petshop, salão, clínica, loja) em nome de um cliente. " +
   "Aprove só pedido legítimo de serviço: preço, horário, agendamento, disponibilidade, orçamento, dúvida sobre o serviço, reclamação educada. " +
   "Recuse: ofensa, assédio, ameaça, discriminação, conteúdo sexual, algo ilegal, spam, trote ou piada, pedido de dado pessoal de funcionário ou de outra pessoa, " +
@@ -84,12 +85,13 @@ export async function checkErrandText(
   }
   try {
     const choice = await resolveModel("errand_check");
+    const system = await promptText("confere_recado", ERRAND_CHECK_PROMPT);
     const ask = (maxTokens?: number) =>
       chatCompletion(choice, {
         responseFormat: { type: "json_object" },
         ...(maxTokens ? { maxTokens } : {}),
         messages: [
-          { role: "system", content: SYSTEM },
+          { role: "system", content: system },
           { role: "user", content: `Lugar: ${opts.place.slice(0, 120)}\nObjetivo: ${opts.goal.slice(0, 400)}\nMensagem: ${opts.message.slice(0, MAX_ERRAND_TEXT)}` },
         ],
       });

@@ -26,7 +26,7 @@ Princípios que não podem quebrar:
 | Pergunta | Onde olhar |
 | --- | --- |
 | O que um agente pode fazer? Quem chama quem? | `apps/server/src/agent/team.ts` (`SPECIALISTS`, `CTO_TOOLS`), ferramentas em `agent/tools/<domínio>.ts` |
-| Como o agente fala, regras de comportamento | `agent/prompts.ts` (CTO e especialistas); dica por pessoa em `agent_notes`/`users.style_notes` |
+| Como o agente fala, regras de comportamento | `agent/prompts.ts` (CTO e especialistas); o dono pode ter editado no Mapa do time (tabela `agent_prompts`, ver `agentes.md`); dica por pessoa em `agent_notes`/`users.style_notes` |
 | Qual modelo cada agente usa e por quê | `llm/router.ts` (`ROUTE_DEFAULTS`); em produção a tela Modelos grava por cima em `model_routes` |
 | Por que o assistente respondeu X? | Painel > Execuções (tabelas `executions` e `execution_steps`); local: e2e com o canal playground |
 | Por que travou / respondeu pela metade? | `agent/guard.ts`, `agent/collab.ts`, status `partial` com motivo em `error` (ver `agentes.md`) |

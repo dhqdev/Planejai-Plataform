@@ -19,6 +19,7 @@ import { goalRoutes } from "./dashboard/goals.js";
 import { resourceRoutes } from "./dashboard/resources.js";
 import { settingsRoutes } from "./dashboard/settings.js";
 import { teamAdminRoutes, teamRoutes } from "./dashboard/team.js";
+import { studioRoutes } from "./dashboard/studio.js";
 import { whatsappRoutes } from "./dashboard/whatsapp.js";
 
 /**
@@ -56,6 +57,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       executionRoutes(api);
       clientRoutes(api);
       teamAdminRoutes(api);
+      studioRoutes(api);
       integrationRoutes(api);
       settingsRoutes(api);
       whatsappRoutes(api);

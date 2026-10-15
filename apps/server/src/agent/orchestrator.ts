@@ -8,6 +8,7 @@ import type { ChatMessage } from "../llm/types.js";
 import { getSettings } from "../settings.js";
 import { delegationTool, TeamRoom } from "./collab.js";
 import { ctoSystemPrompt } from "./prompts.js";
+import { promptOverrides, withPrompt } from "./prompt-overrides.js";
 import { availableTools, OWNER_INTEGRATIONS, personOf, runToolLoop } from "./runner.js";
 import { asPerson } from "../integrations/person.js";
 import { clientAgents, ctoGroups, CTO_TOOL_GROUPS, CTO_TOOLS, SPECIALISTS, TEAM_TOOLS_WHEN, type AgentDef } from "./team.js";
@@ -385,8 +386,10 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       });
     }
     // Só entra no time quem tem pelo menos uma ferramenta utilizável (menos token e nada de delegação inútil)
+    // papel e instruções editados pelo dono no Mapa do time valem para todos
+    const prompts = await promptOverrides();
     const team: AgentDef[] = [];
-    for (const s of [...SPECIALISTS, ...(await clientAgents(user.id))]) {
+    for (const s of [...SPECIALISTS.map((d) => withPrompt(d, prompts)), ...(await clientAgents(user.id))]) {
       if ((await availableTools(s.tools, user)).length) team.push(s);
     }
     const lastText = fresh.map((e) => e.text).join(" ").slice(0, 500);
@@ -404,6 +407,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     const wantsTeam = TEAM_TOOLS_WHEN.test(topicText);
     const gifs = (await isConnected("klipy")) || (await isConnected("giphy"));
     const system = ctoSystemPrompt({
+      rules: prompts.get("cto")?.instructions,
       gifs,
       groups: new Set([...groups.map((g) => g.id), ...(wantsTeam ? ["time"] : [])]),
       settings,

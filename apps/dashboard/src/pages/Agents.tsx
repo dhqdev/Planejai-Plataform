@@ -44,6 +44,7 @@ export function AgentsPage() {
         subtitle="O CTO conversa com a pessoa e chama os especialistas. Toda noite às 19h o Juvenal (CTO) faz a reunião do time: ajusta o jeito de falar com cada pessoa, passa dicas para cada agente e cria agentes novos, cada um com nome e carinha."
         actions={
           <>
+            <Link className="btn" to="/agents/mapa"><Icon name="resize" size={16} /> Prompts e conversas</Link>
             <Link className="btn" to="/models"><Icon name="cpu" size={16} /> Modelos</Link>
             <button className="btn btn-primary" disabled={running} onClick={runNow}>
               <Icon name="sparkle" size={16} /> {running ? "Reunindo o time…" : "Reunião agora"}
@@ -55,7 +56,7 @@ export function AgentsPage() {
 
       <div className="agents-body">
       <div className="card card-pad agents-map" style={{ marginBottom: 14 }}>
-        <TeamMap />
+        <TeamMap expandTo="/agents/mapa" />
       </div>
 
       <div className="grid grid-2 agents-lists" style={{ alignItems: "start" }}>
