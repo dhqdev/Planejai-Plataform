@@ -135,3 +135,15 @@
 }
 @keyframes team-fly-in { from { opacity: 0; transform: translateX(-6px) scale(.97); } }
 @media (prefers-reduced-motion: reduce) { .team-fly { animation: none; } }
+
+/* Conteúdo dentro da moldura (notebook): com o trilho fixo, as telas ocupam o painel inteiro com um respiro
+   igual dos dois lados, em vez de ficarem numa coluna estreita no meio (David, 2026-10-15). Formulários e
+   textos longos (Configurações, termos) seguem com a largura de leitura deles. */
+@media (min-width: 1024px) {
+  .layout > .main .page, .layout > .main .subtabs-bar { max-width: none; padding-left: 32px; padding-right: 32px; }
+  .layout > .main .page { padding-top: 28px; }
+  .layout > .main :is(.ct-page, .fin-page, .shop-page) { max-width: none; }
+}
+@media (min-width: 1600px) {
+  .layout > .main .page, .layout > .main .subtabs-bar { padding-left: 40px; padding-right: 40px; }
+}

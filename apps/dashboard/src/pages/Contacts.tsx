@@ -199,6 +199,7 @@ export function ContactsPage() {
       if (!c) return [];
       return [
         { label: "Mandar mensagem", icon: "send", onSelect: () => setWriting(c) },
+        { label: "Abrir no WhatsApp", icon: "external", onSelect: () => void window.open(`https://wa.me/${c.phone.replace(/\D/g, "")}`, "_blank", "noreferrer") },
         { label: "Copiar número", icon: "copy", onSelect: () => copy(c) },
         { label: named(c.name) ? "Mudar nome" : "Dar nome", icon: "edit", onSelect: () => setEditing(c.id) },
         { label: "Apagar", icon: "trash", danger: true, onSelect: () => void remove(c) },
@@ -464,7 +465,6 @@ function ContactCard({
 
   return (
     <li className={`ct-card${ok ? "" : " noname"}${editing ? " editing" : ""}`} data-id={c.id} {...(editing ? {} : press)}>
-      <span className="ct-avatar" aria-hidden="true">{ok ? initials(c.name) : <Icon name="user" size={18} />}</span>
       {editing ? (
         <form className="ct-edit" onSubmit={submit}>
           <input className="input" autoFocus placeholder="Nome do contato" value={name} onChange={(e) => setName(e.target.value)} aria-label="Nome do contato" onKeyDown={(e) => e.key === "Escape" && onCancel()} />
@@ -477,32 +477,44 @@ function ContactCard({
         </form>
       ) : (
         <>
-          <button type="button" className="ct-info" onClick={onEdit} title={ok ? "Mudar nome" : "Dar nome"}>
-            <strong>{ok ? c.name : "Sem nome"}</strong>
-            <span className="ct-sub">
-              <small className="ct-phone">{showPhone(c.phone)}</small>
-              {(c.label || c.approximate) && <small className="ct-tag">{c.approximate ? "nome parecido" : c.label}</small>}
+          <div className="ct-top">
+            <span className="ct-avatar" aria-hidden="true">{ok ? initials(c.name) : <Icon name="user" size={18} />}</span>
+            <button type="button" className="ct-info" onClick={onEdit} title={ok ? "Mudar nome" : "Dar nome"}>
+              <strong>{ok ? c.name : "Sem nome"}</strong>
+              <span className="ct-sub">
+                <small className="ct-phone">{showPhone(c.phone)}</small>
+                {(c.label || c.approximate) && <small className="ct-tag">{c.approximate ? "nome parecido" : c.label}</small>}
+              </span>
+            </button>
+          </div>
+          <div className="ct-acts">
+            <button type="button" className="ct-msg" aria-label={`Mandar mensagem para $${ok ? c.name : showPhone(c.phone)}`} title="Mandar mensagem pelo assistente" onClick={onWrite}>
+              <Icon name="send" size={14} /> <span>Mensagem</span>
+            </button>
+            <span className="ct-acts-more">
+              <a className="ct-act" href={`https://wa.me/${c.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" aria-label={`Abrir conversa com $${ok ? c.name : showPhone(c.phone)} no seu WhatsApp`} title="Abrir no seu WhatsApp">
+                <Icon name="external" size={15} />
+              </a>
+              <button
+                type="button"
+                className="ct-act"
+                aria-label={`Copiar número de $${ok ? c.name : showPhone(c.phone)}`}
+                title={copied ? "Copiado" : "Copiar número"}
+                onClick={() => {
+                  onCopy();
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1400);
+                }}
+              >
+                <Icon name={copied ? "check" : "copy"} size={15} />
+              </button>
+              <button type="button" className="ct-act" aria-label={ok ? `Mudar nome de $${ok ? c.name : showPhone(c.phone)}` : "Dar nome"} title={ok ? "Mudar nome" : "Dar nome"} onClick={onEdit}>
+                <Icon name="edit" size={15} />
+              </button>
+              <button type="button" className="ct-act ct-del" aria-label={`Apagar $${ok ? c.name : showPhone(c.phone)}`} title="Apagar" onClick={onRemove}>
+                <Icon name="trash" size={15} />
+              </button>
             </span>
-          </button>
-          <button type="button" className="icon-btn sm ct-send" aria-label={`Mandar mensagem para ${ok ? c.name : showPhone(c.phone)}`} title="Mandar mensagem" onClick={onWrite}>
-            <Icon name="send" size={15} />
-          </button>
-          <div className="ct-tools">
-            <button
-              className="icon-btn sm"
-              aria-label={`Copiar número de ${ok ? c.name : showPhone(c.phone)}`}
-              title={copied ? "Copiado" : "Copiar número"}
-              onClick={() => {
-                onCopy();
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1400);
-              }}
-            >
-              <Icon name={copied ? "check" : "copy"} size={15} />
-            </button>
-            <button className="icon-btn sm" aria-label={`Apagar ${ok ? c.name : showPhone(c.phone)}`} title="Apagar" onClick={onRemove}>
-              <Icon name="trash" size={15} />
-            </button>
           </div>
         </>
       )}

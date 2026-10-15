@@ -11,7 +11,7 @@
 .ct-clear { align-self: flex-start; color: var(--err); }
 
 /* agenda */
-.ct-book { display: flex; flex-direction: column; min-width: 0; padding: 18px 18px 8px; }
+.ct-book { display: flex; flex-direction: column; min-width: 0; padding: 20px 20px 8px; }
 .ct-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
 .ct-head .cp-h { margin: 0; margin-right: auto; }
 .ct-count { font-weight: 500; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -24,34 +24,39 @@
 
 .ct-group + .ct-group { margin-top: 14px; }
 .ct-letter { position: sticky; top: 0; z-index: 1; margin: 0 0 8px; padding: 4px 2px; font-size: 13px; font-weight: 650; color: var(--muted); background: var(--panel); }
-.ct-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.ct-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
 
-.ct-card { position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); transition: border-color .15s, background-color .15s; }
-.ct-avatar { flex-shrink: 0; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--violet-soft); color: var(--violet); font-size: 14px; font-weight: 650; letter-spacing: .01em; }
+.ct-card { position: relative; display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 14px 14px 10px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); transition: border-color .15s, box-shadow .15s; }
+.ct-top { flex: 1; display: flex; align-items: center; gap: 12px; min-width: 0; }
+.ct-avatar { flex-shrink: 0; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--violet-soft); color: var(--violet); font-size: 14px; font-weight: 650; letter-spacing: .01em; }
 .ct-card.noname .ct-avatar { background: var(--panel-2); color: var(--muted); }
-.ct-info { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.ct-info { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .ct-info strong { max-width: 100%; font-size: 14.5px; font-weight: 600; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .ct-card.noname .ct-info strong { color: var(--muted); font-weight: 500; }
 .ct-phone { font-family: var(--mono); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ct-sub { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; min-width: 0; }
 .ct-tag { font-size: 11.5px; color: var(--muted); }
-/* copiar e apagar: aparecem ao passar o mouse; no toque, segurar o cartão abre o menu */
-.ct-tools { display: none; }
-.ct-send { flex-shrink: 0; }
+/* ações sempre à vista no rodapé do cartão: mensagem pelo assistente em destaque e o resto em ícones */
+.ct-acts { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
+.ct-msg { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 13px 0 11px; border: 0; border-radius: 99px; background: var(--violet-soft); color: var(--violet); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .15s; }
+.ct-msg:focus-visible, .ct-act:focus-visible { outline: 2px solid var(--violet); outline-offset: 1px; }
+.ct-acts-more { display: flex; align-items: center; gap: 2px; }
+.ct-act { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; transition: background .15s, color .15s; }
 .ct-msg-hint { margin: 0 0 8px; font-size: 13px; }
 .ct-msg-preview { padding: 10px 12px; border-radius: 14px 14px 14px 4px; background: var(--panel-2); font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ct-msg-done { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 14px; line-height: 1.5; }
 .ct-more { display: flex; justify-content: center; padding: 16px 0 12px; }
 
-.ct-card.editing { align-items: flex-start; border-color: var(--ink); }
+.ct-card.editing { align-items: stretch; border-color: var(--ink); }
 .ct-edit { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .ct-edit .input { height: 36px; padding: 6px 10px; font-size: 14px; }
 .ct-edit-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 2px; }
 
 @media (hover: hover) and (pointer: fine) {
-  .ct-card:hover { border-color: color-mix(in srgb, var(--ink) 22%, var(--border)); }
-  .ct-tools { position: absolute; top: 50%; right: 44px; translate: 0 -50%; display: flex; gap: 4px; padding-left: 6px; background: var(--panel); opacity: 0; pointer-events: none; transition: opacity .15s; }
-  .ct-card:hover .ct-tools, .ct-card:focus-within .ct-tools { opacity: 1; pointer-events: auto; }
+  .ct-card:hover { border-color: color-mix(in srgb, var(--ink) 22%, var(--border)); box-shadow: 0 6px 18px -10px rgba(20, 10, 40, .18); }
+  .ct-act:hover { color: var(--text); background: var(--panel-2); }
+  .ct-del:hover { color: var(--err); }
+  .ct-msg:hover { background: color-mix(in srgb, var(--violet) 18%, transparent); }
   .ct-info:hover strong { text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; }
 }
 
@@ -78,7 +83,13 @@
   .ct-head .seg { width: 100%; display: flex; }
   .ct-head .seg button { flex: 1; }
   .ct-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .ct-card { padding: 10px 12px; }
+  /* celular: linha compacta, só o botão de mensagem em ícone; o resto fica no segurar */
+  .ct-card { flex-direction: row; align-items: center; gap: 10px; padding: 10px 12px; }
+  .ct-top { flex: 1; }
+  .ct-acts { padding: 0; border: 0; }
+  .ct-acts-more { display: none; }
+  .ct-msg { width: 36px; height: 36px; padding: 0; justify-content: center; }
+  .ct-msg span { display: none; }
   .ct-side { gap: 8px; }
   .ct-clear { padding: 2px 4px; min-height: 0; }
   .ct-actions .btn { flex: 1 1 auto; justify-content: center; }
