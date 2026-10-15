@@ -2,7 +2,7 @@
  * Trava de honestidade: a resposta só pode dizer que fez algo (anotei, apaguei, agendei…) se a ferramenta
  * correspondente rodou com sucesso nesta execução, pelo CTO ou por um especialista.
  */
-const SCHEDULE_TOOLS = ["schedule_reminder", "set_alarm", "calendar_create_event", "reschedule_reminder", "watch_create", "watch_update", "automation_save", "bill_save", "card_save", "card_invoice_pay", "errand_start", "errand_done", "send_whatsapp"];
+const SCHEDULE_TOOLS = ["schedule_reminder", "set_alarm", "calendar_create_event", "reschedule_reminder", "watch_create", "watch_update", "bill_save", "card_save", "card_invoice_pay", "errand_start", "errand_done", "send_whatsapp"];
 // "amanhã às 8h", "hoje", "segunda", "daqui a 20 min": a frase fala de um momento futuro
 const WHEN = /\b(amanh[ãa]|hoje|depois de amanh[ãa]|daqui a?|segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo|semana que vem|m[êe]s que vem|de manh[ãa]|[àa] tarde|[àa] noite|meio-dia|meia-noite|dia \d{1,2}|[àa]s? \d{1,2})\b|\b\d{1,2}\s?h(\d{2})?\b|\b\d{1,2}:\d{2}\b/i;
 
@@ -93,7 +93,7 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; sameSentence?: boole
   {
     what: "guardar documento ou nota",
     says: /\b(salvei|guardei)\b/i,
-    tools: ["document_save", "save_memory", "contact_save", "shop_save", "automation_save", "set_budget", "add_transaction", "bill_save", "bill_pay", "card_save"],
+    tools: ["document_save", "save_memory", "contact_save", "shop_save", "set_budget", "add_transaction", "bill_save", "bill_pay", "card_save"],
   },
   {
     what: "enviar mensagem",

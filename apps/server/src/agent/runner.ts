@@ -27,7 +27,7 @@ export function personOf(user: { id: string; phone: string }) {
 }
 
 export function isOwnerOnly(t: Pick<Tool, "integration" | "ownerOnly">) {
-  // ownerOnly: false libera de propósito uma ferramenta de integração do dono (ex.: automações seguras dos clientes)
+  // ownerOnly: false libera de propósito uma ferramenta de integração do dono (ex.: listar e desligar as automações da própria pessoa)
   return t.ownerOnly ?? Boolean(t.integration && OWNER_INTEGRATIONS.has(t.integration));
 }
 

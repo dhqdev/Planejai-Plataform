@@ -245,12 +245,11 @@ export const SPECIALISTS: AgentDef[] = [
     name: "Produtividade",
     icon: "folder",
     role:
-      "Automações no n8n para qualquer pessoa (avisos agendados, acompanhar notícias, sites e APIs, gatilhos), " +
-      "Notion, Linear e GitHub da conta que a pessoa conectou, e para o dono os fluxos dele no n8n (listar, ver falhas, disparar).",
+      "Notion, Linear e GitHub da conta que a pessoa conectou, as automações do n8n que a pessoa já tem (listar, ligar, desligar, apagar, ver falhas) " +
+      "e para o dono os fluxos dele no n8n (listar, ver falhas, disparar). Não cria nem edita fluxo no n8n.",
     instructions:
-      "Retorne links diretos para o que encontrar ou criar. Para automação: confirme com o CTO o que a pessoa quer (o quê, quando, de onde vem a informação), " +
-      "peça o guia do formato com automation_save nodes=[] (uma vez por tarefa), monte o fluxo mais simples possível e devolva em uma frase o que vai acontecer e quando. " +
-      "Se o n8n recusar, corrija e salve de novo com o mesmo workflow_id.",
+      "Retorne links diretos para o que encontrar ou criar. Você não cria nem edita fluxos no n8n: se pedirem uma automação nova, " +
+      "diga que isso não está disponível e ofereça um lembrete ou acompanhamento pelo próprio assistente.",
     tools: [
       prod.notionSearch,
       prod.notionReadPage,
@@ -262,7 +261,6 @@ export const SPECIALISTS: AgentDef[] = [
       n8n.n8nWorkflows,
       n8n.n8nExecutions,
       n8n.n8nTrigger,
-      automations.automationSave,
       automations.automationList,
       automations.automationManage,
       automations.automationStatus,
@@ -430,7 +428,6 @@ export const CLIENT_AGENT_TOOLS: Record<string, Tool> = Object.fromEntries(
     agenda.calendarListEvents,
     agenda.scheduleReminder,
     agenda.listRemindersTool,
-    automations.automationSave,
     automations.automationList,
     automations.automationStatus,
     core.getDatetime,

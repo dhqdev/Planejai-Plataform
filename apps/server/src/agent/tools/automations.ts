@@ -1,115 +1,13 @@
-import { config } from "../../config.js";
-import { cronTooFrequent } from "../../cron-limits.js";
 import { many, one, query } from "../../db/pool.js";
 import { isOwner } from "../../ingest.js";
 import { getCredentials } from "../../integrations/registry.js";
-import { BlockedUrlError, assertPublicUrl } from "../../net.js";
-import { notify } from "../../notifications.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 
 /**
- * Automações no n8n criadas pelo assistente a pedido de qualquer pessoa ("me avisa todo dia às 8h das notícias de X").
- * O modelo descreve o fluxo num formato curto (nós + ligações); aqui ele é validado, completado e salvo no n8n do dono.
- *
- * Para clientes o fluxo é seguro por construção: só nós da lista CLIENT_NODES, sem credenciais, sem $env/$vars,
- * HTTP só para endereço público fixo, e o aviso (planejai.notify / planejai.agent) sempre vai para a própria pessoa.
- * O dono pode usar qualquer nó do n8n.
+ * Automações no n8n que já existem (feitas antes, quando o assistente ainda criava fluxos).
+ * O assistente não cria nem reescreve fluxo no n8n (decisão do dono, 2026-10-15): só lista, liga, desliga,
+ * apaga (com o "sim") e mostra se está rodando bem.
  */
-
-const VERSIONS: Record<string, number> = {
-  scheduleTrigger: 1.2,
-  webhook: 2,
-  respondToWebhook: 1.1,
-  set: 3.4,
-  if: 2.2,
-  filter: 2.2,
-  switch: 3.2,
-  merge: 3,
-  wait: 1.1,
-  noOp: 1,
-  splitInBatches: 3,
-  splitOut: 1,
-  aggregate: 1,
-  limit: 1,
-  sort: 1,
-  removeDuplicates: 2,
-  dateTime: 2,
-  rssFeedRead: 1.1,
-  httpRequest: 4.2,
-  html: 1.2,
-  markdown: 1,
-  xml: 1,
-};
-const CLIENT_NODES = new Set(Object.keys(VERSIONS));
-
-/**
- * Nomes no n8n: fluxos do sistema (feitos à mão, ninguém de fora mexe) começam com "[Sistema]";
- * os que o assistente cria começam com "[Cliente] Nome ·" ou "[Dono]", e ganham a etiqueta certa.
- */
-export const TAG_CLIENT = "Planejai Cliente";
-export const TAG_OWNER = "Planejai Dono";
-export function flowName(owner: boolean, who: string, label: string) {
-  return owner ? `[Dono] ${label}` : `[Cliente] ${who} · ${label}`;
-}
-
-/** Etiqueta o fluxo (cria a etiqueta se não existir). Falhar aqui não derruba a automação. */
-async function tagWorkflow(api: (m: string, p: string, b?: unknown) => Promise<any>, workflowId: string, tag: string) {
-  try {
-    const all = await api("GET", "/tags?limit=250");
-    let t = (all?.data ?? []).find((x: any) => x.name === tag);
-    if (!t) t = await api("POST", "/tags", { name: tag });
-    const cur = await api("GET", `/workflows/${workflowId}/tags`).catch(() => []);
-    const ids = new Set([...(Array.isArray(cur) ? cur : []).map((x: any) => x.id), t.id]);
-    await api("PUT", `/workflows/${workflowId}/tags`, [...ids].map((id) => ({ id })));
-  } catch {
-    /* n8n antigo sem etiquetas na API */
-  }
-}
-const PLANEJAI_NODES = new Set(["planejai.notify", "planejai.agent"]);
-/** Nada que leia segredo da instância ou rode código fora do sandbox das expressões. */
-const FORBIDDEN = /\$env|\$vars|\$secrets|process\.|require\s*\(|constructor|__proto__|prototype|\$getWorkflowStaticData|\$execution|\bthis\b|globalThis|\bFunction\b|\beval\b/i;
-/**
- * Fluxo de cliente só usa estas variáveis do n8n. Lista do que pode, e não do que não pode: uma lista de proibidos
- * deixa passar truques como $evaluateExpression("{{ $"+"env.X }}"), que lê a chave da API interna.
- */
-const CLIENT_VARS = new Set(["$json", "$input", "$now", "$today", "$node", "$item", "$items", "$itemIndex", "$runIndex", "$index", "$position", "$prevNode", "$binary", "$jmespath", "$if", "$ifEmpty", "$min", "$max"]);
-
-/** Motivo pelo qual os parâmetros de um nó de cliente não podem ir para o n8n, ou null. */
-export function clientParamsProblem(params: unknown): string | null {
-  const text = JSON.stringify(params ?? {});
-  if (FORBIDDEN.test(text)) return "usa algo que não é permitido ($env, $vars, código)";
-  for (const m of text.matchAll(/\$[A-Za-z_]\w*/g)) if (!CLIENT_VARS.has(m[0])) return `usa ${m[0]}, que não é permitido em automação de cliente`;
-  return null;
-}
-
-/** Fluxo de cliente não dispara mais vezes que isso: cada disparo pode custar uma chamada de IA e uma mensagem. */
-export const MIN_CLIENT_INTERVAL_MIN = 15;
-
-/** Motivo pelo qual o agendamento é frequente demais para um cliente, ou null se está bom. */
-export function scheduleTooFrequent(params: Record<string, unknown>): string | null {
-  const rules = (params.rule as any)?.interval;
-  for (const r of Array.isArray(rules) ? rules : []) {
-    const field = String(r?.field ?? "days");
-    if (field === "seconds") return "intervalo em segundos";
-    if (field === "minutes" && Number(r.minutesInterval ?? 5) < MIN_CLIENT_INTERVAL_MIN) return `a cada ${r.minutesInterval ?? 5} min`;
-    if (field === "cronExpression") {
-      const why = cronTooFrequent(String(r.expression ?? ""), MIN_CLIENT_INTERVAL_MIN);
-      if (why) return why;
-    }
-  }
-  return null;
-}
-
-export interface ShortNode {
-  name: string;
-  type: string;
-  parameters?: Record<string, unknown>;
-}
-export interface ShortLink {
-  from: string;
-  to: string;
-  output?: number;
-}
 
 async function n8nApi() {
   const c = await getCredentials("n8n");
@@ -129,237 +27,12 @@ async function n8nApi() {
   };
 }
 
-const typeName = (t: string) => t.replace(/^n8n-nodes-base\./, "");
-
-/** Texto do usuário vira expressão do n8n só se tiver {{ }} dentro. */
-const expr = (s: string) => (s.includes("{{") ? `=${s}` : s);
-
-function planejaiNode(n: ShortNode, userId: string): Record<string, unknown> {
-  const p = n.parameters ?? {};
-  const agent = n.type === "planejai.agent";
-  const field = agent ? "instruction" : "text";
-  const value = String(p[field] ?? "").trim();
-  if (!value) throw new Error(`O nó "${n.name}" precisa de ${field}`);
-  return {
-    type: "n8n-nodes-base.httpRequest",
-    typeVersion: VERSIONS.httpRequest,
-    parameters: {
-      method: "POST",
-      url: `={{ $env.PLANEJAI_API_URL }}/api/internal/${agent ? "agent" : "send"}`,
-      sendHeaders: true,
-      headerParameters: { parameters: [{ name: "X-Planejai-Key", value: "={{ $env.PLANEJAI_API_KEY }}" }] },
-      sendBody: true,
-      bodyParameters: {
-        parameters: [
-          { name: "user_id", value: userId },
-          { name: field, value: expr(value) },
-        ],
-      },
-      options: {},
-    },
-  };
-}
-
-/** Valida e completa o fluxo curto no formato do n8n. Lança erro com o motivo (o agente corrige e tenta de novo). */
-export async function buildWorkflow(input: { nodes: ShortNode[]; connections: ShortLink[]; userId: string; owner: boolean; webhookPrefix: string }) {
-  const { nodes, connections, userId, owner } = input;
-  if (!Array.isArray(nodes) || nodes.length === 0) throw new Error("O fluxo precisa de pelo menos um nó");
-  if (nodes.length > 25) throw new Error("Fluxo grande demais (máx. 25 nós)");
-  const names = new Set<string>();
-  const out: Record<string, unknown>[] = [];
-  let triggers = 0;
-  for (const [i, n] of nodes.entries()) {
-    if (!n?.name || !n.type) throw new Error("Cada nó precisa de name e type");
-    if (names.has(n.name)) throw new Error(`Nome de nó repetido: ${n.name}`);
-    names.add(n.name);
-    const short = typeName(n.type);
-    const params = n.parameters ?? {};
-    let node: Record<string, unknown>;
-    if (PLANEJAI_NODES.has(n.type)) {
-      const why = owner ? null : clientParamsProblem(params);
-      if (why) throw new Error(`O nó "${n.name}" ${why}`);
-      node = planejaiNode(n, userId);
-    } else if (owner && !CLIENT_NODES.has(short)) {
-      // dono: qualquer nó, com a versão que ele informar (ou 1)
-      node = { type: n.type.includes(".") ? n.type : `n8n-nodes-base.${n.type}`, typeVersion: Number((n as any).typeVersion ?? 1), parameters: params };
-    } else {
-      if (!CLIENT_NODES.has(short)) throw new Error(`Nó "${n.type}" não permitido. Use: ${[...CLIENT_NODES, ...PLANEJAI_NODES].join(", ")}`);
-      if (!owner) {
-        const why = clientParamsProblem(params);
-        if (why) throw new Error(`O nó "${n.name}" ${why}`);
-        if (short === "httpRequest") {
-          const url = String(params.url ?? "");
-          if (!url || url.includes("{{") || url.startsWith("=")) throw new Error(`O nó "${n.name}" precisa de uma URL fixa (sem expressão)`);
-          try {
-            await assertPublicUrl(url);
-          } catch (e) {
-            throw new Error(e instanceof BlockedUrlError ? e.message : `URL inválida em "${n.name}"`);
-          }
-          if (params.authentication && params.authentication !== "none") throw new Error(`O nó "${n.name}" não pode usar credenciais`);
-        }
-        if (short === "scheduleTrigger") {
-          const why = scheduleTooFrequent(params);
-          if (why) throw new Error(`O nó "${n.name}" dispara vezes demais (${why}). O mínimo é a cada ${MIN_CLIENT_INTERVAL_MIN} minutos.`);
-        }
-        if (short === "rssFeedRead") {
-          const url = String(params.url ?? "");
-          if (url.includes("{{")) throw new Error(`O nó "${n.name}" precisa de uma URL fixa`);
-          await assertPublicUrl(url).catch(() => {
-            throw new Error(`URL do RSS bloqueada ou inválida em "${n.name}"`);
-          });
-        }
-      }
-      node = { type: `n8n-nodes-base.${short}`, typeVersion: VERSIONS[short], parameters: { ...params } };
-      if (!owner && short === "httpRequest") {
-        // a URL conferida é a primeira: sem redirecionamento (um endereço público que redireciona para um interno passaria)
-        // e sem proxy (que levaria a chamada para outro lugar)
-        const { proxy: _proxy, ...options } = ((params.options as Record<string, unknown>) ?? {}) as Record<string, unknown>;
-        (node.parameters as Record<string, unknown>).options = { ...options, redirect: { redirect: { followRedirects: false, maxRedirects: 0 } } };
-      }
-      if (short === "webhook") {
-        const path = String(params.path ?? "").replace(/[^a-z0-9-]/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "gatilho";
-        (node.parameters as any).path = owner ? path : `${input.webhookPrefix}-${path}`;
-        (node as any).webhookId = crypto.randomUUID();
-      }
-    }
-    if (short === "scheduleTrigger" || short === "webhook") triggers++;
-    out.push({ id: crypto.randomUUID(), name: n.name, position: [i * 260, 0], ...node });
-  }
-  if (!owner && triggers === 0) throw new Error("O fluxo precisa começar com scheduleTrigger ou webhook");
-
-  const conns: Record<string, { main: { node: string; type: "main"; index: number }[][] }> = {};
-  for (const l of connections ?? []) {
-    if (!names.has(l.from) || !names.has(l.to)) throw new Error(`Ligação com nó que não existe: ${l.from} -> ${l.to}`);
-    const o = Math.max(0, Math.min(10, Math.floor(l.output ?? 0)));
-    const main = (conns[l.from] ??= { main: [] }).main;
-    while (main.length <= o) main.push([]);
-    main[o]!.push({ node: l.to, type: "main", index: 0 });
-  }
-  if (!owner) {
-    // fluxo de cliente tem de estar inteiro ligado: nó solto é sinal de fluxo que não faz o que a pessoa pediu
-    const isTrigger = (n: Record<string, unknown>) => /\.(scheduleTrigger|webhook)$/.test(String(n.type));
-    const seen = new Set(out.filter(isTrigger).map((n) => String(n.name)));
-    const queue = [...seen];
-    while (queue.length) {
-      for (const outs of conns[queue.pop()!]?.main ?? []) for (const l of outs) if (!seen.has(l.node)) (seen.add(l.node), queue.push(l.node));
-    }
-    const loose = [...names].filter((n) => !seen.has(n));
-    if (loose.length) throw new Error(`Nó sem ligação a partir do gatilho: ${loose.join(", ")}. Ligue todos em connections.`);
-    if (seen.size < 2) throw new Error("O fluxo só tem o gatilho: falta o que ele faz (ex.: planejai.notify ou planejai.agent)");
-  }
-  return { nodes: out, connections: conns };
-}
-
 async function ownAutomation(workflowId: string, ctx: { user: { id: string; phone: string } }) {
   const row = await one("SELECT * FROM automations WHERE workflow_id = $1", [workflowId]);
   if (row && (row.user_id === ctx.user.id || isOwner(ctx.user.phone))) return row;
   if (!row && isOwner(ctx.user.phone)) return { workflow_id: workflowId, user_id: ctx.user.id, name: workflowId };
   throw new Error("Automação não encontrada");
 }
-
-const NODE_GUIDE =
-  "Formato curto: nodes=[{name,type,parameters}], connections=[{from,to,output?}] (output 1 = ramo falso do if). " +
-  "Tipos: scheduleTrigger, webhook, set, if, filter, switch, merge, wait, noOp, splitInBatches, splitOut, aggregate, limit, sort, removeDuplicates, dateTime, rssFeedRead, httpRequest, html, markdown, xml, respondToWebhook, " +
-  "e os especiais planejai.notify {text} (manda mensagem para a pessoa) e planejai.agent {instruction} (o assistente escreve a mensagem do jeito dele). " +
-  'Exemplos de parameters: scheduleTrigger {"rule":{"interval":[{"field":"cronExpression","expression":"0 8 * * *"}]}} ou {"rule":{"interval":[{"field":"hours","hoursInterval":2}]}}; ' +
-  'rssFeedRead {"url":"https://g1.globo.com/rss/g1/"}; limit {"maxItems":3}; httpRequest {"url":"https://api.exemplo.com/x","method":"GET"}; ' +
-  'planejai.agent {"instruction":"Resuma para a pessoa estas notícias: {{ $json.title }} {{ $json.link }}"}; ' +
-  'if {"conditions":{"options":{"caseSensitive":true,"typeValidation":"loose"},"combinator":"and","conditions":[{"leftValue":"={{ $json.preco }}","rightValue":100,"operator":{"type":"number","operation":"lt"}}]}}. ' +
-  "Texto com {{ }} vira expressão do n8n. Para juntar vários itens numa mensagem, use aggregate antes do planejai.agent. " +
-  `Todo nó tem de estar ligado a partir do gatilho, e o agendamento mais frequente é a cada ${MIN_CLIENT_INTERVAL_MIN} minutos.`;
-
-export const automationSave = defineTool<{
-  name: string;
-  description?: string;
-  nodes: ShortNode[];
-  connections: ShortLink[];
-  workflow_id?: string;
-  activate?: boolean;
-}>({
-  name: "automation_save",
-  description:
-    "Cria (ou substitui, com workflow_id) uma automação no n8n da pessoa: avisos agendados, RSS/sites/APIs, webhook. Já sai ativa. " +
-    "Primeira vez: chame com nodes=[] para receber o guia do formato (vai só quando precisa, não em toda chamada). " +
-    "Se o n8n recusar, corrija pelo erro e chame de novo com o mesmo workflow_id.",
-  integration: "n8n",
-  ownerOnly: false,
-  parameters: obj(
-    {
-      name: { type: "string", description: "Curto, ex.: Notícias de IA às 8h" },
-      description: { type: "string" },
-      nodes: { type: "array", items: { type: "object" }, description: "Nós no formato curto" },
-      connections: { type: "array", items: { type: "object" }, description: "Ligações {from,to,output?}" },
-      workflow_id: { type: "string", description: "Para substituir uma automação existente" },
-      activate: { type: "boolean", description: "Padrão true" },
-    },
-    ["name", "nodes", "connections"],
-  ),
-  async run(args, ctx) {
-    const api = await n8nApi();
-    const owner = isOwner(ctx.user.phone);
-    const existing = args.workflow_id ? await ownAutomation(args.workflow_id, ctx) : null;
-    if (!existing && !owner && config.AUTOMATIONS_PER_USER > 0) {
-      const n = await one<{ n: number }>("SELECT count(*)::int AS n FROM automations WHERE user_id = $1", [ctx.user.id]);
-      if ((n?.n ?? 0) >= config.AUTOMATIONS_PER_USER)
-        return { ok: false, error: `A pessoa já tem ${n!.n} automações (limite ${config.AUTOMATIONS_PER_USER}). Ofereça apagar uma antes.` };
-    }
-    // o guia do formato (~1,5 KB) vai no resultado quando o agente precisa, e não na descrição de toda chamada
-    if (!Array.isArray(args.nodes) || !args.nodes.length) return { ok: false, guide: NODE_GUIDE, next: "Monte os nós neste formato e chame de novo." };
-    let built: Awaited<ReturnType<typeof buildWorkflow>>;
-    try {
-      built = await buildWorkflow({ nodes: args.nodes, connections: args.connections ?? [], userId: ctx.user.id, owner, webhookPrefix: `pj-${ctx.user.id.slice(0, 8)}` });
-    } catch (err) {
-      return { ok: false, error: (err as Error).message, guide: NODE_GUIDE };
-    }
-    const label = String(args.name).trim().slice(0, 80) || "Automação";
-    const who = String(ctx.user.name ?? ctx.user.phone).split(" ")[0];
-    const body = {
-      name: flowName(owner, who, label),
-      nodes: built.nodes,
-      connections: built.connections,
-      settings: {
-        executionOrder: "v1",
-        timezone: ctx.timezone,
-        // execução de cliente não fica guardada com dados (privacidade); erro fica para dar para ver o que quebrou
-        ...(owner ? {} : { saveDataSuccessExecution: "none", saveManualExecutions: false, executionTimeout: 300 }),
-      },
-    };
-    const wf = existing ? await api("PUT", `/workflows/${existing.workflow_id}`, body) : await api("POST", "/workflows", body);
-    await tagWorkflow(api, String(wf.id), owner ? TAG_OWNER : TAG_CLIENT);
-    await query(
-      `INSERT INTO automations (workflow_id, user_id, name, description) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (workflow_id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, updated_at = now()`,
-      [String(wf.id), existing?.user_id ?? ctx.user.id, label, args.description ?? null],
-    );
-    let active = false;
-    let activationError: string | null = null;
-    if (args.activate !== false) {
-      try {
-        await api("POST", `/workflows/${wf.id}/activate`);
-        active = true;
-      } catch (e) {
-        activationError = (e as Error).message;
-      }
-    }
-    await query("UPDATE automations SET active = $2, updated_at = now() WHERE workflow_id = $1", [String(wf.id), active]);
-    if (!existing) {
-      const who = ctx.user.name ?? `+${ctx.user.phone}`;
-      await notify({ userId: ctx.user.id, kind: "automacao", title: `Automação criada: ${label}`, body: args.description ?? null });
-      if (!isOwner(ctx.user.phone)) await notify({ userId: null, kind: "automacao", title: `${who} criou uma automação`, body: label, link: "/clients" });
-    }
-    const webhooks = built.nodes
-      .filter((n: any) => n.type === "n8n-nodes-base.webhook")
-      .map((n: any) => `/webhook/${n.parameters.path}`);
-    return {
-      ok: !activationError,
-      workflow_id: String(wf.id),
-      name: label,
-      active,
-      ...(webhooks.length ? { webhooks } : {}),
-      ...(activationError ? { error: `Salvo, mas o n8n não ativou: ${activationError}. Corrija e salve de novo com este workflow_id.` } : {}),
-    };
-  },
-});
 
 export const automationList = defineTool<{ all?: boolean }>({
   name: "automation_list",
@@ -411,7 +84,7 @@ export const automationStatus = defineTool<{ workflow_id: string }>({
   name: "automation_status",
   description:
     "Mostra se uma automação da pessoa está rodando bem: as últimas execuções no n8n e, se alguma falhou, em que nó e por quê. " +
-    "Use depois de criar (quando já deu tempo de disparar) ou quando a pessoa disser que o aviso não chegou; com o erro em mãos, corrija com automation_save e o mesmo workflow_id.",
+    "Use quando a pessoa disser que o aviso não chegou; com o erro em mãos, explique o que falhou (o assistente não edita o fluxo).",
   integration: "n8n",
   ownerOnly: false,
   parameters: obj({ workflow_id: { type: "string" } }, ["workflow_id"]),
@@ -422,7 +95,7 @@ export const automationStatus = defineTool<{ workflow_id: string }>({
       if (/404/.test(e.message)) return null;
       throw e;
     });
-    if (!wf) return { ok: false, name: row.name, error: "O fluxo não existe mais no n8n. Crie de novo com automation_save ou apague com automation_manage." };
+    if (!wf) return { ok: false, name: row.name, error: "O fluxo não existe mais no n8n. Ofereça apagar da lista com automation_manage." };
     if (row.active !== undefined && Boolean(wf.active) !== Boolean(row.active))
       await query("UPDATE automations SET active = $2, updated_at = now() WHERE workflow_id = $1", [row.workflow_id, Boolean(wf.active)]);
     const list = await api("GET", `/executions?workflowId=${encodeURIComponent(row.workflow_id)}&limit=5`);

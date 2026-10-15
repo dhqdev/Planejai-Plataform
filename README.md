@@ -160,7 +160,6 @@ A lista completa, com comentários, está em [`.env.example`](.env.example). As 
 | `APP_SECRET` | legado | Só para abrir credenciais antigas. No boot elas são recriptografadas com a `ENCRYPTION_KEY` |
 | `INTERNAL_API_KEY` | para o n8n (≥24) | Chave da API interna. Vazia deixa a API desligada |
 | `N8N_URL` / `N8N_API_KEY` | para o n8n | n8n na mesma rede (`http://n8n-interno:5678`) e chave da API dele, para o assistente criar fluxos |
-| `AUTOMATIONS_PER_USER` | não | Automações no n8n por cliente (5) |
 | `LOGIN_CODE` | não | Código no WhatsApp ao entrar de navegador novo (`true`) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | sim | Conta do dono (super admin) |
 | `OPENROUTER_API_KEY` | sim | Modelos de IA |
@@ -206,10 +205,7 @@ As integrações (Google, Notion, GitHub, Linear, Slack, Tavily, Brave, Mercado 
   | Planejai · Enviar mensagem | subfluxo | Qualquer fluxo manda mensagem pelo Planejai (texto fixo ou escrito pelo assistente) |
 
 - **Assinatura pelo Asaas.** Em Integrações > Asaas cole a chave de API e um token de webhook; no Asaas, cadastre o webhook `{PUBLIC_URL}/webhooks/asaas` (eventos de Cobranças e Assinaturas) com o mesmo token. Em Configurações > Assinatura defina preço, dias grátis e ligue a cobrança. O cliente assina em `/assinatura` e paga na página do Asaas (Pix, cartão ou boleto). Sem assinatura em dia depois dos dias grátis, o assistente avisa uma vez por dia e para de responder; donos e pessoas liberadas nunca são cobrados.
-- **Automações pedidas pelos clientes.** O especialista Produtividade cria fluxos no n8n quando alguém pede ("me avisa todo dia às 8h das notícias de IA", "me avisa quando esse site mudar"). Ferramentas: `automation_save`, `automation_list`, `automation_manage` e `automation_status` (mostra as últimas execuções e o motivo da falha, para o assistente consertar o fluxo sozinho). Fluxo de cliente dispara no máximo a cada 15 minutos.
-  - Para clientes o fluxo é seguro por construção: só nós simples (agenda, webhook, RSS, HTTP para endereço público fixo, filtros e transformação), sem código, sem credenciais e sem `$env`. O aviso sempre vai para a própria pessoa.
-  - Cada cliente tem até `AUTOMATIONS_PER_USER` automações (padrão 5). Os fluxos aparecem no n8n como "[Cliente] Nome · …" com a etiqueta "Planejai Cliente" (os do dono como "[Dono] …"), separados dos fluxos do sistema "[Sistema] Planejai · …" (etiqueta "Planejai Sistema"), que só o dono edita e somem quando a pessoa apaga a conta.
-  - O dono pode usar qualquer nó.
+- **Automações no n8n.** Os agentes não criam nem editam fluxos no n8n (decisão do dono, 2026-10-15). As automações que já existiam continuam: o especialista Produtividade lista, liga, desliga, apaga (com o "sim") e mostra falhas (`automation_list`, `automation_manage`, `automation_status`); elas somem quando a pessoa apaga a conta.
 - **Telegram.** Cadastre o bot do dono em Integrações > Telegram. Cada pessoa liga a própria conta em Minha conta > Conexões. Lembretes e avisos saem no canal em que a pessoa está falando.
 - **API interna para o n8n.** Toda chamada leva o cabeçalho `X-Planejai-Key: {INTERNAL_API_KEY}`. Endpoints:
 

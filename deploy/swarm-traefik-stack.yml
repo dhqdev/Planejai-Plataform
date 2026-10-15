@@ -47,7 +47,6 @@ x-env: &env
   STORAGE_S3_ACCESS_KEY_ID: ""
   STORAGE_S3_SECRET_ACCESS_KEY: ""
   # Automações que cada cliente pode ter (criadas pelo assistente no n8n)
-  AUTOMATIONS_PER_USER: "5"
   # --- Login no painel: navegador novo recebe código de 6 dígitos no WhatsApp (OWNER_PHONES para o dono) ---
   LOGIN_CODE: "true"
   # --- Redis próprios: memória curta das conversas (24h) e cache descartável ---

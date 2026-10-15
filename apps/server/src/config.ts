@@ -70,13 +70,11 @@ const schema = z.object({
   STORAGE_S3_REGION: z.string().default("auto"),
   STORAGE_S3_ACCESS_KEY_ID: z.string().default(""),
   STORAGE_S3_SECRET_ACCESS_KEY: z.string().default(""),
-  // automações que cada cliente pode ter ativas no n8n (criadas pelo assistente)
   // Login em navegador novo pede um código no WhatsApp da pessoa (desligue com LOGIN_CODE=false)
   LOGIN_CODE: z
     .string()
     .default("true")
     .transform((v) => !["0", "false", "no", "nao", "não"].includes(v.trim().toLowerCase())),
-  AUTOMATIONS_PER_USER: z.coerce.number().int().min(0).max(50).default(5),
 
   // Números (só dígitos, com DDI) que podem falar com o agente sem aprovação.
   OWNER_PHONES: z
