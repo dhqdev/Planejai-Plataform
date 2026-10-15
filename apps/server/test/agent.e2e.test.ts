@@ -236,7 +236,7 @@ describe.skipIf(!enabled)("time de agentes (e2e)", () => {
     const created = steps.find((s) => s.name === "team_create_agent")!.output;
     expect(created.agent).toBe("c_treino");
     // colegas dele: só os que não mandam mensagem nem mexem no dinheiro
-    expect(created.report).toBe("Treino de hoje: 5 km leve. Colegas: pesquisador,agenda,compras");
+    expect(created.report).toBe("Treino de hoje: 5 km leve. Colegas: pesquisador,agenda");
 
     await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'e o treino de amanhã?', 'in7')", [convId]);
     channel = new channels.PlaygroundChannel();

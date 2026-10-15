@@ -289,7 +289,12 @@ export const SPECIALISTS: AgentDef[] = [
   },
 ];
 
-SPECIALISTS.push({
+/**
+ * Nina (Compras) saiu do time em 2026-10-15: o dono tirou a aba Compras ("não vamos fazer isso agora").
+ * Menor preço fica com o Pesquisador (shop_search) e o aviso de preço com os Acompanhamentos (watch_create kind price).
+ * Para voltar: SPECIALISTS.push(COMPRAS_AGENT), o "compras" em CLIENT_AGENT_PEERS e a aba no painel.
+ */
+export const COMPRAS_AGENT: AgentDef = {
   id: "compras",
   persona: "Nina",
   face: { color: 5, eyes: "happy", mouth: "smile", extra: "none" },
@@ -310,7 +315,7 @@ SPECIALISTS.push({
     "Você não compra nem paga nada: a compra é sempre da pessoa, no app da loja, logada. Nunca diga que comprou, reservou ou pagou. " +
     "Não ofereça arma, remédio de receita, bebida alcoólica, cigarro ou cópia pirata.",
   tools: [shopping.shopSearch, shopping.shopSave, shopping.shopList, shopping.shopUpdate, research.webSearch, research.fetchUrl],
-});
+};
 
 /**
  * Ferramentas do CTO que vão em toda chamada: o núcleo da conversa e os atalhos para o que é simples e frequente

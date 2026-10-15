@@ -1,5 +1,7 @@
 # Compras: achar o menor preço
 
+> **Desligado desde 2026-10-15** (pedido do dono: "não vamos fazer isso agora"). A aba Compras saiu do painel (`/compras` leva para Acompanhamentos), a Nina saiu do time (`COMPRAS_AGENT` em `agent/team.ts`, fora de `SPECIALISTS`) e o CTO manda "menor preço" para o Pesquisador (`shop_search`) e "me avisa quando baixar" para `watch_create` kind `price`, que aparece em Acompanhamentos com "Ver na loja". Servidor, rotas `/api/compras*` e tabelas ficaram. Para voltar: `SPECIALISTS.push(COMPRAS_AGENT)`, "compras" em `CLIENT_AGENT_PEERS` (`collab.ts`), a linha do prompt do CTO e a página e o CSS dela (no git: `git show af0d76d:apps/dashboard/src/pages/Compras.tsx`, idem o compras.css de styles). O resto deste arquivo descreve como era.
+
 Nenhuma loja brasileira abre API para um app de fora fechar a compra pela pessoa (Mercado Livre, Shopee, Amazon, Magalu: só busca e afiliados), e o robô que entrava na conta da loja e ia até o Pix foi barrado pelas lojas. Em 2026-10-12 o dono pediu para remodelar: Compras virou **busca comparada + link**. A pessoa pede no WhatsApp, a Nina (agente `compras`) busca nas lojas ao mesmo tempo, devolve as melhores ofertas com link e a pessoa compra no app da loja, logada, com o pagamento dela. Dinheiro e login de loja nunca passam por nós.
 
 ## Busca (`shopping.ts`)
@@ -22,7 +24,7 @@ Nenhuma loja brasileira abre API para um app de fora fechar a compra pela pessoa
 ## Agente e ferramentas (`agent/tools/shopping.ts`)
 `shop_search` (5 ofertas, preço já formatado e em centavos, `variant`, `ask_first`, `variant_ok`, `pick` "Na loja, escolha: …"; cache de 30 min em `agent/cache.ts`), `shop_save` (com `variant`, `alert`/`alert_below`), `shop_list`, `shop_update` (bought, alert, remove; `bought` devolve `finance_offer` e o CTO pergunta se lança o gasto em Finanças, categoria Compras, pelo Financeiro). Plano das fases seguintes (carteira com token de pagamento quando Mastercard Agent Pay/Visa abrirem no Brasil): doc "Compras com agente: plano" (https://claude.ai/code/artifact/1a087e1f-7193-4466-a337-19dd933cf3ca). A Nina tem só essas mais `web_search` e `fetch_url`: nada de navegador. O Pesquisador usa `shop_search` no lugar de `mercadolivre_search`.
 
-## Painel (`pages/Compras.tsx`, `styles/compras.css`, prefixo `shop-`)
+## Painel (antes de 2026-10-15: página Compras e o CSS dela, prefixo `shop-`)
 Em "Meu dia" para todo mundo. Busca com campo "Cor, tamanho, voltagem", filtro Novos/Usados e teto em R$, ofertas em grade (no celular viram linha com foto pequena), selo "Variação certa" ou a linha "Na loja, escolha: …", "Abrir na loja" e "Guardar" (guarda com a variação); "Sua lista" com preço guardado, preço de hoje do acompanhamento, sino do aviso (modal com meta), Comprei e Tirar. Fotos só dos CDNs `*.mlstatic.com` e `*.susercontent.com` (liberados no `img-src` da CSP em `api/security.ts`). Rotas (`api/routes/dashboard/shopping.ts`): `GET /api/compras`, `GET /api/compras/busca?q=&condition=&max=&variant=` (40 por hora por pessoa), `POST /api/compras/lista`, `PATCH|DELETE /api/compras/lista/:id`.
 
 ## O que saiu

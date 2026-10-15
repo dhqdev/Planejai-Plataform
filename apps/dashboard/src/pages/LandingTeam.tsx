@@ -9,7 +9,7 @@ import "../styles/landing-time.css";
  */
 interface Member {
   id: string;
-  /** Nina (compras) não está em CORE_FACES: nome e carinha vêm daqui (espelho de team.ts). */
+  /** para um agente que não está em CORE_FACES: nome e carinha vêm daqui (espelho de team.ts). */
   persona?: string;
   face?: Face;
   role: string;
@@ -24,14 +24,6 @@ const TEAM: Member[] = [
   { id: "pesquisador", role: "Procura por você", ask: "tem pizzaria aberta perto de mim?", answer: "Três abertas agora. A mais perto fica a 800 m." },
   { id: "recados", role: "Fala com lojas e lugares", ask: "vê se a barbearia tem horário sábado cedo", answer: "Pergunto pra Barbearia do Zé se tem às 9h. Posso mandar?" },
   { id: "comunicacao", role: "Manda mensagem por você", ask: "amanhã às 8h manda parabéns pra Ana", answer: "Deixo agendado pra amanhã às 8h. Confirma?" },
-  {
-    id: "compras",
-    persona: "Nina",
-    face: { color: 5, eyes: "happy", mouth: "smile", extra: "none" },
-    role: "Acha o menor preço",
-    ask: "air fryer boa até 400 reais",
-    answer: "A melhor sai por R$ 389,90 no Mercado Livre. Quer o link?",
-  },
   { id: "produtividade", role: "Automatiza o resto", ask: "toda segunda me manda a lista da semana", answer: "Combinado. Toda segunda às 8h ela chega aqui." },
 ];
 

@@ -26,6 +26,8 @@ type Watch = {
 
 const HOURS = [3, 6, 8, 12, 24, 48];
 const DAYS = [1, 3, 7, 14, 30];
+/** Link da oferta mais barata (o aviso de preço que era de Compras mora aqui): só http(s). */
+const offerLink = (u?: string) => (u && /^https?:\/\//i.test(u) ? u : null);
 const daysLeft = (iso: string) => Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000));
 
 /**
@@ -74,6 +76,9 @@ export function WatchesPage() {
           <div className="watch-meta">
             {w.target && <span>meta {brl(Number(w.target))}</span>}
             {w.best?.price != null && <span>menor até agora {brl(Number(w.best.price))}</span>}
+            {w.kind === "price" && offerLink(w.best?.link) && (
+              <a href={offerLink(w.best?.link)!} target="_blank" rel="noopener noreferrer">Ver na loja</a>
+            )}
           </div>
         )}
         <div className="watch-last">

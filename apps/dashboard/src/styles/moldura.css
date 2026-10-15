@@ -142,7 +142,7 @@
 @media (min-width: 1024px) {
   .layout > .main .page, .layout > .main .subtabs-bar { max-width: none; padding-left: 32px; padding-right: 32px; }
   .layout > .main .page { padding-top: 28px; }
-  .layout > .main :is(.ct-page, .fin-page, .shop-page) { max-width: none; }
+  .layout > .main :is(.ct-page, .fin-page) { max-width: none; }
 }
 @media (min-width: 1600px) {
   .layout > .main .page, .layout > .main .subtabs-bar { padding-left: 40px; padding-right: 40px; }

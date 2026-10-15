@@ -122,7 +122,7 @@ export function needsChrome(_def: { id: string }, ...texts: (string | undefined)
  * Colegas que um agente sob medida pode consultar: só os que não mandam mensagem a terceiros nem mexem no dinheiro,
  * para a lista CLIENT_AGENT_TOOLS valer também por tabela (antes ele pedia ao Moacir para apagar um lançamento).
  */
-export const CLIENT_AGENT_PEERS = new Set(["pesquisador", "agenda", "compras"]);
+export const CLIENT_AGENT_PEERS = new Set(["pesquisador", "agenda"]);
 
 /** Separa as ferramentas do agente entre as que vão na lista (núcleo + assunto do pedido) e as que ficam escondidas. */
 export function byTopic(def: Pick<AgentDef, "toolGroups">, tools: Tool[], text: string) {

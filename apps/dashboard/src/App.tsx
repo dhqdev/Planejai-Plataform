@@ -26,7 +26,6 @@ const load = {
   billing: () => import("./pages/Billing"),
   calendar: () => import("./pages/Calendar"),
   clients: () => import("./pages/Clients"),
-  compras: () => import("./pages/Compras"),
   dashboard: () => import("./pages/Dashboard"),
   documents: () => import("./pages/Documents"),
   errands: () => import("./pages/Errands"),
@@ -71,7 +70,6 @@ function PageUnavailable() {
 const AgentsPage = page(() => load.agents().then((m) => m.AgentsPage));
 const BillingPage = page(() => load.billing().then((m) => m.BillingPage));
 const ClientsPage = page(() => load.clients().then((m) => m.ClientsPage));
-const ComprasPage = page(() => load.compras().then((m) => m.ComprasPage));
 const DashboardPage = page(() => load.dashboard().then((m) => m.DashboardPage));
 const ExecutionDetailPage = page(() => load.executions().then((m) => m.ExecutionDetailPage));
 const ExecutionsPage = page(() => load.executions().then((m) => m.ExecutionsPage));
@@ -124,7 +122,6 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/settings": load.settings,
   "/profile": load.profile,
   "/plano": load.billing,
-  "/compras": load.compras,
   "/time": load.team,
 };
 function preload(to: string) {
@@ -167,7 +164,6 @@ const MY_DAY: NavItem[] = [
   { to: "/agenda", label: "Agenda", icon: "calendar" },
   { to: "/finance", label: "Finanças", icon: "wallet" },
   { to: "/watches", label: "Acompanhamentos", icon: "eye", short: "De olho" },
-  { to: "/compras", label: "Compras", icon: "shop" },
   { to: "/recados", label: "Recados", icon: "send" },
   { to: "/contatos", label: "Contatos", icon: "users" },
   { to: "/documentos", label: "Documentos", icon: "file" },
@@ -449,7 +445,7 @@ export function App() {
           <Route path="/watches" element={<WatchesPage />} />
           <Route path="/recados" element={<ErrandsPage />} />
           <Route path="/contatos" element={<ContactsPage />} />
-          <Route path="/compras" element={<ComprasPage isSuper={isSuper} />} />
+          <Route path="/compras" element={<Navigate to="/watches" replace />} />
           <Route path="/finance" element={<FinancePage />} />
           <Route path="/agenda" element={<CalendarPage isSuper={isSuper} />} />
           <Route path="/reminders" element={<Navigate to="/agenda" replace />} />
