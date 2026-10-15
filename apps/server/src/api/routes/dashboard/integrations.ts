@@ -6,15 +6,17 @@ import { googleAuthUrl, googleExchangeCode, googleRedirectUri } from "../../../i
 import { mercadolivreAuthUrl, mercadolivreExchangeCode } from "../../../integrations/mercadolivre.js";
 import { disconnect, getCredentials, getDef, isConnected, listIntegrations, rawCredentials, saveCredentials, setEnabled } from "../../../integrations/registry.js";
 import { setupTelegram } from "../../../telegram.js";
-import { isOauthState, newOauthState, oauthStateUser } from "./shared.js";
+import { sessionAccount } from "../../server.js";
+import { checkOauthState, newOauthState } from "./shared.js";
 
 /** Callbacks de OAuth: públicos, sem cookie de API garantido; valem pelo state assinado. */
 export function integrationCallbackRoutes(app: FastifyInstance) {
   // Callback do OAuth do Google vem do navegador sem cookie de API garantido: valida pelo state assinado.
   app.get<{ Querystring: { code?: string; state?: string; error?: string } }>("/api/integrations/google/oauth/callback", async (req, reply) => {
-    if (!isOauthState(req.query.state)) return reply.code(400).send("state inválido");
+    const st = await checkOauthState(req.query.state, await sessionAccount(req));
+    if (!st.ok) return reply.code(400).send(st.error);
     // conexão pessoal de um cliente volta para Minha conta; a da plataforma, para Integrações
-    const userId = oauthStateUser(req.query.state);
+    const userId = st.userId;
     const page = userId ? "/profile" : "/integrations";
     if (req.query.error) return reply.redirect(`${page}?error=${encodeURIComponent(req.query.error)}`);
     try {
@@ -29,7 +31,9 @@ export function integrationCallbackRoutes(app: FastifyInstance) {
 
   app.get<{ Querystring: { code?: string; state?: string; error?: string } }>("/api/integrations/mercadolivre/oauth/callback", async (req, reply) => {
     if (req.query.error) return reply.redirect(`/integrations?error=${encodeURIComponent(req.query.error)}`);
-    if (!isOauthState(req.query.state)) return reply.code(400).send("state inválido");
+    // Mercado Livre é só da plataforma: state pessoal de cliente não troca a conta do dono
+    const st = await checkOauthState(req.query.state, await sessionAccount(req), { platformOnly: true });
+    if (!st.ok) return reply.code(400).send(st.error);
     try {
       await mercadolivreExchangeCode(req.query.code ?? "");
       return reply.redirect("/integrations?connected=mercadolivre");
@@ -118,13 +122,13 @@ export function integrationRoutes(api: FastifyInstance) {
     return { ok: true };
   });
 
-  api.get("/api/integrations/mercadolivre/oauth/start", async () => {
-    const state = newOauthState();
+  api.get("/api/integrations/mercadolivre/oauth/start", async (req) => {
+    const state = newOauthState(req.account.id);
     return { url: await mercadolivreAuthUrl(state) };
   });
 
-  api.get("/api/integrations/google/oauth/start", async () => {
-    const state = newOauthState();
+  api.get("/api/integrations/google/oauth/start", async (req) => {
+    const state = newOauthState(req.account.id);
     return { url: await googleAuthUrl(state) };
   });
 }

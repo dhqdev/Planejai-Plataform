@@ -226,6 +226,41 @@ describe.skipIf(!enabled)("segurança e privacidade (e2e)", () => {
     expect((await app.inject({ method: "GET", url: "/api/auth/me", headers: { cookie: b } })).statusCode).toBe(401);
   });
 
+  it("OAuth: link de autorização vale uma vez, só para quem pediu; dono não cria login para número de outra pessoa", async () => {
+    const { hashPassword } = await import("../src/accounts.js");
+    const { checkOauthState, newOauthState } = await import("../src/api/routes/dashboard/shared.js");
+    const mk = async (phone: string, email: string) => {
+      const u = await db.one("INSERT INTO users (phone, name, status) VALUES ($1, 'X', 'active') RETURNING id", [phone]);
+      const a = await db.one("INSERT INTO accounts (email, name, password_hash, role, status, user_id, phone) VALUES ($1, 'X', $2, 'admin', 'active', $3, $4) RETURNING id", [
+        email,
+        hashPassword("senha-123456"),
+        u.id,
+        phone,
+      ]);
+      return { userId: u.id as string, accountId: a.id as string };
+    };
+    const ana = await mk("5519955550001", "ana-oauth@x.com");
+    const bia = await mk("5519955550002", "bia-oauth@x.com");
+    const biaCookie = cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "bia-oauth@x.com", password: "senha-123456" } }));
+
+    // Ana pede e repassa o link: no navegador da Bia (logada) a conta Google dela não vai parar na da Ana
+    const state = newOauthState(ana.accountId, ana.userId);
+    const cb = await app.inject({ method: "GET", url: `/api/integrations/google/oauth/callback?state=${encodeURIComponent(state)}&error=x`, headers: { cookie: biaCookie } });
+    expect(cb.statusCode).toBe(400);
+    // na própria conta vale, mas uma vez só
+    expect(await checkOauthState(state, { id: ana.accountId })).toEqual({ ok: true, userId: ana.userId });
+    expect((await checkOauthState(state, { id: ana.accountId })).ok).toBe(false);
+    // Mercado Livre é da plataforma: state de cliente não troca a conta do dono
+    const ml = await app.inject({ method: "GET", url: `/api/integrations/mercadolivre/oauth/callback?state=${encodeURIComponent(newOauthState(bia.accountId, bia.userId))}&code=c`, headers: { cookie: biaCookie } });
+    expect(ml.statusCode).toBe(400);
+    expect((await checkOauthState("forjado", null)).ok).toBe(false);
+
+    const owner = cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } }));
+    const taken = await app.inject({ method: "POST", url: "/api/accounts", headers: { cookie: owner }, payload: { name: "Outra", email: "outra@x.com", password: "senha-123456", phone: "19955550001" } });
+    expect(taken.statusCode).toBe(409);
+    expect(await db.one("SELECT COUNT(*)::int AS n FROM accounts WHERE user_id = $1", [ana.userId])).toEqual({ n: 1 });
+  });
+
   it("cadastro exige aceite dos termos", async () => {
     await (await import("../src/settings.js")).saveSettings({ signupMode: "open" });
     const r = await app.inject({ method: "POST", url: "/api/auth/register", payload: { name: "Teo Silva", email: "teo@x.com", password: "senha-forte", phone: "19 95555-4444" } });

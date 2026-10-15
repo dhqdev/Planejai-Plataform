@@ -238,7 +238,7 @@ export function meRoutes(base: FastifyInstance) {
     const uid = await personalUser(req);
     if (!uid) return reply.code(403).send({ error: "Use a tela Integrações" });
     try {
-      return { url: await googleAuthUrl(newOauthState(uid)) };
+      return { url: await googleAuthUrl(newOauthState(req.account.id, uid)) };
     } catch {
       return reply.code(400).send({ error: "O Google ainda não está disponível aqui. Fale com o responsável pelo assistente." });
     }

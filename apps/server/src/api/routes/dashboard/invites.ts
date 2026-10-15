@@ -3,6 +3,7 @@ import { scopeUserId } from "../../../accounts.js";
 import { many, query } from "../../../db/pool.js";
 import { withOutfits } from "../../../mascot.js";
 import { myShares, selfUserId, setShare, sharedWithMe, type ShareScope } from "../../../sharing.js";
+import { isUuid } from "./shared.js";
 import { createInvite, createInviteCode, inviteLink, inviteStats, listContacts } from "../../../social.js";
 
 /** Convites e contatos. */
@@ -49,7 +50,8 @@ export function inviteRoutes(base: FastifyInstance) {
       return reply.code(400).send({ error: (err as Error).message });
     }
   });
-  base.delete<{ Params: { id: string } }>("/api/invites/:id", async (req) => {
+  base.delete<{ Params: { id: string } }>("/api/invites/:id", async (req, reply) => {
+    if (!isUuid(req.params.id)) return reply.code(404).send({ error: "não encontrado" });
     const r = await query("UPDATE invites SET status = 'expired' WHERE id = $1 AND status = 'pending' AND ($2::uuid IS NULL OR inviter_user_id = $2)", [
       req.params.id,
       scopeUserId(req.account),

@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { hashPassword, normalizePhone } from "../../../accounts.js";
 import { many, one, query } from "../../../db/pool.js";
+import { phoneVariants } from "../../../ingest.js";
+import { isUuid } from "./shared.js";
 
 /** Contas do painel (só super admin). */
 export function accountRoutes(api: FastifyInstance) {
@@ -10,6 +12,7 @@ export function accountRoutes(api: FastifyInstance) {
             FROM accounts a LEFT JOIN users u ON u.id = a.user_id ORDER BY a.status = 'pending' DESC, a.created_at DESC`),
   );
   api.patch<{ Params: { id: string }; Body: { status?: string; role?: string } }>("/api/accounts/:id", async (req, reply) => {
+    if (!isUuid(req.params.id)) return reply.code(404).send({ error: "não encontrada" });
     const status = req.body.status && ["active", "pending", "disabled"].includes(req.body.status) ? req.body.status : null;
     // papel não muda pelo painel: super admin é só o dono da stack
     const row = await one(
@@ -22,7 +25,8 @@ export function accountRoutes(api: FastifyInstance) {
     if (row.user_id && status === "disabled") await query("UPDATE users SET status = 'blocked' WHERE id = $1", [row.user_id]);
     return { ok: true };
   });
-  api.delete<{ Params: { id: string } }>("/api/accounts/:id", async (req) => {
+  api.delete<{ Params: { id: string } }>("/api/accounts/:id", async (req, reply) => {
+    if (!isUuid(req.params.id)) return reply.code(404).send({ error: "não encontrada" });
     await query("DELETE FROM accounts WHERE id = $1", [req.params.id]);
     return { ok: true };
   });
@@ -33,10 +37,12 @@ export function accountRoutes(api: FastifyInstance) {
     let userId: string | null = null;
     const phone = req.body.phone ? normalizePhone(req.body.phone) : null;
     if (phone) {
-      const u = await one(
-        `INSERT INTO users (phone, name, status) VALUES ($1, $2, 'active') ON CONFLICT (phone) DO UPDATE SET status = 'active' RETURNING id`,
-        [phone, req.body.name ?? null],
-      );
+      // número que já é de alguém não ganha login com senha escolhida pelo dono: os dados dele são particulares.
+      // Para essa pessoa entrar no painel, Clientes manda o link para ela mesma criar a senha.
+      if (await one("SELECT 1 FROM users WHERE phone = ANY($1)", [phoneVariants(phone)])) {
+        return reply.code(409).send({ error: "Esse WhatsApp já é de uma pessoa cadastrada. Use Clientes para mandar o link de criar a senha." });
+      }
+      const u = await one(`INSERT INTO users (phone, name, status) VALUES ($1, $2, 'active') RETURNING id`, [phone, req.body.name ?? null]);
       userId = u.id;
     }
     return one(

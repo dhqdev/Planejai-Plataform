@@ -57,7 +57,7 @@ export async function startChallenge(account: Account, sendCode: (phone: string,
   const phone = await phoneFor(account);
   if (!phone) return { needs_code: false, reason: "sem número" };
   if (!(await whatsappReady())) {
-    await notify({ userId: account.owner ? null : account.userId, kind: "seguranca", title: "Entrada sem código", body: "Um navegador novo entrou só com a senha porque o WhatsApp estava desconectado." });
+    if (account.owner || account.userId) await notify({ userId: account.owner ? null : account.userId, kind: "seguranca", title: "Entrada sem código", body: "Um navegador novo entrou só com a senha porque o WhatsApp estava desconectado." });
     return { needs_code: false, reason: "whatsapp fora" };
   }
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");

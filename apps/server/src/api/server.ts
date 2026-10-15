@@ -32,12 +32,18 @@ declare module "fastify" {
   }
 }
 
-/** Exige login. Coloca a conta em req.account (recarregada a cada pedido: bloqueio vale na hora). */
-export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
-  const session = verifySession(req.cookies[COOKIE]);
+/** Conta do cookie de login, ou null (sem login, token vencido ou de versão antiga). */
+export async function sessionAccount(req: FastifyRequest): Promise<Account | null> {
+  const session = verifySession(req.cookies?.[COOKIE]);
   const account = session ? await loadAccount(session.sub) : null;
   // senha trocada, conta desativada ou "sair de todos os aparelhos": token antigo não vale mais
-  if (!account || session?.v !== account.sessionVersion) return reply.code(401).send({ error: "não autenticado" });
+  return account && session?.v === account.sessionVersion ? account : null;
+}
+
+/** Exige login. Coloca a conta em req.account (recarregada a cada pedido: bloqueio vale na hora). */
+export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
+  const account = await sessionAccount(req);
+  if (!account) return reply.code(401).send({ error: "não autenticado" });
   if (account.status !== "active") return reply.code(403).send({ error: account.status === "pending" ? "Conta aguardando aprovação" : "Conta desativada" });
   req.account = account;
 }
@@ -134,7 +140,8 @@ export async function buildServer() {
     if (newDevice) {
       const token = await trustDevice(account.id, req.headers["user-agent"]);
       reply.setCookie(DEVICE_COOKIE, token, { path: "/", httpOnly: true, sameSite: "lax", secure: config.PUBLIC_URL.startsWith("https"), maxAge: 365 * 86_400 });
-      await notify({ userId: account.owner ? null : account.userId, kind: "seguranca", title: "Novo acesso ao painel", body: `Navegador novo confirmado pelo código do WhatsApp (${String(req.headers["user-agent"] ?? "").slice(0, 80)}).` });
+      // conta de cliente sem WhatsApp ligado não avisa ninguém (user_id nulo é o sino do dono)
+      if (account.owner || account.userId) await notify({ userId: account.owner ? null : account.userId, kind: "seguranca", title: "Novo acesso ao painel", body: `Navegador novo confirmado pelo código do WhatsApp (${String(req.headers["user-agent"] ?? "").slice(0, 80)}).` });
     }
     setSession(reply, account);
     return publicAccount(account);
@@ -228,6 +235,10 @@ export async function buildServer() {
       [variants],
     );
     if (taken) return reply.code(409).send({ error: "Esse WhatsApp já tem conta. Entre com seu e-mail e senha." });
+    // número bloqueado pelo dono não volta por um cadastro novo no painel
+    if (await one("SELECT 1 FROM users WHERE phone = ANY($1) AND status = 'blocked'", [variants])) {
+      return reply.code(403).send({ error: "Esse WhatsApp está bloqueado. Fale com quem administra o Planejai." });
+    }
     // prova de que o número é da pessoa: código no WhatsApp antes de criar a conta
     if (config.LOGIN_CODE) {
       if (!req.body?.challenge) {

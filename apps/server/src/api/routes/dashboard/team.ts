@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { scopeUserId } from "../../../accounts.js";
+import { selfUserId } from "../../../sharing.js";
 import { CTO, CTO_TOOLS, faceFor, SPECIALISTS } from "../../../agent/team.js";
 import { many, one } from "../../../db/pool.js";
 import { dailyImprovement, improveUser } from "../../../improve.js";
@@ -10,7 +11,7 @@ import { isUuid, withLook } from "./shared.js";
 /** Time de agentes como cada conta vê: o próprio time e o mapa de quem conversa com quem. */
 export function teamRoutes(base: FastifyInstance) {
   base.get("/api/me/team", async (req) => {
-    const uid = req.account.userId;
+    const uid = await selfUserId(req.account);
     const core = [CTO, ...SPECIALISTS].map((a) => ({ id: a.id, name: a.name, persona: a.persona, face: a.face, role: a.role, kind: a.id === "cto" ? "cto" : "specialist" }));
     if (!uid) return { core, mine: [] };
     const mine = (await many("SELECT id, slug, name, persona, face, focus, uses, created_at FROM client_agents WHERE user_id = $1 AND active ORDER BY created_at", [uid])).map((a) =>
@@ -82,14 +83,14 @@ export function teamAdminRoutes(api: FastifyInstance) {
               CASE WHEN ca.user_id = $1 THEN ca.instructions END AS instructions,
               COALESCE(u.full_name, u.name, '+' || u.phone) AS owner
          FROM client_agents ca JOIN users u ON u.id = ca.user_id ORDER BY ca.active DESC, ca.uses DESC`,
-      [req.account.userId ?? null],
+      [await selfUserId(req.account)],
     ).then((rows) => rows.map((r) => withLook(r, r.user_id))),
   );
 
   api.patch<{ Params: { id: string }; Body: { active?: boolean; instructions?: string } }>("/api/client-agents/:id", async (req, reply) => {
     if (!isUuid(req.params.id)) return reply.code(404).send({ error: "Agente não encontrado" });
     // pausar/reativar vale para qualquer um; mudar as instruções, só nos agentes do próprio dono
-    const own = req.body.instructions != null ? await one("SELECT 1 FROM client_agents WHERE id = $1 AND user_id = $2", [req.params.id, req.account.userId ?? null]) : null;
+    const own = req.body.instructions != null ? await one("SELECT 1 FROM client_agents WHERE id = $1 AND user_id = $2", [req.params.id, await selfUserId(req.account)]) : null;
     if (req.body.instructions != null && !own) return reply.code(403).send({ error: "As instruções do agente de um cliente são só dele." });
     const row = await one("UPDATE client_agents SET active = COALESCE($2, active), instructions = COALESCE($3, instructions), updated_at = now() WHERE id = $1 RETURNING id, active", [
       req.params.id,
@@ -98,10 +99,9 @@ export function teamAdminRoutes(api: FastifyInstance) {
     ]);
     return row ?? reply.code(404).send({ error: "Agente não encontrado" });
   });
-  api.get("/api/topics", async (req) =>
-    req.account.userId
-      ? many(`SELECT topic, round(score::numeric, 1) AS score, days, last_at FROM user_topics WHERE user_id = $1 ORDER BY score DESC LIMIT 100`, [req.account.userId])
-      : [],
-  );
+  api.get("/api/topics", async (req) => {
+    const self = await selfUserId(req.account);
+    return self ? many(`SELECT topic, round(score::numeric, 1) AS score, days, last_at FROM user_topics WHERE user_id = $1 ORDER BY score DESC LIMIT 100`, [self]) : [];
+  });
   api.post<{ Body: { user?: string } }>("/api/improve/run", async (req) => (req.body?.user ? improveUser(req.body.user) : dailyImprovement()));
 }

@@ -7,6 +7,7 @@ import { phoneVariants } from "../../../ingest.js";
 import { withOutfits } from "../../../mascot.js";
 import { eraseUserData, resetContext } from "../../../privacy.js";
 import { getSettings } from "../../../settings.js";
+import { selfUserId } from "../../../sharing.js";
 import { inviteLink } from "../../../social.js";
 import { getTabs, saveTabs } from "../../../tabs.js";
 import { isUuid, withLook } from "./shared.js";
@@ -58,8 +59,8 @@ export function clientRoutes(api: FastifyInstance) {
     }
     return { client, link: inviteLink(code) };
   });
-  api.patch<{ Params: { id: string }; Body: { status?: string; full_name?: string; email?: string } }>("/api/clients/:id", async (req) =>
-    one(
+  api.patch<{ Params: { id: string }; Body: { status?: string; full_name?: string; email?: string } }>("/api/clients/:id", async (req, reply) =>
+    !isUuid(req.params.id) ? reply.code(404).send({ error: "não encontrado" }) : one(
       `UPDATE users SET status = COALESCE($2, status), full_name = COALESCE($3, full_name), email = COALESCE($4, email) WHERE id = $1 RETURNING *`,
       [req.params.id, ["active", "pending", "blocked"].includes(req.body.status ?? "") ? req.body.status : null, req.body.full_name ?? null, req.body.email ?? null],
     ),
@@ -161,7 +162,8 @@ export function clientRoutes(api: FastifyInstance) {
       withLook(a, id),
     );
     // decisão do dono (D1): assuntos, jeito de falar e notas dos agentes são da pessoa; o painel só mostra os do próprio dono
-    const own = id === req.account.userId;
+    // o dono não tem pessoa ligada à conta: a dele é o primeiro OWNER_PHONES
+    const own = id === (await selfUserId(req.account));
     const topics = own ? await many("SELECT topic, round(score::numeric, 1)::float AS score, days FROM user_topics WHERE user_id = $1 ORDER BY score DESC LIMIT 10", [id]) : [];
     const person = own ? await one("SELECT style_notes FROM users WHERE id = $1", [id]) : null;
     const notes = own ? await many("SELECT agent, note, user_note, updated_at FROM agent_notes WHERE user_id = $1 ORDER BY agent", [id]) : [];
