@@ -246,6 +246,10 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     expect(asaasCalls).toHaveLength(2);
 
     expect((await hook({ id: "e1", event: "PAYMENT_CONFIRMED", payment: { id: "pay_av_1", externalReference: `grains:${p.id}` } }, "errado")).statusCode).toBe(401);
+    // endereço antigo, ainda cadastrado no Asaas: responde em vez de 404 (404 penaliza e pausa a fila)
+    const legacy = await app.inject({ method: "POST", url: "/api/webhook-asaas", headers: { "asaas-access-token": TOKEN }, payload: { id: "evt_antigo", event: "PAYMENT_OVERDUE", payment: { id: "pay_x", subscription: "sub_de_outro_sistema" } } });
+    expect(legacy.statusCode).toBe(200);
+    expect(legacy.json()).toMatchObject({ ok: true, handled: false });
     expect((await hook({ id: "e1", event: "PAYMENT_CONFIRMED", payment: { id: "pay_av_1", externalReference: `grains:${p.id}`, billingType: "PIX" } })).json()).toEqual({ ok: true, handled: true, status: "paid" });
     // cartão manda RECEIVED do mesmo pagamento depois, com outro id de evento: não credita de novo
     await hook({ id: "e2", event: "PAYMENT_RECEIVED", payment: { id: "pay_av_1", externalReference: `grains:${p.id}` } });

@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { channels } from "../../channels/index.js";
 import { handleAsaasEvent } from "../../billing.js";
 import { config } from "../../config.js";
@@ -45,7 +45,9 @@ export async function registerWebhookRoutes(app: FastifyInstance) {
   });
 
   // Asaas: avisos de pagamento da assinatura. O token é o que o dono colou em Integrações > Asaas e no webhook do Asaas.
-  app.post("/webhooks/asaas", async (req, reply) => {
+  // /api/webhook-asaas é o endereço do sistema antigo, que ainda está cadastrado no Asaas de quem migrou:
+  // sem ele o Asaas recebia 404, penalizava a fila e acabava pausando os avisos.
+  const asaasHook = async (req: FastifyRequest, reply: FastifyReply) => {
     const token = (await getCredentials("asaas"))?.webhook_token ?? "";
     if (!sameSecret(req.headers["asaas-access-token"], token)) return reply.code(401).send({ error: "token inválido" });
     try {
@@ -55,7 +57,9 @@ export async function registerWebhookRoutes(app: FastifyInstance) {
       req.log.error({ err }, "falha no evento do Asaas");
       return reply.code(500).send({ error: "falha ao processar" });
     }
-  });
+  };
+  app.post("/webhooks/asaas", asaasHook);
+  app.post("/api/webhook-asaas", asaasHook);
 
   // Telegram: o setWebhook (ao salvar o token em Integrações) manda o segredo no cabeçalho
   app.post("/webhooks/telegram", async (req, reply) => {
