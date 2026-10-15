@@ -42,6 +42,17 @@
 .grain-amount { margin: 0; font-weight: 600; font-size: 14px; color: var(--violet); }
 .grain-blurb { margin: 0 0 8px; color: var(--muted); font-size: 13px; flex: 1; }
 .grain-plan .btn { justify-content: center; width: 100%; }
+.grain-blurb:has(+ .grain-perks) { flex: none; margin-bottom: 2px; }
+.grain-perks { flex: 1; list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 5px; font-size: 13px; }
+.grain-perks li { position: relative; padding-left: 18px; }
+.grain-perks li::before { content: ""; position: absolute; left: 2px; top: 5px; width: 8px; height: 4px; border: solid var(--violet); border-width: 0 0 2px 2px; transform: rotate(-45deg); }
+.grain-more { font-style: normal; font-weight: 600; font-size: 12px; color: var(--muted); }
+.grain-shop-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.grain-compare { font-size: 13px; font-weight: 600; color: var(--violet); }
+.grain-up { display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; margin-bottom: 18px; padding: 14px 16px; border-radius: 18px; background: var(--violet-soft); }
+.grain-up > div { display: grid; gap: 2px; min-width: 0; flex: 1 1 260px; }
+.grain-up b { font-size: 14.5px; }
+.grain-up span { font-size: 13px; color: var(--muted); }
 @media (hover: hover) and (pointer: fine) { .grain-plan:not(.mine):hover { transform: translateY(-2px); } }
 
 .grain-packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }

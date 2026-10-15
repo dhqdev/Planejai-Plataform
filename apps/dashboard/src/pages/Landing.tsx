@@ -369,6 +369,12 @@ function Plans({ pricing, cta, go, closed }: { pricing: Pricing; cta: (p: Plan) 
           ))}
         </ul>
 
+        <p className="lv-more" data-reveal>
+          <a className="lp-link" href="/precos" onClick={go}>
+            Ver planos, pacotes e o que cada um dá
+          </a>
+        </p>
+
         {packs.length > 0 && (
           <div className="lv-packs" data-reveal>
             <b>Acabou antes do mês? Pacotes avulsos, que não vencem:</b>
@@ -444,7 +450,11 @@ export function LandingPage() {
             <a href="#apps">Apps</a>
             <a href="#como-funciona">Como funciona</a>
             <a href="#time">O time</a>
-            {pricing && <a href="#planos">Planos</a>}
+            {pricing && (
+              <a href="/precos" onClick={go}>
+                Planos
+              </a>
+            )}
             <a href="#perguntas">Perguntas</a>
           </nav>
           <div className="lp-nav-cta">

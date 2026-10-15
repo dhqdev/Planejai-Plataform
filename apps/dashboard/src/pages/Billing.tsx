@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { api, brl } from "../api";
 import { ErrorBox, Loading, Modal, PageHead, confirmDialog } from "../components";
 import { useApi } from "../hooks";
@@ -10,6 +11,7 @@ interface Plan {
   grains: number;
   blurb: string;
   highlight?: boolean;
+  perks?: string[];
 }
 interface Pack {
   id: string;
@@ -160,6 +162,10 @@ export function BillingPage() {
     }
   };
 
+  // o próximo plano acima do atual: a sugestão de subir mostra o que ganha e quanto paga hoje
+  const nextUp = sub?.plan && !sub.nextPlan ? pricing.plans.filter((p) => p.price > currentPrice).sort((a, b) => a.price - b.price)[0] ?? null : null;
+  const upToday = nextUp && sub?.lastPaymentAt ? Math.round((nextUp.price - currentPrice) * (1 - discount / 100) * 100) / 100 : null;
+
   const total = wallet?.total ?? 0;
   const planShare = sub?.plan && wallet ? Math.min(1, wallet.plan / Math.max(1, sub.plan.grains)) : null;
   const days = data.burnPerDay && data.burnPerDay > 0 ? Math.floor(total / data.burnPerDay) : null;
@@ -274,7 +280,30 @@ export function BillingPage() {
 
         {live && data.linked && (
           <section className="grain-shop" aria-label="Planos e pacotes">
-            <h2>Planos</h2>
+            {data.ready && nextUp && sub?.plan && (
+              <div className="grain-up">
+                <div>
+                  <b>Quer mais grãos? Suba para o {nextUp.name}.</b>
+                  <span>
+                    +{grainsText(nextUp.grains - sub.plan.grains)} por mês
+                    {upToday != null && upToday >= ASAAS_MIN_CHARGE ? `, pagando hoje só a diferença (${brl(upToday)})` : `, por ${brl(priceOf(nextUp))} por mês`}.
+                  </span>
+                </div>
+                <button className="btn btn-primary" onClick={() => changePlan(nextUp)}>Subir de plano</button>
+              </div>
+            )}
+            {data.ready && !sub && total > 0 && (
+              <div className="grain-up">
+                <div>
+                  <b>Você está usando os grãos de presente.</b>
+                  <span>Com um plano eles recarregam sozinhos todo mês, e o grão sai mais barato que no avulso.</span>
+                </div>
+              </div>
+            )}
+            <div className="grain-shop-head">
+              <h2>Planos</h2>
+              <Link className="grain-compare" to="/precos">Comparar planos</Link>
+            </div>
             <p className="muted grain-lead">Todo mês o plano recarrega seus grãos. O que sobra não acumula; os extras não vencem.</p>
             <div className="grain-plans">
               {pricing.plans.map((p) => {
@@ -291,8 +320,16 @@ export function BillingPage() {
                       <b>{brl(price)}</b>
                       <span>por mês</span>
                     </p>
-                    <p className="grain-amount">{grainsText(p.grains)} por mês</p>
+                    <p className="grain-amount">
+                      {grainsText(p.grains)} por mês
+                      {sub?.plan && p.grains > sub.plan.grains && <em className="grain-more"> +{nf.format(p.grains - sub.plan.grains)}</em>}
+                    </p>
                     <p className="grain-blurb">{p.blurb}</p>
+                    {p.perks && p.perks.length > 0 && (
+                      <ul className="grain-perks">
+                        {p.perks.map((x) => <li key={x}>{x}</li>)}
+                      </ul>
+                    )}
                     {!data.ready ? null : !sub ? (
                       <button className={`btn ${p.highlight ? "btn-primary" : ""}`} onClick={() => setCheckout({ kind: "plan", plan: p })}>Assinar</button>
                     ) : mine && !sub.nextPlan ? (

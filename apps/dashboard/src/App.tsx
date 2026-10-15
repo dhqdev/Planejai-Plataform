@@ -57,6 +57,7 @@ function page<P>(pick: () => Promise<ComponentType<P>>) {
 }
 /** Landing pública: só baixa para quem abre "/" sem estar logado. */
 const Landing = page(() => import("./pages/Landing").then((m) => m.LandingPage));
+const Pricing = page(() => import("./pages/Pricing").then((m) => m.PricingPage));
 
 function PageUnavailable() {
   return (
@@ -368,6 +369,8 @@ export function App() {
 
   // termos e privacidade abrem sem login (link do cadastro e do convite no WhatsApp)
   if (loc.pathname === "/privacidade") return <PrivacyPage />;
+  // página de preços: aberta pelo "Planos" da landing, com ou sem login
+  if (loc.pathname === "/precos") return <Suspense fallback={<BlockLoader />}><Pricing /></Suspense>;
   if (me === undefined) return <BlockLoader />;
   if (!me && loc.pathname === "/") return <Suspense fallback={<BlockLoader />}><Landing /></Suspense>;
   if (!me) return <AuthPage onLogin={setMe} />;

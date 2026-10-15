@@ -27,6 +27,7 @@
 .lv-facts li::before { content: ""; width: 5px; height: 9px; margin: 0 2px 3px 0; border: solid var(--lp-violet); border-width: 0 2px 2px 0; transform: rotate(45deg); }
 
 .lv-packs { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin-top: 16px; padding: 18px 22px; border-radius: 22px; border: 1px solid var(--lp-line); }
+.lv-more { margin-top: 18px; text-align: center; }
 .lv-packs > b { font-size: 15px; font-weight: 500; color: var(--lp-muted); }
 .lv-packs ul { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .lv-packs li { display: flex; align-items: baseline; gap: 10px; padding: 8px 14px; border-radius: 999px; background: var(--lp-sand); font-size: 14.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
