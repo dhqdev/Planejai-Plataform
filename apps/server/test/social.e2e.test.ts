@@ -418,6 +418,17 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     const late = await app.inject({ method: "GET", url: `/api/invite/${old.code}` });
     expect(late.statusCode).toBe(410);
     expect(late.json().error).toContain("24 horas");
+
+    // aba Convites: cada um vê só quem entrou pelo convite dele; o aceito vira amigo e sai da lista de convites
+    const mine = (await app.inject({ method: "GET", url: "/api/me/convites", headers: { cookie: sup } })).json();
+    expect(mine.friends).toEqual(expect.arrayContaining([expect.objectContaining({ id: rafa.id, name: "Rafa", paying: false })]));
+    expect(mine.invites.map((i: any) => i.id)).toContain(old.id);
+    expect(mine.invites.some((i: any) => i.code === created.code)).toBe(false);
+    expect(mine.discount).toMatchObject({ percent: 0 });
+    const rafaLogin = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "rafa@x.com", password: "senha-forte" } });
+    const rafaCookie = String(rafaLogin.headers["set-cookie"]).split(";")[0]!;
+    const hers = (await app.inject({ method: "GET", url: "/api/me/convites", headers: { cookie: rafaCookie } })).json();
+    expect(hers).toMatchObject({ linked: true, friends: [], invites: [] });
     config.OWNER_PHONES = owners;
     await app.close();
   });

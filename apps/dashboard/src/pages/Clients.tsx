@@ -308,7 +308,7 @@ function CostsCard({ onOpen }: { onOpen: (id: string) => void }) {
   );
 }
 
-const MODULE_LABEL: Record<string, string> = { convites: "Convites", memorias: "O que ele sabe", meu_time: "Meu time" };
+const MODULE_LABEL: Record<string, string> = { memorias: "O que ele sabe", meu_time: "Meu time" };
 
 /** Uso do cliente: execuções, custo, agentes que o time criou para ele, o que aprenderam e as abas do app. */
 function ClientUsage({ id }: { id: string }) {

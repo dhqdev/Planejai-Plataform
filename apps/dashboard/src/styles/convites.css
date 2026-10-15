@@ -1,0 +1,53 @@
+/* Aba Convites (pages/Convites.tsx): desconto por indicação, quem entrou e convites em aberto. Roxo só na barra e no chip de quem conta. */
+.convites .conv-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: end; padding: 24px 26px; margin-bottom: 16px; }
+.conv-label { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+.conv-big { margin: 2px 0 4px; font-size: 52px; line-height: 1; font-weight: 650; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.conv-big small { font-size: 26px; margin-left: 2px; color: var(--muted); font-weight: 600; }
+.conv-lead { margin: 0; max-width: 52ch; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.conv-steps { display: flex; gap: 4px; margin: 16px 0 0; max-width: 460px; }
+.conv-steps i { flex: 1; height: 6px; border-radius: 99px; background: var(--panel-2); transition: background .3s; }
+.conv-steps i.on { background: var(--violet); }
+.conv-scale { display: flex; justify-content: space-between; max-width: 460px; margin-top: 6px; font-size: 11.5px; }
+.conv-price { margin: 14px 0 0; font-size: 13.5px; }
+.conv-price s { color: var(--muted); margin: 0 4px; }
+
+.conv-stats { display: grid; grid-template-columns: repeat(3, minmax(84px, auto)); gap: 8px; margin: 0; }
+.conv-stats div { padding: 12px 16px; border-radius: 14px; background: var(--panel-2); }
+.conv-stats dt { font-size: 12px; color: var(--muted); }
+.conv-stats dd { margin: 2px 0 0; font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+
+.conv-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.conv-list header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 18px 20px 10px; }
+.conv-list header h3 { margin: 0; font-size: 15px; }
+.conv-list header .muted { font-size: 12px; text-align: right; }
+.conv-list ul { list-style: none; margin: 0; padding: 0 8px 8px; }
+.conv-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
+.conv-list li + li { border-top: 1px solid var(--border); }
+.conv-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.conv-who strong, .conv-who > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv-who .muted { font-size: 12px; }
+.conv-ico { width: 34px; height: 34px; flex-shrink: 0; display: grid; place-items: center; border-radius: 50%; background: var(--panel-2); color: var(--muted); }
+.convites .conv-list .icon-btn { width: 34px; height: 34px; flex-shrink: 0; border: 0; background: none; box-shadow: none; color: var(--muted); }
+.convites .conv-list .icon-btn:hover { background: var(--panel-2); color: var(--text); }
+.conv-who .invite-chip { margin: 0 6px 0 0; }
+.conv-chip { flex-shrink: 0; padding: 4px 10px; border-radius: 99px; font-size: 12px; background: var(--panel-2); color: var(--muted); white-space: nowrap; }
+.conv-chip.on { background: var(--violet-soft); color: var(--violet); font-weight: 600; }
+.conv-old { margin: 0 8px 10px; border-top: 1px solid var(--border); }
+.conv-old summary { cursor: pointer; padding: 12px; font-size: 13px; color: var(--muted); list-style: none; }
+.conv-old summary::-webkit-details-marker { display: none; }
+.conv-old summary::after { content: "›"; display: inline-block; margin-left: 6px; transition: transform .2s; }
+.conv-old[open] summary::after { transform: rotate(90deg); }
+.conv-old ul { padding: 0; opacity: .75; }
+.conv-old .empty { display: none; }
+
+@media (max-width: 900px) {
+  .convites .conv-hero { grid-template-columns: minmax(0, 1fr); gap: 18px; padding: 20px; }
+  .conv-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .conv-stats div { padding: 10px 12px; }
+  .conv-cols { grid-template-columns: minmax(0, 1fr); }
+  .conv-big { font-size: 44px; }
+}
+@media (max-width: 420px) {
+  .conv-list header { flex-direction: column; gap: 2px; }
+  .conv-list header .muted { text-align: left; }
+}

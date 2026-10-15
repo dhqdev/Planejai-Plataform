@@ -112,7 +112,7 @@ export async function improveUser(userId: string): Promise<Result> {
           "Todos melhoram para ele, gastando pouco. Responda só JSON:\n" +
           '{"summary":"...","facts":[{"category":"gostos","fact":"..."}],"fix":[{"n":3,"fact":"..."}],"sort":[{"n":5,"category":"rotina"}],' +
           '"topics":[{"topic":"cinema","weight":1-5}],"style":"...","agent_notes":[{"agent":"financeiro","note":"..."}],' +
-          '"tabs":{"enable":["convites"],"custom":[{"title":"Academia","icon":"heart","widgets":["categories","reminders"]}]},' +
+          '"tabs":{"enable":["memorias"],"custom":[{"title":"Academia","icon":"heart","widgets":["categories","reminders"]}]},' +
           '"create":[{"topic":"cinema","name":"Cinema","persona":"Pipoca","focus":"sessões, estreias e ingressos na cidade dele","instructions":"...","tools":["web_search"]}],' +
           '"update":[{"slug":"...","instructions":"..."}],"retire":["slug"]}\n' +
           "Regras: summary = a ata da reunião para o próprio cliente ler, em segunda pessoa e tom leve, 1 a 3 frases: o que o time percebeu hoje e o que vai fazer diferente. Sem citar mensagens, sem dados sensíveis. " +

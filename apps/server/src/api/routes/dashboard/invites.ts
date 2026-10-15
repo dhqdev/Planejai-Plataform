@@ -1,6 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { scopeUserId } from "../../../accounts.js";
+import { getSubscription, hasPlan, pricingOf, referralDiscount, withDiscount } from "../../../billing.js";
+import { planById } from "../../../credits.js";
 import { many, query } from "../../../db/pool.js";
+import { getSettings } from "../../../settings.js";
 import { withOutfits } from "../../../mascot.js";
 import { myShares, selfUserId, setShare, sharedWithMe, type ShareScope } from "../../../sharing.js";
 import { isUuid } from "./shared.js";
@@ -26,6 +29,41 @@ export function inviteRoutes(base: FastifyInstance) {
         )
       : [];
     return { invites: rows.map((r) => ({ ...r, link: inviteLink(r.code) })), stats: await inviteStats(uid), leaderboard };
+  });
+  // Aba Convites de cada pessoa (dono incluso): só os convites e os amigos DELA e o desconto que eles dão
+  base.get("/api/me/convites", async (req) => {
+    const uid = await selfUserId(req.account);
+    const s = await getSettings();
+    const pricing = pricingOf(s);
+    const empty = { linked: false, billing: pricing.enabled, discount: { friends: 0, percent: 0, step: 0, max: 0, next: null }, friends: [], invites: [], subscription: null };
+    if (!uid) return empty;
+    const [discount, sub, friends, invites] = await Promise.all([
+      referralDiscount(uid, s),
+      getSubscription(uid),
+      // quem entrou pelo convite da pessoa; "paying" é a mesma regra do desconto (payingFriends)
+      many(
+        `SELECT u.id, COALESCE(u.full_name, u.name, 'Amigo') AS name, u.created_at AS joined_at, (s.status = 'active') AS paying
+           FROM users u LEFT JOIN subscriptions s ON s.user_id = u.id
+          WHERE u.invited_by = $1 AND u.id <> $1 AND u.status = 'active' ORDER BY u.created_at DESC LIMIT 200`,
+        [uid],
+      ),
+      // convites que ainda não viraram cadastro (o aceito já aparece como amigo acima)
+      many(
+        `SELECT id, code, name, phone, status, created_at, expires_at FROM invites
+          WHERE inviter_user_id = $1 AND status <> 'accepted' AND created_at > now() - interval '90 days' ORDER BY created_at DESC LIMIT 100`,
+        [uid],
+      ),
+    ]);
+    const plan = hasPlan(sub) ? planById(s, sub.plan_id) : null;
+    return {
+      linked: true,
+      billing: pricing.enabled,
+      discount: { ...discount, next: discount.step > 0 && discount.percent < discount.max ? Math.min(discount.max, discount.percent + discount.step) : null },
+      // só o primeiro nome do amigo, como no Plano e grãos
+      friends: await withOutfits(friends.map((f) => ({ id: f.id as string, name: String(f.name).split(" ")[0], joinedAt: f.joined_at, paying: Boolean(f.paying) }))),
+      invites: invites.map((i) => ({ ...i, link: inviteLink(i.code) })),
+      subscription: plan ? { plan: plan.name, price: plan.price, value: withDiscount(plan.price, discount.percent) } : null,
+    };
   });
   base.post<{ Body: { name?: string; phone?: string; email?: string } }>("/api/invites", async (req, reply) => {
     const a = req.account;

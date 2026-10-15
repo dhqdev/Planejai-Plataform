@@ -31,6 +31,7 @@ const load = {
   documents: () => import("./pages/Documents"),
   errands: () => import("./pages/Errands"),
   contacts: () => import("./pages/Contacts"),
+  convites: () => import("./pages/Convites"),
   executions: () => import("./pages/Executions"),
   finance: () => import("./pages/Finance"),
   integrations: () => import("./pages/Integrations"),
@@ -92,6 +93,7 @@ const AlarmPage = page(() => load.alarm().then((m) => m.AlarmPage));
 const DocumentsPage = page(() => load.documents().then((m) => m.DocumentsPage));
 const ErrandsPage = page(() => load.errands().then((m) => m.ErrandsPage));
 const ContactsPage = page(() => load.contacts().then((m) => m.ContactsPage));
+const ConvitesPage = page(() => load.convites().then((m) => m.ConvitesPage));
 const WhatsAppPage = page(() => load.whatsapp().then((m) => m.WhatsAppPage));
 
 /** Qual pedaço cada rota do menu abre: para baixar antes do toque (e deixar pronto para abrir sem internet). */
@@ -113,6 +115,7 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/watches": load.watches,
   "/recados": load.errands,
   "/contatos": load.contacts,
+  "/convites": load.convites,
   "/documentos": load.documents,
   "/settings": load.settings,
   "/profile": load.profile,
@@ -179,6 +182,7 @@ const SUPER_NAV: NavItem[] = [
   { to: "/servidor", label: "Servidor", icon: "cpu" },
   { to: "/settings", label: "Configurações", icon: "settings", short: "Ajustes" },
   { section: "Conta" },
+  { to: "/convites", label: "Convites", icon: "user-plus" },
   { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
   { to: "/profile", label: "Minha conta", icon: "user" },
 ];
@@ -218,6 +222,7 @@ function adminNav(tabs: AppTabs | null, billing = false): NavItem[] {
     ...MY_DAY,
     ...(extra.length ? [{ section: "Feito para você" }, ...extra] : []),
     { section: "Conta" },
+    { to: "/convites", label: "Convites", icon: "user-plus" },
     { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
     // só aparece quando o dono ligou a cobrança
     ...(billing ? [{ to: "/plano", label: "Plano e grãos", icon: "card", short: "Plano" }] : []),
@@ -442,7 +447,9 @@ export function App() {
           <Route path="/alarme" element={<AlarmPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/" element={<DashboardPage me={me} theme={theme} onTheme={toggleTheme} />} />
-          {has("convites") && <Route path="/invites" element={<InvitesPage isSuper={isSuper} />} />}
+          {/* /invites é a visão do dono (todos os convites); cliente cai na aba Convites dele */}
+          <Route path="/invites" element={isSuper ? <InvitesPage isSuper /> : <Navigate to="/convites" replace />} />
+          <Route path="/convites" element={<ConvitesPage />} />
           {has("meu_time") && <Route path="/time" element={<TeamPage />} />}
           {(tabs.data?.custom ?? []).map((t) => (
             <Route key={t.slug} path={`/aba/${t.slug}`} element={<CustomTabPage me={me} tab={t} />} />

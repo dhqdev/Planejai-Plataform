@@ -3,11 +3,10 @@ import { one, query } from "./db/pool.js";
 /**
  * Abas do app de cada pessoa. Todo mundo começa só com o essencial (Início, Agenda, Finanças e De olho);
  * a reunião noturna do time libera módulos e cria abas sob medida conforme o uso. Menos tela,
- * menos ferramenta no prompt e menos token.
+ * menos ferramenta no prompt e menos token. Convites não é módulo: fica na Conta de todo mundo (/convites).
  */
 export const ESSENTIAL = ["inicio", "agenda", "financas", "de_olho"] as const;
 export const OPTIONAL: Record<string, { label: string; icon: string; to: string; desc: string }> = {
-  convites: { label: "Convites", icon: "user-plus", to: "/invites", desc: "convidar pessoas e ver contatos (para quem compartilha coisas)" },
   memorias: { label: "O que ele sabe", icon: "bookmark", to: "/memories", desc: "o que o assistente guardou sobre a pessoa" },
   meu_time: { label: "Meu time", icon: "brain", to: "/time", desc: "os agentes criados para a pessoa, com nome e carinha" },
 };
