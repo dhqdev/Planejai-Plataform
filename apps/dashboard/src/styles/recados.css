@@ -164,3 +164,31 @@
   .errands-page.fit .errand-follow-del .lbl { display: none; }
   .errands-page.fit .errand-outcome .clamp > p.clamped { margin: 0; }
 }
+
+/* mais leve e amigável (2026-10-15, David: "tem muito preto"): nada de bloco preto. A mensagem que o assistente
+   mandou fica num lilás bem clarinho, a resposta num cinza claro, a conversa sobre fundo branco. Avatares em tom
+   suave da cor escolhida, item ativo sem a barra preta e o ponto de "responderam" no roxo do Mochi. */
+.errand-chat { background: transparent; padding: 14px 4px; gap: 8px; border-radius: 0; border-top: 1px solid var(--border); }
+.errand-bubble { padding: 9px 13px 7px; border-radius: 18px; box-shadow: none; }
+.errand-bubble.theirs { background: var(--panel-2); border: 0; border-bottom-left-radius: 6px; }
+.errand-bubble.ours { background: var(--violet-soft); color: var(--text); border-bottom-right-radius: 6px; }
+.errand-bubble.next { background: transparent; border: 1.5px dashed color-mix(in srgb, var(--violet) 28%, var(--border)); }
+.errand-bubble-time { opacity: 1; color: var(--muted); }
+.errand-decided { background: transparent; border-color: var(--border); }
+.errand-row { border-radius: 14px; }
+.errand-row.active { background: var(--panel-2); box-shadow: none; }
+.errand-state.you { color: var(--text); font-weight: 600; }
+.errand-state.you::before { background: var(--violet); }
+.errand-avatar { background: var(--panel-2); border: 0; color: var(--muted); }
+.errand-avatar[class*=" c-"], .errand-row.active .errand-avatar[class*=" c-"] { background: color-mix(in srgb, var(--chat) 14%, var(--panel)); border: 0; color: var(--chat); }
+.errand-row.active .errand-avatar:not([class*=" c-"]) { background: var(--panel); }
+.errand-outcome, .errand-follow { border: 0; background: var(--panel-2); }
+.errand-bar .btn.on { background: var(--violet-soft); border-color: transparent; color: var(--text); }
+:root[data-theme="dark"] .errand-avatar[class*=" c-"] { background: color-mix(in srgb, var(--chat) 26%, var(--panel)); color: color-mix(in srgb, var(--chat) 55%, #fff); }
+@media (max-width: 1023px), (max-height: 679px) {
+  .errand-chat { margin: 0; padding: 12px 0; }
+  .errand-detail .errand-back { box-shadow: none; }
+}
+@media (min-width: 1024px) and (min-height: 680px) {
+  .errands-page.fit .errand-follow { border: 0; }
+}
