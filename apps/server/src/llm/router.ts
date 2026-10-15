@@ -138,6 +138,15 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     maxTokens: 8000,
   },
   {
+    task: "blog",
+    label: "Blog (post da semana)",
+    why: "Escreve sozinho o post semanal do blog público (/blog): texto longo e organizado em seções, uma vez por semana. As ilustrações saem da rota Imagens.",
+    model: "deepseek/deepseek-v4.1-flash",
+    fallbacks: ["google/gemini-3.8-flash"],
+    temperature: 0.7,
+    maxTokens: 9000,
+  },
+  {
     task: "image",
     label: "Imagens (gerar foto ou ilustração)",
     why: "Pediu uma foto, desenho ou ilustração: um modelo de imagem barato gera direto, sem navegador. Foto de coisa real (produto, lugar) primeiro é buscada na Tavily/Brave e só gera se não achar.",

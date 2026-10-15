@@ -19,6 +19,7 @@ import { registerDashboardRoutes } from "./routes/dashboard.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { registerInternalRoutes } from "./routes/internal.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
+import { blogPage, registerBlogRoutes } from "./routes/blog.js";
 import { registerSecurity, trustProxySetting } from "./security.js";
 import { DEVICE_COOKIE, isTrustedDevice, startChallenge, startReset, startSignupChallenge, trustDevice, verifyChallenge, verifyReset, verifySignup, whatsappReady } from "../logincode.js";
 import { emitEvent } from "../events.js";
@@ -322,6 +323,7 @@ export async function buildServer() {
   await registerInternalRoutes(app);
   await registerDashboardRoutes(app);
   await registerNotificationRoutes(app);
+  await registerBlogRoutes(app);
 
   // Dashboard (SPA) servido pelo mesmo container
   if (existsSync(publicDir)) {
@@ -335,9 +337,12 @@ export async function buildServer() {
         if (path.endsWith("sw.js")) reply.header("Service-Worker-Allowed", "/");
       },
     });
-    app.setNotFoundHandler((req, reply) => {
+    app.setNotFoundHandler(async (req, reply) => {
       // arquivo do app que não existe (aba antiga depois de um deploy): 404 de verdade, não o index no lugar do JS
       if (req.method === "GET" && !req.url.startsWith("/api/") && !req.url.startsWith("/webhooks/") && !req.url.startsWith("/assets/")) {
+        // blog: o mesmo index, com título, descrição e imagem do post no <head> (Google e prévia do link)
+        const blog = await blogPage(publicDir, req.url).catch(() => null);
+        if (blog) return reply.type("text/html; charset=utf-8").header("Cache-Control", "no-cache").send(blog);
         return reply.sendFile("index.html");
       }
       return reply.code(404).send({ error: "não encontrado" });

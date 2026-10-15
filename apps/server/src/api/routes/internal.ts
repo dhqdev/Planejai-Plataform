@@ -62,6 +62,12 @@ export async function registerInternalRoutes(app: FastifyInstance) {
 
     api.get("/api/internal/ping", async () => ({ ok: true, app: "planejai", public_url: config.PUBLIC_URL }));
 
+    // blog: escreve e publica um post agora (o worker já posta sozinho toda semana; isto é para um fluxo do n8n disparar quando quiser)
+    api.post("/api/internal/blog/write", async () => {
+      await (await getBoss()).send(QUEUES.blog, { action: "write" }, { retryLimit: 0, expireInSeconds: 900 });
+      return { ok: true, queued: true };
+    });
+
     // ---------- Pessoas e contas ----------
     api.get<{ Querystring: { phone?: string; email?: string; user_id?: string } }>("/api/internal/users", async (req, reply) => {
       const u = await findUser(req.query);

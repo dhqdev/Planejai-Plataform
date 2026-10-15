@@ -456,6 +456,7 @@ export function LandingPage() {
               </a>
             )}
             <a href="#perguntas">Perguntas</a>
+            <a href="/blog">Blog</a>
           </nav>
           <div className="lp-nav-cta">
             <a className="lp-btn ghost" href="/login" onClick={go}>
@@ -637,6 +638,7 @@ export function LandingPage() {
             <a href="/login" onClick={go}>
               Entrar
             </a>
+            <a href="/blog">Blog</a>
             <a href="/privacidade">Termos e privacidade</a>
           </span>
           <small>Seu assistente pessoal no WhatsApp.</small>

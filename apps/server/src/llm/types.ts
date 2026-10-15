@@ -30,6 +30,8 @@ export interface ChatRequest {
   responseFormat?: Record<string, unknown>;
   /** saídas pedidas ao modelo, ex.: ["image", "text"] para gerar imagem (rota "image") */
   modalities?: string[];
+  /** ajuste da imagem gerada, ex.: { aspect_ratio: "16:9" } (o modelo que não entende ignora) */
+  imageConfig?: Record<string, unknown>;
   /** "off": sem raciocínio (texto longo do redator; o raciocínio comia o teto de saída e o texto voltava vazio) */
   reasoning?: "off";
   /** cancela a chamada (prazo máximo da execução) */

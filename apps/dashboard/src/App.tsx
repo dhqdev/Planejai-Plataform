@@ -32,6 +32,7 @@ const load = {
   documents: () => import("./pages/Documents"),
   errands: () => import("./pages/Errands"),
   esteira: () => import("./pages/Esteira"),
+  blogAdmin: () => import("./pages/BlogAdmin"),
   contacts: () => import("./pages/Contacts"),
   convites: () => import("./pages/Convites"),
   executions: () => import("./pages/Executions"),
@@ -58,6 +59,9 @@ function page<P>(pick: () => Promise<ComponentType<P>>) {
 /** Landing pública: só baixa para quem abre "/" sem estar logado. */
 const Landing = page(() => import("./pages/Landing").then((m) => m.LandingPage));
 const Pricing = page(() => import("./pages/Pricing").then((m) => m.PricingPage));
+/** Blog público (/blog e /blog/:slug): abre com ou sem login. */
+const Blog = page(() => import("./pages/Blog").then((m) => m.BlogPage));
+const BlogAdminPage = page(() => load.blogAdmin().then((m) => m.BlogAdminPage));
 
 function PageUnavailable() {
   return (
@@ -129,6 +133,7 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/time": load.team,
   "/esteira": load.esteira,
   "/esteira-custos": load.esteira,
+  "/blog-posts": load.blogAdmin,
 };
 function preload(to: string) {
   ROUTE_CHUNK[to]?.().catch(() => {});
@@ -189,6 +194,7 @@ const SUPER_NAV: NavItem[] = [
   { to: "/agents", label: "Agentes", icon: "brain" },
   { to: "/whatsapp", label: "Conexões", icon: "plug" },
   { to: "/servidor", label: "Servidor", icon: "cpu" },
+  { to: "/blog-posts", label: "Blog", icon: "book" },
   { to: "/settings", label: "Configurações", icon: "settings", short: "Ajustes" },
   { section: "Conta" },
   { to: "/convites", label: "Convites", icon: "user-plus" },
@@ -371,6 +377,7 @@ export function App() {
   if (loc.pathname === "/privacidade") return <PrivacyPage />;
   // página de preços: aberta pelo "Planos" da landing, com ou sem login
   if (loc.pathname === "/precos") return <Suspense fallback={<BlockLoader />}><Pricing /></Suspense>;
+  if (loc.pathname === "/blog" || loc.pathname.startsWith("/blog/")) return <Suspense fallback={<BlockLoader />}><Blog loggedIn={Boolean(me)} /></Suspense>;
   if (me === undefined) return <BlockLoader />;
   if (!me && loc.pathname === "/") return <Suspense fallback={<BlockLoader />}><Landing /></Suspense>;
   if (!me) return <AuthPage onLogin={setMe} />;
@@ -451,6 +458,7 @@ export function App() {
               <Route path="/integrations" element={<IntegrationsPage />} />
               <Route path="/models" element={<ModelsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/blog-posts" element={<BlogAdminPage />} />
               {me.owner && <Route path="/esteira" element={<EsteiraPage />} />}
               {me.owner && <Route path="/esteira-custos" element={<EsteiraCustosPage />} />}
             </>

@@ -17,6 +17,8 @@ export const QUEUES = {
   alarm: "alarm.ring",
   /** esteira de desenvolvimento do dono (devpipeline/pipeline.ts): uma etapa de um chamado por job */
   dev: "dev.pipeline",
+  /** blog público: posts de partida, ilustrações que faltam e o post da semana (blog.ts) */
+  blog: "blog.run",
 } as const;
 
 let boss: PgBoss | null = null;
@@ -39,6 +41,7 @@ export async function getBoss(): Promise<PgBoss> {
   await b.createQueue(QUEUES.waRpc, { name: QUEUES.waRpc, policy: "standard" });
   await b.createQueue(QUEUES.alarm, { name: QUEUES.alarm, policy: "standard" });
   await b.createQueue(QUEUES.dev, { name: QUEUES.dev, policy: "standard" });
+  await b.createQueue(QUEUES.blog, { name: QUEUES.blog, policy: "standard" });
   boss = b;
   return b;
 }
@@ -63,6 +66,7 @@ export const QUEUE_LABELS: Record<string, string> = {
   [QUEUES.waRpc]: "Envios entre processos",
   [QUEUES.alarm]: "Alarmes",
   [QUEUES.dev]: "Esteira de desenvolvimento",
+  [QUEUES.blog]: "Blog",
 };
 
 /**

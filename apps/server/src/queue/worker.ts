@@ -129,6 +129,13 @@ async function startChannelJobs(log: WorkerLog) {
   });
   await boss.schedule(QUEUES.financeDaily, "0 9 * * *", undefined, { tz: config.DEFAULT_TIMEZONE });
 
+  // blog público: de hora em hora confere posts de partida, ilustrações que faltam e o post da semana (dia e hora no painel)
+  await boss.work<import("../blog.js").BlogJob>(QUEUES.blog, { batchSize: 1, pollingIntervalSeconds: 10 }, async ([job]) => {
+    const { runBlogJob } = await import("../blog.js");
+    await runBlogJob(log, job?.data ?? {});
+  });
+  await boss.schedule(QUEUES.blog, "41 * * * *", { action: "tick" });
+
   // mensagens pedidas pelo n8n / automações (API interna)
   await boss.work<OutboundJob>(QUEUES.outbound, { batchSize: 1, pollingIntervalSeconds: 2 }, async ([job]) => {
     if (job) await runOutboundJob(job.data);

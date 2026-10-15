@@ -4,6 +4,7 @@ import { accountRoutes } from "./dashboard/accounts.js";
 import { agendaRoutes } from "./dashboard/agenda.js";
 import { alarmActionRoutes, alarmRoutes } from "./dashboard/alarms.js";
 import { billingAdminRoutes, billingRoutes } from "./dashboard/billing.js";
+import { blogAdminRoutes } from "./dashboard/blog.js";
 import { clientRoutes } from "./dashboard/clients.js";
 import { devPipelineRoutes } from "./dashboard/devpipeline.js";
 import { errandRoutes } from "./dashboard/errands.js";
@@ -64,6 +65,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       whatsappRoutes(api);
       billingAdminRoutes(api);
       resourceRoutes(api);
+      blogAdminRoutes(api);
       // só o dono da stack (requireOwner dentro do módulo)
       await devPipelineRoutes(api);
     });

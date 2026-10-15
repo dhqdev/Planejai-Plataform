@@ -145,14 +145,14 @@ export async function svgToPng(svg: string): Promise<string> {
 }
 
 /** HTML -> PNG (base64) da página inteira, na largura dada (altura acompanha o conteúdo). */
-export async function htmlToPng(html: string, width: number): Promise<string> {
+export async function htmlToPng(html: string, width: number, shot: { type: "png" } | { type: "jpeg"; quality: number } = { type: "png" }): Promise<string> {
   const b = await getCredentials("browserless");
   if (b?.url) {
     const url = `${b.url.replace(/\/$/, "")}/chromium/screenshot${b.token ? `?token=${encodeURIComponent(b.token)}` : ""}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ html, options: { type: "png", fullPage: true, omitBackground: false }, viewport: { width, height: 600, deviceScaleFactor: 1 } }),
+      body: JSON.stringify({ html, options: { ...shot, fullPage: true, omitBackground: false }, viewport: { width, height: 600, deviceScaleFactor: 1 } }),
       signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) throw new Error(`Browserless ${res.status}: ${(await res.text()).slice(0, 200)}`);
@@ -164,7 +164,7 @@ export async function htmlToPng(html: string, width: number): Promise<string> {
     const page = await browser.newPage();
     await page.setViewport({ width, height: 600, deviceScaleFactor: 1 });
     await page.setContent(html, { waitUntil: "load" });
-    const buf = await page.screenshot({ type: "png", fullPage: true });
+    const buf = await page.screenshot({ ...shot, fullPage: true });
     return Buffer.from(buf).toString("base64");
   } finally {
     await browser.close().catch(() => {});

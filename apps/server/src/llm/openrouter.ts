@@ -28,6 +28,7 @@ export async function chatCompletion(choice: ModelChoice, req: ChatRequest, atte
     body.tool_choice = "auto";
     body.parallel_tool_calls = true;
   }
+  if (req.imageConfig) body.image_config = req.imageConfig;
   // raciocínio longo é saída cara: baixo em toda chamada, inclusive no último passo (sem ferramentas)
   if (req.modalities) body.modalities = req.modalities;
   else if (req.reasoning === "off") body.reasoning = { enabled: false, exclude: true };
