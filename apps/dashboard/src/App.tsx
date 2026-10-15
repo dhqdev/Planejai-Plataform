@@ -31,6 +31,7 @@ const load = {
   dashboard: () => import("./pages/Dashboard"),
   documents: () => import("./pages/Documents"),
   errands: () => import("./pages/Errands"),
+  esteira: () => import("./pages/Esteira"),
   contacts: () => import("./pages/Contacts"),
   convites: () => import("./pages/Convites"),
   executions: () => import("./pages/Executions"),
@@ -94,6 +95,8 @@ const NotificationsPage = page(() => load.notifications().then((m) => m.Notifica
 const AlarmPage = page(() => load.alarm().then((m) => m.AlarmPage));
 const DocumentsPage = page(() => load.documents().then((m) => m.DocumentsPage));
 const ErrandsPage = page(() => load.errands().then((m) => m.ErrandsPage));
+const EsteiraPage = page(() => load.esteira().then((m) => m.EsteiraPage));
+const EsteiraCustosPage = page(() => load.esteira().then((m) => m.EsteiraCustosPage));
 const ContactsPage = page(() => load.contacts().then((m) => m.ContactsPage));
 const ConvitesPage = page(() => load.convites().then((m) => m.ConvitesPage));
 const WhatsAppPage = page(() => load.whatsapp().then((m) => m.WhatsAppPage));
@@ -123,6 +126,8 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/profile": load.profile,
   "/plano": load.billing,
   "/time": load.team,
+  "/esteira": load.esteira,
+  "/esteira-custos": load.esteira,
 };
 function preload(to: string) {
   ROUTE_CHUNK[to]?.().catch(() => {});
@@ -154,6 +159,7 @@ const GROUPS: { to: string; label: string }[][] = [
   [{ to: "/agents", label: "Agentes" }, { to: "/models", label: "Modelos" }],
   [{ to: "/whatsapp", label: "WhatsApp" }, { to: "/integrations", label: "Integrações" }],
   [{ to: "/servidor", label: "Servidor" }, { to: "/armazenamento", label: "Armazenamento" }],
+  [{ to: "/esteira", label: "Chamados" }, { to: "/esteira-custos", label: "Custos" }],
 ];
 const groupOf = (path: string) => GROUPS.find((g) => g.some((t) => t.to === "/" + (path.split("/")[1] ?? "")));
 
@@ -201,12 +207,16 @@ interface AppTabs {
 const specialistTabs = (tabs: AppTabs | null): NavItem[] =>
   (tabs?.specialists ?? []).map((a) => ({ to: `/especialistas/${a.slug}`, label: a.persona, icon: a.icon }));
 
+/** Esteira de desenvolvimento: só o dono da stack (outro super admin não vê; a API também recusa). */
+const OWNER_ONLY: NavLinkItem = { to: "/esteira", label: "Esteira", icon: "github" };
+
 /** O dono também liga especialistas para ele: as abas entram antes da Plataforma. */
-function superNav(tabs: AppTabs | null): NavItem[] {
+function superNav(tabs: AppTabs | null, owner = false): NavItem[] {
   const extra = specialistTabs(tabs);
-  if (!extra.length) return SUPER_NAV;
-  const at = SUPER_NAV.findIndex((i) => "section" in i && i.section === "Plataforma");
-  return [...SUPER_NAV.slice(0, at), { section: "Feito para você" }, ...extra, ...SUPER_NAV.slice(at)];
+  const base = owner ? SUPER_NAV.flatMap((i) => ("to" in i && i.to === "/servidor" ? [i, OWNER_ONLY] : [i])) : SUPER_NAV;
+  if (!extra.length) return base;
+  const at = base.findIndex((i) => "section" in i && i.section === "Plataforma");
+  return [...base.slice(0, at), { section: "Feito para você" }, ...extra, ...base.slice(at)];
 }
 
 /**
@@ -290,7 +300,7 @@ export function App() {
   const tabs = useApi<AppTabs>(me ? `/api/me/tabs?for=${me.id}` : null);
   const isSuper = me?.role === "superadmin";
   const billing = useApi<{ pricing: { enabled: boolean } }>(me && !isSuper ? "/api/billing" : null);
-  const NAV = !me ? NO_NAV : isSuper ? superNav(tabs.data ?? null) : adminNav(tabs.data ?? null, billing.data?.pricing?.enabled);
+  const NAV = !me ? NO_NAV : isSuper ? superNav(tabs.data ?? null, me.owner) : adminNav(tabs.data ?? null, billing.data?.pricing?.enabled);
   const links = NAV.filter((i): i is NavLinkItem => "to" in i);
   // com o app parado, baixa em segundo plano o código das telas do menu desta pessoa (e só delas)
   const routes = links.map((l) => l.to).join(" ");
@@ -438,6 +448,8 @@ export function App() {
               <Route path="/integrations" element={<IntegrationsPage />} />
               <Route path="/models" element={<ModelsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              {me.owner && <Route path="/esteira" element={<EsteiraPage />} />}
+              {me.owner && <Route path="/esteira-custos" element={<EsteiraCustosPage />} />}
             </>
           ) : (
             <>

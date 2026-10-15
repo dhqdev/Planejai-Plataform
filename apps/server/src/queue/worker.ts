@@ -140,6 +140,13 @@ async function startChannelJobs(log: WorkerLog) {
     await startChannelRpc(log);
   }
 
+  // esteira de desenvolvimento do dono: uma etapa por vez, na ordem dos chamados (a espera do CI volta para a fila)
+  await boss.work<{ ticketId: number; stage: string; attempt?: number }>(QUEUES.dev, { batchSize: 1, pollingIntervalSeconds: 5 }, async ([job]) => {
+    if (!job) return;
+    const { runStage } = await import("../devpipeline/pipeline.js");
+    await runStage(job.data);
+  });
+
   // Telegram sem webhook (sem https público): só um processo pode buscar as mensagens
   startTelegramPolling(log);
 }

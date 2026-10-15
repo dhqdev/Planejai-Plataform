@@ -134,6 +134,35 @@ export const INTEGRATIONS: IntegrationDef[] = [
     },
   },
   {
+    id: "esteira",
+    name: "Esteira de desenvolvimento",
+    description: "Só o dono: chamados viram branch, código, teste e PR sozinhos no seu repositório (tela Esteira).",
+    category: "Infraestrutura",
+    icon: "github",
+    docsUrl: "https://github.com/settings/personal-access-tokens",
+    fields: [
+      {
+        key: "token",
+        label: "Personal access token (fine-grained)",
+        type: "password",
+        required: true,
+        placeholder: "github_pat_...",
+        help: "Settings > Developer settings > Fine-grained tokens, só o repositório da esteira. Permissões: Contents: Read and write, Pull requests: Read and write, Actions: Read-only (Metadata vem junto). Sem Workflows: a esteira não mexe em .github/.",
+      },
+      { key: "repo", label: "Repositório", type: "text", required: true, placeholder: "dono/repositorio" },
+      { key: "base_branch", label: "Branch base (opcional)", type: "text", placeholder: "main", help: "De onde saem os branches esteira/... e para onde vão os PRs. A esteira nunca escreve nele." },
+      { key: "cost_cap", label: "Limite de custo por chamado em US$ (opcional)", type: "text", placeholder: "2", help: "Passou disso, o chamado para e espera você." },
+    ],
+    test: async (c) => {
+      const repo = String(c.repo ?? "").trim();
+      if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error("Repositório no formato dono/repositorio");
+      const j = await okJson(await fetch(`https://api.github.com/repos/${repo}`, { headers: GH_HEADERS(c.token!), signal: timed() }), `GitHub (${repo})`);
+      if (!j.permissions?.push) throw new Error("O token lê o repositório mas não pode escrever (falta Contents: Read and write).");
+      await okJson(await fetch(`https://api.github.com/repos/${repo}/actions/runs?per_page=1`, { headers: GH_HEADERS(c.token!), signal: timed() }), "GitHub Actions (falta Actions: Read-only)");
+      return `Pronto para abrir PRs em ${j.full_name} (base ${c.base_branch?.trim() || j.default_branch})`;
+    },
+  },
+  {
     id: "linear",
     name: "Linear",
     description: "Buscar e criar issues no Linear.",

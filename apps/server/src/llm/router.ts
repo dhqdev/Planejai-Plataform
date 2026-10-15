@@ -187,6 +187,33 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     fallbacks: ["deepseek/deepseek-v4.1-flash"],
     temperature: 0,
   },
+  {
+    task: "dev:refine",
+    label: "Esteira: analista e planejador",
+    why: "Esteira de desenvolvimento (só o dono): reescreve o chamado com critérios de aceite e planeja onde mexer. Lê muito código e escreve pouco: entrada barata do DeepSeek Flash.",
+    model: "deepseek/deepseek-v4.1-flash",
+    fallbacks: ["google/gemini-3.8-flash"],
+    temperature: 0.2,
+    maxTokens: 4000,
+  },
+  {
+    task: "dev:code",
+    label: "Esteira: desenvolvedor",
+    why: "Escreve as trocas no código e conserta o CI vermelho. É onde a qualidade mais pesa: troque aqui por um modelo de código mais forte se os PRs vierem fracos (o custo aparece por etapa na tela Esteira).",
+    model: "google/gemini-3.8-flash",
+    fallbacks: ["deepseek/deepseek-v4.1-flash"],
+    temperature: 0.1,
+    maxTokens: 16000,
+  },
+  {
+    task: "dev:review",
+    label: "Esteira: revisor",
+    why: "Lê o diff contra os critérios de aceite antes de abrir o PR e devolve uma vez para o desenvolvedor se achar problema real.",
+    model: "deepseek/deepseek-v4.1-flash",
+    fallbacks: ["google/gemini-3.8-flash"],
+    temperature: 0,
+    maxTokens: 2000,
+  },
 ];
 
 let cache: { at: number; rows: Map<string, ModelChoice> } | null = null;

@@ -202,6 +202,7 @@ Leia só o do assunto que você vai mexer:
 | `financas.md` | gastos automáticos, limites, gráficos, imagens, grãos, planos e pacotes do Asaas, indicação, contas fixas |
 | `integracoes.md` | WhatsApp (Baileys), Telegram, API interna, eventos e n8n, automações, notificações, documentos, código de login |
 | `deploy.md` | rodar e testar local, CI, imagem, stacks, versões, migrações |
+| `esteira.md` | esteira de desenvolvimento do dono: chamado vira branch, código, CI e PR sozinho; custos por etapa |
 
 Skills de terceiros da Replica (MIT, github.com/Jakeschincariol/replica-skill), só as 4 que servem a um app que já existe: `replica-recon` (mapear um concorrente por páginas públicas), `replica-diff` (nota de paridade e comparação de layout entre prints: `.claude/skills/replica-diff/imgdiff.py`), `replica-entrepreneur` (avaliações reais de concorrentes viram correções) e `replica-design` (contraste WCAG: `.claude/skills/replica-design/contrast.py`). Elas sugerem Next, Supabase, Stripe e Tailwind para um clone novo; aqui vale a stack e as regras do Planejai. As outras 7 do pacote ficaram de fora de propósito (David, 2026-10-09).
 
