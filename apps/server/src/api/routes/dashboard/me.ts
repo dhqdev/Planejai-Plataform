@@ -97,7 +97,13 @@ export function meRoutes(base: FastifyInstance) {
   base.get("/api/me/onboarding", async (req) => {
     const uid = await selfUserId(req.account);
     const ob = uid ? await getOnboarding(uid) : null;
-    return { questions: ONBOARDING, due: Boolean(uid) && !ob, answers: ob?.answers ?? {}, summary: ob?.summary ?? "" };
+    // tour do painel: uma vez por conta, no primeiro login (o dono da stack não tem linha em accounts e já conhece o painel)
+    const tour = !req.account.owner && Boolean((await one("SELECT tour_seen_at IS NULL AS due FROM accounts WHERE id = $1", [req.account.id]))?.due);
+    return { questions: ONBOARDING, due: Boolean(uid) && !ob, answers: ob?.answers ?? {}, summary: ob?.summary ?? "", tour };
+  });
+  base.put("/api/me/tour", async (req) => {
+    if (!req.account.owner) await query("UPDATE accounts SET tour_seen_at = now() WHERE id = $1 AND tour_seen_at IS NULL", [req.account.id]);
+    return { ok: true };
   });
   base.put<{ Body: { answers?: unknown; skip?: boolean } }>("/api/me/onboarding", async (req, reply) => {
     const uid = await selfUserId(req.account);

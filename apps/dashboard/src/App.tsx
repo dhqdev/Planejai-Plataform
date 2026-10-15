@@ -16,6 +16,7 @@ import { useUnread } from "./notify";
 import { AuthPage } from "./pages/Login";
 import { PrivacyPage } from "./pages/Privacy";
 import { Welcome, type Onboarding } from "./pages/Welcome";
+import { Tour } from "./pages/Tour";
 import { PullToRefresh } from "./PullToRefresh";
 import { canInstall, haptic, isIos, isStandalone, onInstallAvailable, promptInstall } from "./touch";
 import { applyUpdate, onUpdateAvailable } from "./update";
@@ -301,12 +302,23 @@ export function App() {
 
   // perguntas de boas-vindas: abrem sozinhas na primeira entrada de quem acabou de se cadastrar (e pelo Perfil, quando quiser)
   const [welcome, setWelcome] = useState<Onboarding | null>(null);
+  // tour animado do primeiro login: depois das perguntas (ou sozinho, se não houver); `?tour=1` ou o evento pj:tour reabrem
+  const [tour, setTour] = useState<"due" | "open" | null>(null);
   useEffect(() => {
     if (!me) return;
-    api<Onboarding>("/api/me/onboarding").then((d) => d.due && setWelcome(d), () => {});
+    const forced = new URLSearchParams(location.search).has("tour");
+    api<Onboarding>("/api/me/onboarding").then(
+      (d) => {
+        if (d.due) setWelcome(d);
+        if (d.tour || forced) setTour(d.due ? "due" : "open");
+      },
+      () => forced && setTour("open"),
+    );
     const open = () => api<Onboarding>("/api/me/onboarding").then(setWelcome, () => {});
+    const openTour = () => setTour("open");
     window.addEventListener("pj:welcome", open);
-    return () => window.removeEventListener("pj:welcome", open);
+    window.addEventListener("pj:tour", openTour);
+    return () => (window.removeEventListener("pj:welcome", open), window.removeEventListener("pj:tour", openTour));
   }, [me?.id]);
 
   const toggleTheme = (e?: { clientX: number; clientY: number }) => {
@@ -455,7 +467,8 @@ export function App() {
 
       <WardrobeHost />
       <MascoteStroll />
-      {welcome && <Welcome data={welcome} name={me.name} onDone={() => (setWelcome(null), window.dispatchEvent(new Event("pj:welcome-done")))} />}
+      {welcome && <Welcome data={welcome} name={me.name} onDone={() => (setWelcome(null), setTour((t) => (t === "due" ? "open" : t)), window.dispatchEvent(new Event("pj:welcome-done")))} />}
+      {tour === "open" && !welcome && <Tour name={me.name} onDone={() => { setTour(null); if (location.search.includes("tour")) history.replaceState(null, "", location.pathname); }} />}
 
       {update && (
         <div className="update-pill" role="status">

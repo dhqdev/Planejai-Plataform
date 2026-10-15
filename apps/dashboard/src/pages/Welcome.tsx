@@ -17,6 +17,8 @@ export interface Onboarding {
   due: boolean;
   answers: Answers;
   summary: string;
+  /** tour animado do painel ainda não visto por esta conta */
+  tour?: boolean;
 }
 
 

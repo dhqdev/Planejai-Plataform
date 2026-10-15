@@ -352,6 +352,10 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     // perguntas de boas-vindas: aparecem para quem acabou de entrar; resposta fora do caminho escolhido é descartada
     const ob = (await app.inject({ method: "GET", url: "/api/me/onboarding", headers: { cookie: adm } })).json();
     expect(ob.due).toBe(true);
+    // tour do painel: uma vez por conta; depois de visto (ou pulado) não volta sozinho
+    expect(ob.tour).toBe(true);
+    await app.inject({ method: "PUT", url: "/api/me/tour", headers: { cookie: adm } });
+    expect((await app.inject({ method: "GET", url: "/api/me/onboarding", headers: { cookie: adm } })).json().tour).toBe(false);
     const saved = await app.inject({
       method: "PUT",
       url: "/api/me/onboarding",
