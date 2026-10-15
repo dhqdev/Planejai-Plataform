@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { api, phoneFmt } from "../api";
 import type { Me } from "../App";
 import { ErrorBox, PageHead, alertDialog, confirmDialog } from "../components";
@@ -7,6 +8,8 @@ import { Connections } from "../Connections";
 import { MyIntegrations } from "../MyIntegrations";
 import { useApi } from "../hooks";
 import { haptic } from "../touch";
+import { MeetingsPage } from "./Meetings";
+import { MemoriesPage } from "./Memories";
 
 export function ProfilePage({ me }: { me: Me }) {
   const { data } = useApi<any>("/api/me/profile");
@@ -25,43 +28,53 @@ export function ProfilePage({ me }: { me: Me }) {
       setError((e as Error).message);
     }
   };
+  // links antigos (/memories, /reunioes, avisos com link) chegam com #sabe ou #reunioes: rola até a seção depois de carregar
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash) return;
+    const t = setTimeout(() => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" }), 350);
+    return () => clearTimeout(t);
+  }, [hash]);
   return (
-    <div className="page" style={{ maxWidth: 1080 }}>
+    <div className="page acct-page">
       <PageHead title="Minha conta" subtitle={me.owner ? "Dono da plataforma. Nome e senha vêm da stack." : me.email} />
       {msg && <div className="ok-box" role="status" style={{ marginBottom: 12 }}>{msg}</div>}
       <ErrorBox error={error} />
-      <div className="grid grid-2" style={{ alignItems: "start" }}>
-      {!me.owner && (
-      <>
-      <div className="card card-pad">
-        <h3>Perfil</h3>
-        <div className="field"><label htmlFor="pf-name">Nome</label><input id="pf-name" name="name" autoComplete="name" className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
-        <div className="field">
-          <label htmlFor="pf-phone">WhatsApp ligado</label>
-          <input id="pf-phone" className="input" aria-describedby="pf-phone-help" value={data?.user ? phoneFmt(data.user.phone) : "nenhum"} disabled />
-          <span className="help" id="pf-phone-help">É por esse número que o assistente sabe que é você.</span>
-        </div>
-        <div className="field">
-          <label htmlFor="pf-tz">Fuso horário</label>
-          <input id="pf-tz" name="timezone" autoComplete="off" spellCheck={false} autoCapitalize="none" className="input" placeholder={data?.user?.timezone ?? "America/Sao_Paulo"} value={tz} onChange={(e) => setTz(e.target.value)} />
-        </div>
-        <button className="btn btn-primary" onClick={() => save({ name, timezone: tz || undefined })}>Salvar perfil</button>
-      </div>
-      <div className="card card-pad">
-        <h3>Trocar senha</h3>
-        <div className="field"><label htmlFor="pf-pw">Senha atual</label><input id="pf-pw" name="current-password" autoComplete="current-password" className="input" type="password" value={pw.current_password} onChange={(e) => setPw({ ...pw, current_password: e.target.value })} /></div>
-        <div className="field"><label htmlFor="pf-newpw">Nova senha</label><input id="pf-newpw" name="new-password" autoComplete="new-password" className="input" type="password" value={pw.password} onChange={(e) => setPw({ ...pw, password: e.target.value })} /></div>
-        <button className="btn" onClick={() => save(pw)}>Trocar senha</button>
-      </div>
-      </>
-      )}
-      {(me.linked || me.owner) && <AboutMe />}
-      {(me.linked || me.owner) && <AlarmSettings />}
-      <Sharing />
-      <Connections owner={me.owner} />
-      {me.linked && !me.owner && <MyIntegrations />}
-      <Security me={me} />
-      </div>
+      {/* tudo numa tela só (David, 2026-10-15): conta em colunas que se encaixam, depois o que ele sabe e as reuniões */}
+      <section className="acct-section acct-cards" aria-label="Conta">
+        {!me.owner && (
+          <div className="card card-pad">
+            <h3>Perfil</h3>
+            <div className="field"><label htmlFor="pf-name">Nome</label><input id="pf-name" name="name" autoComplete="name" className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
+            <div className="field">
+              <label htmlFor="pf-phone">WhatsApp ligado</label>
+              <input id="pf-phone" className="input" aria-describedby="pf-phone-help" value={data?.user ? phoneFmt(data.user.phone) : "nenhum"} disabled />
+              <span className="help" id="pf-phone-help">É por esse número que o assistente sabe que é você.</span>
+            </div>
+            <div className="field">
+              <label htmlFor="pf-tz">Fuso horário</label>
+              <input id="pf-tz" name="timezone" autoComplete="off" spellCheck={false} autoCapitalize="none" className="input" placeholder={data?.user?.timezone ?? "America/Sao_Paulo"} value={tz} onChange={(e) => setTz(e.target.value)} />
+            </div>
+            <button className="btn btn-primary" onClick={() => save({ name, timezone: tz || undefined })}>Salvar perfil</button>
+          </div>
+        )}
+        {(me.linked || me.owner) && <AboutMe />}
+        <Connections owner={me.owner} />
+        {(me.linked || me.owner) && <AlarmSettings />}
+        <Sharing />
+        {me.linked && !me.owner && <MyIntegrations />}
+        {!me.owner && (
+          <div className="card card-pad">
+            <h3>Trocar senha</h3>
+            <div className="field"><label htmlFor="pf-pw">Senha atual</label><input id="pf-pw" name="current-password" autoComplete="current-password" className="input" type="password" value={pw.current_password} onChange={(e) => setPw({ ...pw, current_password: e.target.value })} /></div>
+            <div className="field"><label htmlFor="pf-newpw">Nova senha</label><input id="pf-newpw" name="new-password" autoComplete="new-password" className="input" type="password" value={pw.password} onChange={(e) => setPw({ ...pw, password: e.target.value })} /></div>
+            <button className="btn" onClick={() => save(pw)}>Trocar senha</button>
+          </div>
+        )}
+        <Security me={me} />
+      </section>
+      <MemoriesPage embedded />
+      <MeetingsPage embedded />
     </div>
   );
 }

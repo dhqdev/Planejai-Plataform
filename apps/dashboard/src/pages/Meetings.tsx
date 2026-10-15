@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
-import { AgentTag, Empty, ErrorBox, PageHead } from "../components";
+import { AgentTag, Empty, ErrorBox, PageHead, SectionHead } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
@@ -29,8 +29,8 @@ const when = (iso: string) => {
   return `${date[0]!.toUpperCase()}${date.slice(1)} · ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
 };
 
-/** Atas das reuniões das 19h: o que o time percebeu, aprendeu e mudou para a pessoa. Cada um vê só as suas. */
-export function MeetingsPage() {
+/** Atas das reuniões das 19h: o que o time percebeu, aprendeu e mudou para a pessoa. Cada um vê só as suas. `embedded`: seção de Minha conta. */
+export function MeetingsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data, error, reload } = useApi<Meeting[]>("/api/meetings", { poll: 120000 });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -50,9 +50,10 @@ export function MeetingsPage() {
     }
   };
 
+  const Head = embedded ? SectionHead : PageHead;
   return (
-    <div className="page meet-page">
-      <PageHead
+    <section className={embedded ? "acct-section meet-page" : "page meet-page"} id={embedded ? "reunioes" : undefined} aria-label={embedded ? "Reuniões das 19h" : undefined}>
+      <Head
         title="Reuniões das 19h"
         subtitle="Todo dia às 19h o time revisa as conversas do dia e se ajusta a você. Aqui fica a ata de cada reunião."
         actions={
@@ -125,6 +126,6 @@ export function MeetingsPage() {
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

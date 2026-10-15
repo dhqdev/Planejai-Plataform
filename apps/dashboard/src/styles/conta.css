@@ -1,0 +1,29 @@
+/* ---------- Minha conta numa tela só (2026-10-15) ----------
+   Conta, O que ele sabe e Reuniões na mesma página, sem abas. Os cartões da conta se encaixam em colunas
+   (sem buraco embaixo do cartão baixo) e cada seção tem um título com respiro igual no notebook e no celular. */
+.acct-page { display: flex; flex-direction: column; gap: 44px; }
+.acct-page > .page-head { margin-bottom: -20px; }
+.acct-page > .ok-box, .acct-page > .error-box { margin: 0 !important; }
+.acct-section { min-width: 0; scroll-margin-top: 24px; }
+.acct-cards { columns: 1; column-gap: 16px; }
+.acct-cards > .card { break-inside: avoid; margin-bottom: 16px; display: block; }
+.acct-cards > .card:last-child { margin-bottom: 0; }
+.acct-cards > .card h3 { font-size: 15px; margin-bottom: 10px; }
+.acct-cards > .card-pad { padding: 20px 22px; }
+@media (min-width: 900px) { .acct-cards { columns: 2; } }
+@media (min-width: 1500px) { .acct-cards { columns: 3; } }
+
+.section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 16px; padding-top: 28px; border-top: 1px solid var(--border); }
+.section-head h2 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.015em; }
+.section-head p { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; max-width: 640px; }
+.section-head .row { flex-shrink: 0; }
+
+@media (max-width: 767px) {
+  .acct-page { gap: 32px; }
+  .acct-page > .page-head { margin-bottom: -14px; }
+  .acct-cards > .card { margin-bottom: 12px; }
+  .acct-cards > .card-pad { padding: 18px; }
+  .section-head { flex-wrap: wrap; align-items: flex-start; padding-top: 22px; margin-bottom: 12px; }
+  .section-head > div:first-child { flex: 1 1 220px; }
+  .section-head h2 { font-size: 18px; }
+}

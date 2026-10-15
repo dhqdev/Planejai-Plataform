@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ago } from "../api";
-import { AgentTag, confirmDialog, Empty, ErrorBox, Modal, PageHead } from "../components";
+import { AgentTag, confirmDialog, Empty, ErrorBox, Modal, PageHead, SectionHead } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
@@ -21,8 +21,9 @@ const SOURCE: Record<string, string> = { reuniao: "da reunião", pessoa: "você 
 /**
  * "O que ele sabe de mim": fatos por assunto (a reunião das 19h preenche e corrige), jeito de falar,
  * o que cada agente aprendeu e os assuntos frequentes. Cada pessoa vê e edita só o dela.
+ * `embedded`: vira uma seção de Minha conta (tudo numa tela só), com título de seção no lugar do título da página.
  */
-export function MemoriesPage() {
+export function MemoriesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string | null>(null);
   const [edit, setEdit] = useState<Partial<Fact> | null>(null);
@@ -47,9 +48,10 @@ export function MemoriesPage() {
     void reload();
   };
 
+  const Head = embedded ? SectionHead : PageHead;
   return (
-    <div className="page mem-page">
-      <PageHead
+    <section className={embedded ? "acct-section mem-page" : "page mem-page"} id={embedded ? "sabe" : undefined} aria-label={embedded ? "O que ele sabe de mim" : undefined}>
+      <Head
         title="O que ele sabe de mim"
         subtitle={
           data?.last_meeting_at
@@ -136,17 +138,19 @@ export function MemoriesPage() {
                 </div>
               </section>
             )}
-            <Link to="/reunioes" className="mem-link card">
-              <Icon name="sparkle" size={16} />
-              <span>Ver as atas das reuniões</span>
-              <Icon name="chevron-right" size={16} />
-            </Link>
+            {!embedded && (
+              <Link to="/profile#reunioes" className="mem-link card">
+                <Icon name="sparkle" size={16} />
+                <span>Ver as atas das reuniões</span>
+                <Icon name="chevron-right" size={16} />
+              </Link>
+            )}
           </aside>
         </div>
       )}
 
       {edit && <FactModal fact={edit} categories={cats} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); void reload(); }} />}
-    </div>
+    </section>
   );
 }
 

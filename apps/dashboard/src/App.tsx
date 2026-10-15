@@ -34,8 +34,6 @@ const load = {
   finance: () => import("./pages/Finance"),
   integrations: () => import("./pages/Integrations"),
   invites: () => import("./pages/Invites"),
-  memories: () => import("./pages/Memories"),
-  meetings: () => import("./pages/Meetings"),
   models: () => import("./pages/Models"),
   notifications: () => import("./pages/Notifications"),
   alarm: () => import("./pages/Alarm"),
@@ -76,8 +74,6 @@ const ExecutionsPage = page(() => load.executions().then((m) => m.ExecutionsPage
 const FinancePage = page(() => load.finance().then((m) => m.FinancePage));
 const IntegrationsPage = page(() => load.integrations().then((m) => m.IntegrationsPage));
 const InvitesPage = page(() => load.invites().then((m) => m.InvitesPage));
-const MemoriesPage = page(() => load.memories().then((m) => m.MemoriesPage));
-const MeetingsPage = page(() => load.meetings().then((m) => m.MeetingsPage));
 const SpecialistsPage = page(() => load.specialists().then((m) => m.SpecialistsPage));
 const SpecialistPage = page(() => load.specialists().then((m) => m.SpecialistPage));
 const ModelsPage = page(() => load.models().then((m) => m.ModelsPage));
@@ -117,8 +113,6 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/recados": load.errands,
   "/contatos": load.contacts,
   "/documentos": load.documents,
-  "/memories": load.memories,
-  "/reunioes": load.meetings,
   "/settings": load.settings,
   "/profile": load.profile,
   "/plano": load.billing,
@@ -154,7 +148,6 @@ const GROUPS: { to: string; label: string }[][] = [
   [{ to: "/agents", label: "Agentes" }, { to: "/models", label: "Modelos" }],
   [{ to: "/whatsapp", label: "WhatsApp" }, { to: "/integrations", label: "Integrações" }],
   [{ to: "/servidor", label: "Servidor" }, { to: "/armazenamento", label: "Armazenamento" }],
-  [{ to: "/profile", label: "Minha conta" }, { to: "/memories", label: "O que ele sabe" }, { to: "/reunioes", label: "Reuniões" }],
 ];
 const groupOf = (path: string) => GROUPS.find((g) => g.some((t) => t.to === "/" + (path.split("/")[1] ?? "")));
 
@@ -449,9 +442,9 @@ export function App() {
           <Route path="/finance" element={<FinancePage />} />
           <Route path="/agenda" element={<CalendarPage isSuper={isSuper} />} />
           <Route path="/reminders" element={<Navigate to="/agenda" replace />} />
-          {/* abas de Minha conta: todo mundo vê o que ele sabe e as atas das reuniões (o módulo "memorias" só põe no menu) */}
-          <Route path="/memories" element={<MemoriesPage />} />
-          <Route path="/reunioes" element={<MeetingsPage />} />
+          {/* o que ele sabe e as reuniões moram em Minha conta, numa tela só; os endereços antigos rolam até a seção */}
+          <Route path="/memories" element={<Navigate to={{ pathname: "/profile", hash: "#sabe" }} replace />} />
+          <Route path="/reunioes" element={<Navigate to={{ pathname: "/profile", hash: "#reunioes" }} replace />} />
           <Route path="/especialistas" element={<SpecialistsPage />} />
           <Route path="/especialistas/:slug" element={<SpecialistPage />} />
           <Route path="*" element={tabs.loading && !isSuper ? <Loading /> : <Navigate to="/" />} />

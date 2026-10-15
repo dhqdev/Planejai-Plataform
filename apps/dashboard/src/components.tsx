@@ -17,6 +17,19 @@ export function PageHead({ title, subtitle, actions }: { title: string; subtitle
   );
 }
 
+/** Título de uma seção dentro de uma tela longa (ex.: Minha conta), no mesmo jeito do PageHead, um degrau menor. */
+export function SectionHead({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
+  return (
+    <div className="section-head">
+      <div>
+        <h2>{title}</h2>
+        {subtitle && <p>{subtitle}</p>}
+      </div>
+      {actions && <div className="row">{actions}</div>}
+    </div>
+  );
+}
+
 export function Status({ status }: { status: string }) {
   const map: Record<string, [string, string]> = {
     success: ["badge-ok", "Sucesso"],
