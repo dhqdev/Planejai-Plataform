@@ -13,6 +13,7 @@ import { one, pool, query } from "../db/pool.js";
 import { phoneVariants } from "../ingest.js";
 import { cleanInviteCode } from "../social.js";
 import { pricingOf } from "../billing.js";
+import { grainsPerMessage } from "../credits.js";
 import { getSettings } from "../settings.js";
 import { registerDashboardRoutes } from "./routes/dashboard.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
@@ -299,7 +300,8 @@ export async function buildServer() {
     // planos e pacotes de grãos: a landing mostra a vitrine mesmo com a cobrança desligada
     // quem responde pelos dados, para a página /privacidade (LGPD)
     const legal = { name: s.legalName, document: s.legalDocument, email: s.privacyEmail, city: s.legalCity };
-    return { signupMode: s.signupMode, version: VERSION, pricing: pricingOf(s), legal };
+    const perMessage = await grainsPerMessage(s);
+    return { signupMode: s.signupMode, version: VERSION, pricing: { ...pricingOf(s), perMessage }, legal };
   });
 
   app.post("/api/auth/logout", async (_req, reply) => {

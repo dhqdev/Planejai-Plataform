@@ -63,6 +63,8 @@ export interface BillingPlan {
   blurb: string;
   /** o plano em destaque na vitrine */
   highlight?: boolean;
+  /** benefícios mostrados na página de preços e na tela de grãos (um por linha, até 5) */
+  perks?: string[];
 }
 
 export interface BillingPack {
@@ -73,10 +75,38 @@ export interface BillingPack {
 
 /** Vitrine padrão: o grão sai mais barato no plano do que no avulso, para valer a pena assinar. */
 export const DEFAULT_PLANS: BillingPlan[] = [
-  { id: "leve", name: "Leve", price: 19.9, grains: 1500, blurb: "Gastos, lembretes e perguntas do dia a dia." },
-  { id: "dia-a-dia", name: "Dia a dia", price: 39.9, grains: 4000, blurb: "Para quem usa todo dia: agenda, pesquisa e áudio.", highlight: true },
-  { id: "completo", name: "Completo", price: 79.9, grains: 10000, blurb: "Time inteiro trabalhando: recados, automações e muito mais." },
+  {
+    id: "leve",
+    name: "Leve",
+    price: 19.9,
+    grains: 1500,
+    blurb: "Gastos, lembretes e perguntas do dia a dia.",
+    perks: ["Gastos, contas e lembretes pelo WhatsApp", "Áudio, foto e comprovante viram anotação", "Agenda e finanças no painel"],
+  },
+  {
+    id: "dia-a-dia",
+    name: "Dia a dia",
+    price: 39.9,
+    grains: 4000,
+    blurb: "Para quem usa todo dia: agenda, pesquisa e áudio.",
+    highlight: true,
+    perks: ["Mais que o dobro de grãos do Leve", "Pesquisa na internet, resumos e PDFs", "Google Agenda, e-mail e Notion conectados"],
+  },
+  {
+    id: "completo",
+    name: "Completo",
+    price: 79.9,
+    grains: 10000,
+    blurb: "Time inteiro trabalhando: recados, automações e muito mais.",
+    perks: ["2,5 vezes os grãos do Dia a dia", "Recados: ele fala com lojas e marca horários por você", "Relatórios e o time inteiro no seu dia"],
+  },
 ];
+
+/** Benefícios do plano: os que o dono escreveu ou, sem nenhum, os da vitrine padrão com o mesmo id. */
+export function perksOf(plan: BillingPlan): string[] {
+  if (plan.perks?.length) return plan.perks;
+  return DEFAULT_PLANS.find((d) => d.id === plan.id)?.perks ?? [];
+}
 export const DEFAULT_PACKS: BillingPack[] = [
   { id: "p500", grains: 500, price: 9.9 },
   { id: "p2000", grains: 2000, price: 34.9 },
@@ -98,6 +128,10 @@ export function cleanPlans(raw: unknown): BillingPlan[] {
       grains: Math.round(Number(p?.grains)),
       blurb: String(p?.blurb ?? "").trim().slice(0, 120),
       highlight: p?.highlight === true,
+      perks: (Array.isArray(p?.perks) ? p.perks : String(p?.perks ?? "").split("\n"))
+        .map((x: unknown) => String(x ?? "").trim().slice(0, 80))
+        .filter(Boolean)
+        .slice(0, 5),
     };
     if (!plan.name) throw new Error("Todo plano precisa de nome.");
     if (!(plan.price >= 1 && plan.price <= 100_000)) throw new Error(`Preço do plano ${plan.name} precisa ficar entre R$ 1 e R$ 100.000.`);

@@ -55,6 +55,14 @@ function BillingSection({ form, setForm }: { form: any; setForm: (f: any) => voi
             <input className="input set-plan-blurb" aria-label="Para quem é" placeholder="Para quem é" value={p.blurb ?? ""} onChange={(e) => setPlan(i, { blurb: e.target.value })} />
             <label className="set-plan-hl" title="Plano em destaque na vitrine"><input type="radio" name="plan-hl" aria-label="Plano em destaque" checked={!!p.highlight} onChange={() => setPlan(i, { highlight: true })} /></label>
             {plans.length > 1 ? <button className="btn btn-sm btn-ghost" onClick={() => setForm({ ...form, billingPlans: plans.filter((_, j) => j !== i) })}>Tirar</button> : <span />}
+            <textarea
+              className="input set-plan-perks"
+              rows={3}
+              aria-label={`Benefícios do plano ${p.name ?? ""}`}
+              placeholder="Benefícios, um por linha (aparecem na página de preços). Vazio usa os do plano padrão."
+              value={Array.isArray(p.perks) ? p.perks.join("\n") : p.perks ?? ""}
+              onChange={(e) => setPlan(i, { perks: e.target.value.split("\n") })}
+            />
           </div>
         ))}
         {plans.length < 4 && <button className="btn btn-sm" onClick={() => setForm({ ...form, billingPlans: [...plans, { name: "", price: 29.9, grains: 3000, blurb: "" }] })}>Adicionar plano</button>}

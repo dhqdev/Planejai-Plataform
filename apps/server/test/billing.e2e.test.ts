@@ -24,7 +24,12 @@ describe("assinatura: regras sem banco", () => {
     expect(() => cleanPlans([])).toThrow(/pelo menos um plano/);
     expect(() => cleanPlans([{ name: "X", price: 0.5, grains: 10 }])).toThrow(/entre R\$ 1/);
     expect(() => cleanPlans([{ name: "A", price: 10, grains: 10 }, { name: "a", price: 20, grains: 20 }])).toThrow(/mesmo nome/);
-    expect(cleanPlans([{ name: "Família Plus", price: "29.999", grains: "3000.4" }])).toEqual([{ id: "familia-plus", name: "Família Plus", price: 30, grains: 3000, blurb: "", highlight: false }]);
+    expect(cleanPlans([{ name: "Família Plus", price: "29.999", grains: "3000.4" }])).toEqual([{ id: "familia-plus", name: "Família Plus", price: 30, grains: 3000, blurb: "", highlight: false, perks: [] }]);
+    // benefícios: um por linha (texto do painel) ou lista, sem linha vazia, até 5; sem nenhum, a vitrine usa os do plano padrão
+    expect(cleanPlans([{ name: "Leve", price: 10, grains: 10, perks: "Um\n\n Dois \n" }])[0]!.perks).toEqual(["Um", "Dois"]);
+    const { perksOf } = await import("../src/settings.js");
+    expect(perksOf({ id: "leve", name: "Leve", price: 10, grains: 10, blurb: "", perks: [] }).length).toBeGreaterThan(0);
+    expect(perksOf({ id: "outro", name: "Outro", price: 10, grains: 10, blurb: "" })).toEqual([]);
     expect(cleanPacks([{ grains: 900, price: 15 }, { grains: 100, price: 2 }]).map((p) => p.id)).toEqual(["p100", "p900"]);
     const worstPlan = Math.max(...DEFAULT_PLANS.map((p) => p.price / p.grains));
     const bestPack = Math.min(...DEFAULT_PACKS.map((p) => p.price / p.grains));

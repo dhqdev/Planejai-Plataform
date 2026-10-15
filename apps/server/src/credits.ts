@@ -197,6 +197,23 @@ export async function chargeUsage(userId: string, costUsd: number) {
   return { charged: amount, left };
 }
 
+let perMessageCache: { at: number; value: number | null } | null = null;
+
+/**
+ * Quantos grãos uma mensagem gasta em média (custo real de IA dos últimos 30 dias ÷ mensagens recebidas), para a
+ * página de preços dizer "dá para umas N mensagens". Com pouca conversa ainda (menos de 50 mensagens) não chuta: null.
+ * Guardado por uma hora.
+ */
+export async function grainsPerMessage(s: AgentSettings): Promise<number | null> {
+  if (perMessageCache && Date.now() - perMessageCache.at < 3_600_000) return perMessageCache.value;
+  const r = await one<{ cost: number; msgs: number }>(
+    "SELECT COALESCE(SUM(cost_usd), 0)::float AS cost, COALESCE(SUM(messages), 0)::float AS msgs FROM usage_daily WHERE day > current_date - 30",
+  ).catch(() => null);
+  const value = r && r.msgs >= 50 && r.cost > 0 ? Math.max(0.1, (r.cost / r.msgs) * Number(s.billingGrainsPerUsd || 1000)) : null;
+  perMessageCache = { at: Date.now(), value };
+  return value;
+}
+
 /** Extrato recente (as entradas de uso já vêm somadas por dia). */
 export async function ledgerOf(userId: string, limit = 30) {
   const rows = await many(
