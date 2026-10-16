@@ -14,6 +14,9 @@ export function isUuid(id: string) {
  * Com userId, a conta conectada é a pessoal desse cliente (Minha conta), não a da plataforma.
  * Leva também a conta do painel que pediu: o callback recusa se outra pessoa estiver logada naquele navegador.
  */
+/** Para onde volta a conexão pessoal do Google ("agenda" quando começou pela Agenda). */
+export const OAUTH_BACK_COOKIE = "pj_oauth_back";
+
 export function newOauthState(accountId: string, userId?: string) {
   return signSession({ sub: `oauth:${userId ? `u:${userId}:` : ""}a:${accountId}:${randomBytes(8).toString("hex")}`, exp: Date.now() + 10 * 60_000 });
 }

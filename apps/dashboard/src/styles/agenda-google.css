@@ -30,13 +30,11 @@
 .btn-pill { border-radius: 99px; padding: 7px 16px; font-weight: 600; }
 .cal-view { width: auto; border-radius: 99px; padding-left: 16px; font-weight: 600; }
 .cal-search { max-width: 260px; }
-.cal-month { display: grid; grid-template-columns: 34px repeat(7, minmax(0, 1fr)); overflow: hidden; }
+.cal-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); overflow: hidden; }
 .cal-month.compact { grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .cal-month .cal-wd { font-weight: 650; border-bottom: none; }
-.cal-month .cal-wd.wk, .cal-wk { border-top: none; }
-.cal-month .cal-wd:nth-child(2) ~ .cal-wd, .cal-month.compact .cal-wd { border-left: none; }
-.cal-wk { font-size: 11px; color: var(--muted); font-weight: 600; text-align: center; padding-top: 10px; border-top: 1px solid var(--border); }
-.cal-month:not(.compact) .cal-cell:nth-child(8n + 10) { border-left: 1px solid var(--border); }
+.cal-month .cal-wd { border-left: none; }
+.cal-month .cal-cell:nth-child(7n + 8) { border-left: none; }
 .cal-num { align-self: center; width: auto; min-width: 26px; padding: 0 6px; border-radius: 99px; font-size: 12.5px; font-weight: 650; }
 .cal-cell.today .cal-num { background: var(--grad); color: var(--on-ink); box-shadow: none; }
 .cal-cell.sel:not(.today) .cal-num { background: var(--panel-2); color: var(--text); }
@@ -83,3 +81,18 @@
   .cal-week-body { max-height: calc(100dvh - 290px); }
 }
 
+
+/* Sincronizar com o Google Agenda: um cartão discreto no topo do painel lateral (notebook) e uma linha no celular */
+.gsync { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); }
+.gsync-side { flex-wrap: wrap; padding: 14px; }
+.gsync-side .gsync-btn { width: 100%; justify-content: center; }
+.gsync-phone { margin: 2px 0 6px; padding: 10px 12px; }
+.gsync-ico { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 12px; background: var(--panel-2); color: var(--text); }
+.gsync.on .gsync-ico { color: var(--cal-google); }
+.gsync-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.gsync-text strong { font-size: 14px; font-weight: 650; }
+.gsync-text small { font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+.gsync-text small.err { color: var(--danger, #d33); }
+.gsync-link { border: none; background: none; padding: 4px 0; color: var(--muted); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.gsync-side .gsync-link { margin-left: 48px; }
+@media (hover: hover) and (pointer: fine) { .gsync-link:hover { color: var(--text); } }

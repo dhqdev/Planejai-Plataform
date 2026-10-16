@@ -30,6 +30,7 @@ import {
   type Tag,
 } from "./Calendar";
 import "../styles/agenda-celular.css";
+import { GoogleSync } from "./GoogleSync";
 
 /**
  * Agenda no celular, no jeito do Toki (pedido do David em 2026-10-16): abas Calendário e Lembretes, o mês numa
@@ -279,6 +280,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
             onChange={(e) => setSearch(e.target.value)}
           />
         )}
+        {tab === "cal" && <GoogleSync isSuper={isSuper} variant="phone" />}
         <div className="pc-row pc-row-2">
           {tab === "cal" && mode === "week" && (
             <button className="pc-ico sm" aria-label="Semana anterior" onClick={() => { haptic(5); setWeekFrom(addDays(weekFrom, -7)); }}>

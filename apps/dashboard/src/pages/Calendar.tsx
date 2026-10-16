@@ -8,6 +8,7 @@ import { DateField, TimeField } from "../pickers";
 import { haptic } from "../touch";
 import { PhoneAgenda } from "./CalendarPhone";
 import { Vazio } from "../Vazio";
+import { GoogleSync } from "./GoogleSync";
 
 /**
  * Agenda no estilo Google Agenda: painel lateral (Criar, minicalendário, agendas), mês com número da
@@ -61,15 +62,6 @@ export const weekStart = (d: Date) => addDays(startOfDay(d), -((d.getDay() + 6) 
 function monthGrid(anchor: Date) {
   const start = weekStart(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
   return Array.from({ length: 42 }, (_, i) => addDays(start, i));
-}
-
-/** Número da semana (ISO 8601). */
-function isoWeek(d: Date) {
-  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const day = t.getUTCDay() || 7;
-  t.setUTCDate(t.getUTCDate() + 4 - day);
-  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
-  return Math.ceil(((t.getTime() - y0.getTime()) / 86400000 + 1) / 7);
 }
 
 /** Feriados nacionais do Brasil (fixos + os que dependem da Páscoa). */
@@ -298,10 +290,10 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
           <button className="cal-create" onClick={() => create(withTime(selected))}>
             <Icon name="plus" size={20} /> Criar
           </button>
+          <GoogleSync isSuper={isSuper} variant="side" />
           <MiniMonth selected={selected} onPick={pick} />
-          <CalendarList title="Minhas agendas" items={calendars.filter((c) => c.group === "mine")} hidden={hidden} onToggle={toggleCal} />
+          <CalendarList title="Agendas" items={calendars} hidden={hidden} onToggle={toggleCal} />
           <CalendarList title="Tags" items={tagItems(tags)} hidden={hidden} onToggle={toggleCal} />
-          <CalendarList title="Outras agendas" items={calendars.filter((c) => c.group === "other")} hidden={hidden} onToggle={toggleCal} />
           {owners.length > 0 && (
             <div className="cal-side-block">
               <h4>De quem</h4>
@@ -632,10 +624,8 @@ function MonthView(p: {
   const weeks = Array.from({ length: 6 }, (_, i) => days.slice(i * 7, i * 7 + 7));
   return (
     <div ref={grid} className={`card cal-month ${p.compact ? "compact" : ""} ${readable ? "" : "tight"}`}>
-      {!p.compact && <div className="cal-wd wk" />}
       {[1, 2, 3, 4, 5, 6, 0].map((w) => <div key={w} className="cal-wd">{p.compact ? WEEKDAYS[w]!.charAt(0).toUpperCase() : `${WEEKDAYS[w]}.`}</div>)}
       {weeks.map((week) => [
-        !p.compact && <div key={`w${key(week[0]!)}`} className="cal-wk">{isoWeek(week[0]!)}</div>,
         ...week.map((d) => {
           const evs = p.byDay.get(key(d)) ?? [];
           const out = d.getMonth() !== p.cursor.getMonth();

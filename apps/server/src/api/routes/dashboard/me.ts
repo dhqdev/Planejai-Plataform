@@ -11,7 +11,7 @@ import { botUsername, connections, telegramLink, unlink } from "../../../telegra
 import { googleAuthUrl } from "../../../integrations/google.js";
 import { disconnectPersonal, getDef, INTEGRATIONS, PERSONAL_INTEGRATIONS, personalFields, rawCredentials, savePersonalCredentials } from "../../../integrations/registry.js";
 import { setSession } from "../../server.js";
-import { newOauthState } from "./shared.js";
+import { newOauthState, OAUTH_BACK_COOKIE } from "./shared.js";
 
 /** A própria conta: resumo, perfil, senha, exclusão (LGPD), layout do painel, mascote, conexões e abas. */
 export function meRoutes(base: FastifyInstance) {
@@ -240,9 +240,11 @@ export function meRoutes(base: FastifyInstance) {
     }
   });
 
-  base.post("/api/me/integrations/google/oauth", async (req, reply) => {
+  base.post<{ Querystring: { volta?: string } }>("/api/me/integrations/google/oauth", async (req, reply) => {
     const uid = await personalUser(req);
     if (!uid) return reply.code(403).send({ error: "Use a tela Integrações" });
+    // conectou pela Agenda: a volta do Google cai de novo na Agenda (senão, em Minha conta)
+    if (req.query.volta === "agenda") reply.setCookie(OAUTH_BACK_COOKIE, "agenda", { path: "/api/integrations", httpOnly: true, sameSite: "lax", secure: config.PUBLIC_URL.startsWith("https"), maxAge: 600 });
     try {
       return { url: await googleAuthUrl(newOauthState(req.account.id, uid)) };
     } catch {

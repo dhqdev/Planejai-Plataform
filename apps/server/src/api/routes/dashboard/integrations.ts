@@ -7,7 +7,7 @@ import { mercadolivreAuthUrl, mercadolivreExchangeCode } from "../../../integrat
 import { disconnect, getCredentials, getDef, isConnected, listIntegrations, rawCredentials, saveCredentials, setEnabled } from "../../../integrations/registry.js";
 import { setupTelegram } from "../../../telegram.js";
 import { sessionAccount } from "../../server.js";
-import { checkOauthState, newOauthState } from "./shared.js";
+import { checkOauthState, newOauthState, OAUTH_BACK_COOKIE } from "./shared.js";
 
 /** Callbacks de OAuth: públicos, sem cookie de API garantido; valem pelo state assinado. */
 export function integrationCallbackRoutes(app: FastifyInstance) {
@@ -17,7 +17,8 @@ export function integrationCallbackRoutes(app: FastifyInstance) {
     if (!st.ok) return reply.code(400).send(st.error);
     // conexão pessoal de um cliente volta para Minha conta; a da plataforma, para Integrações
     const userId = st.userId;
-    const page = userId ? "/profile" : "/integrations";
+    const page = userId ? (req.cookies?.[OAUTH_BACK_COOKIE] === "agenda" ? "/agenda" : "/profile") : "/integrations";
+    reply.clearCookie(OAUTH_BACK_COOKIE, { path: "/api/integrations" });
     if (req.query.error) return reply.redirect(`${page}?error=${encodeURIComponent(req.query.error)}`);
     try {
       await googleExchangeCode(req.query.code ?? "", userId ?? undefined);
