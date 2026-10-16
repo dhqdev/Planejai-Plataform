@@ -9,7 +9,8 @@ import { parseLocalDateTime } from "../../time.js";
 import { barChart, budgetChart, donutChart, svgToPng } from "../../charts.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
 import { autoCategory, ensureCategories, FALLBACK, learnCategory, plain, resolveCategory } from "../../categories.js";
-import { addMonths, invoiceDates, invoiceMonthFor, listCards, localDate, monthName, placeOnCard, resolveCard, shiftDate, type Card } from "../../cards.js";
+import { CARD_USED } from "../claims.js";
+import { addMonths, cardInText, invoiceDates, invoiceMonthFor, listCards, localDate, monthName, placeOnCard, resolveCard, shiftDate, type Card } from "../../cards.js";
 
 export { CATEGORIES, guessCategory } from "../../categories.js";
 
@@ -304,6 +305,13 @@ async function financeOwner(ctx: { user: { id: string } }, ofContact?: string): 
   return { id: c.id, name: c.name };
 }
 
+/** O que a pessoa falou nesta rodada (a linha da mensagem `messageId`, se houver), para achar o cartão que ela citou. */
+function spokenText(ctx: { inboundText?: string; typedText?: string }, messageId?: string) {
+  const all = ctx.inboundText || ctx.typedText || "";
+  const line = messageId ? all.split("\n").find((l) => l.includes(`[msg_id=${messageId}]`)) : undefined;
+  return (line ?? all).replace(/\[msg_id=\d+\]\s*/g, "").slice(0, 600);
+}
+
 /** "no débito", "pix", "dinheiro": não é cartão de crédito. */
 const NO_CARD = /^(nenhum|sem cart[aã]o|n[aã]o|pix|dinheiro|esp[eé]cie|d[eé]bito|cart[aã]o de d[eé]bito|boleto|transfer[eê]ncia|ted|doc)$/i;
 
@@ -373,10 +381,11 @@ export const addTransaction = defineTool<{
   message_id?: string;
   item?: number;
   date_confirmed?: boolean;
+  again?: boolean;
 }>({
   name: "add_transaction",
   description:
-    "Registra gasto ou receita, sem pedir confirmação. Parcelado: valor TOTAL + installments. No cartão de crédito: card (apelido ou final); cada parcela cai na fatura certa. " +
+    "Registra gasto ou receita NOVO, sem pedir confirmação (corrigir um já lançado é update_transaction). Parcelado: valor TOTAL + installments. Pagou com cartão (crédito, vale alimentação/refeição): card; cada parcela cai na fatura certa. " +
     "message_id evita lançar o mesmo comprovante duas vezes; vários itens na mesma mensagem: uma chamada por item com item=1, 2, 3…",
   parameters: obj(
     {
@@ -387,11 +396,12 @@ export const addTransaction = defineTool<{
       merchant: { type: "string" },
       date: { type: "string", description: "AAAA-MM-DD[THH:MM]; padrão agora" },
       installments: { type: "number" },
-      card: { type: "string", description: "Cartão de crédito usado (ex.: Nubank, final 1234). Vazio = Pix/dinheiro/débito" },
+      card: { type: "string", description: "Cartão que ela citou, do jeito que falou (Nubank, final 1234, vale alimentação, VR). Vazio = Pix/dinheiro/débito" },
       source: { type: "string", enum: ["conversa", "audio", "comprovante", "documento"] },
       message_id: { type: "string" },
       item: { type: "number" },
       date_confirmed: { type: "boolean", description: "true só se a pessoa disse uma data de mais de um ano atrás" },
+      again: { type: "boolean", description: "true só se ela disse que é outro gasto igual a um de agora há pouco" },
     },
     ["kind", "amount"],
   ),
@@ -404,9 +414,22 @@ export const addTransaction = defineTool<{
       if ("error" in found) return { ok: false, error: found.error };
       card = found;
     }
-    // parcelou sem dizer onde: com um cartão só, é nele; com vários, lança sem cartão e pede para perguntar
     let cardNote: Record<string, string> = {};
-    if (!card && !args.card?.trim() && args.kind === "expense" && Math.floor(args.installments ?? 1) > 1) {
+    const said = !args.card?.trim() && args.kind === "expense" && !["comprovante", "documento"].includes(args.source ?? "") ? spokenText(ctx, args.message_id) : "";
+    // "gastei 17,20 no vale alimentação" sem card: o modelo esqueceu, mas a pessoa disse. Cartão dela que bate vai junto.
+    if (said) {
+      const mine = await many<Card>("SELECT * FROM cards WHERE user_id = $1 AND active ORDER BY created_at", [ctx.user.id]);
+      const hit = cardInText(said, mine);
+      if (hit && "card" in hit) card = hit.card as Card;
+      else if (hit)
+        cardNote = {
+          card_note: mine.length
+            ? `Ela falou "${hit.said}", mas não deu para saber qual dos cartões dela (${mine.map((c) => c.name).join(", ")}): lancei SEM cartão. Não diga que foi no cartão; pergunte qual e corrija com update_transaction ids + card.`
+            : `Ela falou "${hit.said}", mas não tem cartão cadastrado: lancei SEM cartão. Não diga que foi no cartão; pergunte se quer cadastrar (dia do fechamento e do vencimento) e passe ao Financeiro.`,
+        };
+    }
+    // parcelou sem dizer onde: com um cartão só, é nele; com vários, lança sem cartão e pede para perguntar
+    if (!card && !cardNote.card_note && !args.card?.trim() && args.kind === "expense" && Math.floor(args.installments ?? 1) > 1) {
       const mine = await many<Card>("SELECT * FROM cards WHERE user_id = $1 AND active ORDER BY created_at", [ctx.user.id]);
       if (mine.length === 1) {
         card = mine[0]!;
@@ -419,6 +442,28 @@ export const addTransaction = defineTool<{
     const first = args.date ? parseLocalDateTime(args.date, ctx.timezone) : new Date();
     const odd = suspiciousDate(first, args);
     if (odd) return odd;
+    // "esse gasto vai no cartão X" virava um 2º lançamento igual: mesmo valor e mesmo lugar de agora há pouco é para corrigir, não somar
+    if (!args.again && !args.item) {
+      const twin = await one<{ id: string; description: string | null; card: string | null; min: number }>(
+        `SELECT t.id, COALESCE(t.description, t.merchant, t.category) AS description, c.name AS card,
+                GREATEST(1, ROUND(EXTRACT(EPOCH FROM now() - t.created_at) / 60))::int AS min
+           FROM transactions t LEFT JOIN cards c ON c.id = t.card_id
+          WHERE t.user_id = $1 AND t.kind = $2 AND t.amount = $3 AND t.created_at > now() - interval '30 minutes'
+            AND ($4::text IS NULL OR t.external_ref IS NULL OR t.external_ref NOT LIKE $4 || '%')
+            AND (($5::text IS NULL AND $6::text IS NULL) OR lower(t.description) = lower($5) OR lower(t.merchant) = lower($6)
+                 OR lower(t.description) = lower($6) OR lower(t.merchant) = lower($5))
+          ORDER BY t.created_at DESC LIMIT 1`,
+        [ctx.user.id, args.kind, total, args.message_id ?? null, args.description?.trim() || null, args.merchant?.trim() || null],
+      );
+      if (twin)
+        return {
+          ok: false,
+          possible_duplicate: { id: twin.id, amount: brl(total), description: twin.description, card: twin.card ?? "sem cartão", lancado_ha: `${twin.min} min` },
+          error:
+            `Já tem ${brl(total)} (${twin.description}) lançado há ${twin.min} min. Se ela quer ajustar esse (cartão, valor, categoria, data), use update_transaction ids=["${twin.id}"]. ` +
+            "Só se ela disse que é OUTRO gasto do mesmo valor, chame de novo com again=true. Na dúvida, pergunte.",
+        };
+    }
     // vários itens da mesma foto/lista não podem cair na mesma referência (o 2º virava "duplicado")
     const ref = args.message_id ? (i: number) => `${args.message_id}${args.item ? `#${Math.floor(args.item)}` : ""}:${i}` : undefined;
     const r = await recordTransaction({
@@ -448,6 +493,7 @@ export const addTransaction = defineTool<{
     if (alerts.length) void emitEvent("budget.alert", { user_id: ctx.user.id, category, alerts });
     let cardInfo: Record<string, unknown> = {};
     if (card) {
+      ctx.room?.done.add(CARD_USED);
       const s = (await listCards(ctx.user.id, ctx.timezone)).find((c) => c.id === card!.id);
       const firstInv = r.invoices[0]!;
       cardInfo = {
@@ -603,7 +649,8 @@ function suspiciousDate(when: Date, args: { date?: string; date_confirmed?: bool
 }
 
 export const updateTransaction = defineTool<{
-  ids: string[];
+  ids?: string[];
+  last?: boolean;
   amount?: number | string;
   category?: string;
   description?: string;
@@ -616,10 +663,11 @@ export const updateTransaction = defineTool<{
 }>({
   name: "update_transaction",
   description:
-    "Corrige lançamentos (ids de list_transactions): valor, categoria, descrição, estabelecimento, data, tipo ou cartão. Vários ids = mesma mudança em todos. Sem confirmação.",
+    "Corrige lançamentos já feitos (ids de list_transactions, ou last=true para o último que ela lançou): valor, categoria, descrição, estabelecimento, data, tipo ou cartão. Vários ids = mesma mudança em todos. Sem confirmação.",
   parameters: obj(
     {
       ids: { type: "array", items: { type: "string" } },
+      last: { type: "boolean", description: "true = o último lançamento dela (\"esse gasto\" de agora há pouco), sem ids" },
       amount: { type: "number" },
       category: { type: "string", description: "Uma categoria dela (lista em categories). Trocar ensina: os parecidos seguem essa daqui para frente" },
       description: { type: "string" },
@@ -630,10 +678,13 @@ export const updateTransaction = defineTool<{
       all_installments: { type: "boolean", description: "Aplica em todas as parcelas da mesma compra" },
       date_confirmed: { type: "boolean", description: "true só se a pessoa disse uma data de mais de um ano atrás" },
     },
-    ["ids"],
   ),
   async run(args, ctx) {
     let ids = (args.ids ?? []).filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 200);
+    if (!ids.length && args.last) {
+      const last = await one<{ id: string }>("SELECT id FROM transactions WHERE user_id = $1 AND created_at > now() - interval '1 day' ORDER BY created_at DESC LIMIT 1", [ctx.user.id]);
+      if (last) ids = [last.id];
+    }
     if (!ids.length) return { ok: false, error: "Passe os ids (use list_transactions)" };
     // trocar de cartão é da compra inteira: as parcelas não podem ficar uma em cada cartão
     if (args.all_installments || args.card?.trim()) ids = await withInstallments(ctx.user.id, ids);
@@ -669,6 +720,7 @@ export const updateTransaction = defineTool<{
     // trocou a categoria: aprende para os próximos parecidos
     if (category) await learnCategory(ctx.user.id, rows.map((r) => ({ kind: r.kind, category: category!, merchant: r.merchant, description: r.description })));
     if (card !== undefined) {
+      if (card) ctx.room?.done.add(CARD_USED);
       const changed = rows.map((r) => r.id as string);
       await query("UPDATE transactions SET card_id = $2, invoice_month = NULL WHERE user_id = $1 AND id = ANY($3::uuid[])", [ctx.user.id, card?.id ?? null, changed]);
       if (card) await placeOnCard(ctx.user.id, card, changed, ctx.timezone);

@@ -127,6 +127,31 @@ describe.skipIf(!enabled)("cartões (e2e)", () => {
     expect(rows.map((r) => r.invoice_month)).toEqual(["2026-11", "2026-12", "2027-01"]);
     expect(rows.map((r) => r.installment)).toEqual([1, 2, 3]);
 
+    // 16/10: "gastei 17,20 no mercado, utilizando o cartão vale alimentação" e o modelo esqueceu o card
+    const { cardSave } = await import("../src/agent/tools/cards.js");
+    await cardSave.run({ name: "Vale alimentação", closing_day: 3, due_day: 10 }, ctx);
+    const done = new Set<string>();
+    const talk = { ...ctx, room: { done }, inboundText: "[msg_id=340] [áudio] acabei de gastar 17,20 aqui no mercado, utilizando o cartão vale alimentação." };
+    const va: any = await addTransaction.run({ kind: "expense", amount: 17.2, description: "Mercado", source: "audio", message_id: "340" }, talk);
+    expect(va).toMatchObject({ ok: true, card: "Vale alimentação" });
+    expect(done.has("card:usado")).toBe(true);
+    // "esse gasto de 17,20 vai no vale alimentação": lançar de novo não duplica, aponta o que já existe
+    const again: any = await addTransaction.run({ kind: "expense", amount: 17.2, description: "Mercado", card: "Vale alimentação", source: "audio", message_id: "342" }, talk);
+    expect(again.ok).toBe(false);
+    expect(again.possible_duplicate.id).toBe(va.ids[0]);
+    const other: any = await addTransaction.run({ kind: "expense", amount: 17.2, description: "Mercado", again: true }, ctx);
+    expect(other.ok).toBe(true);
+    const { updateTransaction } = await import("../src/agent/tools/finance.js");
+    const moved: any = await updateTransaction.run({ last: true, card: "nenhum" }, ctx);
+    expect(moved).toMatchObject({ ok: true, updated: 1, card: "nenhum" });
+    expect(moved.items[0].id).toBe(other.ids[0]);
+    const vague: any = await addTransaction.run({ kind: "expense", amount: 9.9, description: "Café", source: "conversa" }, { ...ctx, inboundText: "café 9,90 no cartão" });
+    expect(vague.ok).toBe(true);
+    expect(vague.card).toBeUndefined();
+    expect(vague.card_note).toMatch(/SEM cartão/);
+    await db.query("DELETE FROM transactions WHERE user_id = $1 AND amount IN (17.2, 9.9)", [user.id]);
+    await db.query("DELETE FROM cards WHERE user_id = $1 AND name = 'Vale alimentação'", [user.id]);
+
     const missing: any = await addTransaction.run({ kind: "expense", amount: 10, card: "Itaú" }, ctx);
     expect(missing.ok).toBe(false);
     expect(missing.error).toContain("Nubank (final 1234)");

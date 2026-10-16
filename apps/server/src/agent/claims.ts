@@ -13,7 +13,35 @@ const ANY = "*";
 const DELETE_TOOLS = ["delete_transaction", "card_delete", "card_save", "cancel_reminder", "alarm_cancel", "document_delete", "forget_memory", "watch_cancel", "watch_update", "direct_cancel", "automation_manage", "bill_delete", "categories", "shop_update", "errand_cancel"];
 const FINANCE_TOOLS = ["add_transaction", "update_transaction", "bill_pay", "bill_save", "card_invoice_pay", "card_save", "goal_add", "goal_update", "goal_create"];
 
-const CLAIMS: { what: string; says: RegExp; about?: RegExp; sameSentence?: boolean; tools: string[] }[] = [
+/** Marca em `room.done` (posta por add_transaction/update_transaction) de que um lançamento desta rodada foi para um cartão. */
+export const CARD_USED = "card:usado";
+export const CARD_CLAIM = "lançar no cartão";
+// "no vale alimentação", "no cartão Inter", "no Nubank", "na fatura": onde a resposta diz que o gasto caiu
+const ON_CARD =
+  /\b(n[oa]|pel[oa]|com o|direto n[oa]|pr[oa]|para o|para a) (seu |sua |teu |tua )?(\*)?(cart[aã]o|vale|va|vr|cr[eé]dito|fatura|nubank|inter|ita[uú]|c6|santander|bradesco|caixa|picpay|mercado pago|alelo|sodexo|pluxee|ticket|flash|caju|swile)\b/i;
+
+const CARD_NEG = /\b(sem cart[aã]o|fora do cart[aã]o|n[aã]o (foi|ficou|lancei|anotei|coloquei|est[áa]|t[áa])|ainda n[aã]o)(?!\p{L})|\bfatura\b[^.!?\n]{0,40}\b(paga|pagou|quitad)/iu;
+
+const CLAIMS: { what: string; says: RegExp; about?: RegExp; sameSentence?: boolean; unless?: RegExp; onlyIf?: string[]; tools: string[] }[] = [
+  {
+    // "Anotei os R$ 17,20 no vale alimentação" com o gasto lançado SEM cartão (2026-10-16): o lugar também precisa ser verdade
+    what: CARD_CLAIM,
+    says: /\b(anotei|registrei|lancei|coloquei|botei|passei|movi|joguei|lan[cç]ad[oa]s?|anotad[oa]s?|registrad[oa]s?)\b/i,
+    about: ON_CARD,
+    sameSentence: true,
+    unless: CARD_NEG,
+    tools: [CARD_USED, "card_invoice_pay", "card_save"],
+  },
+  {
+    // "já tá certinho no vale alimentação", "caiu na fatura": só quando um lançamento rodou (lendo o extrato, "foi no Inter" é verdade)
+    what: CARD_CLAIM,
+    says: /(?<!\p{L})(caiu|ca[ií]ram|ficou|ficaram|foi|foram|t[áa]|est[áa]|entrou|entraram)(?!\p{L})/iu,
+    about: ON_CARD,
+    sameSentence: true,
+    unless: CARD_NEG,
+    onlyIf: ["add_transaction", "update_transaction"],
+    tools: [CARD_USED, "card_invoice_pay", "card_save"],
+  },
   {
     what: "lançar gasto ou receita",
     says: /\b(anotei|registrei|lancei|lan[cç]ad[oa]s?|anotad[oa]s?|registrad[oa]s?)\b/i,
@@ -125,7 +153,8 @@ export function unbackedClaim(text: string, done: Set<string>, opts: { event?: b
   // rodada de [evento do sistema] (recado fechado, lembrete): o "Marcado!" conta o que o sistema já fez
   const anyAction = opts.event || [...done].some((t) => !READ_ONLY.test(t));
   for (const c of CLAIMS) {
-    const hit = sentences.some((s) => c.says.test(s) && (!c.about || c.about.test(s) || (!c.sameSentence && c.about.test(text))));
+    if (c.onlyIf && !c.onlyIf.some((t) => done.has(t))) continue;
+    const hit = sentences.some((s) => c.says.test(s) && !c.unless?.test(s) && (!c.about || c.about.test(s) || (!c.sameSentence && c.about.test(text))));
     if (hit && !c.tools.some((t) => (t === ANY ? anyAction : done.has(t)))) return c.what;
   }
   return null;

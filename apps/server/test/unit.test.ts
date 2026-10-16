@@ -326,6 +326,43 @@ describe("trava: dizer que fez sem ter feito", () => {
     expect(unmetRequest("apaga o contato do Marcos", "Ok", new Set())).toBeNull();
   });
 
+  it("gasto no cartão: só diz \"no vale alimentação\" se foi mesmo para o cartão", async () => {
+    const { unbackedClaim, CARD_USED, CARD_CLAIM } = await import("../src/agent/claims.js");
+    // 16/10: add_transaction sem card e a resposta "Anotei os R$ 17,20 do mercado no vale alimentação ✅"
+    const said = "Anotei os R$ 17,20 do mercado no vale alimentação ✅\n\nJá somou no mês 🛒";
+    expect(unbackedClaim(said, new Set(["add_transaction", "react_to_message"]))).toBe(CARD_CLAIM);
+    expect(unbackedClaim(said, new Set(["add_transaction", CARD_USED]))).toBeNull();
+    expect(unbackedClaim("Isso, já tá certinho no *vale alimentação* ✅", new Set(["update_transaction"]))).toBe(CARD_CLAIM);
+    expect(unbackedClaim("Pronto, passei pro cartão Inter ✅", new Set(["update_transaction", CARD_USED]))).toBeNull();
+    expect(unbackedClaim("Anotei os R$ 30 sem cartão, no Pix ✅", new Set(["add_transaction"]))).toBeNull();
+    expect(unbackedClaim("Anotei os R$ 30 do almoço ✅ Foi no cartão?", new Set(["add_transaction"]))).toBeNull();
+    // lendo o extrato, "foi no Inter" é só informação
+    expect(unbackedClaim("O de ontem foi no Inter, R$ 30", new Set(["list_transactions"]))).toBeNull();
+  });
+
+  it("acha o cartão que a pessoa citou na mensagem", async () => {
+    const { cardInText } = await import("../src/cards.js");
+    const mine = [
+      { id: "1", name: "Inter", brand: null, last4: "1234" },
+      { id: "2", name: "Vale refeição", brand: null, last4: null },
+      { id: "3", name: "Vale alimentação", brand: null, last4: null },
+    ];
+    const pick = (t: string) => {
+      const r = cardInText(t, mine);
+      return r && "card" in r ? r.card.name : r;
+    };
+    expect(pick("[áudio] Planejar é acabei de gastar 17,20 aqui no mercado, utilizando o cartão vale alimentação.")).toBe("Vale alimentação");
+    expect(pick("almoço 32 no VR")).toBe("Vale refeição");
+    expect(pick("gastei 50 no inter")).toBe("Inter");
+    expect(pick("paguei 80 no final 1234")).toBe("Inter");
+    expect(pick("gastei 20 de internet")).toBeNull();
+    expect(pick("gastei 12 no pix")).toBeNull();
+    expect(pick("gastei 12 no cartão de débito")).toBeNull();
+    expect(pick("gastei 40 no cartão")).toEqual({ said: "cartao" });
+    expect(cardInText("gastei 40 no cartão do Itaú", [])).toEqual({ said: "cartao do itau" });
+    expect(cardInText("17 no vale alimentação", [{ id: "9", name: "Alelo", brand: null, last4: null }])).toEqual({ card: { id: "9", name: "Alelo", brand: null, last4: null } });
+  });
+
   it("cartão de contato do WhatsApp vira texto com nome e número", async () => {
     const { parseWAMessage } = await import("../src/channels/wa-message.js");
     const vcard = "BEGIN:VCARD\nVERSION:3.0\nN:;Marcos;;;\nFN:Marcos\nitem1.TEL;waid=5519996726445:+55 19 99672-6445\nitem1.X-ABLabel:Celular\nEND:VCARD";

@@ -20,7 +20,7 @@ import { autoLaunchReceipts } from "./receipts.js";
 import { errandsContext, openErrands } from "../errands.js";
 import { isOwner } from "../ingest.js";
 import { describeMessage, preprocessMedia } from "./media.js";
-import { unbackedClaim, unmetRequest } from "./claims.js";
+import { CARD_CLAIM, unbackedClaim, unmetRequest } from "./claims.js";
 import { openPending, resolvePending } from "./confirm.js";
 import { Progress } from "./progress.js";
 import { humanize } from "./humanize.js";
@@ -498,6 +498,9 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
             role: "system",
             content:
               `Sua resposta trata como feito "${claim}", mas nenhuma ferramenta confirmou isso nesta conversa. ` +
+              (claim === CARD_CLAIM
+                ? "O gasto NÃO está nesse cartão. Se ele já foi lançado, mova com update_transaction (ids, ou last=true) e card; não lance de novo. "
+                : "Se ela pediu para ajustar algo já feito (cartão, valor, categoria), corrija com update_transaction; não crie de novo. ") +
               "Faça a ação agora com a ferramenta certa (ou peça ao especialista) e responda de novo. Se não der, diga com honestidade o que não foi feito.",
           },
         ],
@@ -506,7 +509,12 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
         ? (unbackedClaim(retry.text, ctx.room.done, { event: proactive }) ?? (!proactive ? unmetRequest(ctx.inboundText ?? "", retry.text, ctx.room.done) : null))
         : claim;
       await step.ok({ refeito: Boolean(retry?.text) && !still });
-      result.text = retry?.text && !still ? retry.text : `Não consegui concluir isso agora (${claim}), então nada foi feito. Pode me pedir de novo?`;
+      result.text =
+        retry?.text && !still
+          ? retry.text
+          : claim === CARD_CLAIM && ctx.room.done.has("add_transaction")
+            ? "Anotei o gasto, mas não consegui colocar no cartão. Me fala de novo em qual cartão foi que eu acerto?"
+            : `Não consegui concluir isso agora (${claim}), então nada foi feito. Pode me pedir de novo?`;
     }
     // resposta vazia (passos só com ferramentas, ou o modelo devolveu nada) não pode virar silêncio: mais uma rodada, sem ferramentas
     if (opts.trigger === "message" && !result.timedOut && !guard.expired && !result.text.trim()) {

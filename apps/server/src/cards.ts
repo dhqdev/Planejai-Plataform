@@ -185,6 +185,41 @@ export async function findCard(userId: string, q: string) {
   return all.filter((c) => strip(c.name).includes(s) || s.includes(strip(c.name)) || (c.brand && (strip(c.brand).includes(s) || s.includes(strip(c.brand)))));
 }
 
+const BENEFIT_TEXT = /\bvale[ -]?(alimentacao|refeicao|mercado|comida)\b|\b(va|vr|alelo|sodexo|pluxee|ticket|flash|caju|swile|ifood beneficios)\b/;
+const NOT_CARD_TEXT = /\b(pix|dinheiro|especie|debito|boleto|transferencia)\b/;
+
+/**
+ * Cartão que a pessoa citou na mensagem ("paguei no Nubank", "no vale alimentação", "final 1234"), para o gasto não
+ * ficar sem cartão quando o modelo esquece de passar `card`. `card` = um cartão dela bate; `said` = falou em cartão
+ * mas nenhum (ou mais de um) dos dela bate, então é para perguntar. null = não falou de cartão.
+ */
+export function cardInText(text: string, cards: Pick<Card, "id" | "name" | "brand" | "last4">[]): { card: (typeof cards)[number] } | { said: string } | null {
+  const t = strip(text).replace(/\s+/g, " ");
+  const said = t.match(/\bcart(ao|oes)\b[^.,!?\n]{0,30}|\bvale[ -]?(alimentacao|refeicao|mercado|comida)\b|\b(no|na|pelo|com o) credito\b/)?.[0]?.trim();
+  if (NOT_CARD_TEXT.test(t) && !/\bcredito\b/.test(t)) return null;
+  const hits = cards.filter((c) => {
+    if (c.last4 && new RegExp(`\\b(final|terminado em|termina em)\\s*${c.last4}\\b`).test(t)) return true;
+    const name = strip(c.name);
+    return name.length >= 2 && new RegExp(`(^|[^\\p{L}\\d])${esc(name)}($|[^\\p{L}\\d])`, "u").test(t);
+  });
+  // "vale alimentação" com o cartão chamado VA, Alelo, Ticket...: só se for o único de benefício dela
+  if (!hits.length && BENEFIT_TEXT.test(t)) {
+    const kind = /refei|\bvr\b/.test(t) ? /refei|\bvr\b/ : /alimenta|mercado|comida|\bva\b/.test(t) ? /alimenta|mercado|\bva\b/ : null;
+    const benefit = cards.filter((c) => BENEFIT_TEXT.test(strip(c.name)) || /^vale\b|\bbeneficio/.test(strip(c.name)));
+    const fit = kind ? benefit.filter((c) => kind.test(strip(c.name))) : benefit;
+    if (fit.length === 1) return { card: fit[0]! };
+    if (benefit.length === 1 && !fit.length) return { card: benefit[0]! };
+  }
+  if (hits.length > 1) {
+    // "vale alimentação" bate no "Vale alimentação" e não no "Vale refeição"; nome mais longo ganha
+    const longest = [...hits].sort((a, b) => b.name.length - a.name.length);
+    if (strip(longest[0]!.name).length > strip(longest[1]!.name).length && strip(longest[0]!.name).includes(strip(longest[1]!.name))) return { card: longest[0]! };
+    return { said: said ?? hits.map((c) => c.name).join(" ou ") };
+  }
+  if (hits.length === 1) return { card: hits[0]! };
+  return said && !/^cart(ao|oes)( de)? debito/.test(said) ? { said } : null;
+}
+
 /** Nome do banco do jeito que aparece em fatura, Pix e conta fixa ("Nu Pagamentos" = Nubank). */
 const BANKS: [RegExp, string][] = [
   [/\bnu ?(pagamentos|financeira|bank|invest)\b|\bnubank\b|\broxinho\b/, "nubank"],

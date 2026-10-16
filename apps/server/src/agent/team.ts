@@ -367,6 +367,12 @@ export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
   { id: "acompanhamentos", when: /(?<!\p{L})(de olho|acompanh|monitor|avis\w* quando)/iu, tools: [social.watchList, social.watchCancel, social.watchUpdate] },
   { id: "alarmes", when: /(?<!\p{L})(alarme|despert|acord)/iu, tools: [agenda.alarmList, agenda.alarmCancel] },
   { id: "dinheiro", when: /(?<!\p{L})(limite|or[çc]amento|teto|no m[aá]ximo|fatura|cart[aã]o|cart[õo]es)/iu, tools: [finance.setBudget, cards.cardList, cards.cardInvoicePay] },
+  {
+    // "esse gasto vai no cartão X", "era 18 e não 81": corrige o que já foi lançado (lançar de novo duplicava)
+    id: "corrigir",
+    when: /(?<!\p{L})(cart[aã]o|vale|corrig|ajust|errad|na verdade|mud[ae]|troc[ae]|era \d|esse gasto|aquele gasto|esse lan[cç]amento|esse valor|n[aã]o foi|foi no|vai no|vai na|coloca no|passa pr)/iu,
+    tools: [finance.updateTransaction, finance.listTransactions],
+  },
   { id: "categorias", when: /(?<!\p{L})categori/iu, tools: [categoriesTool] },
   { id: "recados", when: /(?<!\p{L})(recado|estabelecimento|conversa)/iu, tools: [errands.errandList, errands.errandCancel] },
   { id: "documentos", when: /(?<!\p{L})(apag|exclu|delet|remov)\w*.{0,40}\b(document|arquivo|pdf|contrato)/iu, tools: [documents.documentDelete] },
