@@ -8,8 +8,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#fafafa" />
+    <script>
+      /* Barra de cima do celular (status bar do iPhone no app instalado) na cor do tema escolhido no painel, não do sistema. */
+      try {
+        var t = localStorage.getItem("pj-theme");
+        if (t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches) document.querySelector('meta[name="theme-color"]').content = "#111111";
+      } catch (e) {}
+    </script>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

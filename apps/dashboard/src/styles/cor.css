@@ -30,6 +30,8 @@
 .input:focus, .select:focus, .textarea:focus { border-color: var(--violet); box-shadow: 0 0 0 3px var(--act-ring); }
 .ct-search:focus-within { border-color: var(--violet); box-shadow: 0 0 0 3px var(--act-ring); }
 :root { accent-color: var(--violet); }
+/* seletores nativos (o iPhone pinta o texto e a setinha com o accent-color): neutros, na cor do texto */
+select, .select { accent-color: var(--text); color: var(--text); }
 :focus-visible { outline-color: var(--violet); }
 
 /* números que contam a história: mês escolhido e gasto nas barras de Finanças, limite e parcelas do cartão */

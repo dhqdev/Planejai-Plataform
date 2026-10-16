@@ -27,6 +27,13 @@ installEdgeBack();
 installLiquidGlass();
 watchForUpdates();
 
+// a barra de cima do celular acompanha o tema do painel (claro/escuro), mesmo com o sistema no outro
+const syncThemeColor = () => {
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (meta) meta.content = document.documentElement.dataset.theme === "dark" ? "#111111" : "#fafafa";
+};
+new MutationObserver(syncThemeColor).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
 try {
   const saved = localStorage.getItem("pj-theme");
   const dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
