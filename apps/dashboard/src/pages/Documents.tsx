@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { api, day } from "../api";
 import { Empty, ErrorBox, Modal, PageHead } from "../components";
 import { useApi } from "../hooks";
+import { Vazio } from "../Vazio";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
 
@@ -54,7 +55,7 @@ export function DocumentsPage() {
 
   const used = data?.usage;
   return (
-    <div className="page fit docs-page">
+    <div className={`page ${data && !all.length ? "" : "fit "}docs-page`}>
       <PageHead
         title="Documentos"
         subtitle="PDFs, fotos e arquivos guardados. Mande no WhatsApp com “guarda esse documento” e peça de volta quando precisar."
@@ -69,6 +70,15 @@ export function DocumentsPage() {
         }
       />
       <ErrorBox error={error ?? err} />
+      {data && !all.length ? (
+        <Vazio
+          img="documentos"
+          title="Seus papéis num lugar só"
+          text="Guarde PDFs, fotos de documentos, boletos e contratos. Quando precisar, é só pedir de volta no WhatsApp que ele acha e manda."
+          actions={[{ label: busy ? "Enviando…" : "Enviar um arquivo", icon: "plus", onClick: () => input.current?.click() }]}
+          tip="Ou mande no WhatsApp: “guarda esse documento”"
+        />
+      ) : (<>
       <div className="docs-bar">
         <div className="docs-folders">
           <button className={`chip ${!folder ? "active" : ""}`} onClick={() => setFolder(null)}>Todos <span className="mono">{all.length}</span></button>
@@ -133,6 +143,7 @@ export function DocumentsPage() {
         </table>
         {data && !items.length && <Empty>{all.length ? "Nada com esse filtro." : "Nenhum documento ainda. Envie aqui ou mande no WhatsApp pedindo para guardar."}</Empty>}
       </div>
+      </>)}
       {del && (
         <Modal
           title="Apagar documento"

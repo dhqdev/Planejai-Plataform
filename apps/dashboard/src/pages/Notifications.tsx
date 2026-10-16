@@ -6,6 +6,7 @@ import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
 import { refreshUnread } from "../notify";
+import { Vazio } from "../Vazio";
 
 interface Item { id: number; kind: string; title: string; body: string | null; link: string | null; read_at: string | null; created_at: string }
 
@@ -43,7 +44,7 @@ export function NotificationsPage() {
   };
 
   return (
-    <div className="page fit">
+    <div className={`page${data && !data.items.length ? "" : " fit"}`}>
       <PageHead
         title="Notificações"
         subtitle="Avisos do sistema e do seu assistente. A bolinha no menu some quando você lê."
@@ -63,6 +64,17 @@ export function NotificationsPage() {
         }
       />
       <ErrorBox error={error} />
+      {data && !data.items.length ? (
+        <Vazio
+          img="notificacoes"
+          title="Tudo calmo por aqui"
+          text="Quando o assistente terminar algo para você, um lembrete chegar ou um acompanhamento achar novidade, o aviso aparece aqui e no sininho."
+          actions={[
+            ...(perm === "default" ? [{ label: "Avisar no navegador", icon: "bell", onClick: async () => setPerm(await Notification.requestPermission()) }] : []),
+            { label: "Criar um lembrete", icon: "calendar", to: "/agenda" },
+          ]}
+        />
+      ) : (
       <div className="card notif-list scroll-y">
         {items.map((n) => (
           <button key={n.id} className={`notif-item ${n.read_at ? "" : "unread"}`} onClick={() => open(n)}>
@@ -77,6 +89,7 @@ export function NotificationsPage() {
         ))}
         {data && !items.length && <Empty>{filter === "unread" ? "Tudo lido." : "Nenhuma notificação ainda."}</Empty>}
       </div>
+      )}
     </div>
   );
 }

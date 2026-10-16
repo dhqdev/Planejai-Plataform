@@ -1,12 +1,13 @@
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { ErrorBox, Modal, alertDialog, confirmDialog } from "../components";
+import { ErrorBox, Modal, PageHead, alertDialog, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { DateField, TimeField } from "../pickers";
 import { haptic } from "../touch";
 import { PhoneAgenda } from "./CalendarPhone";
+import { Vazio } from "../Vazio";
 
 /**
  * Agenda no estilo Google Agenda: painel lateral (Criar, minicalendário, agendas), mês com número da
@@ -163,6 +164,26 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
   // no celular a agenda é a PhoneAgenda (CalendarPhone.tsx), que carrega o que precisa
   const path = phone ? null : `/api/calendar?from=${range.from.toISOString()}&to=${range.to.toISOString()}${person ? `&user=${person}` : ""}`;
   const { data, error, reload } = useApi<{ events: Ev[]; readonly?: boolean; tags?: Tag[] }>(path, { poll: 30000 });
+  // primeiro acesso: nada na agenda de um mês atrás a três meses à frente mostra a ilustração com os atalhos
+  // (no celular e no notebook), até criar algo ou tocar em "Ver o calendário"
+  const [vazioOk, setVazioOk] = useState(() => {
+    try {
+      return localStorage.getItem("pj-agenda-vazia-ok") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [firstPath] = useState(() => `/api/calendar?from=${addDays(startOfDay(new Date()), -30).toISOString()}&to=${addDays(startOfDay(new Date()), 90).toISOString()}`);
+  const first = useApi<{ events: Ev[]; readonly?: boolean }>(vazioOk || person ? null : firstPath);
+  const vazia = Boolean(!vazioOk && !person && first.data && !first.data.readonly && !first.data.events.length);
+  const verCalendario = () => {
+    setVazioOk(true);
+    try {
+      localStorage.setItem("pj-agenda-vazia-ok", "1");
+    } catch {
+      /* sem storage */
+    }
+  };
   const tags = data?.tags ?? [];
   const readonly = Boolean(data?.readonly);
   const create = (d: Date) => { if (!readonly) setCreating(d); };
@@ -251,6 +272,23 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
   const VIEWS: [View, string][] = [["list", "Lista"], ["day", "Dia"], ["week", "Semana"], ["month", "Mês"]];
   const calendars = CALENDARS.filter((c) => c.id !== "google" || isSuper || (data?.events ?? []).some((e) => e.kind === "google"));
 
+  if (vazia)
+    return (
+      <div className="page">
+        <PageHead title="Agenda" subtitle="Compromissos, lembretes e mensagens agendadas num lugar só." />
+        <Vazio
+          img="agenda"
+          title="Sua semana em ordem, sem esforço"
+          text="Anote compromissos e lembretes e ele te avisa no WhatsApp na hora certa. Dá para ligar a Google Agenda e agendar mensagens para outras pessoas."
+          actions={[
+            { label: "Criar um lembrete", icon: "plus", onClick: () => setCreating(withTime(new Date())) },
+            { label: "Ver o calendário", icon: "calendar", onClick: verCalendario },
+          ]}
+          tip="Ou diga: “me lembra de pagar a luz dia 10”"
+        />
+        {creating && <NewReminder at={creating} tags={[]} onClose={(saved) => { setCreating(null); if (saved) void first.reload(); }} />}
+      </div>
+    );
   if (phone) return <PhoneAgenda isSuper={isSuper} hidden={hidden} onToggle={toggleCal} owners={owners} person={person} onPerson={setPerson} />;
 
   return (

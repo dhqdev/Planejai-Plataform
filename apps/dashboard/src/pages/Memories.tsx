@@ -5,6 +5,7 @@ import { AgentTag, confirmDialog, Empty, ErrorBox, Modal, PageHead, SectionHead 
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
+import { Vazio } from "../Vazio";
 
 type Fact = { id: string; content: string; category: string | null; source: string; created_at: string };
 type Overview = {
@@ -98,7 +99,17 @@ export function MemoriesPage({ embedded = false }: { embedded?: boolean } = {}) 
               </div>
             ))}
             {!groups.length && (
-              <Empty>{data.facts.length ? "Nada com esse filtro." : "Ainda não sei nada sobre você. Conte pelo WhatsApp ou toque em Ensinar algo."}</Empty>
+              data.facts.length ? (
+                <Empty>Nada com esse filtro.</Empty>
+              ) : (
+                <Vazio
+                  img="memorias"
+                  title="Ele ainda está te conhecendo"
+                  text="Tudo o que você contar (gostos, rotina, pessoas importantes) fica guardado aqui, e você pode corrigir ou apagar quando quiser."
+                  actions={[{ label: "Ensinar algo", icon: "plus", onClick: () => setEdit({ category: cat ?? "perfil", content: "" }) }]}
+                  tip="Ou conte no WhatsApp: “sou vegetariano”"
+                />
+              )
             )}
           </section>
 

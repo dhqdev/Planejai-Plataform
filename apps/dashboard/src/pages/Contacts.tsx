@@ -3,6 +3,7 @@ import { api } from "../api";
 import { ErrorBox, Loading, Modal, PageHead, confirmDialog } from "../components";
 import { FIT_QUERY, useMedia } from "../hooks";
 import { Icon } from "../icons";
+import { Vazio } from "../Vazio";
 import { useLongPress } from "../ios";
 
 interface Contact {
@@ -224,9 +225,25 @@ export function ContactsPage() {
   }
 
   return (
-    <div className={`page ct-page${fit ? " fit" : ""}`}>
+    <div className={`page ct-page${fit && (data.total || query) ? " fit" : ""}`}>
       <PageHead title="Contatos" subtitle='Traga os contatos do celular e peça no WhatsApp: "manda pra Ana que eu chego às 8". O assistente acha o número pelo nome.' />
 
+      {!data.total && !query ? (
+        <>
+          <Vazio
+            img="contatos"
+            title="Traga sua agenda para cá"
+            text="Com os contatos aqui, é só pedir no WhatsApp pelo nome: o assistente acha o número e manda o recado por você. Só você vê."
+            actions={[
+              { label: busy ? "Importando…" : "Importar contatos", icon: "download", onClick: () => (picker ? void fromPhone() : file.current?.click()) },
+              { label: "Adicionar um contato", icon: "user-plus", onClick: () => setAdding(true) },
+            ]}
+            tip="Depois é só dizer: “manda pra Ana que eu chego às 8”"
+          />
+          <input ref={file} type="file" accept=".vcf,text/vcard,text/x-vcard" hidden onChange={fromFile} />
+          {err && <p className="cp-err" style={{ textAlign: "center" }}>{err}</p>}
+        </>
+      ) : (
       <div className="ct-body">
         <aside className="ct-side">
           <section className="card card-pad ct-import">
@@ -344,6 +361,7 @@ export function ContactsPage() {
           </div>
         </section>
       </div>
+      )}
       {writing && <WriteMessage c={writing} onClose={() => setWriting(null)} />}
       {adding && (
         <Modal title="Novo contato" icon={<Icon name="user-plus" size={18} />} onClose={() => setAdding(false)}>

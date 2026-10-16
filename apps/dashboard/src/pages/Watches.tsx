@@ -4,6 +4,7 @@ import { Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog }
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
+import { Vazio } from "../Vazio";
 
 type Watch = {
   id: string;
@@ -262,6 +263,15 @@ export function WatchesPage() {
         actions={<button className="btn btn-brand" onClick={() => setEditing("new")}><Icon name="plus" size={16} /> Novo</button>}
       />
 
+      {!data.length ? (
+        <Vazio
+          img="de-olho"
+          title="Deixe ele de olho para você"
+          text="Preço de um produto, passagem, notícia ou resultado: o assistente olha sozinho todo dia por 7 dias e te avisa no WhatsApp quando tiver novidade."
+          actions={[{ label: "Criar o primeiro", icon: "eye", onClick: () => setEditing("new") }]}
+          tip="Ou diga: “fica de olho no preço do PS5”"
+        />
+      ) : (<>
       <div className="watches-stats-grid">
         <div className="watch-stat-card">
           <span className="watch-stat-num text-brand">{totalActive}</span>
@@ -350,6 +360,7 @@ export function WatchesPage() {
           )}
         </div>
       )}
+      </>)}
 
       {viewing && (
         <WatchDetailsModal

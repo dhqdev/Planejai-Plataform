@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { api, brl, day } from "../api";
 import { Donut, Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
 import { useApi, useMedia } from "../hooks";
+import { Vazio } from "../Vazio";
 import { Icon } from "../icons";
 import { DateField, isoDate } from "../pickers";
 import { useLongPress } from "../ios";
@@ -95,6 +96,8 @@ export function FinancePage() {
   const isCurrent = month === thisMonth();
   const budgets: { id: string; category: string | null; limit: number; spent: number }[] = data?.budgets ?? [];
   const readonly = Boolean(data?.readonly);
+  // primeiro acesso: nada lançado nos últimos meses e nenhum limite (as Finanças de um contato nunca contam)
+  const novo = Boolean(data && !readonly && !user && !months.length && !budgets.length);
   // finanças de um contato: só para ver
   const openBudget = (b: { category: string | null; amount?: number }) => { if (!readonly) setBudget(b); };
   const remove = async (t: any) => {
@@ -281,7 +284,18 @@ export function FinancePage() {
       <div ref={bodyEl} key={phone ? tab : "body"} className={`fp-body ${tabDir.current}`}>
       {tab === "cards" ? (
         <CardsTab user={user} readonly={readonly} focus={focusCard} onChanged={() => void reload()} />
-      ) : !data ? <Loading /> : tab === "overview" ? (
+      ) : !data ? <Loading /> : novo ? (
+        <Vazio
+          img="financas"
+          title="Seu dinheiro, sem planilha"
+          text="Anote gastos e entradas e veja para onde vai cada real, com limite por categoria e as faturas dos cartões. Dá para mandar a foto do comprovante no WhatsApp que ele lança sozinho."
+          actions={[
+            { label: "Anotar um gasto", icon: "plus", onClick: () => setAdding(true) },
+            { label: "Cadastrar um cartão", icon: "card", onClick: () => setTab("cards") },
+          ]}
+          tip="Ou diga: “gastei 32 no almoço”"
+        />
+      ) : tab === "overview" ? (
         <>
           <div className={`card fin-kpis${totalBudget ? "" : " three"}`}>
             <div><small>Entradas</small><strong className={`pos${longMoney(income)}`}>{brl(income)}</strong><span>no período</span></div>

@@ -1,7 +1,8 @@
+import { Vazio } from "../Vazio";
 import { useEffect, useState } from "react";
 import { CLIENT_DOING, ROLE_DOING } from "../agentProps";
 import { ago } from "../api";
-import { Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
+import { ErrorBox, Loading, Modal, PageHead } from "../components";
 import { AgentFace, type Face } from "../faces";
 import { useApi } from "../hooks";
 
@@ -59,7 +60,12 @@ export function TeamPage() {
       {data.mine.length ? (
         <div className="team-grid">{data.mine.map((m) => <Card key={m.id} m={m} />)}</div>
       ) : (
-        <div className="card"><Empty>Quando um assunto aparece bastante nas suas conversas, o time cria um agente só para ele.</Empty></div>
+        <Vazio
+          img="especialistas"
+          title="Seu time cresce com você"
+          text="Quando um assunto aparece bastante nas suas conversas, o time cria um agente só para ele. Também dá para ligar especialistas prontos agora."
+          actions={[{ label: "Conhecer os especialistas", icon: "sparkle", to: "/especialistas" }]}
+        />
       )}
       {sel && (
         <Modal title={sel.persona ?? sel.name} icon={<AgentFace face={sel.face} size={26} />} onClose={() => setSel(null)}>

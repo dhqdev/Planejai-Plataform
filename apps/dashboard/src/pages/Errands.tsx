@@ -5,6 +5,7 @@ import { Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog }
 import { FIT_QUERY, useApi, useMedia } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
+import { Vazio } from "../Vazio";
 
 type State = "them" | "you" | "done" | "failed" | "cancelled" | "expired";
 type Line = { from: "nos" | "eles" | "pessoa"; text: string; at: string };
@@ -103,6 +104,7 @@ const contactState = (c: ContactChat) => (c.waiting_you ? "Respondeu" : c.schedu
 export function ErrandsPage() {
   const { data, error, reload } = useApi<Data>("/api/errands", { poll: 10000 });
   const fit = useMedia(FIT_QUERY);
+  const phone = useMedia("(max-width: 767px)");
   // a conversa aberta fica na URL: no celular o "voltar" do aparelho (ou o gesto) volta para a lista
   const [params, setParams] = useSearchParams();
   const fromList = Boolean((useLocation().state as { fromList?: boolean } | null)?.fromList);
@@ -295,8 +297,20 @@ export function ErrandsPage() {
   );
 
   return (
-    <div className={`page errands-page${fit ? " fit" : detailOpen ? " reading" : ""}`}>
+    <div className={`page errands-page${!total ? "" : fit ? " fit" : detailOpen ? " reading" : ""}`}>
       <PageHead title="Recados" subtitle="Todas as conversas que o assistente tem por você, com lugares e com pessoas. Atualiza sozinho enquanto a tela está aberta." />
+      {!total ? (
+        <Vazio
+          img="recados"
+          title="Ele fala com os outros por você"
+          text="Peça para perguntar preço, marcar horário ou avisar alguém. O assistente conversa no WhatsApp em seu nome, só depois do seu “sim”, e cada conversa aparece aqui."
+          actions={[
+            ...(phone ? [{ label: "Pedir no chat", icon: "send", to: "/" }] : []),
+            { label: "Trazer meus contatos", icon: "users", to: "/contatos" },
+          ]}
+          tip="Exemplo: “pergunta no petshop quanto custa a tosa”"
+        />
+      ) : (
       <div className={`errand-grid${detailOpen && !fit ? " detail-only" : ""}`}>
         {(fit || !detailOpen) && listView}
         {detailOpen && (
@@ -334,6 +348,7 @@ export function ErrandsPage() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

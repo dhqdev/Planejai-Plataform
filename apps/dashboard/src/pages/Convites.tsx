@@ -6,6 +6,7 @@ import { Icon } from "../icons";
 import type { Outfit } from "../mascote/Mascote";
 import { UserMascote } from "../mascote/UserMascote";
 import { InviteForm } from "./Invites";
+import { Vazio } from "../Vazio";
 import "../styles/convites.css";
 
 interface Data {
@@ -114,6 +115,14 @@ export function ConvitesPage() {
         </dl>
       </section>
 
+      {!friends.length && !pending.length && !old.length ? (
+        <Vazio
+          img="convites"
+          title="Chame quem você gosta"
+          text="Mande um convite para um amigo ou alguém da família. Quem entra ganha o próprio assistente, e vocês podem compartilhar agenda e finanças se quiserem."
+          actions={data.linked ? [{ label: "Convidar alguém", icon: "user-plus", onClick: () => setInviting(true) }] : []}
+        />
+      ) : (
       <div className="conv-cols">
         <section className="card conv-list" aria-label="Quem entrou">
           <header>
@@ -192,6 +201,7 @@ export function ConvitesPage() {
           )}
         </section>
       </div>
+      )}
 
       {inviting && (
         <Modal title="Convidar alguém" icon={<Icon name="user-plus" />} onClose={() => (setInviting(false), reload())}>
