@@ -82,3 +82,17 @@
 .install-point.up { flex-direction: column-reverse; animation-name: install-nudge-up; }
 @keyframes install-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
 @keyframes install-nudge-up { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+/* ---------- Seta de voltar (David, 2026-10-16: toda tela aberta pela Conta tem voltar) ----------
+   Celular: a seta toma o lugar do mascote no topo, em toda tela que não é aba da barra.
+   Notebook: telas abertas pela Conta ganham "‹ Conta" acima do título. */
+.topbar-back { flex-shrink: 0; }
+.page-back {
+  display: inline-flex; align-items: center; gap: 4px; margin: 22px 0 -14px 32px; padding: 6px 12px 6px 8px; border-radius: 99px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;
+  transition: background-color .15s;
+}
+@media (hover: hover) and (pointer: fine) { .page-back:hover { background: var(--panel-2); } }
+@media (max-width: 767px) { .page-back { display: none; } }
+/* Meu plano tem o próprio voltar ao lado do título: no notebook ele aparece quando se chega pela Conta */
+@media (min-width: 768px) { .plan-back.show { display: grid; } }

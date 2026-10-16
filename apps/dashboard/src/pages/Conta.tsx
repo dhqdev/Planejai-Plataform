@@ -13,6 +13,9 @@ import { haptic } from "../touch";
 
 declare const __APP_VERSION__: string;
 
+/** Telas abertas daqui ganham a seta de voltar também no notebook (o App lê `state.from`). */
+const FROM_CONTA = { from: "conta" };
+
 export type MenuLink = { to: string; label: string; icon: string; badge?: string; short?: string };
 
 /**
@@ -39,7 +42,7 @@ export function ContaPage({ me, sections, theme, onTheme, onLogout, unread }: {
   const screens = sections.filter((s) => s.title !== "Conta" && s.items.length);
   const go = (to: string) => {
     haptic(5);
-    nav(to);
+    nav(to, { state: FROM_CONTA });
   };
 
   return (
@@ -53,7 +56,7 @@ export function ContaPage({ me, sections, theme, onTheme, onLogout, unread }: {
               <strong>{me.name ?? me.email}</strong>
               <span>{me.email}</span>
             </div>
-            <Link className="conta-edit" to="/profile" aria-label="Editar perfil" title="Editar perfil" onClick={() => haptic(5)}>
+            <Link className="conta-edit" state={FROM_CONTA} to="/profile" aria-label="Editar perfil" title="Editar perfil" onClick={() => haptic(5)}>
               <Icon name="edit" size={18} />
             </Link>
           </div>
@@ -62,12 +65,12 @@ export function ContaPage({ me, sections, theme, onTheme, onLogout, unread }: {
               <div className="conta-plan">
                 <span className="conta-plan-name">{use.plan}</span>
                 {use.canUpgrade && (
-                  <Link className="btn btn-primary btn-sm conta-up" to="/plano#planos" onClick={() => haptic(10)}>
+                  <Link className="btn btn-primary btn-sm conta-up" state={FROM_CONTA} to="/plano#planos" onClick={() => haptic(10)}>
                     {use.plan === "Grátis" ? "Assinar" : "Subir de plano"}
                   </Link>
                 )}
               </div>
-              <Link className="conta-quota" to="/plano" onClick={() => haptic(5)}>
+              <Link className="conta-quota" state={FROM_CONTA} to="/plano" onClick={() => haptic(5)}>
                 <span className="conta-quota-row">
                   <span>Grãos usados</span>
                   <b>{use.used != null ? pct(use.used) : `${use.left} grãos`}</b>
@@ -81,7 +84,7 @@ export function ContaPage({ me, sections, theme, onTheme, onLogout, unread }: {
           ) : (
             <div className="conta-plan">
               <span className="conta-plan-name">{role ?? "Grátis"}</span>
-              {!isSuper && billing.data && !billing.data.linked && <Link className="btn btn-sm" to="/profile">Ligar WhatsApp</Link>}
+              {!isSuper && billing.data && !billing.data.linked && <Link className="btn btn-sm" state={FROM_CONTA} to="/profile">Ligar WhatsApp</Link>}
             </div>
           )}
         </section>

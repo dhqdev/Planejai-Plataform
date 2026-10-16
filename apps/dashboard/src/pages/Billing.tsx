@@ -141,7 +141,8 @@ export function BillingPage() {
   const [ledger, setLedger] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const nav = useNavigate();
-  const { hash } = useLocation();
+  const { hash, state } = useLocation();
+  const fromConta = (state as { from?: string } | null)?.from === "conta";
   // "Subir de plano" da Conta chega com #planos: rola até os planos depois de carregar
   useEffect(() => {
     if (hash !== "#planos" || !data) return;
@@ -236,7 +237,7 @@ export function BillingPage() {
   return (
     <div className="page grain-page">
       <div className="plan-bar">
-        <button type="button" className="plan-back" onClick={back} aria-label="Voltar">
+        <button type="button" className={`plan-back${fromConta ? " show" : ""}`} onClick={back} aria-label="Voltar">
           <Icon name="chevron-left" size={20} />
         </button>
         <h1>Meu plano</h1>

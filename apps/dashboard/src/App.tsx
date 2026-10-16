@@ -280,6 +280,15 @@ export function App() {
   const install = useInstallAction();
   const loc = useLocation();
   const motion = useRouteMotion(loc.pathname);
+  // seta de voltar: no celular em toda tela que não é aba da barra (todas se abrem pela Conta); no notebook
+  // nas telas abertas pela Conta (ela navega com state.from = "conta", que o voltar do navegador preserva)
+  const top = "/" + (loc.pathname.split("/")[1] ?? "");
+  const back: "conta" | "phone" | null = (loc.state as { from?: string } | null)?.from === "conta" ? "conta" : [...PHONE_TABS, "/conta"].includes(top) ? null : "phone";
+  const goBack = () => {
+    haptic(5);
+    if (((history.state as { idx?: number } | null)?.idx ?? 0) > 0) nav(-1);
+    else nav("/conta");
+  };
   const mainRef = useRef<HTMLElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   // barra de baixo: a aba aberta desliza para o meio (dá para rolar para os lados)
@@ -402,7 +411,11 @@ export function App() {
     <div className="layout">
       <a className="skip-link" href="#conteudo" onClick={(e) => { e.preventDefault(); mainRef.current?.focus(); }}>Pular para o conteúdo</a>
       <header className="topbar">
-        <MascoteButton size={50} />
+        {back ? (
+          <button type="button" className="icon-btn topbar-back" onClick={goBack} aria-label="Voltar"><Icon name="chevron-left" size={22} /></button>
+        ) : (
+          <MascoteButton size={50} />
+        )}
         <strong className="topbar-title">{titleFor(loc.pathname, NAV)}</strong>
         <span className="spacer" />
         <BellButton />
@@ -448,6 +461,9 @@ export function App() {
         <Suspense fallback={<Loading />}>
         {isSuper && <SubTabs path={loc.pathname} />}
         <div className={`route-fade route-${motion}`} key={loc.pathname}>
+        {back === "conta" && loc.pathname !== "/plano" && (
+          <button type="button" className="page-back" onClick={goBack}><Icon name="chevron-left" size={18} />Conta</button>
+        )}
         <Routes>
           {isSuper ? (
             <>
