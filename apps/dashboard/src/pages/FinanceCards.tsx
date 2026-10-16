@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, brl } from "../api";
 import { CATEGORY_COLORS, Empty, ErrorBox, Loading, Modal, alertDialog, confirmDialog } from "../components";
 import { useApi } from "../hooks";
@@ -70,7 +70,7 @@ export function StatusPill({ status }: { status: InvoiceStatus }) {
 export function CardArt({ card, selected, onClick, compact }: { card: CreditCard; selected?: boolean; onClick?: () => void; compact?: boolean }) {
   const pct = card.limit ? Math.min(1, card.used / card.limit) : 0;
   return (
-    <button type="button" className={`cc-art c-${card.color}${selected ? " sel" : ""}${compact ? " compact" : ""}`} onClick={onClick} aria-pressed={selected} aria-label={`Cartão ${card.name}`}>
+    <button type="button" data-id={card.id} className={`cc-art c-${card.color}${selected ? " sel" : ""}${compact ? " compact" : ""}`} onClick={onClick} aria-pressed={selected} aria-label={`Cartão ${card.name}`}>
       <span className="cc-art-top">
         <strong className="ellipsis">{card.name}</strong>
         {card.brand && <small className="ellipsis">{card.brand}</small>}
@@ -161,6 +161,24 @@ export function CardsTab({ user, readonly, focus, onChanged }: { user: string; r
   const [month, setMonth] = useState<string | null>(null);
   const [editing, setEditing] = useState<CreditCard | "new" | null>(null);
   useEffect(() => { if (focus) setSel(focus); }, [focus]);
+  // celular: a carteira é um carrossel; o cartão que para no meio vira o escolhido, como na Carteira do iPhone
+  const wallet = useRef<HTMLElement>(null);
+  const settle = useRef<number>(0);
+  const onWalletScroll = () => {
+    const el = wallet.current;
+    if (!el || el.scrollWidth <= el.clientWidth || getComputedStyle(el).flexDirection !== "row") return;
+    clearTimeout(settle.current);
+    settle.current = window.setTimeout(() => {
+      const mid = el.getBoundingClientRect().left + el.clientWidth / 2;
+      let best: { id: string; d: number } | null = null;
+      for (const b of el.querySelectorAll<HTMLElement>(".cc-art[data-id]")) {
+        const r = b.getBoundingClientRect();
+        const d = Math.abs(r.left + r.width / 2 - mid);
+        if (!best || d < best.d) best = { id: b.dataset.id!, d };
+      }
+      if (best && best.id !== (sel ?? cards[0]?.id)) { haptic(4); setSel(best.id); setMonth(null); }
+    }, 90);
+  };
   const card = cards.find((c) => c.id === sel) ?? cards[0];
   // fatura escolhida: a próxima a pagar, até a pessoa tocar outra
   const current = card ? (month && card.invoices.some((i) => i.month === month) ? month : card.next.month) : null;
@@ -193,7 +211,7 @@ export function CardsTab({ user, readonly, focus, onChanged }: { user: string; r
 
   return (
     <div className="cc-layout">
-      <aside className="cc-wallet">
+      <aside className="cc-wallet" ref={wallet} onScroll={onWalletScroll}>
         {cards.map((x) => (
           <CardArt key={x.id} card={x} selected={x.id === c.id} onClick={() => { haptic(5); if (x.id === c.id && !readonly) setEditing(x); else { setSel(x.id); setMonth(null); } }} />
         ))}

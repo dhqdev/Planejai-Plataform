@@ -162,10 +162,12 @@
 @media (max-width: 900px) {
   .cc-layout { grid-template-columns: minmax(0, 1fr); }
   /* carteira vira um carrossel na horizontal */
-  .cc-wallet { position: static; flex-direction: row; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 -16px; padding: 4px 16px 8px; gap: 10px; }
+  /* arraste de lado leve: cada cartão para no meio, sem puxar a página junto nem o "voltar" do navegador */
+  .cc-wallet { position: static; flex-direction: row; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 -16px; padding: 4px 16px 8px; gap: 10px; overscroll-behavior-x: contain; touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; scroll-padding: 0 16px; }
+  .cc-wallet .cc-art, .cc-add { scroll-snap-stop: always; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   .cc-wallet::-webkit-scrollbar { display: none; }
   .cc-wallet .cc-art { flex: 0 0 min(78vw, 300px); scroll-snap-align: center; }
-  .cc-wallet .cc-art:not(.sel) { transform: scale(.94); }
+  .cc-wallet .cc-art:not(.sel) { transform: scale(.94); opacity: .85; }
   .cc-add { flex: 0 0 120px; flex-direction: column; min-height: 0; aspect-ratio: auto; scroll-snap-align: center; }
 }
 @media (max-width: 767px) {

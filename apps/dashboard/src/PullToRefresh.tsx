@@ -13,7 +13,7 @@ const MAX = 96;
 export function PullToRefresh({ target }: { target: RefObject<HTMLElement | null> }) {
   const [pull, setPull] = useState(0);
   const [busy, setBusy] = useState(false);
-  const st = useRef({ y: 0, active: false, armed: false, pull: 0 });
+  const st = useRef({ x: 0, y: 0, active: false, locked: false, armed: false, pull: 0 });
 
   useEffect(() => {
     const el = target.current;
@@ -22,12 +22,19 @@ export function PullToRefresh({ target }: { target: RefObject<HTMLElement | null
       if (busy || el.scrollTop > 0 || e.touches.length !== 1) return;
       const t = e.target as Element;
       if (t.closest(".modal, .sheet, .more-sheet, .cal-week-body, input, textarea, select, [data-no-ptr]")) return;
-      st.current = { y: e.touches[0]!.clientY, active: true, armed: false, pull: 0 };
+      st.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY, active: true, locked: false, armed: false, pull: 0 };
     };
     const move = (e: TouchEvent) => {
       const s = st.current;
       if (!s.active) return;
       const dy = e.touches[0]!.clientY - s.y;
+      // só vale puxar na vertical: um arraste de lado (carrossel de cartões, faixas) que desce um tico não é segurado
+      if (!s.locked) {
+        const dx = e.touches[0]!.clientX - s.x;
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        if (Math.abs(dx) >= Math.abs(dy)) return void (s.active = false);
+        s.locked = true;
+      }
       if (dy <= 0 || el.scrollTop > 0) {
         if (s.pull) setPull((s.pull = 0));
         return;
