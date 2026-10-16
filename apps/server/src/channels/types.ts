@@ -26,8 +26,11 @@ export interface InboundMessage {
 }
 
 export interface OutboundImage {
-  /** padrão "image"; "sticker" = figurinha webp 512x512 */
-  kind?: "image" | "video" | "document" | "audio" | "sticker";
+  /**
+   * padrão "image"; "sticker" = figurinha webp 512x512. "event", "location" e "contact" são cartões nativos do WhatsApp
+   * (só canais com `rich`); nos outros sai `fallbackText`.
+   */
+  kind?: "image" | "video" | "document" | "audio" | "sticker" | "event" | "location" | "contact";
   base64?: string;
   url?: string;
   mimetype?: string;
@@ -40,7 +43,17 @@ export interface OutboundImage {
   seconds?: number;
   /** áudio: o texto falado, para a memória curta saber o que foi dito */
   spoken?: string;
+  /** convite de evento do WhatsApp (Vou / Não vou); datas em ISO */
+  event?: { name: string; description?: string; start: string; end?: string; location?: string };
+  /** pino de localização */
+  location?: { lat: number; lng: number; name?: string; address?: string };
+  /** cartão de contato */
+  contact?: { name: string; phone: string };
+  /** o que vai em texto quando o canal não tem o cartão nativo (e o que entra na memória curta) */
+  fallbackText?: string;
 }
+
+export const RICH_KINDS = new Set(["event", "location", "contact"]);
 
 /** Enquete do WhatsApp (uma escolha só): usada para o "sim" das ações sensíveis */
 export interface OutboundPoll {
@@ -77,6 +90,14 @@ export interface Channel {
   /** "digitando..." ou, antes de um áudio, "gravando áudio..." */
   setTyping(remoteJid: string, ms: number, kind?: "typing" | "recording"): Promise<void>;
   markRead(remoteJid: string, messageId: string): Promise<void>;
+  /** manda cartões nativos (evento, localização, contato), edita, apaga, fixa e agrupa fotos em álbum (Baileys) */
+  rich?: boolean;
+  editText?(remoteJid: string, messageId: string, text: string): Promise<void>;
+  deleteMessage?(remoteJid: string, messageId: string): Promise<void>;
+  /** fixa uma mensagem nossa no topo da conversa por 1, 7 ou 30 dias */
+  pinMessage?(remoteJid: string, messageId: string, days: 1 | 7 | 30): Promise<void>;
+  /** várias fotos (e vídeos) num álbum só; devolve o id de cada uma */
+  sendAlbum?(remoteJid: string, items: OutboundImage[]): Promise<{ ids: (string | undefined)[] }>;
   /** só Baileys: posta um status do número para as pessoas da lista */
   postStatus?(status: OutboundStatus, jids: string[]): Promise<{ id?: string }>;
 }

@@ -4,7 +4,7 @@ import { resolveTag } from "../../agenda-tags.js";
 import { cancelReminder, createReminder, listReminders, reminderOccurrences, retimeReminder } from "../../reminders.js";
 import { formatLocal, parseLocalDateTime } from "../../time.js";
 import { cancelAlarm, createAlarm, listAlarms } from "../../alarms.js";
-import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
+import { CONFIRM_PARAM, defineTool, obj, requireConfirmation, type ToolContext } from "./types.js";
 
 const hm = (d: Date, tz: string) => new Intl.DateTimeFormat("pt-BR", { timeZone: tz, hour: "2-digit", minute: "2-digit" }).format(d);
 const dayOf = (d: Date, tz: string) => new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(d);
@@ -69,6 +69,8 @@ export const scheduleReminder = defineTool<{
           .filter((o) => o.reminderId !== r.id && dayOf(new Date(o.start), ctx.timezone) === dayOf(at, ctx.timezone))
           .slice(0, 6);
     const clash = others.find((o) => Math.abs(new Date(o.start).getTime() - at.getTime()) < 3600_000);
+    // compromisso com hora: vai junto o convite nativo do WhatsApp (o celular mostra o card e lembra do evento)
+    const card = args.title && eventAt && !r.cron ? eventCard(ctx, { name: args.title, start: eventAt }) : null;
     return {
       ok: true,
       id: r.id,
@@ -78,9 +80,23 @@ export const scheduleReminder = defineTool<{
       tag: tag ? `${tag.name}${tag.created ? " (nova)" : ""}` : null,
       ...(others.length ? { same_day: others.map((o) => `${hm(new Date(o.start), ctx.timezone)} ${o.title.slice(0, 40)}`) } : {}),
       ...(clash ? { clash: `Choca com ${clash.title.slice(0, 40)}` } : {}),
+      ...(card ? { invite_card: card } : {}),
     };
   },
 });
+
+/**
+ * Convite de evento do WhatsApp para a própria pessoa (Vou / Não vou e lembrete do celular). Só no WhatsApp embutido
+ * e para compromisso que ainda vai acontecer. Sai sozinho depois do primeiro balão; devolve o media_id.
+ */
+export function eventCard(ctx: ToolContext, e: { name: string; start: Date; end?: Date; location?: string; description?: string }) {
+  if (!ctx.channel?.rich || e.start.getTime() < Date.now() + 5 * 60_000) return null;
+  return ctx.outbox.addMedia({
+    kind: "event",
+    event: { name: e.name, start: e.start.toISOString(), end: e.end?.toISOString(), location: e.location, description: e.description },
+    fallbackText: `📅 ${e.name}, ${formatLocal(e.start, ctx.timezone)}`,
+  });
+}
 
 export const listRemindersTool = defineTool<Record<string, never>>({
   name: "list_reminders",
@@ -282,6 +298,7 @@ export const calendarCreateEvent = defineTool<{
       }),
     });
     const meetLink = e.hangoutLink ?? e.conferenceData?.entryPoints?.find((p: any) => p.entryPointType === "video")?.uri ?? null;
+    const card = eventCard(ctx, { name: args.title, start, end, location: args.location ?? meetLink ?? undefined, description: args.description });
     return {
       ok: true,
       id: e.id,
@@ -290,6 +307,7 @@ export const calendarCreateEvent = defineTool<{
       meet_pending: Boolean(args.meet && !meetLink && e.conferenceData?.createRequest?.status?.statusCode === "pending"),
       invited: attendees,
       reminder: `${remind} min antes`,
+      ...(card ? { invite_card: card } : {}),
     };
   },
 });

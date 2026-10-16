@@ -1,4 +1,4 @@
-import { jidNormalizedUser, type WASocket } from "baileys";
+import { jidNormalizedUser, proto, type AnyMessageContent, type WASocket } from "baileys";
 import { safeFetch } from "../net.js";
 import { callChannel, holdsWhatsApp } from "../whatsapp/rpc.js";
 import { isConnectionError, whatsapp, type WhatsAppSession } from "../whatsapp/session.js";
@@ -17,6 +17,7 @@ const STATUS_WAIT_MS = 120_000;
  */
 export class BaileysChannel implements Channel {
   id = "baileys";
+  rich = true;
 
   constructor(
     private session: WhatsAppSession = whatsapp,
@@ -65,6 +66,11 @@ export class BaileysChannel implements Channel {
   async sendImage(jid: string, image: OutboundImage) {
     if (this.remote) return { id: (await callChannel({ op: "media", jid, image }, SEND_WAIT_MS)).id };
     // URL de fora é baixada aqui, só da internet pública (net.ts), em vez de a biblioteca buscar sozinha
+    const card = cardContent(image);
+    if (card) {
+      const r = await this.run((s) => s.sendMessage(jid, card));
+      return { id: r?.key?.id ?? undefined };
+    }
     const content = image.base64 ? Buffer.from(image.base64, "base64") : await downloadMedia(image.url!);
     const r = await this.run((s) =>
       image.kind === "document"
@@ -78,6 +84,45 @@ export class BaileysChannel implements Channel {
         : s.sendMessage(jid, { image: content, caption: image.caption, mimetype: image.mimetype }),
     );
     return { id: r?.key?.id ?? undefined };
+  }
+
+  /** Troca o texto de uma mensagem nossa (o WhatsApp mostra "Editada"; vale até 15 min depois do envio). */
+  async editText(jid: string, messageId: string, text: string) {
+    if (this.remote) return void (await callChannel({ op: "edit", jid, messageId, text }, SEND_WAIT_MS));
+    await this.run((s) => s.sendMessage(jid, { text, edit: { remoteJid: jid, id: messageId, fromMe: true } }));
+  }
+
+  /** Apaga para todos uma mensagem nossa. */
+  async deleteMessage(jid: string, messageId: string) {
+    if (this.remote) return void (await callChannel({ op: "delete", jid, messageId }, SEND_WAIT_MS));
+    await this.run((s) => s.sendMessage(jid, { delete: { remoteJid: jid, id: messageId, fromMe: true } }));
+  }
+
+  async pinMessage(jid: string, messageId: string, days: 1 | 7 | 30) {
+    if (this.remote) return void (await callChannel({ op: "pin", jid, messageId, days }, SEND_WAIT_MS));
+    const time = days === 30 ? 2592000 : days === 1 ? 86400 : 604800;
+    await this.run((s) => s.sendMessage(jid, { pin: { remoteJid: jid, id: messageId, fromMe: true }, type: proto.PinInChat.Type.PIN_FOR_ALL, time }));
+  }
+
+  /** Álbum: a mensagem-mãe diz quantas fotos e vídeos vêm, e cada mídia aponta para ela. */
+  async sendAlbum(jid: string, items: OutboundImage[]) {
+    if (this.remote) return { ids: (await callChannel({ op: "album", jid, items }, SEND_WAIT_MS * 2)).ids ?? [] };
+    const files = await Promise.all(items.map((i) => (i.base64 ? Buffer.from(i.base64, "base64") : downloadMedia(i.url!))));
+    const videos = items.filter((i) => i.kind === "video").length;
+    const parent = await this.run((s) => s.sendMessage(jid, { album: { expectedImageCount: items.length - videos, expectedVideoCount: videos } }));
+    const ids: (string | undefined)[] = [];
+    for (const [n, item] of items.entries()) {
+      const r = await this.run((s) =>
+        s.sendMessage(
+          jid,
+          item.kind === "video"
+            ? { video: files[n]!, caption: item.caption, mimetype: item.mimetype ?? "video/mp4", albumParentKey: parent?.key }
+            : { image: files[n]!, caption: item.caption, mimetype: item.mimetype, albumParentKey: parent?.key },
+        ),
+      );
+      ids.push(r?.key?.id ?? undefined);
+    }
+    return { ids };
   }
 
   async sendPoll(jid: string, poll: OutboundPoll) {
@@ -132,6 +177,31 @@ export class BaileysChannel implements Channel {
     if (this.remote) return void (await callChannel({ op: "read", jid, messageId }, EXTRA_WAIT_MS));
     await this.run((s) => s.readMessages([{ remoteJid: jid, id: messageId, fromMe: false }]), EXTRA_WAIT_MS);
   }
+}
+
+/** Cartão nativo (evento, localização, contato) no formato do Baileys, ou null se é mídia comum. */
+export function cardContent(m: OutboundImage): AnyMessageContent | null {
+  if (m.kind === "event" && m.event) {
+    return {
+      event: {
+        name: m.event.name.slice(0, 100),
+        description: m.event.description?.slice(0, 500),
+        startDate: new Date(m.event.start),
+        endDate: m.event.end ? new Date(m.event.end) : undefined,
+        location: m.event.location ? { name: m.event.location.slice(0, 200) } : undefined,
+      },
+    };
+  }
+  if (m.kind === "location" && m.location) {
+    return { location: { degreesLatitude: m.location.lat, degreesLongitude: m.location.lng, name: m.location.name, address: m.location.address } };
+  }
+  if (m.kind === "contact" && m.contact) {
+    const digits = m.contact.phone.replace(/\D/g, "");
+    const name = m.contact.name.replace(/[\r\n;]/g, " ").trim();
+    const vcard = `BEGIN:VCARD\nVERSION:3.0\nFN:${name}\nTEL;type=CELL;type=VOICE;waid=${digits}:+${digits}\nEND:VCARD`;
+    return { contacts: { displayName: name, contacts: [{ displayName: name, vcard }] } };
+  }
+  return null;
 }
 
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024;

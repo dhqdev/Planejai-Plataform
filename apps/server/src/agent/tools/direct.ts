@@ -137,3 +137,20 @@ export const contactSave = defineTool<{ name?: string; phone?: string; contacts?
     return { ok: true, saved, ...(failed.length ? { failed } : {}) };
   },
 });
+
+/** Cartão de contato do WhatsApp ("me passa o número da Ana"): a pessoa toca e já salva ou abre a conversa. */
+export const sendContactCard = defineTool<{ name: string; phone: string }>({
+  name: "send_contact_card",
+  description:
+    "Manda o cartão de contato de alguém no chat (a pessoa toca para salvar ou conversar). Use quando ela pedir o número ou o contato de alguém; " +
+    "pegue nome e número com contacts_search. Devolve media_id para [[media:ID]].",
+  parameters: obj({ name: { type: "string" }, phone: { type: "string", description: "Com DDD; só números" } }, ["name", "phone"]),
+  async run(args, ctx) {
+    let digits = String(args.phone ?? "").replace(/\D/g, "");
+    if (digits.length === 10 || digits.length === 11) digits = `55${digits}`;
+    if (digits.length < 12 || digits.length > 15) return { ok: false, error: "Número incompleto: precisa do DDD." };
+    const name = String(args.name ?? "").trim().slice(0, 60) || `+${digits}`;
+    const id = ctx.outbox.addMedia({ kind: "contact", contact: { name, phone: digits }, fallbackText: `👤 ${name}: +${digits}` });
+    return { media_id: id, how_to_send: `Coloque [[media:${id}]] na resposta, com uma frase curta.` };
+  },
+});

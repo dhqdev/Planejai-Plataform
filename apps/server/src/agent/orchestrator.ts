@@ -1,5 +1,6 @@
 import { getChannel } from "../channels/index.js";
-import type { Channel } from "../channels/types.js";
+import { RICH_KINDS, type Channel, type OutboundImage } from "../channels/types.js";
+import { rememberOurs } from "./sent-ids.js";
 import { many, one, pool, query, waitLonger } from "../db/pool.js";
 import { INTEGRATIONS, isConnected } from "../integrations/registry.js";
 import { chatCompletion, LlmError } from "../llm/openrouter.js";
@@ -64,20 +65,28 @@ export function toWhatsApp(text: string) {
   return humanize(out, { bullets: true });
 }
 
-export type Bubble = { type: "text"; text: string } | { type: "media"; id: string };
+export type Bubble = { type: "text"; text: string; pin?: boolean } | { type: "media"; id: string };
 
-/** Divide a resposta do CTO em balões: "---" separa mensagens e [[media:ID]] posiciona imagens. */
+const PIN_MARK = /[ \t]*\[\[fixar\]\][ \t]*/gi;
+
+/** Divide a resposta do CTO em balões: "---" separa mensagens e [[media:ID]] posiciona imagens. [[fixar]] fixa o balão no chat. */
 export function splitBubbles(text: string): Bubble[] {
   const out: Bubble[] = [];
   for (const chunk of text.split(/^\s*---\s*$/m)) {
     const parts = chunk.split(/\[\[media:([\w-]+)\]\]/);
     parts.forEach((p, i) => {
-      if (i % 2 === 1) out.push({ type: "media", id: p });
-      else if (p.trim()) out.push({ type: "text", text: toWhatsApp(p) });
+      if (i % 2 === 1) return void out.push({ type: "media", id: p });
+      const pin = PIN_MARK.test(p);
+      PIN_MARK.lastIndex = 0;
+      const clean = p.replace(PIN_MARK, " ");
+      if (clean.trim()) out.push({ type: "text", text: toWhatsApp(clean), ...(pin ? { pin: true } : {}) });
     });
   }
   return out;
 }
+
+/** Foto comum (sem legenda própria), que pode entrar num álbum com as vizinhas. */
+const albumable = (m: OutboundImage | undefined) => Boolean(m && (!m.kind || m.kind === "image") && !m.caption);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -588,7 +597,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       ...bubbles.flatMap((b) => {
         if (b.type === "text") return [b.text];
         const m = outbox.media.get(b.id);
-        return m?.spoken ? [`[áudio] ${m.spoken}`] : m?.kind === "sticker" ? ["[figurinha]"] : m?.gif ? ["[gif]"] : [];
+        return m?.spoken ? [`[áudio] ${m.spoken}`] : m?.kind === "sticker" ? ["[figurinha]"] : m?.gif ? ["[gif]"] : m?.fallbackText ? [m.fallbackText] : [];
       }),
       ...(askedText ? [askedText] : []),
     ];
@@ -712,41 +721,81 @@ async function askYes(what: string, o: { channel: Channel; conversation: Convers
   return sent?.text ?? null;
 }
 
-async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: ConversationRow; outbox: Outbox; tracer: Tracer; keepInDb: boolean }) {
-  for (const [i, b] of bubbles.entries()) {
+export async function deliver(bubbles: Bubble[], o: { channel: Channel; conversation: ConversationRow; outbox: Outbox; tracer: Tracer; keepInDb: boolean }) {
+  const jid = o.conversation.remote_jid;
+  const save = async (content: string, id: string | undefined, media?: OutboundImage) => {
+    await rememberOurs(o.conversation.id, id, content);
+    if (!o.keepInDb) return;
+    if (!media) {
+      await query("INSERT INTO messages (conversation_id, role, content, external_id, processed) VALUES ($1, 'assistant', $2, $3, true)", [o.conversation.id, content, id ?? null]);
+    } else {
+      await query(
+        "INSERT INTO messages (conversation_id, role, content, external_id, media, processed) VALUES ($1, 'assistant', $2, $3, $4, true)",
+        [o.conversation.id, content, id ?? null, { url: media.url ?? null, mimetype: media.mimetype ?? null }],
+      );
+    }
+  };
+  for (let i = 0; i < bubbles.length; i++) {
+    const b = bubbles[i]!;
     const m = b.type === "media" ? o.outbox.media.get(b.id) : undefined;
-    const name = b.type === "text" ? "enviar_texto" : m?.kind === "audio" ? "enviar_audio" : m?.kind === "sticker" ? "enviar_figurinha" : m?.gif ? "enviar_gif" : "enviar_imagem";
+    // fotos seguidas viram um álbum só (no WhatsApp ficam agrupadas, em vez de uma embaixo da outra)
+    if (b.type === "media" && o.channel.sendAlbum && albumable(m)) {
+      let j = i;
+      while (j + 1 < bubbles.length && bubbles[j + 1]!.type === "media" && albumable(o.outbox.media.get((bubbles[j + 1] as { id: string }).id))) j++;
+      if (j > i) {
+        const group = bubbles.slice(i, j + 1).map((x) => o.outbox.media.get((x as { id: string }).id)!);
+        const step = await o.tracer.step({ agent: "cto", type: "channel", name: "enviar_album", input: { media: bubbles.slice(i, j + 1).map((x) => (x as { id: string }).id) } });
+        try {
+          const r = await o.channel.sendAlbum(jid, group);
+          for (const [n, img] of group.entries()) await save("[imagem]", r.ids[n], img);
+          await step.ok({ fotos: group.length });
+        } catch (err) {
+          await step.fail(err);
+        }
+        i = j;
+        continue;
+      }
+    }
+    const card = Boolean(m?.kind && RICH_KINDS.has(m.kind));
+    const name =
+      b.type === "text" ? "enviar_texto" : card ? `enviar_${m!.kind === "event" ? "convite" : m!.kind === "location" ? "localizacao" : "contato"}`
+      : m?.kind === "audio" ? "enviar_audio" : m?.kind === "sticker" ? "enviar_figurinha" : m?.gif ? "enviar_gif" : "enviar_imagem";
     const step = await o.tracer.step({ agent: "cto", type: "channel", name, input: b.type === "text" ? { text: b.text } : { media: b.id } });
     try {
       if (b.type === "text") {
         if (i > 0) {
           const ms = Math.min(2500, 400 + b.text.length * 15);
-          o.channel.setTyping(o.conversation.remote_jid, ms).catch(() => {});
+          o.channel.setTyping(jid, ms).catch(() => {});
           await sleep(o.channel.id === "playground" ? 0 : ms);
         }
         b.text = redactSecrets(b.text);
-        const r = await o.channel.sendText(o.conversation.remote_jid, b.text);
-        if (o.keepInDb) {
-          await query("INSERT INTO messages (conversation_id, role, content, external_id, processed) VALUES ($1, 'assistant', $2, $3, true)", [
-            o.conversation.id,
-            b.text,
-            r.id ?? null,
-          ]);
-        }
-        await step.ok(r);
+        const r = await o.channel.sendText(jid, b.text);
+        await save(b.text, r.id);
+        // [[fixar]]: lista de compras, resumo do mês... fica no topo da conversa por 7 dias
+        if (b.pin && r.id && o.channel.pinMessage) await o.channel.pinMessage(jid, r.id, 7).catch(() => {});
+        await step.ok(b.pin ? { ...r, fixada: Boolean(r.id && o.channel.pinMessage) } : r);
       } else {
-        const img = o.outbox.media.get(b.id);
+        const img = m;
         if (!img) throw new Error(`media ${b.id} não existe`);
+        // cartão nativo (convite, localização, contato) só no WhatsApp embutido; nos outros vai o texto
+        if (card && !o.channel.rich) {
+          const text = redactSecrets(img.fallbackText ?? "");
+          const r = text ? await o.channel.sendText(jid, text) : {};
+          await save(text, (r as { id?: string }).id);
+          await step.ok({ ...r, texto: true });
+          continue;
+        }
         // áudio de voz: "gravando áudio..." um instante antes, como uma pessoa faria (e não "digitando")
         if (img.kind === "audio" && img.ptt !== false) {
           const ms = Math.min(3000, 1000 + (img.seconds ?? 0) * 100);
-          o.channel.setTyping(o.conversation.remote_jid, ms, "recording").catch(() => {});
+          o.channel.setTyping(jid, ms, "recording").catch(() => {});
           await sleep(o.channel.id === "playground" ? 0 : ms);
         }
-        const r = await o.channel.sendImage(o.conversation.remote_jid, img);
-        if (o.keepInDb) await query(
-          "INSERT INTO messages (conversation_id, role, content, external_id, media, processed) VALUES ($1, 'assistant', $2, $3, $4, true)",
-          [o.conversation.id, img.spoken ? `[áudio] ${img.spoken}` : img.kind === "sticker" ? "[figurinha]" : img.caption ?? (img.gif ? "[gif]" : "[imagem]"), r.id ?? null, { url: img.url ?? null, mimetype: img.mimetype ?? null }],
+        const r = await o.channel.sendImage(jid, img);
+        await save(
+          card ? (img.fallbackText ?? `[${img.kind}]`) : img.spoken ? `[áudio] ${img.spoken}` : img.kind === "sticker" ? "[figurinha]" : img.caption ?? (img.gif ? "[gif]" : "[imagem]"),
+          r.id,
+          card ? undefined : img,
         );
         await step.ok(r);
       }

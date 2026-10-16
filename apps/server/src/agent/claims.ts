@@ -10,7 +10,7 @@ const WHEN = /\b(amanh[ãa]|hoje|depois de amanh[ãa]|daqui a?|segunda|ter[çc]a
 const READ_ONLY = /^(ask_|consult_|share_with_team$|react_to_message$|web_search|fetch_url|places_nearby|calculate|read_|list_|get_|search_)|(_list|_status|_search|_read|_events|_channels|_workflows|_executions|_catalog|_info)$/;
 /** tools: ["*"] = qualquer ferramenta que fez algo (lançar, salvar, agendar, gerar...). */
 const ANY = "*";
-const DELETE_TOOLS = ["delete_transaction", "card_delete", "card_save", "cancel_reminder", "alarm_cancel", "document_delete", "forget_memory", "watch_cancel", "watch_update", "direct_cancel", "automation_manage", "bill_delete", "categories", "shop_update", "errand_cancel"];
+const DELETE_TOOLS = ["delete_transaction", "card_delete", "card_save", "cancel_reminder", "alarm_cancel", "document_delete", "forget_memory", "watch_cancel", "watch_update", "direct_cancel", "automation_manage", "bill_delete", "categories", "shop_update", "errand_cancel", "unsend_message"];
 const FINANCE_TOOLS = ["add_transaction", "update_transaction", "bill_pay", "bill_save", "card_invoice_pay", "card_save", "goal_add", "goal_update", "goal_create"];
 
 /** Marca em `room.done` (posta por add_transaction/update_transaction) de que um lançamento desta rodada foi para um cartão. */
@@ -57,7 +57,7 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; sameSentence?: boole
   {
     what: "apagar ou cancelar",
     says: /\b(apaguei|removi|exclu[ií]|deletei|cancelei)\b/i,
-    tools: ["delete_transaction", "card_delete", "card_save", "cancel_reminder", "alarm_cancel", "document_delete", "forget_memory", "watch_cancel", "watch_update", "direct_cancel", "automation_manage", "set_budget", "bill_delete", "bill_save"],
+    tools: ["delete_transaction", "card_delete", "card_save", "cancel_reminder", "alarm_cancel", "document_delete", "forget_memory", "watch_cancel", "watch_update", "direct_cancel", "automation_manage", "set_budget", "bill_delete", "bill_save", "unsend_message"],
   },
   {
     what: "agendar lembrete ou evento",

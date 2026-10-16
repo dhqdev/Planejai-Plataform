@@ -204,3 +204,31 @@ export const placesNearby = defineTool<{ what: string; near: string; limit?: num
     return nearbyPlaces(args.what, args.near, { limit: args.limit, radiusKm: args.radius_km });
   },
 });
+
+/** Pino de localização do WhatsApp (abre no mapa do celular). Fora do WhatsApp embutido vai o endereço com o link do mapa. */
+export const sendLocation = defineTool<{ name?: string; address?: string; lat?: number; lng?: number }>({
+  name: "send_location",
+  description:
+    "Manda o pino de localização de um lugar no chat (abre no mapa do celular). Use lat/lng de places_nearby quando tiver; senão o address. " +
+    "Devolve media_id para [[media:ID]].",
+  parameters: obj({
+    name: { type: "string", description: "Nome do lugar" },
+    address: { type: "string" },
+    lat: { type: "number" },
+    lng: { type: "number" },
+  }),
+  async run(args, ctx) {
+    let at: { lat: number; lng: number; label?: string } | null =
+      Number.isFinite(args.lat) && Number.isFinite(args.lng) ? { lat: Number(args.lat), lng: Number(args.lng) } : null;
+    if (!at && args.address) at = await geocode(args.address);
+    if (!at || Math.abs(at.lat) > 90 || Math.abs(at.lng) > 180) return { ok: false, error: "Não achei esse lugar no mapa. Peça o endereço com bairro e cidade." };
+    const address = args.address ?? at.label;
+    const link = `https://www.google.com/maps/search/?api=1&query=${at.lat},${at.lng}`;
+    const id = ctx.outbox.addMedia({
+      kind: "location",
+      location: { lat: at.lat, lng: at.lng, name: args.name, address },
+      fallbackText: `📍 ${[args.name, address].filter(Boolean).join(" - ")}\n${link}`,
+    });
+    return { media_id: id, how_to_send: `Coloque [[media:${id}]] na resposta, com uma frase curta.` };
+  },
+});

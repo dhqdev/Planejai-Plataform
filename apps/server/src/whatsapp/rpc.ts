@@ -18,6 +18,10 @@ export type WaRpc =
   | { op: "media"; jid: string; image: OutboundImage }
   | { op: "poll"; jid: string; poll: OutboundPoll }
   | { op: "status"; status: OutboundStatus; jids: string[] }
+  | { op: "edit"; jid: string; messageId: string; text: string }
+  | { op: "delete"; jid: string; messageId: string }
+  | { op: "pin"; jid: string; messageId: string; days: 1 | 7 | 30 }
+  | { op: "album"; jid: string; items: OutboundImage[] }
   | { op: "react"; jid: string; messageId: string; emoji: string }
   | { op: "typing"; jid: string; ms: number; kind?: "typing" | "recording" }
   | { op: "read"; jid: string; messageId: string }
@@ -26,7 +30,7 @@ export type WaRpc =
 
 /** pedido na fila: depois do prazo o channel descarta (ninguém está mais esperando) */
 export type WaRpcJob = WaRpc & { deadline: number };
-export type WaRpcResult = { id?: string; jid?: string | null };
+export type WaRpcResult = { id?: string; jid?: string | null; ids?: (string | undefined)[] };
 export type WaRpcDone = { jobId: string; ok: boolean; result?: WaRpcResult; error?: string };
 
 export const RPC_WAKE = "wa_rpc";

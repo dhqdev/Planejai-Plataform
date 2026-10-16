@@ -35,7 +35,8 @@ describe("ferramentas do CTO por assunto", () => {
     const core = new Set(CTO_TOOLS.map((t) => t.name));
     const team = new Set(SPECIALISTS.flatMap((s) => s.tools.map((t) => t.name)));
     // make_audio e send_gif não têm especialista: o grupo de mídia pega "áudio" e "gif" pela palavra
-    const own = new Set(["make_audio", "send_gif", "document_delete"]);
+    // unsend_message apaga mensagem do próprio CTO na conversa: não tem por que passar por especialista
+    const own = new Set(["make_audio", "send_gif", "document_delete", "unsend_message"]);
     for (const t of CTO_TOOL_GROUPS.flatMap((g) => g.tools)) {
       expect(core.has(t.name), `${t.name} não pode estar no núcleo e num grupo`).toBe(false);
       expect(team.has(t.name) || own.has(t.name), `${t.name} sem especialista`).toBe(true);

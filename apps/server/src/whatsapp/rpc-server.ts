@@ -62,6 +62,17 @@ async function run(ch: BaileysChannel, req: WaRpcJob): Promise<WaRpcResult> {
       return ch.sendPoll(req.jid, req.poll);
     case "status":
       return ch.postStatus(req.status, req.jids);
+    case "edit":
+      await ch.editText(req.jid, req.messageId, req.text);
+      return {};
+    case "delete":
+      await ch.deleteMessage(req.jid, req.messageId);
+      return {};
+    case "pin":
+      await ch.pinMessage(req.jid, req.messageId, req.days);
+      return {};
+    case "album":
+      return ch.sendAlbum(req.jid, req.items);
     case "react":
       await ch.react(req.jid, req.messageId, req.emoji);
       return {};

@@ -78,7 +78,6 @@ describe.skipIf(!enabled)("status do WhatsApp (e2e)", () => {
   beforeAll(async () => {
     db = await import("../src/db/pool.js");
     await db.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
-    await db.query("DROP SCHEMA IF EXISTS pgboss CASCADE");
     await (await import("../src/db/migrate.js")).migrate(() => {});
     st = await import("../src/wa-status.js");
     // os testes rodam com WHATSAPP_PROVIDER=none; o canal Baileys aqui é falso (mock acima)

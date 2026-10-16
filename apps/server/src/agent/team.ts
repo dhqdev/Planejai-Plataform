@@ -89,6 +89,7 @@ export const SPECIALISTS: AgentDef[] = [
       research.webSearch,
       research.fetchUrl,
       places.placesNearby,
+      places.sendLocation,
       research.mapRoute,
       research.screenshotUrl,
       research.browserOpen,
@@ -222,6 +223,7 @@ export const SPECIALISTS: AgentDef[] = [
       "Ela quer que alguém CONVERSE com a pessoa (não só avisar): conversa_start com o agente do assunto (saude para quem está doente; geral se nenhum combina).",
     tools: [
       direct.contactsSearch,
+      direct.sendContactCard,
       social.sendToContact,
       direct.sendWhatsapp,
       direct.contactSave,
@@ -353,7 +355,13 @@ export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
   {
     id: "mensagens",
     when: /(?<!\p{L})(mand|envi|mensage|msg|recado|avis[ae] (o|a|pr)|fala (pr|com)|convers\w* com|diz(er|e)? (pr|que)|respond|pergunt[ae] (pr|ao?|à|pa)|encaminh|repass|convi|contato|n[uú]mero|whats|zap|agendad)|te mandou|\d{8,}|\d{4,5}-\d{4}|\(\d{2}\)/iu,
-    tools: [social.sendToContact, direct.sendWhatsapp, errands.conversaStart, direct.contactsSearch, direct.contactSave, direct.directList, direct.directCancel, social.invitePerson],
+    tools: [social.sendToContact, direct.sendWhatsapp, errands.conversaStart, direct.contactsSearch, direct.contactSave, direct.directList, direct.directCancel, social.invitePerson, direct.sendContactCard],
+  },
+  { id: "apagar_mensagem", when: /(?<!\p{L})(apag|exclu|delet|remov|tira)\w*.{0,30}(mensage|msg|isso|ess[ae]|o que (voc[eê]|tu) mand|[aú]ltima)|mand\w* errad/iu, tools: [core.unsendMessage] },
+  {
+    id: "localizacao",
+    when: /(?<!\p{L})(localiza|endere[cç]o|onde fica|pino|manda o local|me manda onde|como cheg)/iu,
+    tools: [places.sendLocation],
   },
   {
     id: "midia",

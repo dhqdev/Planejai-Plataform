@@ -29,6 +29,8 @@ export class Progress {
   private timers: NodeJS.Timeout[] = [];
   private typing?: NodeJS.Timeout;
   private stillSent = false;
+  /** id do último aviso de reserva: o "ainda tô nisso" edita ele em vez de mandar outro balão */
+  private reserveId?: string;
   private stopped = false;
 
   constructor(
@@ -68,7 +70,19 @@ export class Progress {
     this.sent.push(clean);
     const step = await this.o.tracer.step({ agent: "cto", type: "channel", name: "aviso_andamento", input: { text: clean, origem: origin } });
     try {
+      if (origin === "reserva" && this.reserveId && this.o.channel.editText) {
+        const id = this.reserveId;
+        try {
+          await this.o.channel.editText(this.o.jid, id, clean);
+          await step.ok({ editada: id });
+          this.o.channel.setTyping(this.o.jid, 12000).catch(() => {});
+          return true;
+        } catch {
+          /* não editou (prazo do WhatsApp, conexão): manda um novo */
+        }
+      }
       const r = await this.o.channel.sendText(this.o.jid, clean);
+      if (origin === "reserva") this.reserveId = r.id;
       await step.ok(r);
       this.o.channel.setTyping(this.o.jid, 12000).catch(() => {});
       return true;

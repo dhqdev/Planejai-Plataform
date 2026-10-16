@@ -158,3 +158,36 @@ export const readDocument = defineTool<{ message_id: number | string; offset?: n
     return { text: chunk, offset, next_offset: offset + 6000 < text.length ? offset + 6000 : null, total_chars: text.length };
   },
 });
+
+/** "Apaga isso", "mandou errado": apaga para todos as últimas mensagens que o assistente mandou nesta conversa. */
+export const unsendMessage = defineTool<{ count?: number; contains?: string }>({
+  name: "unsend_message",
+  description:
+    "Apaga para todos mensagem(ns) que VOCÊ mandou nesta conversa (só do assistente, das últimas 48 h). Sem argumentos: a última. " +
+    "count = quantas das últimas (até 5); contains = trecho para achar uma específica. Só quando a pessoa pedir ou você mandou algo errado.",
+  parameters: obj({
+    count: { type: "number", description: "Quantas das últimas (1 a 5)" },
+    contains: { type: "string", description: "Trecho do texto da mensagem a apagar" },
+  }),
+  async run(args, ctx) {
+    if (!ctx.channel.deleteMessage) return { ok: false, error: "Este canal não apaga mensagens." };
+    const { forgetOurs, lastOurs } = await import("../sent-ids.js");
+    const ours = await lastOurs(ctx.conversation.id);
+    const needle = args.contains?.trim().toLowerCase();
+    const pick = needle
+      ? ours.filter((r) => r.what.toLowerCase().includes(needle)).slice(0, 1)
+      : ours.slice(0, Math.min(5, Math.max(1, Math.round(args.count ?? 1))));
+    if (!pick.length) return { ok: false, error: needle ? "Não achei mensagem minha com esse trecho." : "Não tenho mensagem recente para apagar." };
+    const done: string[] = [];
+    for (const r of pick) {
+      try {
+        await ctx.channel.deleteMessage(ctx.conversation.remote_jid, r.id);
+        done.push(r.what);
+      } catch {
+        /* o WhatsApp recusou (prazo): segue com as outras */
+      }
+    }
+    await forgetOurs(ctx.conversation.id, pick.map((r) => r.id));
+    return done.length ? { ok: true, apagadas: done } : { ok: false, error: "O WhatsApp não deixou apagar (passou do prazo)." };
+  },
+});
