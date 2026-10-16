@@ -1,7 +1,8 @@
 import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { ErrorBox, Modal, alertDialog } from "../components";
+import { ErrorBox, Modal, alertDialog, confirmDialog } from "../components";
+import { DateField, TimeField } from "../pickers";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
@@ -419,6 +420,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
           ev={open}
           origin={origin}
           readonly={readonly}
+          tags={tags}
           onClose={() => setOpen(null)}
           onEdit={() => setEditing(open)}
           onChanged={(next) => { reload(); if (next) setOpen(next); }}
@@ -598,7 +600,16 @@ export function MonthJump({ current, onPick, onClose, max }: { current: Date; on
 const leadText = (m: number) => (m === 0 ? "na hora" : m % 1440 === 0 ? `${m / 1440} dia antes` : m % 60 === 0 ? `${m / 60}h antes` : `${m}min antes`);
 
 /** O compromisso em tela cheia, no jeito do Toki: cor dele no topo, quando, aviso, detalhes e atalhos embaixo. */
-function EventScreen({ ev, origin, readonly, onClose, onEdit, onChanged }: { ev: Ev; origin: DOMRect | null; readonly: boolean; onClose: () => void; onEdit: () => void; onChanged: (next?: Ev) => void }) {
+const LEADS = [0, 10, 30, 60, 1440];
+/** Campo de texto que cresce com o conteúdo (título e detalhes editáveis no evento). */
+const grow = (el: HTMLTextAreaElement | null) => {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+};
+const leadChip = (m: number) => (m === 0 ? "Na hora" : m % 1440 === 0 ? `${m / 1440} dia antes` : m % 60 === 0 ? `${m / 60} h antes` : `${m} min antes`);
+
+function EventScreen({ ev, origin, readonly, tags, onClose, onEdit, onChanged }: { ev: Ev; origin: DOMRect | null; readonly: boolean; tags: Tag[]; onClose: () => void; onEdit: () => void; onChanged: (next?: Ev) => void }) {
   const sheet = useRef<HTMLDivElement>(null);
   const [leaving, setLeaving] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -677,7 +688,7 @@ function EventScreen({ ev, origin, readonly, onClose, onEdit, onChanged }: { ev:
       if (scrim.current) scrim.current.style.opacity = String(Math.max(0, 1 - dy / (innerHeight * 0.9)));
     };
     const down = (x: TouchEvent) => {
-      if (leavingRef.current || (x.target as HTMLElement).closest("input, .pe-chips")) return;
+      if (leavingRef.current || (x.target as HTMLElement).closest("input, textarea, .pe-chips, .pe-opts")) return;
       const body = el.querySelector(".pe-body");
       g = { x: x.touches[0]!.clientX, y: x.touches[0]!.clientY, t: performance.now(), dy: 0, v: 0, on: false, off: Boolean(body && body.scrollTop > 0) };
     };
@@ -727,12 +738,19 @@ function EventScreen({ ev, origin, readonly, onClose, onEdit, onChanged }: { ev:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const [saved, setSaved] = useState(0);
+  useEffect(() => {
+    if (!saved) return;
+    const t = setTimeout(() => setSaved(0), 1800);
+    return () => clearTimeout(t);
+  }, [saved]);
   const patch = async (label: string, json: Record<string, unknown>, next?: Partial<Ev>) => {
     setBusy(label);
     setError(null);
     try {
       await api(`/api/reminders/${ev.reminderId}`, { method: "PATCH", json });
       haptic(12);
+      setSaved(Date.now());
       onChanged(next ? { ...ev, ...next } : undefined);
     } catch (err) {
       void alertDialog("Não deu para mudar", (err as Error).message);
@@ -775,11 +793,72 @@ function EventScreen({ ev, origin, readonly, onClose, onEdit, onChanged }: { ev:
     }
   };
 
+  // editar ali mesmo (pedido do David): cada campo salva sozinho ao sair dele ou ao tocar numa opção
+  const inline = isReminder && !readonly;
+  const [title, setTitle] = useState(ev.title);
+  const [desc, setDesc] = useState(details !== ev.title ? details : "");
+  const [newTag, setNewTag] = useState<string | null>(null);
+  const saveTitle = () => {
+    const t = title.trim();
+    if (!t) return setTitle(ev.title);
+    if (t === ev.title) return;
+    const json: Record<string, unknown> = { title: t };
+    // sem detalhes, o próprio título é o texto que o assistente lê na hora do aviso
+    if (!desc.trim() && (ev.intent ?? "").endsWith(suffix)) json.intent = t + suffix;
+    void patch("titulo", json, { title: t, intent: json.intent ? String(json.intent) : ev.intent });
+  };
+  const saveDesc = () => {
+    const d = desc.trim();
+    if (d === (details !== ev.title ? details : "")) return;
+    const text = d || title.trim() || ev.title;
+    const intent = (ev.intent ?? "").endsWith(suffix) ? text + suffix : text;
+    void patch("detalhes", { intent }, { intent });
+  };
+  const retime = (date: string, time: string) => {
+    const at = new Date(`${date}T${time}:00`);
+    if (Number.isNaN(at.getTime()) || at.getTime() === s.getTime()) return;
+    const delta = at.getTime() - s.getTime();
+    void patch("hora", { at: at.toISOString() }, {
+      start: at.toISOString(),
+      end: e ? new Date(e.getTime() + delta).toISOString() : ev.end,
+      remindAt: ev.remindAt ? new Date(new Date(ev.remindAt).getTime() + delta).toISOString() : ev.remindAt,
+    });
+  };
+  const setLead = (m: number) => {
+    if (m === lead) return;
+    void patch("aviso", { before_min: m }, { remindAt: new Date(s.getTime() - m * 60_000).toISOString() });
+  };
+  const setTag = (name: string | null, color?: string) => {
+    if ((name ?? "") === (ev.tag ?? "")) return;
+    void patch("tag", { tag: name }, { tag: name ?? undefined, color: name ? color ?? ev.color : ev.color });
+  };
+  const remove = async () => {
+    const ok = await confirmDialog({
+      title: ev.recurring ? "Excluir todas as repetições?" : "Excluir este lembrete?",
+      body: ev.recurring ? `“${ev.title}” deixa de repetir e nenhum aviso futuro é enviado.` : `“${ev.title}” não será mais enviado no WhatsApp.`,
+      confirmLabel: "Excluir",
+      cancelLabel: "Manter",
+      danger: true,
+    });
+    if (!ok) return;
+    setBusy("excluir");
+    try {
+      await api(`/api/reminders/${ev.reminderId}`, { method: "DELETE" });
+      haptic(12);
+      onChanged();
+      close();
+    } catch (err) {
+      setBusy(null);
+      void alertDialog("Não deu para excluir", (err as Error).message);
+    }
+  };
+  const leads = lead == null || LEADS.includes(lead) ? LEADS : [...LEADS, lead].sort((a, b) => a - b);
+
   const future = s.getTime() > Date.now() - 3600_000;
   const chips: { id: string; label: string; run: () => void }[] = [];
   if (isReminder && !ev.recurring && !readonly && future) chips.push({ id: "adiar", label: "Adiar 1 hora", run: postpone });
   if (isReminder && !ev.recurring && !readonly && s.getTime() > Date.now() + 30 * 60_000 && lead !== 30) chips.push({ id: "avisar", label: "Avisar 30 min antes", run: notify30 });
-  if (canEdit) chips.push({ id: "editar", label: "Editar", run: onEdit });
+  if (canEdit && !inline) chips.push({ id: "editar", label: "Editar", run: onEdit });
   const link = ev.link;
 
   return createPortal(
@@ -788,8 +867,10 @@ function EventScreen({ ev, origin, readonly, onClose, onEdit, onChanged }: { ev:
       <div ref={sheet} className="pe" style={{ ["--ev" as string]: evColor(ev) }}>
         <div className="pe-top">
           <button className="pc-ico" aria-label="Fechar" onClick={() => close()}><Icon name="x" size={24} /></button>
-          <span className="pe-src"><i />{source}</span>
-          {canEdit ? (
+          <span className="pe-src"><i />{saved ? <span key={saved} className="pe-saved"><Icon name="check" size={15} /> Salvo</span> : source}</span>
+          {inline ? (
+            <button className="pc-ico" aria-label="Excluir lembrete" disabled={busy != null} onClick={() => void remove()}><Icon name="trash" size={22} /></button>
+          ) : canEdit ? (
             <button className="pc-ico" aria-label="Editar ou excluir" onClick={onEdit}><Icon name="more" size={24} /></button>
           ) : (
             <span className="pc-ico" aria-hidden="true" />
@@ -797,15 +878,96 @@ function EventScreen({ ev, origin, readonly, onClose, onEdit, onChanged }: { ev:
         </div>
         <div className="pe-body">
           <span className="pe-badge" aria-hidden="true"><Icon name={ev.kind === "holiday" ? "sparkle" : ev.kind === "google" ? "calendar" : ev.recurring ? "repeat" : "bell"} size={30} /></span>
-          <h2 className="pe-title">{ev.title}</h2>
-          <p className="pe-when">
-            <span>{dayLabel}</span>
-            <i aria-hidden="true" />
-            <span>{timeLabel}</span>
-          </p>
-          {lead != null && <p className="pe-when">Lembrar: {leadText(lead)}{ev.remindAt && !sameDay(new Date(ev.remindAt), s) ? ` (${new Date(ev.remindAt).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })})` : ""}</p>}
-          {ev.recurring && <p className="pe-when soft">Repete</p>}
-          {details && details !== ev.title && <p className="pe-desc">{details}</p>}
+          {inline ? (
+            <>
+              <textarea
+                className="pe-title pe-input"
+                name="titulo"
+                aria-label="Título"
+                rows={1}
+                maxLength={80}
+                enterKeyHint="done"
+                value={title}
+                ref={grow}
+                onChange={(x) => { setTitle(x.target.value); grow(x.target); }}
+                onKeyDown={(x) => { if (x.key === "Enter") { x.preventDefault(); x.currentTarget.blur(); } }}
+                onBlur={saveTitle}
+              />
+              {ev.recurring ? (
+                <>
+                  <p className="pe-when"><span>{dayLabel}</span><i aria-hidden="true" /><span>{timeLabel}</span></p>
+                  <p className="pe-when soft">Repete. Para mudar a repetição ou o horário, peça ao time aqui embaixo.</p>
+                </>
+              ) : (
+                <div className="pe-when pe-when-edit">
+                  <DateField id="pe-dia" title="Dia" value={key(s)} onChange={(d) => retime(d, hhmm(s))} />
+                  <i aria-hidden="true" />
+                  <TimeField id="pe-hora" title="Hora" value={hhmm(s)} onChange={(t) => retime(key(s), t)} />
+                </div>
+              )}
+              {!ev.recurring && (
+                <div className="pe-opts" role="radiogroup" aria-label="Aviso no WhatsApp">
+                  <span className="pe-opts-label"><Icon name="bell" size={15} /> Lembrar</span>
+                  {leads.map((m) => (
+                    <button key={m} type="button" role="radio" aria-checked={lead === m} className={lead === m ? "on" : ""} disabled={busy != null} onClick={() => { haptic(5); setLead(m); }}>
+                      {leadChip(m)}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {tags.length > 0 || ev.tag ? (
+                <div className="pe-opts" role="radiogroup" aria-label="Tag">
+                  <span className="pe-opts-label"><Icon name="hash" size={15} /> Tag</span>
+                  {tags.map((t) => (
+                    <button key={t.name} type="button" role="radio" aria-checked={ev.tag === t.name} className={ev.tag === t.name ? "on" : ""} disabled={busy != null} onClick={() => { haptic(5); setTag(ev.tag === t.name ? null : t.name, t.color); }}>
+                      <span className="tag-dot" style={{ background: t.color }} />{t.name}
+                    </button>
+                  ))}
+                  {newTag == null ? (
+                    <button type="button" onClick={() => { haptic(5); setNewTag(""); }}><Icon name="plus" size={13} /> Nova</button>
+                  ) : (
+                    <input
+                      className="pe-tag-new"
+                      name="tag"
+                      aria-label="Nome da nova tag"
+                      placeholder="Nome da tag"
+                      maxLength={24}
+                      autoFocus
+                      enterKeyHint="done"
+                      value={newTag}
+                      onChange={(x) => setNewTag(x.target.value)}
+                      onKeyDown={(x) => { if (x.key === "Enter") { x.preventDefault(); x.currentTarget.blur(); } }}
+                      onBlur={() => { const n = newTag.trim(); setNewTag(null); if (n) setTag(n); }}
+                    />
+                  )}
+                </div>
+              ) : null}
+              <textarea
+                className="pe-desc pe-input"
+                name="detalhes"
+                aria-label="Detalhes"
+                placeholder="Adicionar detalhes"
+                rows={1}
+                maxLength={1000}
+                value={desc}
+                ref={grow}
+                onChange={(x) => { setDesc(x.target.value); grow(x.target); }}
+                onBlur={saveDesc}
+              />
+            </>
+          ) : (
+            <>
+            <h2 className="pe-title">{ev.title}</h2>
+            <p className="pe-when">
+              <span>{dayLabel}</span>
+              <i aria-hidden="true" />
+              <span>{timeLabel}</span>
+            </p>
+            {lead != null && <p className="pe-when">Lembrar: {leadText(lead)}{ev.remindAt && !sameDay(new Date(ev.remindAt), s) ? ` (${new Date(ev.remindAt).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })})` : ""}</p>}
+            {ev.recurring && <p className="pe-when soft">Repete</p>}
+            {details && details !== ev.title && <p className="pe-desc">{details}</p>}
+            </>
+          )}
           {ev.location && <p className="pe-desc">Local: {ev.location}</p>}
           {ev.person && ev.kind !== "reminder" && <p className="pe-desc">Com {ev.person}</p>}
           <p className="pe-from">{ev.kind === "google" ? "Do seu Google Agenda" : ev.kind === "holiday" ? "Feriado nacional" : "Criado no Planejai"}</p>

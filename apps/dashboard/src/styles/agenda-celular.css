@@ -139,6 +139,28 @@
 .pe-when.soft { font-size: 16px; color: var(--muted); }
 .pe-desc { margin: 22px 0 0; font-size: 16.5px; line-height: 1.5; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .pe-desc + .pe-desc { margin-top: 10px; }
+/* editar ali mesmo: título e detalhes viram campo sem moldura; dia e hora abrem o seletor; aviso e tag em pílulas */
+.pe-input { display: block; width: 100%; border: none; outline: none; background: none; resize: none; padding: 0; font-family: inherit; color: var(--text); overflow: hidden; border-radius: 8px; transition: background .15s, box-shadow .15s; }
+.pe-input:focus { background: color-mix(in srgb, var(--ev) 8%, var(--panel)); box-shadow: 0 0 0 6px color-mix(in srgb, var(--ev) 8%, var(--panel)); }
+.pe-input::placeholder { color: var(--muted); opacity: .8; }
+textarea.pe-desc { color: var(--text); font-size: 16.5px !important; margin-top: 18px; }
+/* o celular força 16px em todo campo (contra o zoom do iPhone); o título editável mantém o tamanho do título */
+textarea.pe-title { font-size: 27px !important; font-weight: 700; line-height: 1.18; letter-spacing: -.02em; }
+.pe-when-edit .pk-field { border: none; background: none; box-shadow: none; padding: 0; min-height: 36px; width: auto; font: inherit; color: inherit; font-weight: 500; }
+.pe-when-edit .pk-field .ico { display: none; }
+.pe-when-edit .pk-field .pk-time-val { font-family: inherit; font-variant-numeric: tabular-nums; }
+.pe-when-edit .pk-field > span { border-bottom: 1.5px dashed color-mix(in srgb, var(--ev) 45%, transparent); padding-bottom: 1px; }
+.pe-when-edit .pk-field:active { opacity: .6; }
+.pe-opts { display: flex; align-items: center; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -26px 10px; padding: 2px 26px; }
+.pe-opts::-webkit-scrollbar { display: none; }
+.pe-opts-label { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--muted); margin-right: 2px; }
+.pe-opts button, .pe-tag-new { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 99px; border: 1px solid var(--border-2); background: var(--panel); color: var(--text); font: inherit; font-size: 14.5px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: transform .2s var(--pc-ease), background .2s, color .2s, border-color .2s; -webkit-tap-highlight-color: transparent; }
+.pe-opts button:active { transform: scale(.94); }
+.pe-opts button.on { background: var(--ev); border-color: transparent; color: #fff; }
+.pe-opts button.on .tag-dot { background: #fff !important; }
+.pe-opts button:disabled:not(.on) { opacity: .6; }
+.pe-tag-new { width: 140px; cursor: text; outline: none; border-color: var(--ev); font-size: 16px; }
+.pe-saved { display: inline-flex; align-items: center; gap: 5px; color: var(--ok, #1a7f37); animation: pc-title .3s var(--pc-ease); }
 .pe-from { margin: 24px 0 0; font-size: 16px; color: var(--muted); }
 .pe-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; color: var(--text); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
 .pe-foot { flex: none; padding: 10px 0 calc(14px + env(safe-area-inset-bottom)); }
