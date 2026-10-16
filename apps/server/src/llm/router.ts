@@ -213,6 +213,15 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     maxTokens: 4000,
   },
   {
+    task: "dev:vision",
+    label: "Esteira: Lia olhando imagens",
+    why: "Quando o chamado tem print ou foto, a Lia descreve cada imagem uma vez (textos, erros, o que está marcado) e o time inteiro lê só esse texto. Modelo de visão barato.",
+    model: "xiaomi/mimo-v2.6-flash",
+    fallbacks: ["google/gemini-3.8-flash"],
+    temperature: 0,
+    maxTokens: 1500,
+  },
+  {
     task: "dev:plan",
     label: "Esteira: Beto (arquiteto)",
     why: "Lê os arquivos que a Lia apontou, decide o passo a passo e responde as dúvidas do Caio. Muita entrada, pouca saída.",
@@ -229,6 +238,15 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     fallbacks: ["deepseek/deepseek-v4.1-flash"],
     temperature: 0.1,
     maxTokens: 16000,
+  },
+  {
+    task: "dev:code:simples",
+    label: "Esteira: Caio em chamado simples",
+    why: "Chamado simples (1 a 3 arquivos, mudança local): o Caio coda com o modelo barato. Se não sair, o chamado vira médio sozinho e passa pelo Beto e pela rota principal do Caio.",
+    model: "deepseek/deepseek-v4.1-flash",
+    fallbacks: ["google/gemini-3.8-flash"],
+    temperature: 0.1,
+    maxTokens: 8000,
   },
   {
     task: "dev:review",

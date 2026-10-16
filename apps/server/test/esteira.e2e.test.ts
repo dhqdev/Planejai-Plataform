@@ -9,11 +9,14 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 const enabled = Boolean(process.env.TEST_DATABASE_URL);
 
 const replies: Record<string, string[]> = {};
+const lastReq: Record<string, { model: string; req: any }> = {};
 vi.mock("../src/llm/openrouter.js", async (orig) => ({
   ...(await orig<typeof import("../src/llm/openrouter.js")>()),
   chatCompletion: vi.fn(async (_choice: any, req: any) => {
     const sys = String(req.messages[0].content);
-    const key = sys.startsWith("Você é a Lia")
+    const key = sys.startsWith("Você é a Lia, analista da esteira. O dono anexou")
+      ? "vision"
+      : sys.startsWith("Você é a Lia")
       ? "refine"
       : sys.startsWith("Você é o Beto, arquiteto da esteira: você planeja")
         ? "plan"
@@ -27,6 +30,7 @@ vi.mock("../src/llm/openrouter.js", async (orig) => ({
                 ? "fix"
                 : "code";
     const content = replies[key]?.shift() ?? "{}";
+    lastReq[key] = { model: _choice.model, req };
     return { message: { content }, model: `fake/${key}`, tokensIn: 1000, tokensOut: 200, costUsd: 0.01, finishReason: "stop" };
   }),
 }));
@@ -249,6 +253,55 @@ describe.skipIf(!enabled)("esteira de desenvolvimento (e2e)", () => {
     const execs = await db.many("SELECT trigger, user_id FROM executions WHERE trigger = 'esteira'");
     expect(execs.length).toBe(6);
     expect(execs.every((e) => e.user_id === null)).toBe(true);
+  });
+
+  it("chamado simples com print: a Lia olha a imagem, pula o Beto e a Vera e o Caio usa o modelo barato", async () => {
+    const owner = cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } }));
+    const png = `data:image/png;base64,${Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]).toString("base64")}`;
+    const svg = `data:image/png;base64,${Buffer.from("<svg onload=alert(1)>").toString("base64")}`;
+    const bad = await app.inject({ method: "POST", url: "/api/dev/tickets", headers: { cookie: owner }, payload: { title: "Botão", description: "O botão está escrito errado.", images: [svg] } });
+    expect(bad.statusCode).toBe(400);
+
+    replies.vision = [JSON.stringify({ imagens: ["Tela Soma com o botão escrito 'Subtrair' em vez de 'Somar'."] })];
+    replies.refine = [JSON.stringify({ titulo: "Botão Somar", problema: "texto errado", esperado: "Somar", criterios: ["botão diz Somar"], arquivos: ["src/soma.ts"], nivel: "simples", passos: ["trocar o texto"], testes: "-", recado: "Só o texto." })];
+    replies.code = [JSON.stringify({ resumo: "Troca o texto", commit: "Texto do botão", recado: "Uma linha.", arquivos: [{ path: "src/soma.ts", action: "edit", edits: [{ search: "a - b", replace: "a + b" }] }] })];
+    const created = await app.inject({ method: "POST", url: "/api/dev/tickets", headers: { cookie: owner }, payload: { title: "Botão", description: "O botão está escrito errado, olha o print.", images: [png] } });
+    expect(created.statusCode).toBe(200);
+    const id = created.json().id;
+    const { runStage } = await import("../src/devpipeline/pipeline.js");
+    const seen: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const t = await db.one("SELECT stage FROM dev_tickets WHERE id = $1", [id]);
+      seen.push(t.stage);
+      if (["pronto", "falhou", "precisa_de_voce", "cancelado"].includes(t.stage)) break;
+      await runStage({ ticketId: id, stage: t.stage });
+    }
+    expect(seen).toEqual(["fila", "entendendo", "codando", "abrindo_pr", "testando", "pronto"]);
+    // a imagem foi para o modelo de visão; a Lia e o Caio leem só a descrição
+    expect(lastReq.vision!.req.messages[1].content.some((p: any) => p.type === "image_url" && p.image_url.url === png)).toBe(true);
+    expect(String(lastReq.refine!.req.messages[1].content)).toContain("escrito 'Subtrair'");
+    expect(typeof lastReq.code!.req.messages[1].content).toBe("string");
+    expect(lastReq.code!.model).toBe("deepseek/deepseek-v4.1-flash");
+    const detail = (await app.inject({ method: "GET", url: `/api/dev/tickets/${id}`, headers: { cookie: owner } })).json();
+    expect(detail).toMatchObject({ level: "simples", level_auto: true });
+    expect(detail.image_notes).toContain("Subtrair");
+    expect(detail.steps.filter((s: any) => s.kind === "msg").map((s: any) => `${s.agent}>${s.to_agent}`)).toEqual(["lia>caio", "caio>tito", "tito>dono", "tito>dono"]);
+    expect(detail.steps.find((s: any) => s.name === "olhar as imagens").agent).toBe("lia");
+    const img = await app.inject({ method: "GET", url: `/api/dev/tickets/${id}/images/${detail.images[0]}`, headers: { cookie: owner } });
+    expect(img.statusCode).toBe(200);
+    expect(img.headers["content-type"]).toBe("image/png");
+  });
+
+  it("espera do CI substituída não duplica e etapa parada volta para a fila", async () => {
+    const { runStage, sweepStuck } = await import("../src/devpipeline/pipeline.js");
+    const row = await db.one("INSERT INTO dev_tickets (title, description, stage, poll_token, updated_at) VALUES ('x', 'y', 'testando', 'novo', now() - interval '2 hours') RETURNING id");
+    // job antigo da espera (token velho) não faz nada
+    await runStage({ ticketId: row.id, stage: "testando", token: "velho" });
+    expect((await db.one("SELECT poll_token FROM dev_tickets WHERE id = $1", [row.id])).poll_token).toBe("novo");
+    expect(await sweepStuck()).toBeGreaterThanOrEqual(1);
+    const t = await db.one("SELECT poll_token, updated_at > now() - interval '1 minute' AS touched FROM dev_tickets WHERE id = $1", [row.id]);
+    expect(t).toMatchObject({ poll_token: null, touched: true });
+    await db.query("UPDATE dev_tickets SET stage = 'cancelado' WHERE id = $1", [row.id]);
   });
 
   it("pedido vago para com perguntas e a resposta do dono faz recomeçar", async () => {

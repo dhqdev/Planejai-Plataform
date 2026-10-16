@@ -148,11 +148,13 @@ async function startChannelJobs(log: WorkerLog) {
   }
 
   // esteira de desenvolvimento do dono: uma etapa por vez, na ordem dos chamados (a espera do CI volta para a fila)
-  await boss.work<{ ticketId: number; stage: string; attempt?: number }>(QUEUES.dev, { batchSize: 1, pollingIntervalSeconds: 5 }, async ([job]) => {
+  await boss.work<{ ticketId?: number; stage?: string; attempt?: number; token?: string; sweep?: boolean }>(QUEUES.dev, { batchSize: 1, pollingIntervalSeconds: 5 }, async ([job]) => {
     if (!job) return;
     const { runStage } = await import("../devpipeline/pipeline.js");
-    await runStage(job.data);
+    await runStage(job.data ?? {});
   });
+  // rede de segurança: etapa parada há mais de 40 min (worker caiu no meio) volta para a fila
+  await boss.schedule(QUEUES.dev, "*/10 * * * *", { sweep: true });
 
   // Telegram sem webhook (sem https público): só um processo pode buscar as mensagens
   startTelegramPolling(log);

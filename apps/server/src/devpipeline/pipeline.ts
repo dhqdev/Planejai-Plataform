@@ -3,7 +3,7 @@ import { many, one, query } from "../db/pool.js";
 import { getCredentials } from "../integrations/registry.js";
 import { chatCompletion, LlmError } from "../llm/openrouter.js";
 import { resolveModel } from "../llm/router.js";
-import type { ChatMessage, ChatResult } from "../llm/types.js";
+import type { ChatMessage, ChatResult, ContentPart } from "../llm/types.js";
 import { notify } from "../notifications.js";
 import { getBoss, QUEUES } from "../queue/boss.js";
 import { applyEdit, branchName, failureExcerpt, type FileEdit, lineDiff, parseModelJson, pathProblem } from "./edits.js";
@@ -60,14 +60,48 @@ export const STAGE_AGENT: Record<string, string> = {
 const RUNNABLE = new Set(["fila", "entendendo", "planejando", "codando", "revisando", "abrindo_pr", "testando", "corrigindo"]);
 export const FINAL = new Set(["pronto", "falhou", "cancelado", "precisa_de_voce"]);
 
-/** Limites: o CI do repositório leva uns 10 min; até 2 rodadas de conserto e 1 de revisão. */
-const MAX_FIX_ROUNDS = 2;
-const MAX_REVIEW_ROUNDS = 1;
+/**
+ * Nível do chamado: decide quantas etapas rodam, quanto do repositório cada agente lê e qual modelo coda.
+ * Simples pula o Beto (a Lia já diz os passos) e a Vera quando o diff é pequeno, e o Caio usa um modelo barato.
+ * O dono escolhe ao abrir o chamado ou deixa "automático" e a Lia decide.
+ */
+export const LEVELS = {
+  simples: { label: "Simples", plan: false, reviewRounds: 0, fixRounds: 1, files: 6, context: 60_000, guide: 8_000, code: "dev:code:simples", imagesToCode: false },
+  medio: { label: "Médio", plan: true, reviewRounds: 1, fixRounds: 2, files: 12, context: 120_000, guide: 16_000, code: "dev:code", imagesToCode: false },
+  complexo: { label: "Complexo", plan: true, reviewRounds: 2, fixRounds: 3, files: 20, context: 200_000, guide: 24_000, code: "dev:code", imagesToCode: true },
+} as const;
+export type Level = keyof typeof LEVELS;
+const levelOf = (t: any) => LEVELS[(t.level as Level) in LEVELS ? (t.level as Level) : "medio"];
+/** Diff pequeno num chamado simples vai direto para o PR, sem a Vera (o CI ainda confere). */
+const SMALL_DIFF_LINES = 60;
+
+/** Imagens anexadas ao chamado: até 4, só formatos de foto/print (sem SVG), até 4 MB cada. */
+export const MAX_IMAGES = 4;
+const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+const IMAGE_MAGIC: [string, (b: Buffer) => boolean][] = [
+  ["image/png", (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))],
+  ["image/jpeg", (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff],
+  ["image/gif", (b) => b.subarray(0, 4).toString("latin1") === "GIF8"],
+  ["image/webp", (b) => b.subarray(0, 4).toString("latin1") === "RIFF" && b.subarray(8, 12).toString("latin1") === "WEBP"],
+];
+
+/** data:image/...;base64 → bytes conferidos pelo conteúdo (não pelo que o navegador diz). */
+export function decodeImage(dataUrl: string): { mime: string; data: Buffer } | { error: string } {
+  const m = String(dataUrl ?? "").match(/^data:image\/[\w.+-]+;base64,([A-Za-z0-9+/=\s]+)$/);
+  if (!m) return { error: "Imagem em formato que não dá para ler." };
+  const data = Buffer.from(m[1]!, "base64");
+  if (!data.length || data.length > IMAGE_MAX_BYTES) return { error: "Cada imagem pode ter até 4 MB." };
+  const kind = IMAGE_MAGIC.find(([, ok]) => ok(data));
+  return kind ? { mime: kind[0], data } : { error: "Só PNG, JPG, WEBP ou GIF." };
+}
+
+/** Limites: o CI do repositório leva uns 10 min; rodadas de conserto e revisão dependem do nível. */
 const CI_POLL_SECONDS = 60;
 const CI_TIMEOUT_MIN = 45;
 const NO_CI_MIN = 10;
 const FILE_MAX = 60_000;
-const CONTEXT_MAX = 160_000;
+/** Etapa parada além disso (worker caiu no meio) volta para a fila sozinha. */
+const STUCK_MIN = 40;
 const DEFAULT_COST_CAP = 2;
 
 export interface DevConfig {
@@ -128,7 +162,7 @@ let checked: { at: number; key: string; problems: string[]; warnings: string[]; 
 export async function devStatus(fresh = false) {
   const cfg = await devConfig();
   const settings = await devSettings();
-  const base = { agents: AGENTS, stageAgent: STAGE_AGENT, stages: STAGE_LABEL, settings };
+  const base = { agents: AGENTS, stageAgent: STAGE_AGENT, stages: STAGE_LABEL, levels: Object.fromEntries(Object.entries(LEVELS).map(([k, v]) => [k, v.label])), settings };
   if ("missing" in cfg) return { ...base, ready: false, missing: cfg.missing, tokenFrom: cfg.tokenFrom ?? null, needRepo: Boolean(cfg.needRepo), problems: [] as string[] };
   const key = `${cfg.tokenFrom}:${cfg.gh.repo.owner}/${cfg.gh.repo.name}:${cfg.base}`;
   if (fresh || !checked || checked.key !== key || Date.now() - checked.at > 60_000) {
@@ -155,19 +189,48 @@ export async function devStatus(fresh = false) {
 
 // ============================== chamados ==============================
 
-export async function createTicket(t: { title: string; description: string; kind?: string }) {
+export async function createTicket(t: { title: string; description: string; kind?: string; level?: string; images?: { mime: string; data: Buffer }[] }) {
   const kind = ["bug", "melhoria", "nova"].includes(t.kind ?? "") ? t.kind! : "melhoria";
-  const row = await one<{ id: number }>("INSERT INTO dev_tickets (title, description, kind) VALUES ($1, $2, $3) RETURNING id", [
+  const level = t.level && t.level in LEVELS ? t.level : null;
+  const row = await one<{ id: number }>("INSERT INTO dev_tickets (title, description, kind, level, level_auto) VALUES ($1, $2, $3, $4, $5) RETURNING id", [
     t.title.trim().slice(0, 160),
     t.description.trim().slice(0, 8000),
     kind,
+    level,
+    !level,
   ]);
+  for (const img of (t.images ?? []).slice(0, MAX_IMAGES)) {
+    await query("INSERT INTO dev_ticket_images (ticket_id, mime, data) VALUES ($1, $2, $3)", [row!.id, img.mime, img.data]);
+  }
   await enqueue(row!.id, "fila");
   return row!.id;
 }
 
-async function enqueue(ticketId: number, stage: string, startAfter = 0, attempt = 0) {
-  await (await getBoss()).send(QUEUES.dev, { ticketId, stage, attempt }, { startAfter, retryLimit: 0, expireInSeconds: 30 * 60 });
+async function enqueue(ticketId: number, stage: string, startAfter = 0, attempt = 0, token?: string) {
+  await (await getBoss()).send(QUEUES.dev, { ticketId, stage, attempt, ...(token ? { token } : {}) }, { startAfter, retryLimit: 0, expireInSeconds: 30 * 60 });
+}
+
+export async function ticketImage(ticketId: number, imageId: number) {
+  return one<{ mime: string; data: Buffer }>("SELECT mime, data FROM dev_ticket_images WHERE id = $1 AND ticket_id = $2", [imageId, ticketId]);
+}
+
+/** As imagens do chamado como data URL, para o modelo enxergar. */
+async function imagesOf(ticketId: number): Promise<string[]> {
+  const rows = await many<{ mime: string; data: Buffer }>("SELECT mime, data FROM dev_ticket_images WHERE ticket_id = $1 ORDER BY id LIMIT $2", [ticketId, MAX_IMAGES]);
+  return rows.map((r) => `data:${r.mime};base64,${r.data.toString("base64")}`);
+}
+
+/**
+ * Rede de segurança (de 10 em 10 min): etapa que ninguém tocou há mais de 40 min (o worker caiu ou o job venceu)
+ * volta para a fila. A espera do CI troca o poll_token, então um job antigo dela não duplica a espera.
+ */
+export async function sweepStuck() {
+  const rows = await many<{ id: number; stage: string }>(
+    "UPDATE dev_tickets SET updated_at = now(), poll_token = NULL WHERE stage = ANY($1) AND updated_at < now() - make_interval(mins => $2) RETURNING id, stage",
+    [[...RUNNABLE], STUCK_MIN],
+  );
+  for (const r of rows) await enqueue(r.id, r.stage);
+  return rows.length;
 }
 
 async function setStage(id: number, stage: string, extra: Record<string, unknown> = {}) {
@@ -203,16 +266,22 @@ export async function answerTicket(id: number, text: string) {
   const t = await one("SELECT stage FROM dev_tickets WHERE id = $1", [id]);
   if (!t || !FINAL.has(t.stage) || t.stage === "pronto") return false;
   await query("UPDATE dev_tickets SET description = description || $2 WHERE id = $1", [id, `\n\nResposta do dono: ${text.trim().slice(0, 4000)}`]);
-  await setStage(id, "entendendo", { error: null, review_rounds: 0 });
+  await setStage(id, "entendendo", { error: null, review_rounds: 0, image_notes: null });
   return true;
 }
 
 // ============================== worker ==============================
 
 /** Um job da fila: roda a etapa se o chamado ainda está nela (job repetido ou atrasado não faz nada). */
-export async function runStage(job: { ticketId: number; stage: string; attempt?: number }) {
+export async function runStage(job: { ticketId?: number; stage?: string; attempt?: number; token?: string; sweep?: boolean }) {
+  if (job.sweep) {
+    await sweepStuck();
+    return;
+  }
   const t = await one("SELECT * FROM dev_tickets WHERE id = $1", [job.ticketId]);
   if (!t || t.stage !== job.stage || !RUNNABLE.has(t.stage)) return;
+  // espera do CI que já foi substituída por outra (rede de segurança ou retomada): não duplica
+  if (job.token && t.poll_token && job.token !== t.poll_token) return;
   const cfg = await devConfig();
   if ("missing" in cfg) {
     await setStage(t.id, "falhou", { error: cfg.missing, failed_stage: t.stage });
@@ -235,6 +304,7 @@ export async function runStage(job: { ticketId: number; stage: string; attempt?:
     await run.tracer?.error(err);
     const transient = (err instanceof LlmError && (!err.status || err.status === 429 || err.status >= 500)) || (err instanceof GithubError && err.status >= 500);
     if (transient && (job.attempt ?? 0) < 2) {
+      await query("UPDATE dev_tickets SET updated_at = now() WHERE id = $1", [t.id]);
       await enqueue(t.id, t.stage, 60, (job.attempt ?? 0) + 1);
       return;
     }
@@ -246,7 +316,18 @@ export async function runStage(job: { ticketId: number; stage: string; attempt?:
 }
 
 /** Quem fala por cada rota (a mesma etapa pode chamar outro agente, ex.: o Beto responde o Caio). */
-const TASK_AGENT: Record<string, string> = Object.fromEntries(Object.entries(AGENTS).map(([id, a]) => [a.route, id]));
+const TASK_AGENT: Record<string, string> = {
+  ...Object.fromEntries(Object.entries(AGENTS).map(([id, a]) => [a.route, id])),
+  "dev:vision": "lia",
+  "dev:code:simples": "caio",
+};
+
+const textOnly = (m: ChatMessage): ChatMessage =>
+  m.role === "user" && Array.isArray(m.content) ? { role: "user", content: m.content.map((p) => (p.type === "text" ? p.text : "[imagem omitida]")).join("\n") } : m;
+
+/** O que vai para Execuções: as imagens viram "[imagem]" (base64 não enche o log). */
+const traceInput = (m: ChatMessage | undefined) =>
+  typeof m?.content === "string" || m?.content == null ? m?.content : m.content.map((p) => (p.type === "text" ? p.text : "[imagem]")).join("\n");
 
 /** Contexto de uma etapa: o chamado, a config e o registro de custo de cada chamada de modelo. */
 class StageRun {
@@ -255,15 +336,23 @@ class StageRun {
   constructor(public t: any, readonly cfg: DevConfig) {}
 
   /** Chamada de modelo com custo em Execuções e em dev_ticket_steps (o painel de custos lê daqui). */
-  async llm(task: string, name: string, messages: ChatMessage[], summary?: (r: ChatResult) => string): Promise<ChatResult> {
-    const choice = await resolveModel(task);
+  async llm(task: string, name: string, messages: ChatMessage[], summary?: (r: ChatResult) => string, opts: { maxTokens?: number } = {}): Promise<ChatResult> {
+    const routed = await resolveModel(task);
+    const choice = opts.maxTokens ? { ...routed, maxTokens: opts.maxTokens } : routed;
     this.tracer ??= await Tracer.start({ trigger: "esteira", input: `#${this.t.id} ${this.t.title} · ${STAGE_LABEL[this.t.stage]}`, noCharge: true });
     const agent = TASK_AGENT[task] ?? STAGE_AGENT[this.t.stage] ?? "esteira";
-    const step = await this.tracer.step({ agent: `esteira:${agent}`, type: "llm", name, model: choice.model, input: messages.at(-1)?.content });
+    const step = await this.tracer.step({ agent: `esteira:${agent}`, type: "llm", name, model: choice.model, input: traceInput(messages.at(-1)) });
     const started = Date.now();
     let r: ChatResult;
     try {
-      r = await chatCompletion(choice, { messages, responseFormat: { type: "json_object" } });
+      try {
+        r = await chatCompletion(choice, { messages, responseFormat: { type: "json_object" } });
+      } catch (err) {
+        // modelo da rota não lê imagem (trocado em Modelos): segue só com o texto, que já traz o que a Lia viu
+        const withImages = messages.some((m) => Array.isArray(m.content) && m.content.some((p) => p.type === "image_url"));
+        if (!(withImages && err instanceof LlmError && err.status && err.status >= 400 && err.status < 500 && err.status !== 429)) throw err;
+        r = await chatCompletion(choice, { messages: messages.map(textOnly), responseFormat: { type: "json_object" } });
+      }
     } catch (err) {
       await step.fail(err);
       await this.record(name, { status: "error", summary: err instanceof Error ? err.message.slice(0, 300) : String(err), durationMs: Date.now() - started, model: choice.model, agent });
@@ -272,6 +361,28 @@ class StageRun {
     await step.ok(r.message.content, { model: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut, costUsd: r.costUsd });
     await this.record(name, { model: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut, costUsd: r.costUsd, durationMs: Date.now() - started, summary: summary?.(r), agent });
     return r;
+  }
+
+  /**
+   * Chamada que tem de voltar um JSON com `ok(json)` verdadeiro. Veio cortada (teto de saída) ou fora do formato:
+   * pede de novo uma vez, com mais espaço se foi corte. Devolve null se nem assim.
+   */
+  async llmJson<T = any>(task: string, name: string, messages: ChatMessage[], ok: (j: any) => boolean, summary?: (j: any) => string): Promise<T | null> {
+    const sum = (r: ChatResult) => summary?.(parseModelJson(r.message.content) ?? {}) ?? "";
+    let r = await this.llm(task, name, messages, sum);
+    let json = parseModelJson(r.message.content);
+    if (json && ok(json) && r.finishReason !== "length") return json as T;
+    const cut = r.finishReason === "length";
+    const max = (await resolveModel(task)).maxTokens;
+    r = await this.llm(
+      task,
+      `${name} (de novo)`,
+      [...messages, { role: "assistant", content: r.message.content ?? "" }, { role: "user", content: cut ? "A resposta veio cortada. Mande o JSON completo de novo, mais enxuto." : "Não veio no formato pedido. Responda só com o JSON pedido, completo." }],
+      sum,
+      cut && max ? { maxTokens: Math.min(max * 2, 32_000) } : {},
+    );
+    json = parseModelJson(r.message.content);
+    return json && ok(json) ? (json as T) : null;
   }
 
   /** Linha na linha do tempo do chamado (com ou sem modelo). */
@@ -308,8 +419,11 @@ class StageRun {
     await setStage(this.t.id, stage, extra);
   }
 
+  /** Volta para a fila daqui a pouco (espera do CI). O token novo invalida qualquer job antigo da mesma espera. */
   async later(seconds: number) {
-    await enqueue(this.t.id, this.t.stage, seconds);
+    const token = Math.random().toString(36).slice(2, 12);
+    await query("UPDATE dev_tickets SET updated_at = now(), poll_token = $2 WHERE id = $1", [this.t.id, token]);
+    await enqueue(this.t.id, this.t.stage, seconds, 0, token);
   }
 }
 
@@ -322,18 +436,19 @@ async function repoContext(run: StageRun) {
   const sha = await gh.branchSha(await gh.resolveBase(run.cfg.base));
   const tree = (await gh.tree(sha)).filter((f) => !SKIP.test(f.path));
   const [rules, skill] = await Promise.all([gh.file("CLAUDE.md", sha), gh.file(".claude/skills/planejai/SKILL.md", sha)]);
-  return { sha, tree, guide: [rules, skill].filter(Boolean).join("\n\n---\n\n").slice(0, 24_000) };
+  return { sha, tree, guide: [rules, skill].filter(Boolean).join("\n\n---\n\n").slice(0, levelOf(run.t).guide) };
 }
 
 /** Lê os arquivos pedidos (só os que existem), até o teto de contexto. */
 async function readFiles(run: StageRun, paths: string[], ref: string, known: Set<string>) {
   const out: { path: string; content: string }[] = [];
   let total = 0;
-  for (const p of [...new Set(paths)].filter((p) => known.has(p)).slice(0, 20)) {
+  const lv = levelOf(run.t);
+  for (const p of [...new Set(paths)].filter((p) => known.has(p)).slice(0, lv.files)) {
     const c = await run.cfg.gh.file(p, ref);
     if (c == null) continue;
     const content = c.length > FILE_MAX ? `${c.slice(0, FILE_MAX)}\n…(arquivo cortado em ${FILE_MAX} caracteres)` : c;
-    if (total + content.length > CONTEXT_MAX) break;
+    if (total + content.length > lv.context) break;
     total += content.length;
     out.push({ path: p, content });
   }
@@ -345,7 +460,8 @@ const filesBlock = (files: { path: string; content: string }[]) => files.map((f)
 /** Título do analista quando é um título de verdade; senão o que o dono escreveu. */
 const titleOf = (t: any): string => (String(t.spec?.titulo ?? "").trim().length > 3 ? String(t.spec.titulo).trim() : t.title);
 
-const ticketBlock = (t: any) => `Chamado #${t.id} (${t.kind}): ${t.title}\n\n${t.description}`;
+const ticketBlock = (t: any) =>
+  `Chamado #${t.id} (${t.kind}): ${t.title}\n\n${t.description}${t.image_notes ? `\n\nImagens que o dono anexou (descritas pela Lia):\n${t.image_notes}` : ""}`;
 const specBlock = (s: any) =>
   s
     ? `Problema: ${s.problema}\nEsperado: ${s.esperado}\nCritérios de aceite:\n${(s.criterios ?? []).map((c: string) => `- ${c}`).join("\n")}${s.riscos?.length ? `\nRiscos: ${s.riscos.join("; ")}` : ""}`
@@ -372,10 +488,15 @@ async function inbox(run: StageRun, to: string) {
 const STAGES = {
   fila: async () => "na fila",
 
-  /** Analista: reescreve o pedido como problema + critérios de aceite e aponta os arquivos prováveis. */
+  /** Analista: olha as imagens (uma vez), reescreve o pedido com critérios de aceite, aponta os arquivos e decide o nível. */
   entendendo: async (run: StageRun) => {
     const ctx = await repoContext(run);
-    const r = await run.llm(
+    await describeImages(run);
+    const fixed = run.t.level_auto ? null : levelOf(run.t);
+    const levelRule = fixed
+      ? `O dono marcou este chamado como ${fixed.label.toLowerCase()}: use "nivel": "${run.t.level}".`
+      : 'Decida o nível: "simples" (1 a 3 arquivos, mudança local e óbvia: texto, estilo, uma condição, um campo), "medio" (alguns arquivos, lógica nova pequena) ou "complexo" (vários módulos, migração, regra de negócio, risco de quebrar o que funciona). Na dúvida entre dois, escolha o maior.';
+    const spec = await run.llmJson(
       "dev:refine",
       "entender o pedido",
       [
@@ -383,25 +504,36 @@ const STAGES = {
           role: "system",
           content:
             "Você é a Lia, analista de uma esteira de desenvolvimento automática (time: Lia analista, Beto arquiteto, Caio desenvolvedor, Vera revisora, Tito testes). Recebe um chamado do dono do produto e o descreve melhor para um desenvolvedor: problema, comportamento esperado, critérios de aceite verificáveis e os arquivos do repositório que provavelmente precisam mudar (só caminhos que existem na lista). Escreva em português do Brasil. Só faça perguntas se for impossível seguir sem a resposta; detalhe que dá para decidir, decida e diga qual escolheu.\n" +
-            'Responda só com JSON: {"titulo": "...", "problema": "...", "esperado": "...", "criterios": ["..."], "arquivos": ["caminho"], "riscos": ["..."], "perguntas": ["..."], "bloqueado": false, "recado": "uma ou duas frases para o Beto (arquiteto): o que importa e onde começar"}',
+            `${levelRule} Em chamado simples não tem arquiteto: dê você "passos" (o passo a passo curto para o Caio) e "testes".\n` +
+            'Responda só com JSON: {"titulo": "...", "problema": "...", "esperado": "...", "criterios": ["..."], "arquivos": ["caminho"], "riscos": ["..."], "nivel": "medio", "passos": ["..."], "testes": "...", "perguntas": ["..."], "bloqueado": false, "recado": "uma ou duas frases para o próximo do time (o Beto; ou o Caio se for simples): o que importa e onde começar"}',
         },
         { role: "user", content: `Guia do repositório:\n${ctx.guide}\n\nArquivos do repositório:\n${ctx.tree.map((f) => f.path).join("\n")}\n\n${ticketBlock(run.t)}` },
       ],
-      (r) => parseModelJson(r.message.content)?.titulo ?? "",
+      (j) => Boolean(j?.problema),
+      (j) => j?.titulo ?? "",
     );
-    const spec = parseModelJson(r.message.content);
     if (!spec?.problema) throw new Error("O analista não devolveu a descrição no formato esperado.");
     const known = new Set(ctx.tree.map((f) => f.path));
     spec.arquivos = (Array.isArray(spec.arquivos) ? spec.arquivos : []).filter((p: string) => known.has(p)).slice(0, 12);
+    const level: Level = fixed ? run.t.level : spec.nivel in LEVELS ? spec.nivel : "medio";
+    spec.nivel = level;
     if (spec.bloqueado && spec.perguntas?.length) {
       await run.say("lia", "dono", `Antes de seguir preciso saber: ${spec.perguntas.join(" ")}`);
-      await run.next("precisa_de_voce", { spec, failed_stage: "entendendo" });
+      await run.next("precisa_de_voce", { spec, level, failed_stage: "entendendo" });
       await notify({ userId: null, kind: "esteira", title: `Esteira: #${run.t.id} tem perguntas`, body: spec.perguntas.join(" "), link: `/esteira?t=${run.t.id}` });
       return `perguntas: ${spec.perguntas.join(" | ")}`;
     }
+    const passos = (Array.isArray(spec.passos) ? spec.passos : []).filter(Boolean);
+    if (!LEVELS[level].plan && passos.length && spec.arquivos.length) {
+      // simples: a Lia já disse o que fazer, o Beto não entra (economiza uma chamada que lê os arquivos)
+      const plan = { passos, arquivos: spec.arquivos.map((p: string) => ({ path: p, o_que: "" })), ler: [], testes: spec.testes ?? "" };
+      await run.say("lia", "caio", spec.recado || passos.join(" "));
+      await run.next("codando", { spec, plan, level });
+      return `${spec.titulo ?? run.t.title} (simples)`;
+    }
     await run.say("lia", "beto", spec.recado || `${spec.problema} Esperado: ${spec.esperado}`);
-    await run.next("planejando", { spec });
-    return spec.titulo ?? run.t.title;
+    await run.next("planejando", { spec, level: LEVELS[level].plan ? level : "medio" });
+    return `${spec.titulo ?? run.t.title} (${LEVELS[level].label.toLowerCase()})`;
   },
 
   /** Planejador: lê os arquivos apontados e decide o passo a passo e onde mexer. */
@@ -409,7 +541,7 @@ const STAGES = {
     const ctx = await repoContext(run);
     const known = new Set(ctx.tree.map((f) => f.path));
     const files = await readFiles(run, run.t.spec?.arquivos ?? [], ctx.sha, known);
-    const r = await run.llm(
+    const plan = await run.llmJson(
       "dev:plan",
       "planejar a mudança",
       [
@@ -424,9 +556,9 @@ const STAGES = {
           content: `Guia do repositório:\n${ctx.guide}\n\nArquivos do repositório:\n${ctx.tree.map((f) => f.path).join("\n")}\n\n${ticketBlock(run.t)}\n\n${specBlock(run.t.spec)}${await inbox(run, "beto")}\n\nArquivos lidos:\n${filesBlock(files)}`,
         },
       ],
-      (r) => `${parseModelJson(r.message.content)?.passos?.length ?? 0} passos`,
+      (j) => Boolean(j?.passos?.length),
+      (j) => `${j?.passos?.length ?? 0} passos`,
     );
-    const plan = parseModelJson(r.message.content);
     if (!plan?.passos?.length) throw new Error("O planejador não devolveu o plano no formato esperado.");
     plan.ler = (Array.isArray(plan.ler) ? plan.ler : []).filter((p: string) => known.has(p)).slice(0, 10);
     await run.say("beto", "caio", plan.recado || plan.passos.join(" "));
@@ -441,6 +573,7 @@ const STAGES = {
     const plan = run.t.plan ?? {};
     const wanted = [...(run.t.spec?.arquivos ?? []), ...(plan.arquivos ?? []).map((a: any) => a?.path), ...(plan.ler ?? [])].filter(Boolean);
     const files = await readFiles(run, wanted, ctx.sha, known);
+    const lv = levelOf(run.t);
     const review = run.t.review?.problemas?.length && !run.t.review.aprovado ? `\n\nO revisor recusou a versão anterior por:\n${run.t.review.problemas.map((p: string) => `- ${p}`).join("\n")}\nResolva esses pontos.` : "";
     const messages: ChatMessage[] = [
       {
@@ -449,10 +582,26 @@ const STAGES = {
       },
       {
         role: "user",
-        content: `Guia do repositório:\n${ctx.guide}\n\n${ticketBlock(run.t)}\n\n${specBlock(run.t.spec)}\n\nPlano:\n${(plan.passos ?? []).map((p: string) => `- ${p}`).join("\n")}\nOnde: ${(plan.arquivos ?? []).map((a: any) => `${a.path}: ${a.o_que}`).join("; ")}\nTestes: ${plan.testes ?? "-"}${review}${await inbox(run, "caio")}\n\nArquivos atuais:\n${filesBlock(files)}`,
+        content: withImages(lv.imagesToCode ? await imagesOf(run.t.id) : [], `Guia do repositório:\n${ctx.guide}\n\n${ticketBlock(run.t)}\n\n${specBlock(run.t.spec)}\n\nPlano:\n${(plan.passos ?? []).map((p: string) => `- ${p}`).join("\n")}\nOnde: ${(plan.arquivos ?? []).map((a: any) => `${a.path}: ${a.o_que}`).join("; ")}\nTestes: ${plan.testes ?? "-"}${review}${await inbox(run, "caio")}\n\nArquivos atuais:\n${filesBlock(files)}`),
       },
     ];
-    const result = await writeChanges(run, messages, ctx.sha, known, "escrever o código", { canAsk: true, files, ctx });
+    let result: Awaited<ReturnType<typeof writeChanges>>;
+    try {
+      result = await writeChanges(run, messages, ctx.sha, known, "escrever o código", { canAsk: lv.plan, files, ctx }, lv.code);
+    } catch (err) {
+      // simples que não saiu com o modelo barato: era maior do que parecia, vira médio e passa pelo Beto
+      if (lv.plan || !(err instanceof CodeError)) throw err;
+      await run.say("caio", "beto", "Esse ficou maior do que parecia e não consegui fechar sozinho. Pode planejar?");
+      await run.next("planejando", { level: "medio", plan: null });
+      return "virou médio";
+    }
+    const changed = result.changes.files.reduce((n, f) => n + f.diff.split("\n").filter((l) => /^[+-](?!\+\+ |-- )/.test(l)).length, 0);
+    if (!lv.plan && changed <= SMALL_DIFF_LINES && result.changes.files.length <= 3) {
+      await run.record("revisão", { summary: `Pulada: chamado simples com diff pequeno (${changed} linhas). O CI confere.` });
+      await run.say("caio", "tito", result.recado || result.resumo);
+      await run.next("abrindo_pr", { changes: result.changes, review: { aprovado: true, problemas: [], observacoes: "Revisão pulada: chamado simples com diff pequeno." } });
+      return result.resumo;
+    }
     await run.say("caio", "vera", result.recado || result.resumo);
     await run.next("revisando", { changes: result.changes });
     return result.resumo;
@@ -461,7 +610,7 @@ const STAGES = {
   /** Revisor: lê o diff contra os critérios. Recusou: volta uma vez para o desenvolvedor com os pontos. */
   revisando: async (run: StageRun) => {
     const diff = (run.t.changes?.files ?? []).map((f: any) => f.diff).join("\n\n").slice(0, 60_000);
-    const r = await run.llm(
+    const checked = await run.llmJson(
       "dev:review",
       "revisar o código",
       [
@@ -473,10 +622,12 @@ const STAGES = {
         },
         { role: "user", content: `${ticketBlock(run.t)}\n\n${specBlock(run.t.spec)}${await inbox(run, "vera")}\n\nDiff:\n${diff}` },
       ],
-      (r) => (parseModelJson(r.message.content)?.aprovado === false ? "pediu ajustes" : "aprovou"),
+      (j) => typeof j?.aprovado === "boolean",
+      (j) => (j?.aprovado === false ? "pediu ajustes" : "aprovou"),
     );
-    const review = parseModelJson(r.message.content) ?? { aprovado: true, problemas: [] };
-    if (review.aprovado === false && review.problemas?.length && run.t.review_rounds < MAX_REVIEW_ROUNDS) {
+    const review = checked ?? { aprovado: true, problemas: [], observacoes: "A revisão não veio no formato; segue para o CI conferir." };
+    review.problemas = Array.isArray(review.problemas) ? review.problemas : [];
+    if (review.aprovado === false && review.problemas.length && run.t.review_rounds < levelOf(run.t).reviewRounds) {
       await run.say("vera", "caio", `Volta com isso, por favor: ${review.problemas.join(" ")}`);
       await run.next("codando", { review, review_rounds: run.t.review_rounds + 1 });
       return `pediu ajustes: ${review.problemas.join("; ")}`;
@@ -550,10 +701,11 @@ const STAGES = {
     }
     const failure = excerpts.join("\n\n").slice(0, 16_000) || `Falhou: ${bad.map((r) => `${r.name} (${r.conclusion})`).join(", ")}`;
     await run.record("testes", { status: "error", durationMs: Date.now() - since, summary: `CI vermelho: ${bad.map((r) => r.name).join(", ")}`, detail: { log: failure, runs: bad } });
-    if (t.fix_rounds >= MAX_FIX_ROUNDS) {
-      await run.say("tito", "dono", `O CI continuou vermelho depois de ${MAX_FIX_ROUNDS} consertos. Deixei o PR para você olhar.`);
-      await run.next("falhou", { ci: { ...t.ci, status: "vermelho", log: failure }, error: `O CI continuou vermelho depois de ${MAX_FIX_ROUNDS} consertos.`, failed_stage: "corrigindo" });
-      await gh.comment(t.pr_number, `A esteira tentou consertar ${MAX_FIX_ROUNDS} vezes e o CI continua vermelho. Fica para revisão manual.\n\n---\n_Esteira de desenvolvimento do Planejai_`).catch(() => {});
+    const maxFix = levelOf(t).fixRounds;
+    if (t.fix_rounds >= maxFix) {
+      await run.say("tito", "dono", `O CI continuou vermelho depois de ${maxFix} conserto${maxFix > 1 ? "s" : ""}. Deixei o PR para você olhar.`);
+      await run.next("falhou", { ci: { ...t.ci, status: "vermelho", log: failure }, error: `O CI continuou vermelho depois de ${maxFix} conserto${maxFix > 1 ? "s" : ""}.`, failed_stage: "corrigindo" });
+      await gh.comment(t.pr_number, `A esteira tentou consertar ${maxFix} vez${maxFix > 1 ? "es" : ""} e o CI continua vermelho. Fica para revisão manual.\n\n---\n_Esteira de desenvolvimento do Planejai_`).catch(() => {});
       await notify({ userId: null, kind: "esteira", title: `Esteira: #${t.id} com teste vermelho`, body: t.title, link: `/esteira?t=${t.id}` });
       return "vermelho, sem mais consertos";
     }
@@ -609,10 +761,11 @@ async function writeChanges(
   known: Set<string>,
   name: string,
   ask?: { canAsk: boolean; files: { path: string; content: string }[]; ctx: { guide: string } },
+  task = "dev:code",
 ) {
   let asked = false;
   for (let round = 0; round < 2; round++) {
-    const r = await run.llm("dev:code", round ? `${name} (2ª tentativa)` : name, messages, (r) => parseModelJson(r.message.content)?.resumo ?? parseModelJson(r.message.content)?.pergunta ?? "");
+    const r = await run.llm(task, round ? `${name} (2ª tentativa)` : name, messages, (r) => parseModelJson(r.message.content)?.resumo ?? parseModelJson(r.message.content)?.pergunta ?? "");
     const out = parseModelJson<{ resumo?: string; commit?: string; recado?: string; pergunta?: string; arquivos?: FileEdit[] }>(r.message.content);
     // dúvida do Caio: o Beto responde uma vez e o Caio tenta de novo (não conta como tentativa)
     if (ask?.canAsk && !asked && out?.pergunta && !out.arquivos?.length) {
@@ -635,7 +788,8 @@ async function writeChanges(
     }
     const problems: string[] = [];
     const files: { path: string; content: string | null; diff: string }[] = [];
-    if (!out?.arquivos?.length) problems.push("Nenhum arquivo no JSON (campo arquivos vazio ou JSON inválido).");
+    if (r.finishReason === "length") problems.push("A resposta veio cortada (passou do teto de saída): use trocas pequenas em vez de arquivo inteiro e só o necessário.");
+    else if (!out?.arquivos?.length) problems.push("Nenhum arquivo no JSON (campo arquivos vazio ou JSON inválido).");
     for (const e of out?.arquivos ?? []) {
       const bad = pathProblem(String(e?.path ?? ""), known);
       if (bad) {
@@ -651,7 +805,39 @@ async function writeChanges(
     await run.record(`${name}: trocas recusadas`, { status: "error", summary: problems.join(" | ").slice(0, 600) });
     messages.push({ role: "assistant", content: r.message.content ?? "" }, { role: "user", content: `Não deu para aplicar:\n${problems.map((p) => `- ${p}`).join("\n")}\nMande o JSON completo de novo, corrigido.` });
   }
-  throw new Error("O modelo não conseguiu escrever trocas que se aplicam nos arquivos.");
+  throw new CodeError("O modelo não conseguiu escrever trocas que se aplicam nos arquivos.");
+}
+
+class CodeError extends Error {}
+
+/** Mensagem do usuário com texto e, se houver, as imagens do chamado (o modelo que não lê imagem cai no texto). */
+function withImages(images: string[], text: string): string | ContentPart[] {
+  return images.length ? [{ type: "text", text }, ...images.map((url) => ({ type: "image_url" as const, image_url: { url } }))] : text;
+}
+
+/** A Lia olha as imagens uma vez (rota de visão) e escreve o que viu; o resto do time lê só esse texto, que é barato. */
+async function describeImages(run: StageRun) {
+  if (run.t.image_notes) return;
+  const images = await imagesOf(run.t.id);
+  if (!images.length) return;
+  const v = await run.llmJson<{ imagens: string[] }>(
+    "dev:vision",
+    "olhar as imagens",
+    [
+      {
+        role: "system",
+        content:
+          'Você é a Lia, analista da esteira. O dono anexou imagens (prints ou fotos) a um chamado. Descreva cada uma para o time, que não vai ver a imagem: qual tela ou parte do sistema aparece, textos e mensagens de erro exatamente como estão, o que está marcado ou destacado e o que parece errado em relação ao pedido. Preciso e curto, em português do Brasil. Responda só com JSON: {"imagens": ["descrição da 1ª imagem", "..."]}',
+      },
+      { role: "user", content: withImages(images, ticketBlock(run.t)) },
+    ],
+    (j) => Array.isArray(j?.imagens) && j.imagens.length > 0,
+    (j) => `${j?.imagens?.length ?? 0} imagem(ns)`,
+  );
+  const notes = (v?.imagens ?? []).map((d, i) => `${i + 1}. ${String(d).slice(0, 1500)}`).join("\n");
+  if (!notes) return;
+  run.t.image_notes = notes;
+  await query("UPDATE dev_tickets SET image_notes = $2 WHERE id = $1", [run.t.id, notes]);
 }
 
 /** Depois de um conserto, o diff mostrado no painel e usado em revisões é o do arquivo final. */
@@ -703,7 +889,7 @@ function prBody(t: any) {
 
 export async function listTickets() {
   return many(
-    `SELECT id, title, kind, stage, failed_stage, pr_number, pr_url, branch, fix_rounds, error, cost_usd::float AS cost_usd,
+    `SELECT id, title, kind, stage, failed_stage, level, (SELECT COUNT(*)::int FROM dev_ticket_images i WHERE i.ticket_id = dev_tickets.id) AS images, pr_number, pr_url, branch, fix_rounds, error, cost_usd::float AS cost_usd,
             tokens_in, tokens_out, spec->>'titulo' AS spec_title, created_at, updated_at, stage_started_at, finished_at,
             (SELECT jsonb_build_object('agent', m.agent, 'to', m.to_agent, 'text', left(m.summary, 160)) FROM dev_ticket_steps m
               WHERE m.ticket_id = dev_tickets.id AND m.kind = 'msg' ORDER BY m.id DESC LIMIT 1) AS last_msg
@@ -714,7 +900,7 @@ export async function listTickets() {
 export async function getTicket(id: number) {
   const t = await one(
     `SELECT id, title, description, kind, stage, failed_stage, spec, plan, review, branch, pr_number, pr_url, head_sha, ci, fix_rounds,
-            review_rounds, error, cost_usd::float AS cost_usd, tokens_in, tokens_out, created_at, updated_at, stage_started_at, finished_at,
+            review_rounds, error, level, level_auto, image_notes, cost_usd::float AS cost_usd, tokens_in, tokens_out, created_at, updated_at, stage_started_at, finished_at,
             (SELECT jsonb_agg(jsonb_build_object('path', f->>'path', 'deleted', f->'content' = 'null'::jsonb, 'diff', left(f->>'diff', 20000)))
                FROM jsonb_array_elements(COALESCE(changes->'files', '[]'::jsonb)) f) AS files,
             changes->>'resumo' AS changes_summary
@@ -727,7 +913,8 @@ export async function getTicket(id: number) {
        FROM dev_ticket_steps WHERE ticket_id = $1 ORDER BY id`,
     [id],
   );
-  return { ...t, steps };
+  const images = await many("SELECT id FROM dev_ticket_images WHERE ticket_id = $1 ORDER BY id", [id]);
+  return { ...t, images: images.map((i) => i.id), steps };
 }
 
 /** Painel de custos: total, por etapa, por modelo, por dia e os chamados mais caros no período. */

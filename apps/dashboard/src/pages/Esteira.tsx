@@ -30,6 +30,7 @@ interface Status {
   stages: Record<string, string>;
   agents: Record<string, Agent>;
   stageAgent: Record<string, string>;
+  levels?: Record<string, string>;
   settings: { repo?: string; base_branch?: string; cost_cap?: string };
 }
 type Msg = { agent: string; to: string; text: string };
@@ -47,6 +48,8 @@ interface Ticket {
   cost_usd: number;
   created_at: string;
   stage_started_at: string;
+  level?: string | null;
+  images?: number | number[];
   last_msg?: Msg | null;
 }
 interface Step {
@@ -78,6 +81,9 @@ interface Detail extends Ticket {
   tokens_out: number;
   files: { path: string; deleted: boolean; diff: string }[] | null;
   changes_summary: string | null;
+  level_auto?: boolean;
+  image_notes?: string | null;
+  images?: number[];
   steps: Step[];
 }
 
@@ -92,6 +98,37 @@ const FLOW = ["entendendo", "planejando", "codando", "revisando", "abrindo_pr", 
 const WORKING = new Set(["fila", "entendendo", "planejando", "codando", "revisando", "abrindo_pr", "testando", "corrigindo"]);
 const STOPPED = new Set(["precisa_de_voce", "falhou", "cancelado"]);
 const KIND: Record<string, string> = { bug: "Bug", melhoria: "Melhoria", nova: "Coisa nova" };
+/** Nível: decide quantas etapas e qual modelo (simples pula o arquiteto e usa o modelo barato). */
+const LEVEL: Record<string, string> = { auto: "Automático", simples: "Simples", medio: "Médio", complexo: "Complexo" };
+const LEVEL_HINT: Record<string, string> = {
+  auto: "A Lia decide pelo tamanho do pedido.",
+  simples: "Texto, estilo ou uma condição: pula o arquiteto, modelo barato e revisão só se o diff crescer.",
+  medio: "Alguns arquivos: o time inteiro, uma volta de revisão e até 2 consertos do CI.",
+  complexo: "Vários módulos ou migração: lê mais do repositório, o Caio vê as imagens e até 3 consertos.",
+};
+const MAX_IMAGES = 4;
+
+/** Print ou foto → data URL reduzida (lado maior 1600 px), para subir leve e o modelo ler barato. */
+async function shrinkImage(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((ok, fail) => {
+      const i = new Image();
+      i.onload = () => ok(i);
+      i.onerror = () => fail(new Error("Não deu para abrir essa imagem."));
+      i.src = url;
+    });
+    const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(img.naturalWidth * scale);
+    canvas.height = Math.round(img.naturalHeight * scale);
+    canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const webp = canvas.toDataURL("image/webp", 0.88);
+    return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/jpeg", 0.88);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 /** Cada agente tem uma cor fixa: avatar da coluna, recados no card e na conversa. */
 const AGENT_TONE: Record<string, string> = { lia: "#c2410c", beto: "#2563eb", caio: "#7c3aed", vera: "#0f766e", tito: "#b45309", dono: "#52525b" };
@@ -205,6 +242,8 @@ export function EsteiraPage() {
                     <div className="dev-card-top">
                       <span className="muted mono">#{t.id}</span>
                       <span className="muted">{KIND[t.kind] ?? t.kind}</span>
+                      {t.level && <span className="muted">· {LEVEL[t.level] ?? t.level}</span>}
+                      {Number(t.images) > 0 && <span className="muted" title="Imagens anexadas">· {Number(t.images)} 📎</span>}
                       <span className="spacer" />
                       <span className="muted mono">{usd(t.cost_usd)}</span>
                     </div>
@@ -296,13 +335,28 @@ function NewTicket({ onClose, onCreated }: { onClose: () => void; onCreated: (id
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [kind, setKind] = useState("melhoria");
+  const [level, setLevel] = useState("auto");
+  const [images, setImages] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const addFiles = async (files: File[]) => {
+    const pics = files.filter((f) => f.type.startsWith("image/") && f.type !== "image/svg+xml");
+    if (!pics.length) return;
+    setErr(null);
+    try {
+      const room = MAX_IMAGES - images.length;
+      if (pics.length > room) setErr(`Até ${MAX_IMAGES} imagens por chamado.`);
+      const added = await Promise.all(pics.slice(0, Math.max(0, room)).map(shrinkImage));
+      setImages((cur) => [...cur, ...added].slice(0, MAX_IMAGES));
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
   const send = async () => {
     setBusy(true);
     setErr(null);
     try {
-      const r = await api<{ id: number }>("/api/dev/tickets", { method: "POST", json: { title, description, kind } });
+      const r = await api<{ id: number }>("/api/dev/tickets", { method: "POST", json: { title, description, kind, level: level === "auto" ? "" : level, images } });
       haptic();
       onCreated(r.id);
     } catch (e) {
@@ -334,7 +388,49 @@ function NewTicket({ onClose, onCreated }: { onClose: () => void; onCreated: (id
       </div>
       <div className="field">
         <label htmlFor="dev-desc">O que acontece e o que você quer</label>
-        <textarea id="dev-desc" className="input" rows={7} value={description} maxLength={8000} onChange={(e) => setDescription(e.target.value)} placeholder="Conte como falaria para um dev: onde aparece, o que esperava e, se souber, como reproduzir." />
+        <textarea
+          id="dev-desc"
+          className="input"
+          rows={7}
+          value={description}
+          maxLength={8000}
+          onChange={(e) => setDescription(e.target.value)}
+          onPaste={(e) => {
+            const files = [...e.clipboardData.files];
+            if (files.some((f) => f.type.startsWith("image/"))) {
+              e.preventDefault();
+              void addFiles(files);
+            }
+          }}
+          placeholder="Conte como falaria para um dev: onde aparece, o que esperava e, se souber, como reproduzir. Dá para colar um print aqui."
+        />
+      </div>
+      <div className="field">
+        <label>Imagens <span className="muted">(prints ou fotos, até {MAX_IMAGES})</span></label>
+        <div className="dev-pics">
+          {images.map((src, i) => (
+            <div key={i} className="dev-pic">
+              <img src={src} alt={`Imagem ${i + 1}`} />
+              <button type="button" aria-label="Tirar imagem" onClick={() => setImages((cur) => cur.filter((_, j) => j !== i))}><Icon name="x" size={12} /></button>
+            </div>
+          ))}
+          {images.length < MAX_IMAGES && (
+            <label className="dev-pic dev-pic-add">
+              <Icon name="plus" size={18} />
+              <span>Anexar</span>
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden onChange={(e) => { void addFiles([...(e.target.files ?? [])]); e.target.value = ""; }} />
+            </label>
+          )}
+        </div>
+      </div>
+      <div className="field">
+        <label>Nível</label>
+        <div className="seg dev-kind" role="group" aria-label="Nível">
+          {Object.entries(LEVEL).map(([k, v]) => (
+            <button key={k} className={level === k ? "active" : ""} aria-pressed={level === k} onClick={() => setLevel(k)}>{v}</button>
+          ))}
+        </div>
+        <p className="muted dev-hint">{LEVEL_HINT[level]}</p>
       </div>
       <p className="muted dev-hint">A esteira descreve melhor o problema, planeja, escreve o código, revisa, abre um PR em rascunho e espera o CI. Nada vai para a main sem você mesclar.</p>
       {err && <ErrorBox error={err} />}
@@ -375,7 +471,10 @@ function TicketModal({ id, labels, agents, onClose, onChange }: { id: number; la
         <div className="dev-detail">
           <div className="dev-detail-head">
             <StageBadge stage={t.stage} label={labels[t.stage] ?? t.stage} />
-            <span className="muted">{KIND[t.kind] ?? t.kind} · aberto {ago(t.created_at)}</span>
+            <span className="muted">
+              {KIND[t.kind] ?? t.kind}
+              {t.level ? ` · ${LEVEL[t.level] ?? t.level}${t.level_auto ? " (a Lia decidiu)" : ""}` : ""} · aberto {ago(t.created_at)}
+            </span>
             <span className="spacer" />
             <span className="mono">{usd(t.cost_usd)}</span>
           </div>
@@ -430,6 +529,20 @@ function TicketModal({ id, labels, agents, onClose, onChange }: { id: number; la
                   </li>
                 ))}
               </ol>
+            </section>
+          )}
+
+          {Boolean(t.images?.length) && (
+            <section className="dev-sec">
+              <h4>Imagens</h4>
+              <div className="dev-pics">
+                {t.images!.map((img) => (
+                  <a key={img} className="dev-pic" href={`/api/dev/tickets/${t.id}/images/${img}`} target="_blank" rel="noreferrer">
+                    <img src={`/api/dev/tickets/${t.id}/images/${img}`} alt="Imagem do chamado" loading="lazy" />
+                  </a>
+                ))}
+              </div>
+              {t.image_notes && <p className="muted dev-notes"><b>O que a Lia viu:</b> {t.image_notes}</p>}
             </section>
           )}
 

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { answerTicket, cancelTicket, costOverview, createTicket, devStatus, getTicket, listTickets, retryTicket, saveDevSettings } from "../../../devpipeline/pipeline.js";
+import { answerTicket, cancelTicket, costOverview, createTicket, decodeImage, devStatus, getTicket, listTickets, MAX_IMAGES, retryTicket, saveDevSettings, ticketImage } from "../../../devpipeline/pipeline.js";
 
 /** Só o dono da stack (não basta ser super admin): a esteira escreve no repositório dele. */
 async function requireOwner(req: FastifyRequest, reply: FastifyReply) {
@@ -25,11 +25,28 @@ export async function devPipelineRoutes(api: FastifyInstance) {
 
     dev.get("/api/dev/tickets", async () => listTickets());
 
-    dev.post<{ Body: { title?: string; description?: string; kind?: string } }>("/api/dev/tickets", async (req, reply) => {
+    /** Chamado novo; `images` são data URLs (prints/fotos), conferidas pelo conteúdo. `level`: simples, medio, complexo ou vazio (a Lia decide). */
+    dev.post<{ Body: { title?: string; description?: string; kind?: string; level?: string; images?: unknown } }>("/api/dev/tickets", async (req, reply) => {
       const title = String(req.body?.title ?? "").trim();
       const description = String(req.body?.description ?? "").trim();
       if (title.length < 3 || description.length < 10) return reply.code(400).send({ error: "Dê um título e conte o que precisa (pelo menos uma frase)." });
-      return { id: await createTicket({ title, description, kind: req.body?.kind }) };
+      const raw = Array.isArray(req.body?.images) ? req.body.images : [];
+      if (raw.length > MAX_IMAGES) return reply.code(400).send({ error: `Até ${MAX_IMAGES} imagens por chamado.` });
+      const images: { mime: string; data: Buffer }[] = [];
+      for (const r of raw) {
+        const img = decodeImage(String(r));
+        if ("error" in img) return reply.code(400).send({ error: img.error });
+        images.push(img);
+      }
+      return { id: await createTicket({ title, description, kind: req.body?.kind, level: req.body?.level, images }) };
+    });
+
+    dev.get<{ Params: { id: string; img: string } }>("/api/dev/tickets/:id/images/:img", async (req, reply) => {
+      const id = idOf(req.params.id);
+      const img = idOf(req.params.img);
+      const row = id && img ? await ticketImage(id, img) : null;
+      if (!row) return reply.code(404).send({ error: "imagem não encontrada" });
+      return reply.type(row.mime).header("Cache-Control", "private, max-age=86400").header("X-Content-Type-Options", "nosniff").send(row.data);
     });
 
     dev.get<{ Params: { id: string } }>("/api/dev/tickets/:id", async (req, reply) => {
