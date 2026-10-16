@@ -82,6 +82,14 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("agenda com tags (e2e)", () => {
     // novo compromisso já com a antecedência
     const dent: any = await tools.scheduleReminder.run({ intent: "Dentista", title: "Dentista", event_at: local(pay), before_minutes: 30 }, ctx);
     expect(dent.first_fire_local).toContain("17:30");
+    expect(dent.ask_lead).toBeUndefined();
+    // "preciso estar lá às 18h" sem dizer quando avisar: aviso 30 min antes e o CTO pergunta se quer outro
+    const exam: any = await tools.scheduleReminder.run({ intent: "Exame de sangue", title: "Exame", event_at: local(pay) }, ctx);
+    expect(exam).toMatchObject({ first_fire_local: expect.stringContaining("17:30"), event_local: expect.stringContaining("18:00"), ask_lead: expect.stringContaining("30 min antes") });
+    // pediu na hora: fica na hora, sem pergunta
+    const now0: any = await tools.scheduleReminder.run({ intent: "Reunião", title: "Reunião", event_at: local(pay), before_minutes: 0 }, ctx);
+    expect(now0.first_fire_local).toContain("18:00");
+    expect(now0.ask_lead).toBeUndefined();
 
     // edição completa pelo painel: texto, dia/hora e aviso de uma vez
     const { retimeReminder, updateReminderLook } = await import("../src/reminders.js");

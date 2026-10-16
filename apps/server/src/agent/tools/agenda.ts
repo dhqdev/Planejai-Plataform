@@ -6,6 +6,9 @@ import { formatLocal, parseLocalDateTime } from "../../time.js";
 import { cancelAlarm, createAlarm, listAlarms } from "../../alarms.js";
 import { CONFIRM_PARAM, defineTool, obj, requireConfirmation, type ToolContext } from "./types.js";
 
+/** Compromisso com hora em que a pessoa não disse quando quer o aviso: avisa este tanto antes. */
+export const DEFAULT_LEAD_MIN = 30;
+
 const hm = (d: Date, tz: string) => new Intl.DateTimeFormat("pt-BR", { timeZone: tz, hour: "2-digit", minute: "2-digit" }).format(d);
 const dayOf = (d: Date, tz: string) => new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(d);
 
@@ -22,7 +25,9 @@ export const scheduleReminder = defineTool<{
   name: "schedule_reminder",
   description:
     "Lembrete ou mensagem proativa: na hora o CTO escreve a mensagem a partir do intent. in_minutes, at (data/hora) ou cron (recorrente). " +
-    "Compromisso: title curto, tag do assunto, event_at e before_minutes se o aviso sai antes. O resultado mostra o que já tem no dia. " +
+    "Compromisso com hora (consulta, reunião, \"preciso estar lá às 15h\"): title curto, tag do assunto e event_at; before_minutes se ela disse quando quer o aviso " +
+    `(0 = na hora). Sem before_minutes o aviso sai ${DEFAULT_LEAD_MIN} min antes e o resultado traz ask_lead: pergunte numa linha se ela quer outra antecedência. ` +
+    "O resultado mostra o que já tem no dia. " +
     "Com Google Agenda conectado, o lembrete único já vai para lá sozinho: não chame calendar_create_event junto.",
   parameters: obj(
     {
@@ -46,6 +51,12 @@ export const scheduleReminder = defineTool<{
     else if (args.at) dueAt = parseLocalDateTime(args.at, ctx.timezone);
     const eventAt = args.event_at && !args.cron ? parseLocalDateTime(args.event_at, ctx.timezone) : null;
     if (eventAt && args.before_minutes != null && args.before_minutes > 0) dueAt = new Date(eventAt.getTime() - args.before_minutes * 60_000);
+    // compromisso sem dizer quando avisar: já deixa um aviso antes (pedido do dono) e o CTO pergunta se ela quer outro
+    const defaultLead = Boolean(eventAt && args.before_minutes == null && (!dueAt || Math.abs(dueAt.getTime() - eventAt.getTime()) < 60_000));
+    if (eventAt && defaultLead) {
+      const early = eventAt.getTime() - DEFAULT_LEAD_MIN * 60_000;
+      dueAt = early > Date.now() + 60_000 ? new Date(early) : eventAt;
+    }
     if (!dueAt && eventAt) dueAt = eventAt;
     const tag = await resolveTag(ctx.user.id, args.tag, `${args.title ?? ""} ${args.intent}`).catch(() => null);
     const r = await createReminder({
@@ -81,6 +92,9 @@ export const scheduleReminder = defineTool<{
       ...(others.length ? { same_day: others.map((o) => `${hm(new Date(o.start), ctx.timezone)} ${o.title.slice(0, 40)}`) } : {}),
       ...(clash ? { clash: `Choca com ${clash.title.slice(0, 40)}` } : {}),
       ...(card ? { invite_card: card } : {}),
+      ...(defaultLead && eventAt && dueAt && dueAt < eventAt
+        ? { ask_lead: `Aviso ficou ${DEFAULT_LEAD_MIN} min antes (${hm(dueAt, ctx.timezone)}). Pergunte se ela quer ser lembrada mais cedo; se disser, use reschedule_reminder com before_minutes.` }
+        : {}),
     };
   },
 });
@@ -94,7 +108,7 @@ export function eventCard(ctx: ToolContext, e: { name: string; start: Date; end?
   return ctx.outbox.addMedia({
     kind: "event",
     event: { name: e.name, start: e.start.toISOString(), end: e.end?.toISOString(), location: e.location, description: e.description },
-    fallbackText: `📅 ${e.name}, ${formatLocal(e.start, ctx.timezone)}`,
+    fallbackText: `🗓️ ${e.name}, ${formatLocal(e.start, ctx.timezone)}`,
   });
 }
 
