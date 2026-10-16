@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
+import { Guard } from "./Guard";
 import "./styles.css";
 import "./motion.css";
 import { installFieldLabels, installKeyboard } from "./a11y";
@@ -45,7 +46,9 @@ try {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
+      <Guard full>
+        <App />
+      </Guard>
     </BrowserRouter>
   </StrictMode>,
 );

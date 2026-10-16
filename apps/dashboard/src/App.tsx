@@ -4,6 +4,7 @@ import { createPortal, flushSync } from "react-dom";
 import { api } from "./api";
 import { BlockLoader } from "./BlockLoader";
 import { Empty, Loading } from "./components";
+import { Guard } from "./Guard";
 import { clearApiCache, prefetchApi, useApi } from "./hooks";
 import { AgentFace, type Face } from "./faces";
 import { Icon } from "./icons";
@@ -472,6 +473,7 @@ export function App() {
         {back === "conta" && loc.pathname !== "/plano" && (
           <button type="button" className="page-back" onClick={goBack}><Icon name="chevron-left" size={18} />Conta</button>
         )}
+        <Guard>
         <Routes>
           {isSuper ? (
             <>
@@ -526,6 +528,7 @@ export function App() {
           <Route path="/especialistas/:slug" element={<SpecialistPage />} />
           <Route path="*" element={tabs.loading && !isSuper ? <Loading /> : <Navigate to="/" />} />
         </Routes>
+        </Guard>
         </div>
         </Suspense>
       </main>
