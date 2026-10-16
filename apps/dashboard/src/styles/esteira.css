@@ -91,3 +91,5 @@
   .dev-board { grid-auto-columns: 84%; scroll-snap-type: x mandatory; margin: 0 -16px; padding: 0 16px 10px; scroll-padding: 0 16px; }
   .dev-setup-form { grid-template-columns: minmax(0, 1fr); }
 }
+.dev-warn { margin-bottom: 16px; font-size: 13px; color: var(--muted, #666); }
+.dev-warn p { margin: 0; }

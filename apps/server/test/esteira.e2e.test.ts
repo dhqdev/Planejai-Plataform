@@ -44,6 +44,7 @@ const gh = {
   comments: [] as string[],
   ready: false,
   readOnly: false,
+  noActions: false,
   ci: [] as ("failure" | "success")[],
   ciBySha: new Map<string, string>(),
   n: 0,
@@ -58,7 +59,7 @@ async function fakeGithub(url: string, init: RequestInit = {}) {
   const body = init.body ? JSON.parse(String(init.body)) : null;
   const path = decodeURIComponent(u.pathname.replace(/^\/repos\/dono\/app/, ""));
   let m: RegExpMatchArray | null;
-  if (path === "") return ok({ full_name: "dono/app", permissions: { push: !gh.readOnly } });
+  if (path === "") return ok({ full_name: "dono/app", default_branch: "main", permissions: { push: !gh.readOnly } });
   if ((m = path.match(/^\/git\/ref\/heads\/(.+)$/))) return gh.refs.has(m[1]!) ? ok({ object: { sha: gh.refs.get(m[1]!) } }) : ok({ message: "Not Found" }, 404);
   if ((m = path.match(/^\/git\/trees\/(\w+)$/)) && method === "GET") return ok({ tree: Object.entries(gh.commits.get(m[1]!)!).map(([p, c]) => ({ path: p, type: "blob", size: c.length })) });
   if ((m = path.match(/^\/contents\/(.+)$/))) {
@@ -102,6 +103,8 @@ async function fakeGithub(url: string, init: RequestInit = {}) {
     gh.comments.push(body.body);
     return ok({});
   }
+  if (path === "/branches") return ok([...gh.refs.keys()].map((name) => ({ name })));
+  if (path.startsWith("/actions") && gh.noActions) return ok({ message: "Resource not accessible by personal access token" }, 403);
   if (path === "/actions/runs" && !u.searchParams.get("head_sha")) return ok({ workflow_runs: [] });
   if (path === "/actions/runs") {
     const sha = u.searchParams.get("head_sha")!;
@@ -164,6 +167,16 @@ describe.skipIf(!enabled)("esteira de desenvolvimento (e2e)", () => {
     gh.readOnly = false;
     st = (await app.inject({ method: "GET", url: "/api/dev/status?fresh=1", headers: { cookie: owner } })).json();
     expect(st.ready).toBe(true);
+    // "Main" com maiúscula e token sem Actions: fica pronto, com a grafia certa e só um aviso
+    gh.noActions = true;
+    st = (await app.inject({ method: "PUT", url: "/api/dev/settings", headers: { cookie: owner }, payload: { repo: "dono/app", base_branch: "Main" } })).json();
+    expect(st).toMatchObject({ ready: true, base: "main", problems: [] });
+    expect(st.warnings[0]).toMatch(/Actions: Read-only/);
+    st = (await app.inject({ method: "PUT", url: "/api/dev/settings", headers: { cookie: owner }, payload: { repo: "dono/app", base_branch: "develop" } })).json();
+    expect(st.ready).toBe(false);
+    expect(st.problems[0]).toMatch(/"develop" não existe/);
+    gh.noActions = false;
+    await app.inject({ method: "PUT", url: "/api/dev/settings", headers: { cookie: owner }, payload: { repo: "dono/app", base_branch: "main" } });
     creds.mockImplementation(async (id: string) => (id === "esteira" ? { token: "ghp_test", repo: "dono/app" } : null));
   });
 

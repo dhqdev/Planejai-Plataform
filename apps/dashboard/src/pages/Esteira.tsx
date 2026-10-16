@@ -21,6 +21,7 @@ interface Status {
   ready: boolean;
   missing?: string | null;
   problems: string[];
+  warnings?: string[];
   tokenFrom: string | null;
   needRepo: boolean;
   repo?: string;
@@ -170,6 +171,9 @@ export function EsteiraPage() {
         }
       />
       {!status.data.ready && <Setup st={status.data} onSaved={(d) => status.setData(d)} />}
+      {status.data.ready && Boolean(status.data.warnings?.length) && (
+        <div className="card card-pad dev-warn">{status.data.warnings!.map((w) => <p key={w}>{w}</p>)}</div>
+      )}
 
       {!tickets.length ? (
         <div className="card">

@@ -122,7 +122,7 @@ export async function devConfig(): Promise<(DevConfig & { tokenFrom: string }) |
   };
 }
 
-let checked: { at: number; key: string; problems: string[] } | null = null;
+let checked: { at: number; key: string; problems: string[]; warnings: string[]; base: string } | null = null;
 
 /** Situação para a tela: pronto de verdade só se o token pode escrever e ler o CI (conferido no GitHub, cache de 1 min). */
 export async function devStatus(fresh = false) {
@@ -130,25 +130,25 @@ export async function devStatus(fresh = false) {
   const settings = await devSettings();
   const base = { agents: AGENTS, stageAgent: STAGE_AGENT, stages: STAGE_LABEL, settings };
   if ("missing" in cfg) return { ...base, ready: false, missing: cfg.missing, tokenFrom: cfg.tokenFrom ?? null, needRepo: Boolean(cfg.needRepo), problems: [] as string[] };
-  const key = `${cfg.tokenFrom}:${cfg.gh.repo.owner}/${cfg.gh.repo.name}`;
+  const key = `${cfg.tokenFrom}:${cfg.gh.repo.owner}/${cfg.gh.repo.name}:${cfg.base}`;
   if (fresh || !checked || checked.key !== key || Date.now() - checked.at > 60_000) {
-    let problems: string[];
     try {
-      problems = await cfg.gh.problems();
+      const r = await cfg.gh.problems(cfg.base);
+      checked = { at: Date.now(), key, problems: r.blocking, warnings: r.warnings, base: r.base };
     } catch (err) {
-      problems = [`Não deu para falar com o GitHub agora: ${err instanceof Error ? err.message : String(err)}`];
+      checked = { at: Date.now(), key, problems: [`Não deu para falar com o GitHub agora: ${err instanceof Error ? err.message : String(err)}`], warnings: [], base: cfg.base };
     }
-    checked = { at: Date.now(), key, problems };
   }
   return {
     ...base,
     ready: !checked.problems.length,
     missing: checked.problems[0] ?? null,
     problems: checked.problems,
+    warnings: checked.warnings,
     tokenFrom: cfg.tokenFrom,
     needRepo: false,
     repo: `${cfg.gh.repo.owner}/${cfg.gh.repo.name}`,
-    base: cfg.base,
+    base: checked.base,
     costCap: cfg.costCap,
   };
 }
@@ -318,8 +318,8 @@ class StageRun {
 const SKIP = /(^|\/)(node_modules|dist|build|coverage|\.git)\/|\.(png|jpe?g|gif|webp|ico|mp4|mp3|wav|ogg|woff2?|ttf|pdf|zip|lock)$|package-lock\.json$/;
 
 async function repoContext(run: StageRun) {
-  const { gh, base } = run.cfg;
-  const sha = await gh.branchSha(base);
+  const { gh } = run.cfg;
+  const sha = await gh.branchSha(await gh.resolveBase(run.cfg.base));
   const tree = (await gh.tree(sha)).filter((f) => !SKIP.test(f.path));
   const [rules, skill] = await Promise.all([gh.file("CLAUDE.md", sha), gh.file(".claude/skills/planejai/SKILL.md", sha)]);
   return { sha, tree, guide: [rules, skill].filter(Boolean).join("\n\n---\n\n").slice(0, 24_000) };
@@ -488,7 +488,8 @@ const STAGES = {
 
   /** Cria o branch esteira/<id>-<título>, faz o commit e abre o PR em rascunho. */
   abrindo_pr: async (run: StageRun) => {
-    const { gh, base } = run.cfg;
+    const { gh } = run.cfg;
+    const base = await gh.resolveBase(run.cfg.base);
     const t = run.t;
     const files = (t.changes?.files ?? []) as { path: string; content: string | null }[];
     if (!files.length) throw new Error("Nenhuma mudança para enviar.");
@@ -511,7 +512,14 @@ const STAGES = {
     const t = run.t;
     const since = new Date(t.ci?.since ?? t.stage_started_at).getTime();
     const waited = (Date.now() - since) / 60_000;
-    const runs = await gh.runs(t.head_sha);
+    const runs = await gh.runs(t.head_sha).catch((e) => (e instanceof GithubError && (e.status === 403 || e.status === 404) ? null : Promise.reject(e)));
+    if (!runs) {
+      await run.record("testes", { summary: "O token não lê o CI (falta Actions: Read-only): confira os testes à mão." });
+      await run.say("tito", "dono", "Não consigo ler o CI com esse token (falta Actions: Read-only). Confira os testes do PR à mão antes de mesclar.");
+      await run.next("pronto", { ci: { ...t.ci, status: "sem_ci" } });
+      await finishReady(run, "sem CI");
+      return "sem acesso ao CI";
+    }
     if (!runs.length) {
       if (waited < NO_CI_MIN) return run.later(CI_POLL_SECONDS).then(() => "esperando o CI começar");
       await run.record("testes", { summary: "O repositório não rodou CI neste PR: confira os testes à mão." });

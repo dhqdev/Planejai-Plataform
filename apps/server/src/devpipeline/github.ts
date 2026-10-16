@@ -45,28 +45,55 @@ export class Github {
   }
 
   /**
-   * Confere o que a esteira precisa e devolve cada problema em português, com o que marcar no token.
-   * Vazio = pode ler, escrever no repositório, abrir PR e ler o CI.
+   * Confere o que a esteira precisa. `blocking` impede abrir chamado (não lê, não escreve, branch base não existe);
+   * `warnings` só avisa (sem Actions: Read a esteira não acompanha o CI e entrega o PR para conferir à mão).
+   * `base` volta com a grafia certa do GitHub ("Main" vira "main").
    */
-  async problems(): Promise<string[]> {
+  async problems(base: string): Promise<{ blocking: string[]; warnings: string[]; base: string }> {
     const full = `${this.repo.owner}/${this.repo.name}`;
     let repo: any;
     try {
       repo = await this.call("GET", "");
     } catch (err) {
-      if (err instanceof GithubError && err.status === 401) return ["O token do GitHub foi recusado (vencido ou apagado). Gere outro e salve de novo."];
-      if (err instanceof GithubError && err.status === 404) return [`O token não enxerga ${full}. No token fine-grained, em Repository access, inclua esse repositório.`];
+      if (err instanceof GithubError && err.status === 401) return { blocking: ["O token do GitHub foi recusado (vencido ou apagado). Gere outro e salve de novo."], warnings: [], base };
+      if (err instanceof GithubError && err.status === 404) return { blocking: [`O token não enxerga ${full}. No token fine-grained, em Repository access, inclua esse repositório.`], warnings: [], base };
       throw err;
     }
-    const out: string[] = [];
-    if (!repo.permissions?.push) out.push(`O token lê ${full} mas não pode escrever: dê Contents: Read and write e Pull requests: Read and write.`);
+    const blocking: string[] = [];
+    const warnings: string[] = [];
+    if (!repo.permissions?.push) blocking.push(`O token lê ${full} mas não pode escrever: dê Contents: Read and write e Pull requests: Read and write.`);
+    let resolved = base;
+    try {
+      resolved = await this.resolveBase(base, repo.default_branch);
+    } catch (err) {
+      if (err instanceof GithubError && err.status === 404) blocking.push(`O branch "${base}" não existe em ${full}. Use ${repo.default_branch ?? "main"}.`);
+      else throw err;
+    }
     try {
       await this.call("GET", "/actions/runs?per_page=1");
     } catch (err) {
-      if (err instanceof GithubError && (err.status === 403 || err.status === 404)) out.push("O token não lê o CI: dê Actions: Read-only.");
+      if (err instanceof GithubError && (err.status === 403 || err.status === 404))
+        warnings.push("O token não lê o CI (falta Actions: Read-only). A esteira funciona, mas entrega o PR sem esperar os testes.");
       else throw err;
     }
-    return out;
+    return { blocking, warnings, base: resolved };
+  }
+
+  /** Nome do branch base como está no GitHub, sem ligar para maiúsculas ("Main" acha "main"). 404 se não existe. */
+  async resolveBase(base: string, defaultBranch?: string): Promise<string> {
+    const want = base.trim();
+    try {
+      await this.branchSha(want);
+      return want;
+    } catch (err) {
+      if (!(err instanceof GithubError && err.status === 404)) throw err;
+    }
+    const def = defaultBranch ?? (await this.call("GET", "")).default_branch;
+    if (def && def.toLowerCase() === want.toLowerCase()) return def;
+    const list = await this.call<any[]>("GET", "/branches?per_page=100");
+    const hit = (Array.isArray(list) ? list : []).find((b) => String(b.name).toLowerCase() === want.toLowerCase());
+    if (hit) return hit.name;
+    throw new GithubError(`Branch ${want} não existe`, 404);
   }
 
   async branchSha(branch: string): Promise<string> {
