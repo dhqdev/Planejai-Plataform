@@ -27,3 +27,12 @@
   .section-head > div:first-child { flex: 1 1 220px; }
   .section-head h2 { font-size: 18px; }
 }
+
+/* ---------- Abas de Minha conta (2026-10-16): uma seção por vez ---------- */
+.acct-page > .acct-tabs-wrap { margin-top: -24px; margin-bottom: -20px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.acct-tabs-wrap::-webkit-scrollbar { display: none; }
+.acct-tabs { display: inline-flex; flex-wrap: nowrap; white-space: nowrap; }
+.acct-tabs button { flex-shrink: 0; }
+@media (max-width: 767px) {
+  .acct-page > .acct-tabs-wrap { margin: -18px -16px -14px; padding: 0 16px; }
+}

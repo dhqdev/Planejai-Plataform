@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { api } from "../api";
+import { alarmsPossible, enableAlarmsHere } from "../Alarms";
 import { useMedia } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
@@ -191,7 +192,7 @@ function Say({ text, hint }: { text: string; hint?: string }) {
 }
 
 type Step =
-  | { id: string; kind: "talk"; say: string; mood: Mood; reply: string; scene?: ReactNode; invite?: boolean }
+  | { id: string; kind: "talk"; say: string; mood: Mood; reply: string; scene?: ReactNode; invite?: boolean; alarm?: boolean }
   | { id: string; kind: "ask"; q: Question };
 
 export function OnboardingFlow({
@@ -262,10 +263,20 @@ export function OnboardingFlow({
       list.push({
         id: "onde",
         kind: "talk",
-        say: narrow ? "As telas principais ficam na barra de baixo. O resto mora em Mais." : "O menu fica aqui à esquerda. Avisos e a sua conta ficam no pé dele.",
+        say: narrow ? "As telas principais ficam na barra de baixo. O resto mora em Conta, no último botão." : "O menu fica aqui à esquerda. Avisos e a sua conta ficam no pé dele.",
         mood: "wink",
         reply: "Beleza",
         scene: <WhereScene phone={narrow} />,
+      });
+    // alarme: a confirmação fica aqui, no fim da primeira conversa, em vez de um botão em Minha conta
+    if (tour && alarmsPossible())
+      list.push({
+        id: "alarme",
+        kind: "talk",
+        say: "Última coisa: quando você pedir um alarme (\"me acorda às 7h\"), posso tocar aqui no aparelho, como uma ligação?",
+        mood: "curious",
+        reply: "Pode tocar aqui",
+        alarm: true,
       });
     list.push({
       id: "fim",
@@ -335,6 +346,12 @@ export function OnboardingFlow({
   const go = async (to: number, a = answers) => {
     if (busy || leaving || to < 0 || to === at) return;
     if (to >= steps.length) return close();
+    // "Pode tocar aqui": pede a permissão dentro do próprio toque; negar não trava a conversa
+    if (to > at && step.kind === "talk" && step.alarm) {
+      setBusy(true);
+      await enableAlarmsHere().catch(() => false);
+      setBusy(false);
+    }
     // saindo da última pergunta: grava as respostas antes de seguir
     if (to > at && at === lastAsk) {
       if (!(await save(false, a))) return;
@@ -514,6 +531,11 @@ export function OnboardingFlow({
           <button className="onb-go" onClick={() => void go(at + 1)} disabled={busy}>
             {goLabel}
           </button>
+          {step.kind === "talk" && step.alarm && (
+            <button className="onb-later" onClick={() => { haptic(); setDir("next"); setI(at + 1); }} disabled={busy}>
+              Agora não
+            </button>
+          )}
           {step.kind === "talk" && step.invite && (
             <button className="onb-later" onClick={() => void notNow()} disabled={busy}>
               Agora não

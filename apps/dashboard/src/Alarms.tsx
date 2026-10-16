@@ -27,6 +27,27 @@ async function currentSubscription() {
   return (await reg?.pushManager.getSubscription()) ?? null;
 }
 
+/** Dá para tocar alarme neste aparelho (no iPhone, só com o app na tela de início). */
+export const alarmsPossible = () => pushSupported() && !(isIos() && !isStandalone());
+
+/**
+ * Liga o alarme neste aparelho: pede a permissão de notificação e inscreve no push. Chamado direto no toque
+ * (o navegador só pede a permissão dentro de um gesto), pela pergunta no fim da primeira conversa.
+ * Devolve false quando a pessoa negou ou não há WhatsApp ligado (sem alarme para tocar).
+ */
+export async function enableAlarmsHere() {
+  if (!alarmsPossible()) return false;
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") return false;
+  const data = await api<AlarmsData>("/api/alarms").catch(() => null);
+  if (!data?.vapidPublicKey) return false;
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(data.vapidPublicKey) });
+  await api("/api/push/subscribe", { method: "POST", json: { subscription: sub.toJSON() } });
+  return true;
+}
+
 export const alarmTime = (iso: string) => {
   const d = new Date(iso);
   const today = new Date().toDateString() === d.toDateString();

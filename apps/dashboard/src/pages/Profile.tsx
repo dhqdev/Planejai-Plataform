@@ -4,7 +4,6 @@ import { api, phoneFmt } from "../api";
 import type { Me } from "../App";
 import { ErrorBox, PageHead, alertDialog, confirmDialog } from "../components";
 import { CampoSenha } from "../CampoSenha";
-import { AlarmSettings } from "../Alarms";
 import { Connections } from "../Connections";
 import { MyIntegrations } from "../MyIntegrations";
 import { useApi } from "../hooks";
@@ -29,56 +28,94 @@ export function ProfilePage({ me }: { me: Me }) {
       setError((e as Error).message);
     }
   };
-  // links antigos (/memories, /reunioes, avisos com link) chegam com #sabe ou #reunioes: rola até a seção depois de carregar
+  // perfil em abas (David, 2026-10-16: "deixe mais simples"): uma coisa por vez, em vez de uma pilha de cartões.
+  // A reunião das 19h é só do dono da stack. Links antigos (#sabe, #reunioes) abrem a aba certa.
   const { hash } = useLocation();
+  const isSuper = me.role === "superadmin";
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "perfil", label: "Perfil" },
+    ...((me.linked || me.owner) ? [{ id: "sabe" as Tab, label: "O que sei de você" }] : []),
+    { id: "conexoes", label: "Conexões" },
+    { id: "seguranca", label: "Segurança" },
+    ...(isSuper ? [{ id: "reunioes" as Tab, label: "Reuniões" }] : []),
+  ];
+  const fromHash = tabs.find((t) => `#${t.id}` === hash)?.id;
+  const [tab, setTab] = useState<Tab>(fromHash ?? "perfil");
   useEffect(() => {
-    if (!hash) return;
-    const t = setTimeout(() => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" }), 350);
-    return () => clearTimeout(t);
-  }, [hash]);
+    if (fromHash) setTab(fromHash);
+  }, [fromHash]);
+  // no celular as abas rolam de lado: a escolhida sempre fica à vista
+  useEffect(() => {
+    document.querySelector(".acct-tabs .active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [tab]);
+  const pick = (t: Tab) => {
+    haptic(5);
+    setTab(t);
+    history.replaceState(history.state, "", t === "perfil" ? location.pathname : `#${t}`);
+  };
   return (
     <div className="page acct-page">
       <PageHead title="Minha conta" subtitle={me.owner ? "Dono da plataforma. Nome e senha vêm da stack." : me.email} />
-      {msg && <div className="ok-box" role="status" style={{ marginBottom: 12 }}>{msg}</div>}
+      <div className="acct-tabs-wrap">
+        <div className="seg acct-tabs" role="tablist" aria-label="Minha conta">
+          {tabs.map((t) => (
+            <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={tab === t.id ? "active" : ""} onClick={() => pick(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {msg && <div className="ok-box" role="status">{msg}</div>}
       <ErrorBox error={error} />
-      {/* tudo numa tela só (David, 2026-10-15): conta em colunas que se encaixam, depois o que ele sabe e as reuniões */}
-      <section className="acct-section acct-cards" aria-label="Conta">
-        {!me.owner && (
-          <div className="card card-pad">
-            <h3>Perfil</h3>
-            <div className="field"><label htmlFor="pf-name">Nome</label><input id="pf-name" name="name" autoComplete="name" className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
-            <div className="field">
-              <label htmlFor="pf-phone">WhatsApp ligado</label>
-              <input id="pf-phone" className="input" aria-describedby="pf-phone-help" value={data?.user ? phoneFmt(data.user.phone) : "nenhum"} disabled />
-              <span className="help" id="pf-phone-help">É por esse número que o assistente sabe que é você.</span>
+
+      {tab === "perfil" && (
+        <section className="acct-section acct-cards" aria-label="Perfil">
+          {!me.owner && (
+            <div className="card card-pad">
+              <h3>Seus dados</h3>
+              <div className="field"><label htmlFor="pf-name">Nome</label><input id="pf-name" name="name" autoComplete="name" className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
+              <div className="field">
+                <label htmlFor="pf-phone">WhatsApp ligado</label>
+                <input id="pf-phone" className="input" aria-describedby="pf-phone-help" value={data?.user ? phoneFmt(data.user.phone) : "nenhum"} disabled />
+                <span className="help" id="pf-phone-help">É por esse número que o assistente sabe que é você.</span>
+              </div>
+              <div className="field">
+                <label htmlFor="pf-tz">Fuso horário</label>
+                <input id="pf-tz" name="timezone" autoComplete="off" spellCheck={false} autoCapitalize="none" className="input" placeholder={data?.user?.timezone ?? "America/Sao_Paulo"} value={tz} onChange={(e) => setTz(e.target.value)} />
+              </div>
+              <button className="btn btn-primary" onClick={() => save({ name, timezone: tz || undefined })}>Salvar</button>
             </div>
-            <div className="field">
-              <label htmlFor="pf-tz">Fuso horário</label>
-              <input id="pf-tz" name="timezone" autoComplete="off" spellCheck={false} autoCapitalize="none" className="input" placeholder={data?.user?.timezone ?? "America/Sao_Paulo"} value={tz} onChange={(e) => setTz(e.target.value)} />
+          )}
+          {(me.linked || me.owner) && <AboutMe />}
+          <Sharing />
+        </section>
+      )}
+      {tab === "sabe" && <MemoriesPage embedded />}
+      {tab === "conexoes" && (
+        <section className="acct-section acct-cards" aria-label="Conexões">
+          <Connections owner={me.owner} />
+          {me.linked && !me.owner && <MyIntegrations />}
+        </section>
+      )}
+      {tab === "seguranca" && (
+        <section className="acct-section acct-cards" aria-label="Segurança">
+          {!me.owner && (
+            <div className="card card-pad">
+              <h3>Trocar senha</h3>
+              <div className="field"><label htmlFor="pf-pw">Senha atual</label><CampoSenha id="pf-pw" name="current-password" autoComplete="current-password" className="input" value={pw.current_password} onChange={(e) => setPw({ ...pw, current_password: e.target.value })} /></div>
+              <div className="field"><label htmlFor="pf-newpw">Nova senha</label><CampoSenha id="pf-newpw" name="new-password" autoComplete="new-password" className="input" value={pw.password} onChange={(e) => setPw({ ...pw, password: e.target.value })} /></div>
+              <button className="btn" onClick={() => save(pw)}>Trocar senha</button>
             </div>
-            <button className="btn btn-primary" onClick={() => save({ name, timezone: tz || undefined })}>Salvar perfil</button>
-          </div>
-        )}
-        {(me.linked || me.owner) && <AboutMe />}
-        <Connections owner={me.owner} />
-        {(me.linked || me.owner) && <AlarmSettings />}
-        <Sharing />
-        {me.linked && !me.owner && <MyIntegrations />}
-        {!me.owner && (
-          <div className="card card-pad">
-            <h3>Trocar senha</h3>
-            <div className="field"><label htmlFor="pf-pw">Senha atual</label><CampoSenha id="pf-pw" name="current-password" autoComplete="current-password" className="input" value={pw.current_password} onChange={(e) => setPw({ ...pw, current_password: e.target.value })} /></div>
-            <div className="field"><label htmlFor="pf-newpw">Nova senha</label><CampoSenha id="pf-newpw" name="new-password" autoComplete="new-password" className="input" value={pw.password} onChange={(e) => setPw({ ...pw, password: e.target.value })} /></div>
-            <button className="btn" onClick={() => save(pw)}>Trocar senha</button>
-          </div>
-        )}
-        <Security me={me} />
-      </section>
-      <MemoriesPage embedded />
-      <MeetingsPage embedded />
+          )}
+          <Security me={me} />
+        </section>
+      )}
+      {tab === "reunioes" && isSuper && <MeetingsPage embedded />}
     </div>
   );
 }
+
+type Tab = "perfil" | "sabe" | "conexoes" | "seguranca" | "reunioes";
 
 /** O que a pessoa contou nas perguntas de boas-vindas (o assistente lê isso antes de cada conversa). */
 function AboutMe() {
