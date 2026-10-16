@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, phoneFmt } from "../api";
 import type { Me } from "../App";
 import { ErrorBox } from "../components";
+import { CampoSenha } from "../CampoSenha";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
 import { Mascote, type Mood } from "../mascote/Mascote";
@@ -256,7 +257,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
                 </div>
                 <div className="field">
                   <label htmlFor="reset-pass">Senha nova</label>
-                  <input id="reset-pass" className="input" type="password" value={form.password} onChange={set("password")} {...focusProps("password")} minLength={8} autoComplete="new-password" required />
+                  <CampoSenha id="reset-pass" className="input" value={form.password} onChange={set("password")} {...focusProps("password")} minLength={8} autoComplete="new-password" required />
                   <span className="help">Pelo menos 8 caracteres. Os outros aparelhos saem da conta.</span>
                 </div>
                 <ErrorBox error={error} />
@@ -346,7 +347,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
                     <div className="field"><label>E-mail</label><input className="input" type="email" value={form.email} onChange={set("email")} {...focusProps("email")} autoComplete="email" autoFocus required /></div>
                     <div className="field">
                       <label>Senha</label>
-                      <input className="input" type="password" value={form.password} onChange={set("password")} {...focusProps("password")} minLength={8} autoComplete="new-password" required />
+                      <CampoSenha className="input" value={form.password} onChange={set("password")} {...focusProps("password")} minLength={8} autoComplete="new-password" required />
                       <span className="help">Pelo menos 8 caracteres.</span>
                     </div>
                     <label className="terms-check">
@@ -385,7 +386,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
               <div className="field"><label>E-mail</label><input className="input" type="email" value={form.email} onChange={set("email")} {...focusProps("email")} autoComplete="email" autoFocus required /></div>
               <div className="field">
                 <label>Senha</label>
-                <input className="input" type="password" value={form.password} onChange={set("password")} {...focusProps("password")} autoComplete="current-password" required />
+                <CampoSenha className="input" value={form.password} onChange={set("password")} {...focusProps("password")} autoComplete="current-password" required />
                 <button type="button" className="link forgot-link" onClick={() => { setMode("forgot"); setReset(null); setError(null); }}>Esqueci a senha</button>
               </div>
               <ErrorBox error={error} />

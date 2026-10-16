@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { api, phoneFmt } from "../api";
 import type { Me } from "../App";
 import { ErrorBox, PageHead, alertDialog, confirmDialog } from "../components";
+import { CampoSenha } from "../CampoSenha";
 import { AlarmSettings } from "../Alarms";
 import { Connections } from "../Connections";
 import { MyIntegrations } from "../MyIntegrations";
@@ -66,8 +67,8 @@ export function ProfilePage({ me }: { me: Me }) {
         {!me.owner && (
           <div className="card card-pad">
             <h3>Trocar senha</h3>
-            <div className="field"><label htmlFor="pf-pw">Senha atual</label><input id="pf-pw" name="current-password" autoComplete="current-password" className="input" type="password" value={pw.current_password} onChange={(e) => setPw({ ...pw, current_password: e.target.value })} /></div>
-            <div className="field"><label htmlFor="pf-newpw">Nova senha</label><input id="pf-newpw" name="new-password" autoComplete="new-password" className="input" type="password" value={pw.password} onChange={(e) => setPw({ ...pw, password: e.target.value })} /></div>
+            <div className="field"><label htmlFor="pf-pw">Senha atual</label><CampoSenha id="pf-pw" name="current-password" autoComplete="current-password" className="input" value={pw.current_password} onChange={(e) => setPw({ ...pw, current_password: e.target.value })} /></div>
+            <div className="field"><label htmlFor="pf-newpw">Nova senha</label><CampoSenha id="pf-newpw" name="new-password" autoComplete="new-password" className="input" value={pw.password} onChange={(e) => setPw({ ...pw, password: e.target.value })} /></div>
             <button className="btn" onClick={() => save(pw)}>Trocar senha</button>
           </div>
         )}
@@ -141,7 +142,7 @@ function Security({ me }: { me: Me }) {
             <button className="btn btn-danger" onClick={() => setErase(true)}>Apagar minha conta e meus dados</button>
           ) : (
             <>
-              <div className="field"><label htmlFor="pf-erase">Confirme com sua senha</label><input id="pf-erase" name="password" autoComplete="current-password" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus /></div>
+              <div className="field"><label htmlFor="pf-erase">Confirme com sua senha</label><CampoSenha id="pf-erase" name="password" autoComplete="current-password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus /></div>
               <ErrorBox error={error} />
               <div className="row row-wrap" style={{ gap: 8 }}>
                 <button className="btn btn-danger-solid" disabled={!password} onClick={eraseAll}>Apagar tudo</button>

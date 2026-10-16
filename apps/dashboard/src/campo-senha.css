@@ -1,0 +1,43 @@
+/* Campo de senha com botão de olho: o botão fica dentro do input, à direita,
+   com alvo de toque confortável (>= 44px) e sem empurrar o layout. */
+.campo-senha {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.campo-senha > .input {
+  padding-right: 48px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.campo-senha-olho {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  border-radius: 8px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.campo-senha-olho:hover {
+  opacity: 1;
+}
+
+.campo-senha-olho:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  opacity: 1;
+}
