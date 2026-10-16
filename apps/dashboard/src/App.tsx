@@ -24,6 +24,7 @@ const load = {
   agents: () => import("./pages/Agents"),
   studio: () => import("./pages/TeamStudio"),
   billing: () => import("./pages/Billing"),
+  payments: () => import("./pages/Payments"),
   calendar: () => import("./pages/Calendar"),
   clients: () => import("./pages/Clients"),
   dashboard: () => import("./pages/Dashboard"),
@@ -77,6 +78,7 @@ function PageUnavailable() {
 const AgentsPage = page(() => load.agents().then((m) => m.AgentsPage));
 const TeamStudioPage = page(() => load.studio().then((m) => m.TeamStudioPage));
 const BillingPage = page(() => load.billing().then((m) => m.BillingPage));
+const PaymentsPage = page(() => load.payments().then((m) => m.PaymentsPage));
 const ClientsPage = page(() => load.clients().then((m) => m.ClientsPage));
 const DashboardPage = page(() => load.dashboard().then((m) => m.DashboardPage));
 const ExecutionDetailPage = page(() => load.executions().then((m) => m.ExecutionDetailPage));
@@ -133,6 +135,7 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/profile": load.profile,
   "/conta": load.conta,
   "/plano": load.billing,
+  "/pagamentos": load.payments,
   "/time": load.team,
   "/esteira": load.esteira,
   "/esteira-custos": load.esteira,
@@ -234,7 +237,7 @@ function superNav(tabs: AppTabs | null, owner = false): NavItem[] {
  * Cliente começa só com o essencial (Início, Agenda, Finanças e De olho). Módulos e abas sob medida
  * aparecem quando a reunião noturna do time libera para a pessoa.
  */
-function adminNav(tabs: AppTabs | null, billing = false): NavItem[] {
+function adminNav(tabs: AppTabs | null, billing = false, paid = false): NavItem[] {
   const extra: NavItem[] = [
     ...(tabs?.modules ?? []).map((m) => tabs!.catalog[m]).filter(Boolean).map((m) => ({ to: m!.to, label: m!.label, icon: m!.icon })),
     ...(tabs?.custom ?? []).map((t) => ({ to: `/aba/${t.slug}`, label: t.title, icon: t.icon })),
@@ -251,6 +254,8 @@ function adminNav(tabs: AppTabs | null, billing = false): NavItem[] {
     { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
     // só aparece quando o dono ligou a cobrança
     ...(billing ? [{ to: "/plano", label: "Meu plano", icon: "card", short: "Plano" }] : []),
+    // quem já pagou alguma vez: cobranças, cartão e assinatura (não confundir com Finanças, que são os gastos da pessoa)
+    ...(billing && paid ? [{ to: "/pagamentos", label: "Pagamentos", icon: "receipt", short: "Pagamentos" }] : []),
     { to: "/profile", label: "Minha conta", icon: "user" },
   ];
 }
@@ -320,8 +325,8 @@ export function App() {
   const nav = useNavigate();
   const tabs = useApi<AppTabs>(me ? `/api/me/tabs?for=${me.id}` : null);
   const isSuper = me?.role === "superadmin";
-  const billing = useApi<{ pricing: { enabled: boolean } }>(me && !isSuper ? "/api/billing" : null);
-  const NAV = !me ? NO_NAV : isSuper ? superNav(tabs.data ?? null, me.owner) : adminNav(tabs.data ?? null, billing.data?.pricing?.enabled);
+  const billing = useApi<{ pricing: { enabled: boolean }; paid?: boolean }>(me && !isSuper ? "/api/billing" : null);
+  const NAV = !me ? NO_NAV : isSuper ? superNav(tabs.data ?? null, me.owner) : adminNav(tabs.data ?? null, billing.data?.pricing?.enabled, billing.data?.paid);
   const links = NAV.filter((i): i is NavLinkItem => "to" in i);
   // com o app parado, baixa em segundo plano o código das telas do menu desta pessoa (e só delas)
   const routes = links.map((l) => l.to).join(" ");
@@ -490,6 +495,7 @@ export function App() {
           ) : (
             <>
               <Route path="/plano" element={<BillingPage />} />
+              <Route path="/pagamentos" element={<PaymentsPage />} />
               <Route path="/assinatura" element={<Navigate to="/plano" replace />} />
             </>
           )}

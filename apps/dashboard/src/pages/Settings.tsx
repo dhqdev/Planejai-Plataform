@@ -84,6 +84,7 @@ function BillingSection({ form, setForm }: { form: any; setForm: (f: any) => voi
       <h4 className="set-sub">Regras</h4>
       <div className="set-fields">
         {numField("billingWelcomeGrains", "Grãos de boas-vindas", "Uma vez por pessoa.")}
+        {numField("billingTrialDays", "Dias de uso livre", "Depois do cadastro, usa sem gastar grãos. Depois gasta os de boas-vindas e, acabando, a IA para. 0 = sem dias livres.", 30)}
         {numField("billingGrainsPerUsd", "Grãos por US$ 1 de IA", "Custo real do OpenRouter. 1.000 = 1 grão a cada US$ 0,001.")}
         {numField("billingReferralStep", "Desconto por amigo pagante (%)", "Na mensalidade de quem convidou. 0 desliga.", 50)}
         {numField("billingReferralMax", "Desconto máximo (%)", "Teto somando todos os amigos.", 90)}

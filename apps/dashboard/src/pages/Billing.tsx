@@ -26,6 +26,7 @@ interface Pricing {
   plans: Plan[];
   packs: Pack[];
   welcome: number;
+  trialDays?: number;
   grainsPerUsd: number;
   referral: { step: number; max: number };
 }
@@ -39,7 +40,8 @@ interface Billing {
   email?: string;
   wallet?: { plan: number; extra: number; total: number };
   burnPerDay?: number;
-  access?: { allowed: boolean; state: string };
+  access?: { allowed: boolean; state: string; until?: string | null };
+  paid?: boolean;
   ledger?: { delta: number; reason: string; label: string; note: string | null; day: string | null; at: string }[];
   pending?: { kind: "pack" | "upgrade"; itemId: string; grains: number; value: number; invoiceUrl: string | null }[];
   subscription?: {
@@ -218,7 +220,9 @@ export function BillingPage() {
       ? "Seu acesso é liberado, sem gastar grãos."
       : !data.linked
         ? "Ligue seu WhatsApp em Minha conta para ver seus grãos."
-        : sub?.status === "overdue"
+        : data.access?.state === "trial" && data.access.until
+          ? `Período livre até ${new Date(data.access.until).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}: use à vontade, sem gastar grãos. Depois disso o uso desconta dos seus grãos de presente.`
+          : sub?.status === "overdue"
           ? "A mensalidade está pendente, então os grãos do plano não foram recarregados."
           : total <= 0
             ? "Seus grãos acabaram. Compre um pacote ou escolha um plano para o assistente voltar."

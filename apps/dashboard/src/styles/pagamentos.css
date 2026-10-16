@@ -1,0 +1,28 @@
+/* Pagamentos (pages/Payments.tsx): quatro cartões da assinatura e a lista de cobranças do Asaas. */
+.pay-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.pay-card { display: grid; gap: 2px; align-content: start; padding: 16px 18px; border-radius: 20px; background: var(--panel); border: 1px solid var(--border); }
+.pay-card small { color: var(--muted); font-size: 12px; font-weight: 600; }
+.pay-card b { font-size: 18px; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.pay-card span { color: var(--muted); font-size: 13px; }
+.pay-alert { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; padding: 12px 16px; border-radius: 16px; background: var(--violet-soft); font-size: 14px; font-weight: 600; }
+.pay-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.pay-head h2 { margin: 0; font-size: 17px; }
+.pay-link { font-size: 13px; font-weight: 600; color: var(--violet); }
+.pay-list { list-style: none; margin: 0; padding: 0; border-radius: 20px; background: var(--panel); border: 1px solid var(--border); overflow: hidden; }
+.pay-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto 110px 100px; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.pay-list li:last-child { border-bottom: 0; }
+.pay-what { display: grid; min-width: 0; }
+.pay-what b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pay-what small { color: var(--muted); font-size: 12.5px; }
+.pay-status { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--border); color: var(--muted); white-space: nowrap; }
+.pay-status.ok { background: color-mix(in srgb, #1f9d55 14%, transparent); color: #1f9d55; }
+.pay-status.open { background: var(--violet-soft); color: var(--violet); }
+.pay-value { text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; }
+.pay-act { text-align: right; font-size: 13px; font-weight: 600; }
+.pay-act a { color: var(--violet); }
+@media (max-width: 640px) {
+  .pay-list li { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+  .pay-status { justify-self: start; grid-row: 2; }
+  .pay-value { grid-row: 1; grid-column: 2; }
+  .pay-act { grid-row: 2; grid-column: 2; }
+}

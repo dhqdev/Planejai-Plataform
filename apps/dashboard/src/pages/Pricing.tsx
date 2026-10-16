@@ -32,6 +32,7 @@ interface Pricing {
   plans: Plan[];
   packs: Pack[];
   welcome: number;
+  trialDays?: number;
   grainsPerUsd: number;
   perMessage?: number | null;
   referral: { step: number; max: number };
@@ -143,6 +144,8 @@ export function PricingPage() {
   const plans = pricing?.plans ?? [];
   const packs = pricing?.packs ?? [];
   const welcome = pricing?.welcome ?? 0;
+  const trial = pricing?.trialDays ?? 0;
+  const trialTxt = trial > 0 ? `${trial} ${trial === 1 ? "dia" : "dias"} de uso livre` : "";
   const perMsg = pricing?.perMessage && pricing.perMessage > 0 ? pricing.perMessage : null;
   const msgs = (grains: number) => (perMsg ? `≈ ${int(roughly(grains / perMsg))} mensagens` : null);
   const cheapestPack = packs.length ? Math.min(...packs.map((k) => k.price / k.grains)) : null;
@@ -155,7 +158,7 @@ export function PricingPage() {
     [
       "Preciso pagar para começar?",
       welcome > 0
-        ? `Não. Toda conta nova ganha ${grainsTxt(welcome)} de presente, sem cartão. Quando acabarem, você assina um plano ou compra um pacote, se quiser continuar.`
+        ? `Não. Toda conta nova ${trial > 0 ? `usa à vontade por ${trialTxt} e depois ainda tem` : "ganha"} ${grainsTxt(welcome)} de presente, sem cartão. Quando acabarem, a IA pausa (o painel continua) até você assinar um plano ou comprar um pacote.`
         : "Você escolhe um plano ou um pacote avulso e já começa.",
     ],
     ["Posso subir de plano no meio do mês?", "Pode. Você paga hoje só a diferença do mês e os grãos a mais entram assim que o pagamento cai. A partir daí a mensalidade é a do plano novo."],
@@ -205,7 +208,7 @@ export function PricingPage() {
           ))}
         </h1>
         <p className="pr-sub">
-          {welcome > 0 ? `Comece com ${grainsTxt(welcome)} de presente. Quando acabarem, assine um plano ou compre mais grãos.` : "Assine um plano ou compre grãos avulsos. Troque quando quiser."}
+          {welcome > 0 ? `Comece com ${trial > 0 ? `${trialTxt} e mais ` : ""}${grainsTxt(welcome)} de presente. Quando acabarem, assine um plano ou compre mais grãos.` : "Assine um plano ou compre grãos avulsos. Troque quando quiser."}
         </p>
         <div className="pr-badges">
           {welcome > 0 && (
@@ -262,15 +265,15 @@ export function PricingPage() {
             {welcome > 0 && (
               <article className="pr-card" data-reveal style={{ ["--d" as string]: 0 } as CSSProperties} onMouseMove={spot}>
                 <h2 className="pr-free">Grátis</h2>
-                <p className="pr-amount">{grainsTxt(welcome)} de presente</p>
-                <p className="pr-note">{msgs(welcome) ?? "Uma vez, sem cartão"}</p>
+                <p className="pr-amount">{trial > 0 ? `${trialTxt} + ${grainsTxt(welcome)}` : `${grainsTxt(welcome)} de presente`}</p>
+                <p className="pr-note">{trial > 0 ? "Sem cartão. Depois dos dias livres, usa os grãos de presente" : (msgs(welcome) ?? "Uma vez, sem cartão")}</p>
                 {!closed && (
                   <a className="pr-cta" href={start} onClick={go}>{logged ? "Ver meus grãos" : invite ? "Tenho um convite" : "Comece agora"}</a>
                 )}
                 <ul className="pr-perks">
                   <li style={{ ["--k" as string]: 0 } as CSSProperties}><PerkIcon i={0} />O time inteiro de agentes no WhatsApp</li>
                   <li style={{ ["--k" as string]: 1 } as CSSProperties}><PerkIcon i={1} />Agenda, finanças e lembretes no painel</li>
-                  <li style={{ ["--k" as string]: 2 } as CSSProperties}><PerkIcon i={4} />Usa até os grãos acabarem, sem prazo</li>
+                  <li style={{ ["--k" as string]: 2 } as CSSProperties}><PerkIcon i={4} />{trial > 0 ? `Ilimitado nos primeiros ${trial === 1 ? "dia" : `${trial} dias`}, depois usa os grãos de presente` : "Usa até os grãos acabarem, sem prazo"}</li>
                 </ul>
               </article>
             )}
@@ -352,7 +355,7 @@ export function PricingPage() {
                 </tr>
                 <tr>
                   <th scope="row">Grãos</th>
-                  {welcome > 0 && <td>{int(welcome)} uma vez</td>}
+                  {welcome > 0 && <td>{trial > 0 ? `${trialTxt} + ${int(welcome)}` : `${int(welcome)} uma vez`}</td>}
                   {plans.map((p) => <td key={p.id} className={p.highlight ? "hi" : ""}>{int(p.grains)} por mês</td>)}
                 </tr>
                 {perMsg && (
@@ -401,7 +404,7 @@ export function PricingPage() {
         <h2 className="pr-h2" data-reveal>Começa pequeno, sobe quando precisar</h2>
         <ol className="pr-steps">
           {[
-            ["Comece de graça", welcome > 0 ? `${grainsTxt(welcome)} de presente para conhecer o time, sem cartão.` : "Escolha um plano ou um pacote avulso."],
+            ["Comece de graça", welcome > 0 ? `${trial > 0 ? `${trialTxt} e ` : ""}${grainsTxt(welcome)} de presente para conhecer o time, sem cartão.` : "Escolha um plano ou um pacote avulso."],
             ["Assine um plano", "Todo mês os grãos do plano recarregam sozinhos. Cartão, Pix ou boleto."],
             ["Suba quando quiser", "Paga só a diferença do mês e os grãos a mais entram na hora. Em Plano e grãos, no painel."],
           ].map(([t, d], i) => (
