@@ -168,12 +168,15 @@ html.pj-kb .hc-dock { padding-bottom: 0; }
 .hc-rec { flex: 1; display: flex; align-items: center; gap: 10px; font-size: 16px; font-variant-numeric: tabular-nums; }
 .hc-rec i { width: 10px; height: 10px; border-radius: 50%; background: var(--err); animation: hc-blink 1s ease-in-out infinite; }
 @keyframes hc-blink { 50% { opacity: .25; } }
-.hc-attach {
-  position: absolute; left: 4px; bottom: calc(100% + 10px); display: flex; flex-direction: column; padding: 6px; border-radius: 22px; min-width: 180px;
-  animation: hc-in .25s var(--ios-spring, ease) both;
-}
-.hc-attach button { display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 14px; border: none; background: none; color: var(--text); font: inherit; font-size: 15.5px; border-radius: 16px; cursor: pointer; text-align: left; }
-.hc-attach button:active { background: color-mix(in srgb, var(--text) 8%, transparent); }
+/* Anexar: folha de vidro igual à do time, ícones no mesmo quadrado para ficarem alinhados */
+/* quase sólida: a conversa por trás não aparece no meio das opções */
+.modal-bg .modal.hc-attach-sheet, .modal-bg .modal.hc-attach-sheet.glass-on { background: var(--lg-sheen), var(--lg-solid); }
+.hc-attach-sheet .modal-head { border-bottom: none; padding-bottom: 4px; }
+.hc-attach-sheet .modal-body { padding-top: 4px; }
+.hc-attach { display: flex; flex-direction: column; gap: 2px; padding-bottom: 6px; }
+.hc-attach-row { display: flex; align-items: center; gap: 14px; min-height: 60px; padding: 8px 6px; border: none; background: none; border-radius: 16px; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.hc-attach-row:active { background: color-mix(in srgb, var(--text) 8%, transparent); }
+.hc-attach-ico { width: 44px; height: 44px; flex-shrink: 0; display: grid; place-items: center; border-radius: 14px; background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
 .hc-error { align-self: center; max-width: 100%; padding: 8px 14px; border-radius: 14px; font-size: 13.5px; background: color-mix(in srgb, var(--err) 12%, var(--panel)); color: var(--err); }
 
 /* ---------- Folha do agente e do time ---------- */
@@ -187,6 +190,6 @@ html.pj-kb .hc-dock { padding-bottom: 0; }
 .hc-team-txt small { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (prefers-reduced-motion: reduce) {
-  .hc-row, .hc-mini, .hc-chip, .hc-send, .hc-reaction, .hc-attach { animation: none; }
+  .hc-row, .hc-mini, .hc-chip, .hc-send, .hc-reaction { animation: none; }
   .hc-typing span { animation: none; opacity: .6; }
 }

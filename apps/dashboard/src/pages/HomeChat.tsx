@@ -316,22 +316,43 @@ function useViewport(root: React.RefObject<HTMLDivElement | null>) {
     const el = root.current;
     if (!vv || !el) return;
     let raf = 0;
+    // no iPhone instalado o innerHeight encolhe junto com o teclado, então a conta sozinha não basta:
+    // campo de texto com foco também conta como teclado aberto
+    const typing = () => {
+      const a = document.activeElement as HTMLElement | null;
+      return Boolean(a && el.contains(a) && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && (a as HTMLInputElement).type !== "file")));
+    };
     const fit = () => {
       raf = 0;
       const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
       el.style.setProperty("--vvh", `${vv.height}px`);
       el.style.setProperty("--vvtop", `${vv.offsetTop}px`);
-      document.documentElement.classList.toggle("pj-kb", kb > 120);
+      document.documentElement.classList.toggle("pj-kb", kb > 120 || typing());
     };
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(fit);
     };
+    // ao sair do campo espera um pouco: tocar em Enviar tira o foco por um instante
+    let blur = 0;
+    const onFocus = () => {
+      clearTimeout(blur);
+      fit();
+    };
+    const onBlur = () => {
+      clearTimeout(blur);
+      blur = window.setTimeout(fit, 120);
+    };
     fit();
     vv.addEventListener("resize", schedule);
     vv.addEventListener("scroll", schedule);
+    document.addEventListener("focusin", onFocus);
+    document.addEventListener("focusout", onBlur);
     return () => {
       vv.removeEventListener("resize", schedule);
       vv.removeEventListener("scroll", schedule);
+      document.removeEventListener("focusin", onFocus);
+      document.removeEventListener("focusout", onBlur);
+      clearTimeout(blur);
       cancelAnimationFrame(raf);
       document.documentElement.classList.remove("pj-kb");
     };
@@ -776,17 +797,40 @@ export function HomeChat({ me }: { me: Me }) {
               )}
             </>
           )}
-          {attach && (
-            <div className="hc-attach lg" role="menu">
-              <button role="menuitem" onClick={() => cameraRef.current?.click()}><Icon name="circle" size={18} /> Câmera</button>
-              <button role="menuitem" onClick={() => { if (fileRef.current) (fileRef.current.accept = "image/*,video/*", fileRef.current.click()); }}><Icon name="layout" size={18} /> Fotos</button>
-              <button role="menuitem" onClick={() => { if (fileRef.current) (fileRef.current.accept = "", fileRef.current.click()); }}><Icon name="file" size={18} /> Arquivo</button>
-            </div>
-          )}
           <input ref={fileRef} type="file" hidden onChange={(e) => { void pickFile(e.target.files?.[0]); e.target.value = ""; }} />
           <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { void pickFile(e.target.files?.[0]); e.target.value = ""; }} />
         </div>
       </div>
+
+      {attach && (
+        <Modal title="Anexar" onClose={() => setAttach(false)} className="hc-sheet hc-attach-sheet">
+          <div className="hc-attach">
+            {(
+              [
+                ["camera", "Câmera", "Tirar uma foto agora", () => cameraRef.current?.click()],
+                ["photo", "Fotos e vídeos", "Da galeria do celular", () => fileRef.current && ((fileRef.current.accept = "image/*,video/*"), fileRef.current.click())],
+                ["file", "Arquivo", "PDF, planilha, documento", () => fileRef.current && ((fileRef.current.accept = ""), fileRef.current.click())],
+              ] as const
+            ).map(([icon, label, hint, open]) => (
+              <button
+                key={icon}
+                className="hc-attach-row"
+                onClick={() => {
+                  haptic();
+                  open();
+                  setAttach(false);
+                }}
+              >
+                <span className="hc-attach-ico"><AttachIcon name={icon} /></span>
+                <span className="hc-team-txt">
+                  <strong>{label}</strong>
+                  <small>{hint}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+        </Modal>
+      )}
 
       {sheet && (
         <Modal title={sheet === "team" ? "Seu time" : sheet.persona} onClose={() => setSheet(null)} className="hc-sheet">
@@ -824,6 +868,31 @@ export function HomeChat({ me }: { me: Me }) {
     </div>
   );
   return createPortal(page, document.body);
+}
+
+/** Ícones do Anexar, todos no mesmo traço e no mesmo quadrado de 24 para alinharem. */
+function AttachIcon({ name }: { name: "camera" | "photo" | "file" }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {name === "camera" ? (
+        <>
+          <path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.6l1.4-2h5l1.4 2h1.6A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z" />
+          <circle cx="12" cy="12.5" r="3.5" />
+        </>
+      ) : name === "photo" ? (
+        <>
+          <rect x="3.5" y="4.5" width="17" height="15" rx="3" />
+          <circle cx="9" cy="10" r="1.6" />
+          <path d="m20.5 15.5-4.5-4.5-8.5 8.5" />
+        </>
+      ) : (
+        <>
+          <path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z" />
+          <path d="M14 3.5V8h4.5M9 13h6M9 16.5h4" />
+        </>
+      )}
+    </svg>
+  );
 }
 
 function MicIcon() {
