@@ -6,15 +6,16 @@ import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { DateField, TimeField } from "../pickers";
 import { haptic } from "../touch";
+import { PhoneAgenda } from "./CalendarPhone";
 
 /**
  * Agenda no estilo Google Agenda: painel lateral (Criar, minicalendário, agendas), mês com número da
- * semana, semana, dia e lista. No celular: pílulas Lista/Dia/Semana/Mês e botão + flutuante.
+ * semana, semana, dia e lista. No celular a tela é outra, no jeito do Toki: PhoneAgenda (CalendarPhone.tsx).
  * Agendas: lembretes do assistente, Google Agenda conectado e feriados nacionais (calculados aqui, sem API).
  */
 
 type Kind = "reminder" | "google" | "holiday" | "message";
-type Ev = {
+export type Ev = {
   id: string;
   kind: Kind;
   reminderId?: string;
@@ -35,26 +36,26 @@ type Ev = {
   directId?: string;
   status?: string;
 };
-type Tag = { name: string; color: string };
+export type Tag = { name: string; color: string };
 /** Mesmas cores do servidor (agenda-tags.ts): todas com texto branco legível. */
 const TAG_COLORS = ["#e03150", "#e8710a", "#b45309", "#0c8040", "#0f8b8d", "#0369a1", "#2a6fdb", "#4f46e5", "#7c3aed", "#d63384", "#475569"];
 const evStyle = (e: Ev) => (e.kind === "reminder" && e.color ? ({ ["--ev" as any]: e.color } as React.CSSProperties) : undefined);
 type View = "day" | "week" | "month" | "list";
 
-const WEEKDAYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
-const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+export const WEEKDAYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+export const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const HOUR_PX = 48;
 const FIRST_HOUR = 0;
 
-const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, d.getHours(), d.getMinutes());
-const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-const key = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+export const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+export const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, d.getHours(), d.getMinutes());
+export const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+export const key = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+export const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const isPhone = () => matchMedia("(max-width: 767px)").matches;
 /** Semana começa na segunda, como no Google Agenda em português. */
-const weekStart = (d: Date) => addDays(startOfDay(d), -((d.getDay() + 6) % 7));
+export const weekStart = (d: Date) => addDays(startOfDay(d), -((d.getDay() + 6) % 7));
 
 function monthGrid(anchor: Date) {
   const start = weekStart(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
@@ -71,7 +72,7 @@ function isoWeek(d: Date) {
 }
 
 /** Feriados nacionais do Brasil (fixos + os que dependem da Páscoa). */
-function holidays(year: number): Ev[] {
+export function holidays(year: number): Ev[] {
   // Páscoa (algoritmo de Meeus/Jones/Butcher)
   const a = year % 19, b = Math.floor(year / 100), c = year % 100, d = Math.floor(b / 4), e = b % 4;
   const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
@@ -96,7 +97,7 @@ function holidays(year: number): Ev[] {
   return list.map(([dt, title]) => ({ id: `h-${key(dt)}-${title}`, kind: "holiday" as const, title, start: dt.toISOString(), allDay: true }));
 }
 
-const CALENDARS: { id: Kind; label: string; color: string; group: "mine" | "other" }[] = [
+export const CALENDARS: { id: Kind; label: string; color: string; group: "mine" | "other" }[] = [
   { id: "reminder", label: "Lembretes", color: "var(--cal-reminder)", group: "mine" },
   { id: "google", label: "Google Agenda", color: "var(--cal-google)", group: "mine" },
   { id: "message", label: "Mensagens agendadas", color: "var(--cal-message)", group: "mine" },
@@ -159,7 +160,8 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
     return { from: startOfDay(new Date()), to: addDays(startOfDay(new Date()), 45) };
   }, [view, cursor]);
 
-  const path = `/api/calendar?from=${range.from.toISOString()}&to=${range.to.toISOString()}${person ? `&user=${person}` : ""}`;
+  // no celular a agenda é a PhoneAgenda (CalendarPhone.tsx), que carrega o que precisa
+  const path = phone ? null : `/api/calendar?from=${range.from.toISOString()}&to=${range.to.toISOString()}${person ? `&user=${person}` : ""}`;
   const { data, error, reload } = useApi<{ events: Ev[]; readonly?: boolean; tags?: Tag[] }>(path, { poll: 30000 });
   const tags = data?.tags ?? [];
   const readonly = Boolean(data?.readonly);
@@ -248,6 +250,8 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
 
   const VIEWS: [View, string][] = [["list", "Lista"], ["day", "Dia"], ["week", "Semana"], ["month", "Mês"]];
   const calendars = CALENDARS.filter((c) => c.id !== "google" || isSuper || (data?.events ?? []).some((e) => e.kind === "google"));
+
+  if (phone) return <PhoneAgenda isSuper={isSuper} hidden={hidden} onToggle={toggleCal} owners={owners} person={person} onPerson={setPerson} />;
 
   return (
     <div className={`page cal-page fit ${side && !phone ? "with-side" : ""}`}>
@@ -386,7 +390,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
   );
 }
 
-const tagItems = (tags: Tag[]) => tags.map((t) => ({ id: `tag:${t.name}`, label: t.name, color: t.color }));
+export const tagItems = (tags: Tag[]) => tags.map((t) => ({ id: `tag:${t.name}`, label: t.name, color: t.color }));
 
 function CalendarList({ title, items, hidden, onToggle }: { title: string; items: { id: string; label: string; color: string }[]; hidden: string[]; onToggle: (k: string) => void }) {
   if (!items.length) return null;
@@ -433,7 +437,7 @@ function MiniMonth({ selected, onPick }: { selected: Date; onPick: (d: Date) => 
   );
 }
 
-function withTime(d: Date) {
+export function withTime(d: Date) {
   const now = new Date();
   const out = new Date(d);
   // hoje: próxima hora cheia; outro dia: 9h
@@ -637,7 +641,7 @@ function MonthView(p: {
   );
 }
 
-function WeekView(p: { from: Date; days: number; byDay: Map<string, Ev[]>; onOpen: (e: Ev) => void; onCreate: (d: Date) => void; onMove: (e: Ev, d: Date) => void }) {
+export function WeekView(p: { from: Date; days: number; byDay: Map<string, Ev[]>; onOpen: (e: Ev) => void; onCreate: (d: Date) => void; onMove: (e: Ev, d: Date) => void }) {
   const cols = Array.from({ length: p.days }, (_, i) => addDays(p.from, i));
   const scroller = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(new Date());
@@ -716,7 +720,7 @@ function WeekView(p: { from: Date; days: number; byDay: Map<string, Ev[]>; onOpe
   );
 }
 
-function ListView({ from, byDay, onOpen }: { from: Date; byDay: Map<string, Ev[]>; onOpen: (e: Ev) => void }) {
+export function ListView({ from, byDay, onOpen }: { from: Date; byDay: Map<string, Ev[]>; onOpen: (e: Ev) => void }) {
   const days = Array.from({ length: 45 }, (_, i) => addDays(from, i)).filter((d) => byDay.has(key(d)));
   if (!days.length) return <div className="card"><p className="muted cal-empty">Nada nos próximos 45 dias.</p></div>;
   return (
@@ -736,7 +740,7 @@ function ListView({ from, byDay, onOpen }: { from: Date; byDay: Map<string, Ev[]
   );
 }
 
-function EventRow({ ev, onOpen }: { ev: Ev; onOpen: (e: Ev) => void }) {
+export function EventRow({ ev, onOpen }: { ev: Ev; onOpen: (e: Ev) => void }) {
   const s = new Date(ev.start);
   return (
     <button className="cal-row" onClick={() => onOpen(ev)}>
@@ -792,7 +796,7 @@ function TagPicker({ tags, tag, color, onChange }: { tags: Tag[]; tag: string; c
 const MSG_STATUS: Record<string, string> = { scheduled: "Mensagem agendada", sending: "Enviando", sent: "Mensagem enviada", failed: "Mensagem não enviada" };
 
 /** Mensagem avulsa: para quem, o texto; cancelar enquanto não saiu, excluir da agenda depois que saiu. */
-function MessageDetail({ ev, onClose, onChanged }: { ev: Ev; onClose: () => void; onChanged: () => void }) {
+export function MessageDetail({ ev, onClose, onChanged }: { ev: Ev; onClose: () => void; onChanged: () => void }) {
   const s = new Date(ev.start);
   const [busy, setBusy] = useState(false);
   const scheduled = ev.status === "scheduled";
@@ -863,7 +867,7 @@ const leadLabel = (m: number) => (m === 0 ? "Na hora" : m % 1440 === 0 ? `${m / 
 const PANEL_SUFFIX = " (criado pelo painel)";
 
 /** Lembrete, compromisso ou evento do Google: tudo editável (dia, hora, aviso, nome, detalhes, tag) e dá para excluir. */
-function EventDetail({ ev, tags, readonly, onClose, onChanged }: { ev: Ev; tags: Tag[]; readonly: boolean; onClose: () => void; onChanged: () => void }) {
+export function EventDetail({ ev, tags, readonly, onClose, onChanged }: { ev: Ev; tags: Tag[]; readonly: boolean; onClose: () => void; onChanged: () => void }) {
   const s = new Date(ev.start);
   const e = ev.end ? new Date(ev.end) : new Date(s.getTime() + 3600_000);
   const [busy, setBusy] = useState(false);
@@ -1030,7 +1034,7 @@ function EventDetail({ ev, tags, readonly, onClose, onChanged }: { ev: Ev; tags:
   );
 }
 
-function NewReminder({ at, tags, onClose }: { at: Date; tags: Tag[]; onClose: (saved: boolean) => void }) {
+export function NewReminder({ at, tags, onClose }: { at: Date; tags: Tag[]; onClose: (saved: boolean) => void }) {
   const [f, setF] = useState({ intent: "", date: key(at), time: hhmm(at), tag: "", color: null as string | null });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

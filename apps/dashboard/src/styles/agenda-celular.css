@@ -1,0 +1,168 @@
+/* ---------- Agenda no celular, no jeito do Toki (pages/CalendarPhone.tsx) ----------
+   Fundo do painel, mês numa rolagem contínua com o compromisso escrito no dia em tom claro da cor dele,
+   hoje num círculo roxo, abas com sublinhado que desliza. Movimento curto e leve; nada anima com movimento reduzido. */
+
+@media (max-width: 767px) {
+  html.pj-agenda .topbar { display: none; }
+  html.pj-agenda .main { overflow: hidden; }
+  html.pc-ev-open .cal-fab { opacity: 0; pointer-events: none; }
+}
+
+.pc {
+  --pc-ease: cubic-bezier(.32, .72, 0, 1);
+  --pc-tab: calc(96px + env(safe-area-inset-bottom));
+  position: fixed; inset: 0; height: 100dvh; z-index: 25;
+  display: flex; flex-direction: column; background: var(--panel); color: var(--text);
+  overscroll-behavior: none;
+}
+
+/* ---------- topo ---------- */
+.pc-head { flex: none; padding: calc(6px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); background: var(--panel); position: relative; z-index: 2; }
+.pc-row { display: flex; align-items: center; gap: 4px; min-height: 52px; }
+.pc-row .spacer { flex: 1; }
+.pc-tabs { position: relative; display: flex; gap: 28px; align-self: stretch; }
+.pc-tabs button { border: none; background: none; padding: 0; font: inherit; font-size: 17px; font-weight: 600; color: var(--muted); cursor: pointer; transition: color .2s; -webkit-tap-highlight-color: transparent; }
+.pc-tabs button.on { color: var(--text); }
+/* sublinhado que desliza entre as abas (posição e largura medidas no componente) */
+.pc-tab-line { position: absolute; left: 0; bottom: 4px; width: var(--w, 0); height: 3px; border-radius: 3px; background: var(--act, var(--text)); transform: translateX(var(--x, 0)); transition: transform .38s var(--pc-ease), width .38s var(--pc-ease); }
+.pc-ico { width: 44px; height: 44px; border: none; background: none; border-radius: 50%; display: grid; place-items: center; color: var(--text); cursor: pointer; position: relative; flex: none; -webkit-tap-highlight-color: transparent; transition: background .15s, transform .2s var(--pc-ease); }
+.pc-ico:active { background: var(--panel-2); transform: scale(.92); }
+.pc-ico.sm { width: 36px; height: 36px; }
+.pc-ico.dot::after { content: ""; position: absolute; top: 9px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--act, var(--err)); box-shadow: 0 0 0 2px var(--panel); }
+.pc-search { margin: 2px 0 6px; animation: pc-drop .26s var(--pc-ease); }
+.pc-row-2 { min-height: 58px; border-top: 1px solid var(--border); }
+.pc-title { display: inline-flex; align-items: center; gap: 8px; border: none; background: none; padding: 6px 0; font: inherit; color: var(--text); cursor: pointer; min-width: 0; }
+.pc-title-txt { font-size: 26px; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: pc-title .32s var(--pc-ease); }
+.pc-today { border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; font-size: 15px; font-weight: 500; height: 40px; padding: 0 18px; border-radius: 99px; cursor: pointer; transition: transform .2s var(--pc-ease), background .15s; }
+.pc-today:active { transform: scale(.95); background: var(--panel-2); }
+.pc-wd { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 4px 0 8px; border-bottom: 1px solid var(--border); margin: 0 calc(-1 * max(16px, env(safe-area-inset-right))) 0 calc(-1 * max(16px, env(safe-area-inset-left))); }
+.pc-wd span { text-align: center; font-size: 13px; font-weight: 600; color: var(--muted); }
+
+/* ---------- corpo ---------- */
+.pc-body { position: relative; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-bottom: var(--pc-tab); animation: pc-fade .28s var(--pc-ease); overscroll-behavior: contain; }
+.pc-body-week, .pc-body-list, .pc-body-rem { padding: 10px max(12px, env(safe-area-inset-right)) var(--pc-tab) max(12px, env(safe-area-inset-left)); }
+.pc-empty { padding: 32px 20px; text-align: center; }
+
+.pc-month { padding-top: 6px; }
+.pc-month-name { margin: 18px 16px 4px; font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+.pc-month-name small { font-size: 15px; font-weight: 500; color: var(--muted); }
+.pc-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid var(--border); min-height: 112px; }
+.pc-month-name + .pc-week { border-top: none; }
+.pc-day { display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 6px 2px 8px; min-width: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background .18s; }
+.pc-day.empty { cursor: default; }
+.pc-day:not(.empty):active { background: var(--panel-2); }
+.pc-num { align-self: center; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; margin-bottom: 2px; }
+.pc-day.past .pc-num { color: var(--muted); font-weight: 500; }
+.pc-day.today .pc-num { background: var(--act, var(--ink)); color: var(--on-act, #fff); }
+
+.pc-chip {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; min-width: 0; border: none; cursor: pointer; text-align: left;
+  padding: 4px 4px 5px; border-radius: 6px; font: inherit; color: var(--text);
+  background: color-mix(in srgb, var(--ev) 20%, var(--panel));
+  animation: pc-chip .32s var(--pc-ease) both; animation-delay: calc(var(--n, 0) * 35ms);
+  transition: transform .18s var(--pc-ease), filter .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.pc-chip:active { transform: scale(.95); filter: brightness(.96); }
+/* como no Toki: o primeiro do dia em até 2 linhas com a hora, os outros numa linha; o texto corta seco, sem "..." */
+.pc-chip-t { font-size: 13px; line-height: 1.24; font-weight: 500; display: block; max-height: 2.48em; overflow: hidden; width: 100%; word-break: break-word; }
+.pc-chip.line { padding: 3px 4px; }
+.pc-chip.line .pc-chip-t { white-space: nowrap; max-height: none; }
+.pc-chip small { font-size: 11.5px; font-weight: 600; color: color-mix(in srgb, var(--ev) 88%, var(--text)); font-variant-numeric: tabular-nums; }
+.pc-day.past .pc-chip { opacity: .72; }
+.pc-more { font-size: 12px; font-weight: 600; color: var(--muted); padding-left: 4px; }
+
+/* ---------- folha de opções ---------- */
+.pc-views { display: grid; margin: -4px 0 8px; }
+.pc-views button { display: flex; align-items: center; gap: 14px; border: none; background: none; padding: 13px 2px; font: inherit; font-size: 17px; color: var(--text); cursor: pointer; text-align: left; border-radius: 10px; transition: background .15s; }
+.pc-views button span { flex: 1; }
+.pc-views button.on { color: var(--act, var(--text)); font-weight: 600; }
+.pc-views button:active { background: var(--panel-2); }
+.pc-opt-sec { border-top: 1px solid var(--border); padding: 14px 0 6px; }
+.pc-opt-sec h4 { margin: 0 0 12px; font-size: 14px; font-weight: 500; color: var(--muted); }
+.pc-cats { display: flex; flex-wrap: wrap; gap: 8px; }
+.pc-cats button { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 15px; border-radius: 99px; border: 1px solid var(--border-2); background: var(--panel); color: var(--text); font: inherit; font-size: 14.5px; font-weight: 500; cursor: pointer; transition: opacity .2s, transform .2s var(--pc-ease); }
+.pc-cats button:active { transform: scale(.95); }
+.pc-cats button.off { opacity: .45; }
+.pc-cats i, .pc-cal i { width: 12px; height: 12px; border-radius: 4px; flex: none; }
+.pc-cal { display: flex; align-items: center; gap: 12px; width: 100%; border: none; background: none; padding: 11px 2px; font: inherit; font-size: 16px; color: var(--text); cursor: pointer; text-align: left; transition: opacity .2s; }
+.pc-cal i { width: 18px; height: 18px; border-radius: 6px; }
+.pc-cal span { flex: 1; }
+.pc-cal.off { opacity: .5; }
+.pc-cal .ico { color: var(--muted); }
+
+/* ---------- ir para um mês ---------- */
+.pc-jump-year { display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 12px; }
+.pc-jump-year strong { font-size: 19px; min-width: 60px; text-align: center; animation: pc-title .28s var(--pc-ease); }
+.pc-jump { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.pc-jump button { height: 48px; border-radius: 14px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; transition: transform .2s var(--pc-ease), background .15s; }
+.pc-jump button:active { transform: scale(.94); }
+.pc-jump button.now { border-color: var(--act, var(--text)); }
+.pc-jump button.on { background: var(--act, var(--ink)); border-color: transparent; color: var(--on-act, #fff); }
+.pc-day-list { margin: -4px -6px; }
+
+/* ---------- compromisso em tela cheia ---------- */
+.pe-wrap { position: fixed; inset: 0; z-index: 48; }
+.pe-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .28); animation: pc-fade .3s ease both; }
+.pe {
+  position: absolute; inset: 0; display: flex; flex-direction: column; color: var(--text);
+  background:
+    radial-gradient(120% 55% at 10% 0%, color-mix(in srgb, var(--ev) 30%, transparent), transparent 70%),
+    linear-gradient(to bottom, color-mix(in srgb, var(--ev) 14%, var(--panel)) 0%, var(--bg) 46%);
+  background-color: var(--bg);
+  animation: pe-up .46s var(--pc-ease) both;
+  transition: transform .34s var(--pc-ease);
+  will-change: transform;
+}
+.pe-wrap.leaving .pe { animation: pe-down .26s cubic-bezier(.4, 0, 1, 1) both; }
+.pe-wrap.leaving .pe-scrim { animation: pc-fade-out .26s ease both; }
+.pe-top { flex: none; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; padding: calc(8px + env(safe-area-inset-top)) 14px 8px; }
+.pe-src { justify-self: center; display: inline-flex; align-items: center; gap: 8px; max-width: 100%; font-size: 15.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-src i { width: 22px; height: 16px; border-radius: 5px; background: var(--ev); flex: none; }
+.pe-body { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 26px 24px; }
+.pe-body > * { animation: pe-item .5s var(--pc-ease) both; }
+.pe-body > :nth-child(2) { animation-delay: 40ms; }
+.pe-body > :nth-child(3) { animation-delay: 80ms; }
+.pe-body > :nth-child(n + 4) { animation-delay: 120ms; }
+.pe-badge { display: grid; place-items: center; width: 60px; height: 60px; border-radius: 16px; color: #fff; background: var(--ev); box-shadow: 0 10px 24px -12px var(--ev), inset 0 1px 0 rgba(255, 255, 255, .25); }
+.pe-title { margin: 22px 0 14px; font-size: 27px; line-height: 1.18; font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.pe-when { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; font-size: 18px; font-weight: 500; color: color-mix(in srgb, var(--ev) 90%, var(--text)); }
+.pe-when i { width: 1px; height: 18px; background: color-mix(in srgb, var(--ev) 30%, transparent); }
+.pe-when.soft { font-size: 16px; color: var(--muted); }
+.pe-desc { margin: 22px 0 0; font-size: 16.5px; line-height: 1.5; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.pe-desc + .pe-desc { margin-top: 10px; }
+.pe-from { margin: 24px 0 0; font-size: 16px; color: var(--muted); }
+.pe-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; color: var(--text); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+.pe-foot { flex: none; padding: 10px 0 calc(14px + env(safe-area-inset-bottom)); }
+.pe-chips { display: flex; gap: 10px; overflow-x: auto; padding: 4px 16px 12px; scrollbar-width: none; }
+.pe-chips::-webkit-scrollbar { display: none; }
+.pe-chips button {
+  flex: none; height: 46px; padding: 0 20px; border-radius: 99px; border: 1px solid var(--border-2); background: var(--panel); color: var(--text);
+  font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  animation: pe-item .45s var(--pc-ease) both; animation-delay: calc(140ms + var(--i, 0) * 45ms);
+  transition: transform .2s var(--pc-ease), background .15s;
+}
+.pe-chips button:active { transform: scale(.95); background: var(--panel-2); }
+.pe-chips button:disabled { opacity: .6; }
+.pe-sent { margin: 0 18px 10px; font-size: 14px; color: var(--muted); animation: pe-item .35s var(--pc-ease) both; }
+.pe-foot .error { margin: 0 16px 10px; }
+.pe-ask { display: flex; align-items: center; gap: 6px; margin: 0 16px; padding: 6px 6px 6px 20px; border-radius: 99px; background: var(--panel); border: 1px solid var(--border); box-shadow: 0 10px 30px -18px rgba(0, 0, 0, .35); animation: pe-item .5s var(--pc-ease) both; animation-delay: 200ms; }
+.pe-ask input { flex: 1; min-width: 0; border: none; background: none; outline: none; font: inherit; font-size: 16px; color: var(--text); height: 44px; }
+.pe-ask input::placeholder { color: var(--muted); }
+.pe-ask button { width: 46px; height: 46px; border-radius: 50%; border: none; display: grid; place-items: center; cursor: pointer; background: var(--act, var(--ink)); color: var(--on-act, #fff); transition: transform .2s var(--pc-ease), opacity .2s; }
+.pe-ask button:disabled { opacity: .35; }
+.pe-ask button:not(:disabled):active { transform: scale(.92); }
+
+/* ---------- movimento ---------- */
+@keyframes pc-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pc-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes pc-title { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pc-drop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes pc-chip { from { opacity: 0; transform: translateY(4px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes pe-up { from { transform: translate3d(0, 100%, 0); } to { transform: none; } }
+@keyframes pe-down { from { transform: none; } to { transform: translate3d(0, 100%, 0); } }
+@keyframes pe-item { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pc *, .pc, .pe-wrap * { animation: none !important; transition: none !important; }
+}
