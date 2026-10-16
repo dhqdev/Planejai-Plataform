@@ -49,11 +49,6 @@
 .code-input.found { border-color: var(--violet); box-shadow: 0 0 0 4px var(--violet-soft); animation: code-found .5s cubic-bezier(.34, 1.56, .64, 1); }
 @keyframes code-found { 40% { transform: scale(1.04); } }
 
-.welcome-float { position: fixed; z-index: -1; display: none; }
-@media (min-width: 900px) { .welcome-float { display: block; } }
-.welcome-stage { display: flex; gap: 14px; align-items: flex-end; margin-bottom: 22px; min-height: 92px; }
-.welcome-stage .stage-mascote { flex-shrink: 0; }
-.welcome-stage .welcome-hello { margin: 0 0 14px; font-size: 14px; display: block; animation: stage-say .4s ease .3s both; }
 
 /* convite gerado: o código grande para ditar ou copiar */
 .invite-made { text-align: center; }
@@ -65,7 +60,6 @@
 .invite-chip { margin-left: 8px; font-size: 11.5px; padding: 2px 7px; border-radius: 6px; background: var(--violet-soft); color: var(--violet); letter-spacing: .06em; }
 
 @media (prefers-reduced-motion: reduce) {
-  .stage-mascote-body, .stage-say, .float-mascote, .signup-step, .code-input.found, .invite-code, .welcome-stage .welcome-hello { animation: none !important; }
-  .float-mascote { opacity: .9; }
+  .stage-mascote-body, .stage-say, .float-mascote, .signup-step, .code-input.found, .invite-code,   .float-mascote { opacity: .9; }
 }
 .forgot-link { display: block; margin: 8px 0 0 auto; font-size: 13px; font-weight: 500; color: var(--muted); }

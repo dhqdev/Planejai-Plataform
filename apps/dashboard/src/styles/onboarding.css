@@ -1,0 +1,152 @@
+/* ---------- Primeira conversa com o mascote (pages/Onboarding.tsx) ----------
+   No jeito do Kody: muito branco, um mascote só no meio, balão de fala em cima dele e um botão grande escuro
+   no pé com a resposta da pessoa. Celular: tela cheia com área segura. Notebook/iPad: cartão alto no meio do
+   painel desfocado. Só transform e opacidade animam; o estilo normal é o final (movimento reduzido = parado). */
+.onb {
+  position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; padding: 24px; outline: none;
+  background: var(--lg-scrim, rgba(0, 0, 0, .2));
+  -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  animation: onb-fade .3s ease-out both;
+}
+.onb.out { animation: onb-fade-out .26s ease-in both; }
+.onb.out .onb-card { animation: onb-card-out .26s ease-in both; }
+
+.onb-card {
+  position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(600px, 100%); height: min(760px, calc(var(--vvh, 100dvh) - 48px));
+  background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 32px;
+  box-shadow: var(--lg-shadow, var(--shadow-lg)); overflow: hidden; touch-action: pan-y;
+  -webkit-user-select: none; user-select: none; animation: onb-card-in .5s var(--soft) both;
+}
+
+/* topo: voltar, progresso e pular */
+.onb-top { display: flex; align-items: center; gap: 12px; padding: 16px 18px 0; }
+.onb-icon, .onb-skip {
+  border: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: color .15s, background .15s, opacity .2s;
+}
+.onb-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; }
+.onb-icon:disabled { opacity: 0; pointer-events: none; }
+.onb-skip { font-size: 15px; font-weight: 500; padding: 8px 12px; border-radius: 99px; }
+@media (hover: hover) and (pointer: fine) { .onb-icon:hover, .onb-skip:hover { color: var(--text); background: var(--panel-2); } }
+.onb-progress { flex: 1; height: 4px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.onb-progress span { display: block; height: 100%; border-radius: inherit; background: var(--ink); transform-origin: left; transition: transform .45s var(--soft); }
+
+/* palco: balão e mascote juntos no meio; cena ou opções logo embaixo */
+.onb-stage {
+  min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 18px; padding: 12px 28px 16px;
+}
+.onb-stage::-webkit-scrollbar { display: none; }
+.onb-talk { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
+
+.onb-say-wrap { display: flex; justify-content: center; width: 100%; }
+.onb-say {
+  position: relative; max-width: min(420px, 100%); padding: 16px 22px; text-align: center;
+  background: var(--panel); border: 1.5px solid var(--border); border-radius: 26px;
+  box-shadow: 0 10px 28px -14px rgba(0, 0, 0, .18); transform-origin: 50% 100%;
+  animation: onb-say-in .44s var(--spring) both;
+}
+/* rabinho do balão apontando para o mascote */
+.onb-say::after {
+  content: ""; position: absolute; left: 50%; bottom: -9px; width: 16px; height: 16px; margin-left: -8px;
+  background: inherit; border-right: 1.5px solid var(--border); border-bottom: 1.5px solid var(--border);
+  border-bottom-right-radius: 4px; transform: rotate(45deg);
+}
+.onb-say p { margin: 0; font-size: 20px; line-height: 1.32; font-weight: 650; letter-spacing: -.012em; text-wrap: balance; }
+.onb-say p span, .onb-say small { display: inline; animation: onb-word .34s calc(.12s + var(--w) * 38ms) ease-out both; }
+.onb-say small { display: block; margin-top: 6px; font-size: 14px; font-weight: 450; color: var(--muted); }
+.onb-say-wrap.prev .onb-say { animation-name: onb-say-in; }
+
+.onb-mascote { display: block; transform-origin: 50% 100%; will-change: transform; }
+.onb-mascote .mascote { margin: 0 auto; }
+
+/* o que vem embaixo entra do lado da direção */
+.onb-below { width: 100%; display: flex; flex-direction: column; align-items: center; }
+.onb-below.next { animation: onb-in-r .44s .05s var(--soft) both; }
+.onb-below.prev { animation: onb-in-l .44s .05s var(--soft) both; }
+.onb-below:empty { display: none; }
+.onb-scene { width: min(340px, 100%); display: grid; place-items: center; }
+
+/* opções: cartões grandes; no cartão largo, duas colunas para caber sem rolar */
+.onb-options { width: 100%; max-width: 440px; display: grid; gap: 10px; }
+.onb-option {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px; padding: 12px 18px;
+  border: 1.5px solid var(--border); border-radius: 18px; background: var(--panel); color: var(--text);
+  font: inherit; font-size: 16px; font-weight: 500; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: border-color .18s, background .18s, color .18s, transform .18s var(--soft);
+  animation: onb-opt-in .4s calc(.18s + var(--n) * 45ms) var(--soft) both;
+}
+.onb-option:active { transform: scale(.97); }
+.onb-option.on { border-color: var(--ink); background: var(--panel-2); font-weight: 600; }
+.onb-option:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .onb-option:not(.on):hover { border-color: var(--border-2); } }
+.onb-check {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 7px; border: 1.5px solid var(--border-2);
+  display: grid; place-items: center; color: var(--on-ink); transition: background .15s, border-color .15s;
+}
+.onb-option.on .onb-check { background: var(--ink); border-color: var(--ink); animation: onb-tick .3s var(--spring); }
+.onb-text { width: 100%; max-width: 440px; resize: none; font-size: 16px; border-radius: 18px; padding: 14px 16px; min-height: 104px; -webkit-user-select: text; user-select: text; }
+
+/* pé: o botão grande escuro, como no Kody */
+.onb-foot { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 28px 28px; }
+.onb-go {
+  width: 100%; max-width: 480px; height: 58px; border: 0; border-radius: 18px; background: var(--ink); color: var(--on-ink);
+  font: inherit; font-size: 17px; font-weight: 600; letter-spacing: -.005em; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: transform .16s var(--soft), opacity .2s;
+}
+.onb-go:active { transform: scale(.97); }
+.onb-go:disabled { opacity: .6; cursor: default; }
+.onb-go:focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; }
+.onb-later { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 15px; font-weight: 500; padding: 10px 16px; border-radius: 99px; cursor: pointer; }
+@media (hover: hover) and (pointer: fine) { .onb-later:hover { color: var(--text); } }
+
+/* notebook e iPad: cartão largo, opções em duas colunas */
+@media (min-width: 600px) {
+  .onb-options.n4, .onb-options.n5 { max-width: 520px; grid-template-columns: 1fr 1fr; }
+  .onb-options.n5 .onb-option:last-child { grid-column: 1 / -1; }
+}
+
+/* celular: tela cheia, branca, sem cartão; área segura em cima e embaixo */
+@media (max-width: 599px) {
+  .onb { padding: 0; place-items: stretch; background: var(--panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .onb-card {
+    width: 100%; height: var(--vvh, 100dvh); border: 0; border-radius: 0; box-shadow: none; animation: onb-fade .3s ease-out both;
+  }
+  .onb-top { padding: max(10px, env(safe-area-inset-top)) 12px 0; }
+  .onb-stage { padding: 8px 20px 12px; gap: 16px; }
+  .onb-say { padding: 14px 20px; }
+  .onb-say p { font-size: 19px; }
+  .onb-foot { padding: 8px 20px max(16px, env(safe-area-inset-bottom)); }
+  .onb-go { max-width: none; }
+  .onb-options, .onb-text { max-width: none; }
+}
+/* celular baixinho (SE): tudo um pouco menor para o botão não sair da tela */
+@media (max-width: 599px) and (max-height: 700px) {
+  .onb-stage { gap: 10px; }
+  .onb-say p { font-size: 17px; }
+  .onb-option { min-height: 48px; padding: 10px 16px; font-size: 15px; }
+  .onb-scene { zoom: .86; }
+  .onb-go { height: 52px; }
+}
+/* notebook baixinho (1366x768 com barra do navegador) */
+@media (min-width: 600px) and (max-height: 720px) {
+  .onb-say p { font-size: 18px; }
+  .onb-scene { zoom: .9; }
+}
+
+@keyframes onb-fade { from { opacity: 0; } }
+@keyframes onb-fade-out { to { opacity: 0; } }
+@keyframes onb-card-in { from { opacity: 0; transform: translateY(20px) scale(.97); } }
+@keyframes onb-card-out { to { opacity: 0; transform: translateY(10px) scale(.98); } }
+@keyframes onb-say-in { from { opacity: 0; transform: translateY(10px) scale(.86); } }
+@keyframes onb-word { from { opacity: 0; } }
+@keyframes onb-in-r { from { opacity: 0; transform: translateX(36px); } }
+@keyframes onb-in-l { from { opacity: 0; transform: translateX(-36px); } }
+@keyframes onb-opt-in { from { opacity: 0; transform: translateY(12px); } }
+@keyframes onb-tick { 0% { transform: scale(.6); } 60% { transform: scale(1.12); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .onb, .onb * { animation: none !important; transition: none !important; }
+}
+@media (prefers-reduced-transparency: reduce) { .onb { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(0, 0, 0, .45); } }

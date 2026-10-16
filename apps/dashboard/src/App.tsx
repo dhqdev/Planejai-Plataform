@@ -13,8 +13,7 @@ import { MascoteButton, WardrobeHost } from "./mascote/Wardrobe";
 import { useUnread } from "./notify";
 import { AuthPage } from "./pages/Login";
 import { PrivacyPage } from "./pages/Privacy";
-import { Welcome, type Onboarding } from "./pages/Welcome";
-import { Tour } from "./pages/Tour";
+import { OnboardingFlow, type Onboarding } from "./pages/Onboarding";
 import { PullToRefresh } from "./PullToRefresh";
 import { useInstallAction } from "./Install";
 import { haptic } from "./touch";
@@ -337,22 +336,21 @@ export function App() {
     return () => window.removeEventListener("pj:logout", onLogout);
   }, []);
 
-  // perguntas de boas-vindas: abrem sozinhas na primeira entrada de quem acabou de se cadastrar (e pelo Perfil, quando quiser)
-  const [welcome, setWelcome] = useState<Onboarding | null>(null);
-  // tour animado do primeiro login: depois das perguntas (ou sozinho, se não houver); `?tour=1` ou o evento pj:tour reabrem
-  const [tour, setTour] = useState<"due" | "open" | null>(null);
+  // primeira conversa com o mascote: como o Planejai funciona (tour, uma vez por conta) e as perguntas de boas-vindas,
+  // juntas numa tela só. `?tour=1` ou o evento pj:tour reabrem o tour; pj:welcome (Minha conta) reabre as perguntas.
+  const [onb, setOnb] = useState<{ data: Onboarding | null; tour: boolean } | null>(null);
   useEffect(() => {
     if (!me) return;
     const forced = new URLSearchParams(location.search).has("tour");
     api<Onboarding>("/api/me/onboarding").then(
       (d) => {
-        if (d.due) setWelcome(d);
-        if (d.tour || forced) setTour(d.due ? "due" : "open");
+        const tour = !!d.tour || forced;
+        if (d.due || tour) setOnb({ data: d.due ? d : null, tour });
       },
-      () => forced && setTour("open"),
+      () => forced && setOnb({ data: null, tour: true }),
     );
-    const open = () => api<Onboarding>("/api/me/onboarding").then(setWelcome, () => {});
-    const openTour = () => setTour("open");
+    const open = () => api<Onboarding>("/api/me/onboarding").then((d) => setOnb({ data: d, tour: false }), () => {});
+    const openTour = () => setOnb({ data: null, tour: true });
     window.addEventListener("pj:welcome", open);
     window.addEventListener("pj:tour", openTour);
     return () => (window.removeEventListener("pj:welcome", open), window.removeEventListener("pj:tour", openTour));
@@ -526,8 +524,18 @@ export function App() {
 
       <WardrobeHost />
       <MascoteStroll />
-      {welcome && <Welcome data={welcome} name={me.name} onDone={() => (setWelcome(null), setTour((t) => (t === "due" ? "open" : t)), window.dispatchEvent(new Event("pj:welcome-done")))} />}
-      {tour === "open" && !welcome && <Tour name={me.name} onDone={() => { setTour(null); if (location.search.includes("tour")) history.replaceState(null, "", location.pathname); }} />}
+      {onb && (
+        <OnboardingFlow
+          data={onb.data}
+          tour={onb.tour}
+          name={me.name}
+          onDone={(answered) => {
+            setOnb(null);
+            if (answered) window.dispatchEvent(new Event("pj:welcome-done"));
+            if (location.search.includes("tour")) history.replaceState(null, "", location.pathname);
+          }}
+        />
+      )}
 
       {update && (
         <div className="update-pill" role="status">
