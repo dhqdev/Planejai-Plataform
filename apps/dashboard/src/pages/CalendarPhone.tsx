@@ -568,7 +568,8 @@ function DaySheet(p: { day: Date; person: string; rev: number; keep: (e: Ev) => 
 }
 
 /** Escolher o mês: o ano com setas e os 12 meses em grade. */
-function MonthJump({ current, onPick, onClose }: { current: Date; onPick: (d: Date) => void; onClose: () => void }) {
+/** "Ir para": ano e 12 meses. Também usada nas Finanças do celular, com `max` (não passa do mês atual). */
+export function MonthJump({ current, onPick, onClose, max }: { current: Date; onPick: (d: Date) => void; onClose: () => void; max?: Date }) {
   const [year, setYear] = useState(current.getFullYear());
   const now = new Date();
   return (
@@ -583,6 +584,7 @@ function MonthJump({ current, onPick, onClose }: { current: Date; onPick: (d: Da
           <button
             key={m}
             className={`${year === current.getFullYear() && i === current.getMonth() ? "on" : ""} ${year === now.getFullYear() && i === now.getMonth() ? "now" : ""}`}
+            disabled={max ? new Date(year, i, 1) > max : false}
             onClick={() => { haptic(5); onPick(new Date(year, i, 1)); }}
           >
             {cap(m.slice(0, 3))}

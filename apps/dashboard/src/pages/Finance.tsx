@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, brl, day } from "../api";
 import { Donut, Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
-import { useApi } from "../hooks";
+import { useApi, useMedia } from "../hooks";
 import { Icon } from "../icons";
 import { DateField, isoDate } from "../pickers";
 import { useLongPress } from "../ios";
@@ -10,6 +11,8 @@ import { ReportModal } from "./FinanceReport";
 import { GoalsCard } from "./FinanceGoals";
 import { CategoriesModal, useCategories } from "./FinanceCategories";
 import { CardsTab, InvoicesCard, invoiceMonthFor, invoiceMonthLabel, useCards, type CreditCard } from "./FinanceCards";
+import { MonthJump } from "./CalendarPhone";
+import "../styles/financas-celular.css";
 
 const SOURCE: Record<string, string> = { conversa: "conversa", audio: "áudio", comprovante: "comprovante", documento: "documento", painel: "painel" };
 
@@ -124,6 +127,47 @@ export function FinancePage() {
   const [tab, setTab] = useState<"overview" | "list" | "cards">("overview");
   const [focusCard, setFocusCard] = useState<string | null>(null);
   const openCards = (id?: string) => { haptic(5); setFocusCard(id ?? null); setTab("cards"); };
+
+  // celular: no jeito da Agenda (abas com sublinhado, mês grande, conteúdo que desliza para o lado certo)
+  const phone = useMedia("(max-width: 767px)");
+  const [jump, setJump] = useState(false);
+  const tabsEl = useRef<HTMLDivElement>(null);
+  const bodyEl = useRef<HTMLDivElement>(null);
+  const lastTab = useRef(tab);
+  const tabDir = useRef("");
+  if (lastTab.current !== tab) {
+    tabDir.current = TAB_ORDER.indexOf(tab) > TAB_ORDER.indexOf(lastTab.current) ? "right" : "left";
+    lastTab.current = tab;
+  }
+  const lastMonth = useRef(month);
+  const monthDir = useRef("");
+  if (lastMonth.current !== month) {
+    monthDir.current = month < lastMonth.current ? "down" : "";
+    lastMonth.current = month;
+  }
+  useEffect(() => {
+    if (!phone) return;
+    document.documentElement.classList.add("pj-fin");
+    return () => document.documentElement.classList.remove("pj-fin");
+  }, [phone]);
+  useLayoutEffect(() => {
+    const on = tabsEl.current?.querySelector<HTMLElement>("button.on");
+    if (!on || !tabsEl.current) return;
+    tabsEl.current.style.setProperty("--x", `${on.offsetLeft + on.offsetWidth * 0.22}px`);
+    tabsEl.current.style.setProperty("--w", `${on.offsetWidth * 0.56}px`);
+  }, [tab, phone]);
+  // trocou o mês: quando os números novos chegam, entram do lado de onde o mês veio
+  const shownMonth = useRef(month);
+  useEffect(() => {
+    if (!data || shownMonth.current === month) return;
+    const dir = month > shownMonth.current ? 1 : -1;
+    shownMonth.current = month;
+    if (!phone || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    bodyEl.current?.animate([{ opacity: 0, transform: `translateX(${dir * 26}px)` }, { opacity: 1, transform: "none" }], { duration: 400, easing: "cubic-bezier(.32,.72,0,1)" });
+  }, [data, month, phone]);
+  const pickTab = (t: typeof tab) => { if (t === tab) return; haptic(5); setTab(t); };
+  const now = new Date();
+  const monthTitle = `${monthName(month)}${month.slice(0, 4) !== String(now.getFullYear()) ? ` ${month.slice(0, 4)}` : ""}`;
   const totalBudget = budgets.find((b) => !b.category);
   const today = new Date();
   // próximos lembretes só nas próprias finanças (a agenda de um contato tem permissão separada)
@@ -138,6 +182,19 @@ export function FinancePage() {
       <span className="fin-cats-dots" aria-hidden>{categories.list.slice(0, 5).map((c) => <i key={c.id} style={{ background: c.color }} />)}</span>
       <span className="fin-cats-bar-text"><strong>Suas categorias</strong><small className="muted">Criar, renomear, trocar a cor e ensinar palavras</small></span>
       <Icon name="chevron-right" size={16} />
+    </button>
+  );
+  const txRow = (t: any) => (
+    <button key={t.id} className="fin-tx" data-id={t.id} onClick={() => setDetail(t)} {...press}>
+      <span className="fin-tx-ico" style={{ ["--c" as any]: colorOf(t.category, Math.max(0, cats.findIndex((c: any) => c.label === t.category))) }}><Icon name={t.kind === "income" ? "arrow-down" : CAT_ICON[t.category] ?? "hash"} size={16} /></span>
+      <span className="fin-tx-text">
+        <span className="ellipsis">{t.description ?? t.merchant ?? t.category}</span>
+        <small className="muted ellipsis">
+          {t.card_name && <span className="fin-tx-card"><span className={`cc-mini c-${t.card_color ?? "preto"}`} aria-hidden />{t.card_name}{t.installments ? ` ${t.installment}/${t.installments}` : ""} · </span>}
+          {t.category}{t.merchant && t.description ? ` · ${t.merchant}` : ""}
+        </small>
+      </span>
+      <strong className={t.kind === "income" ? "amount-in" : ""}>{t.kind === "income" ? "+" : "−"}{brl(t.amount)}</strong>
     </button>
   );
   const insight = buildInsight(cats, expenses, prevCat, budgets, monthName(month));
@@ -184,7 +241,49 @@ export function FinancePage() {
           </button>
         )}
       </div>
+      {phone && (
+        <header className="fp-head">
+          <div className="pc-row">
+            <div ref={tabsEl} className="pc-tabs fp-tabs" role="tablist" aria-label="Finanças">
+              {TAB_ORDER.map((t) => (
+                <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => pickTab(t)}>{TAB_LABEL[t]}</button>
+              ))}
+              <i className="pc-tab-line" aria-hidden="true" />
+            </div>
+            <span className="spacer" />
+            {tab !== "cards" && (
+              <button className="pc-ico" aria-label="Relatório em PDF" onClick={() => { haptic(8); setReport(true); }}>
+                <Icon name="file" size={21} />
+              </button>
+            )}
+          </div>
+          {tab !== "cards" && (
+            <div className="pc-row pc-row-2">
+              <button className="pc-title" aria-label={`${monthTitle}: escolher outro mês`} onClick={() => { haptic(5); setJump(true); }}>
+                <span key={month} className={`pc-title-txt ${monthDir.current}`}>{monthTitle}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7z" fill="currentColor" /></svg>
+              </button>
+              <span className="spacer" />
+              <button className="pc-ico sm fp-arrow" aria-label="Mês anterior" onClick={() => go(-1)}><Icon name="chevron-left" size={18} /></button>
+              {isCurrent ? (
+                <button className="pc-ico sm fp-arrow" aria-label="Próximo mês" disabled><Icon name="chevron-right" size={18} /></button>
+              ) : (
+                <button className="pc-today fp-now" onClick={() => { haptic(5); setCat(null); setMonth(thisMonth()); }}>Este mês</button>
+              )}
+            </div>
+          )}
+          {owners.length > 0 && (
+            <div className="fp-people">
+              <button className={!user ? "on" : ""} onClick={() => { haptic(5); setUser(""); }}>Minhas</button>
+              {owners.map((p) => (
+                <button key={p.id} className={user === p.id ? "on" : ""} title={p.name} onClick={() => { haptic(5); setUser(p.id); }}>{p.name.trim().split(" ")[0]}</button>
+              ))}
+            </div>
+          )}
+        </header>
+      )}
       <ErrorBox error={error} />
+      <div ref={bodyEl} key={phone ? tab : "body"} className={`fp-body ${tabDir.current}`}>
       {tab === "cards" ? (
         <CardsTab user={user} readonly={readonly} focus={focusCard} onChanged={() => void reload()} />
       ) : !data ? <Loading /> : tab === "overview" ? (
@@ -365,25 +464,27 @@ export function FinancePage() {
             <div className="card"><Empty>Sem gastos em {monthName(month)}.</Empty></div>
           )}
           <div className="fin-section-head"><h3>{cat ? `Lançamentos em ${cat}` : "Lançamentos"}</h3></div>
-          <div className="card fin-list">
-            {groups.map(([k, items]) => {
+          <div className={phone ? "fp-days" : "card fin-list"}>
+            {groups.map(([k, items], gi) => {
               const total = items.filter((t) => t.kind === "expense").reduce((a, t) => a + Number(t.amount), 0);
+              const d = new Date(items[0].occurred_at);
+              // celular: como os Lembretes da Agenda, o dia grande à esquerda e os lançamentos num cartão
+              if (phone) return (
+                <div key={k} className="cal-list-day fp-day" style={{ ["--n" as any]: Math.min(gi, 8) }}>
+                  <span className={`cal-list-date ${d.toDateString() === today.toDateString() ? "today" : ""}`}>
+                    <strong>{d.getDate()}</strong>
+                    <small>{d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")}</small>
+                  </span>
+                  <div className="card fp-day-card">
+                    {items.map((t: any) => txRow(t))}
+                    {total > 0 && items.length > 1 && <div className="fp-day-total"><span>Gasto no dia</span><span>{brl(total)}</span></div>}
+                  </div>
+                </div>
+              );
               return (
                 <div key={k}>
                   <div className="fin-day"><span>{dayLabel(items[0].occurred_at)}</span>{total > 0 && <span>{brl(total)}</span>}</div>
-                  {items.map((t: any) => (
-                    <button key={t.id} className="fin-tx" data-id={t.id} onClick={() => setDetail(t)} {...press}>
-                      <span className="fin-tx-ico" style={{ ["--c" as any]: colorOf(t.category, Math.max(0, cats.findIndex((c: any) => c.label === t.category))) }}><Icon name={t.kind === "income" ? "arrow-down" : CAT_ICON[t.category] ?? "hash"} size={16} /></span>
-                      <span className="fin-tx-text">
-                        <span className="ellipsis">{t.description ?? t.merchant ?? t.category}</span>
-                        <small className="muted ellipsis">
-                          {t.card_name && <span className="fin-tx-card"><span className={`cc-mini c-${t.card_color ?? "preto"}`} aria-hidden />{t.card_name}{t.installments ? ` ${t.installment}/${t.installments}` : ""} · </span>}
-                          {t.category}{t.merchant && t.description ? ` · ${t.merchant}` : ""}
-                        </small>
-                      </span>
-                      <strong className={t.kind === "income" ? "amount-in" : ""}>{t.kind === "income" ? "+" : "−"}{brl(t.amount)}</strong>
-                    </button>
-                  ))}
+                  {items.map((t: any) => txRow(t))}
                 </div>
               );
             })}
@@ -391,6 +492,19 @@ export function FinancePage() {
           </div>
           </div>
         </>
+      )}
+      </div>
+      {phone && !readonly && tab !== "cards" && createPortal(
+        <button className="cal-fab fp-fab" aria-label="Novo lançamento" onClick={() => { haptic(8); setAdding(true); }}><Icon name="plus" size={24} /></button>,
+        document.body,
+      )}
+      {jump && (
+        <MonthJump
+          current={new Date(Number(month.slice(0, 4)), Number(month.slice(5)) - 1, 1)}
+          max={new Date(now.getFullYear(), now.getMonth(), 1)}
+          onPick={(d) => { setJump(false); setCat(null); setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }}
+          onClose={() => setJump(false)}
+        />
       )}
       {managing && <CategoriesModal onClose={(changed) => { setManaging(false); if (changed) { void reload(); void categories.reload(); } }} />}
       {budget && <BudgetModal initial={budget} onClose={() => { setBudget(null); void reload(); }} />}
@@ -447,6 +561,9 @@ function buildInsight(cats: { label: string; value: number }[], total: number, p
   else if (cats.length > 1) parts.push(`Depois vem ${cats[1]!.label}, com ${brl(cats[1]!.value)}.`);
   return parts.join(" ");
 }
+
+const TAB_ORDER = ["overview", "list", "cards"] as const;
+const TAB_LABEL: Record<(typeof TAB_ORDER)[number], string> = { overview: "Visão geral", list: "Lançamentos", cards: "Cartões" };
 
 function shift(month: string, delta: number) {
   const [y, m] = month.split("-").map(Number) as [number, number];
