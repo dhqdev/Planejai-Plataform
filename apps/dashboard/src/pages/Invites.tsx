@@ -53,7 +53,7 @@ export function InviteForm({ onDone }: { onDone?: (link: string) => void }) {
       "Te convidei pro *Planejai* 🎉, um assistente no WhatsApp que organiza a vida por você:",
       "",
       "💸 Anota seus gastos e mostra para onde vai o dinheiro",
-      "📅 Cuida da agenda e dos compromissos",
+      "🗓️ Cuida da agenda e dos compromissos",
       "⏰ Lembra do que importa na hora certa",
       "",
       "👉 *Entre por aqui:*",

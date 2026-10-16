@@ -30,7 +30,9 @@ describe("formatação para WhatsApp", () => {
     expect(toWhatsApp("Opções:\n- Kinoplex — 14h30\n• Cinemark - das 16 - 18h\n* Pipoca\n1. Refri")).toBe(
       "Opções:\n• Kinoplex, 14h30\n• Cinemark, das 16 a 18h\n• Pipoca\n1. Refri",
     );
-    expect(toWhatsApp("📅 *Amanhã*\n🍿 Cinema às 19h [[figurinha:feliz]]")).toBe("📅 *Amanhã*\n🍿 Cinema às 19h");
+    expect(toWhatsApp("🗓️ *Amanhã*\n🍿 Cinema às 19h [[figurinha:feliz]]")).toBe("🗓️ *Amanhã*\n🍿 Cinema às 19h");
+    // calendário com dia fixo (📅 mostra "17" no WhatsApp) vira o calendário sem número
+    expect(toWhatsApp("📅 *Amanhã* e 📆 hoje")).toBe("🗓️ *Amanhã* e 🗓️ hoje");
     expect(toWhatsApp("Fica uns R$ 50 – com pipoca 🍿")).toBe("Fica uns R$ 50, com pipoca 🍿");
     expect(toWhatsApp("Guarda-chuva e -5 graus")).toBe("Guarda-chuva e -5 graus");
   });

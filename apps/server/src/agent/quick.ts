@@ -89,7 +89,7 @@ export async function quickAnswer(user: { id: string; phone: string }, owner: bo
       .sort((a, b) => a.at.localeCompare(b.at))
       .map((l) => l.line);
     if (!lines.length) return { text: intent.day === 0 ? "Hoje não tem mais nada marcado 🙌" : "Amanhã está livre, nada marcado 🙌", data: { dia: label, itens: 0 } };
-    const text = `${label} você tem ${lines.length === 1 ? "isso" : `${lines.length} coisas`} 📅\n${lines.join("\n")}`;
+    const text = `${label} você tem ${lines.length === 1 ? "isso" : `${lines.length} coisas`} 🗓️\n${lines.join("\n")}`;
     return { text, data: { dia: label, itens: lines.length } };
   }
 

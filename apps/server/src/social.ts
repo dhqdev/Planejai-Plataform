@@ -207,7 +207,7 @@ export async function sendInvite(inviteId: string) {
     :
     `${hello}👋✨\n\n${inviter} te convidou para o *Planejai* 🎉, um assistente aqui no WhatsApp que organiza a vida por você` +
     (inv.inviter_user_id ? `, e deixa vocês mandarem coisas um pro outro por aqui.` : ".") +
-    `\n\n💸 Anota gastos e mostra para onde vai o dinheiro\n📅 Cuida da agenda\n⏰ Lembra do que importa na hora certa` +
+    `\n\n💸 Anota gastos e mostra para onde vai o dinheiro\n🗓️ Cuida da agenda\n⏰ Lembra do que importa na hora certa` +
     `\n\n👉 Responda *SIM* para aceitar ou *NÃO* para recusar.` +
     `\n\n_Ao aceitar, você concorda com os termos e a política de privacidade:_ ${config.PUBLIC_URL.replace(/\/$/, "")}/privacidade` +
     `\n\n🔗 Se quiser acessar o painel: ${inviteLink(inv.code)}`;

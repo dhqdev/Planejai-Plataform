@@ -4,7 +4,7 @@
  * com `bullets` (respostas do assistente para a pessoa, que podem vir organizadas em blocos).
  */
 export function humanize(text: string, opts: { bullets?: boolean } = {}) {
-  return text
+  return plainCalendar(text)
     .replace(/^[ \t]*(?:[-*•–—]|\d+[.)])[ \t]+/gm, (m) => (/\d/.test(m) ? m.trimStart() : opts.bullets ? "• " : ""))
     // faixa de horário/data ("10 - 12h", "5 - 10 dias") vira "a"; conta ("100 - 30 = 70") fica como está
     .replace(/(\d)[ \t]+[-–—][ \t]+(\d+(?:[:,]\d+)?)(?=[ \t]*(?:h\b|hs?\b|horas?|min|dias?|semanas?|meses|m[eê]s|anos?|de |\/|%))/g, "$1 a $2")
@@ -14,4 +14,9 @@ export function humanize(text: string, opts: { bullets?: boolean } = {}) {
     .replace(/,[ \t]*,/g, ",")
     .replace(/,[ \t]*$/gm, "")
     .trim();
+}
+
+/** Calendário sem número: 📅 e 📆 aparecem no WhatsApp com um dia fixo ("17") e confundem; 🗓️ é o calendário sem data. */
+export function plainCalendar(text: string) {
+  return text.replace(/[\u{1F4C5}\u{1F4C6}]️?/gu, "\u{1F5D3}️");
 }

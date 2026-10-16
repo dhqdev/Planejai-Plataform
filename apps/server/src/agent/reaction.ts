@@ -21,7 +21,7 @@ const THEMES: [RegExp, string][] = [
   [/\b(carro|moto|uber|gasolina|combustivel|estacionamento|ipva|oficina)/, "🚗"],
   [/\b(casa|aluguel|apartamento|mudanca|condominio|imovel)/, "🏠"],
   [/\b(preco|promocao|desconto|oferta|mercado livre|comprar|loja|black friday)/, "🛒"],
-  [/\b(lembr|lembrete|agenda|reuniao|compromisso|amanha as|horario|marcar)/, "📅"],
+  [/\b(lembr|lembrete|agenda|reuniao|compromisso|amanha as|horario|marcar)/, "🗓️"],
   [/\b(chuva|tempo amanha|previsao|calor|frio|temperatura|clima)/, "🌦️"],
   [/\b(trabalho|chefe|emprego|entrevista|curriculo|projeto|cliente|reuniao)/, "💼"],
   [/\b(estud|prova|faculdade|escola|curso|livro|ler\b)/, "📚"],

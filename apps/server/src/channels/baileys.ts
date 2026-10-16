@@ -1,4 +1,5 @@
 import { generateMessageIDV2, jidNormalizedUser, proto, WAMessageStatus, type AnyMessageContent, type WASocket } from "baileys";
+import { plainCalendar } from "../agent/humanize.js";
 import { safeFetch } from "../net.js";
 import { callChannel, holdsWhatsApp } from "../whatsapp/rpc.js";
 import { isConnectionError, whatsapp, type WhatsAppSession } from "../whatsapp/session.js";
@@ -51,7 +52,8 @@ export class BaileysChannel implements Channel {
     return msg.media?.base64 ? { base64: msg.media.base64, mimetype: msg.media.mimetype } : null;
   }
 
-  async sendText(jid: string, text: string, opts?: { quotedId?: string }) {
+  async sendText(jid: string, rawText: string, opts?: { quotedId?: string }) {
+    const text = plainCalendar(rawText);
     if (this.remote) return { id: (await callChannel({ op: "text", jid, text, quotedId: opts?.quotedId }, SEND_WAIT_MS)).id };
     const r = await this.run((s) =>
       s.sendMessage(

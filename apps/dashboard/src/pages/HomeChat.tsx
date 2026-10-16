@@ -105,7 +105,7 @@ const ASKS: Record<string, Chip[]> = {
 };
 
 const START_CHIPS: Chip[] = [
-  { label: "📅 O que tenho amanhã?", text: "O que eu tenho amanhã?", send: true },
+  { label: "🗓️ O que tenho amanhã?", text: "O que eu tenho amanhã?", send: true },
   { label: "💸 Anotar um gasto", text: "Gastei " },
   { label: "⏰ Me lembra de…", text: "Me lembra de " },
   { label: "🔎 Pesquisar um preço", text: "Pesquisa o menor preço de " },
