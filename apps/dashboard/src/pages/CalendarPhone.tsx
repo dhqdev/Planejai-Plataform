@@ -638,10 +638,12 @@ function EventScreen({ ev, origin, readonly, tags, onClose, onEdit, onChanged }:
   const EASE = "cubic-bezier(.32, .72, 0, 1)";
   const clipOf = (r: DOMRect) =>
     `inset(${r.top}px ${Math.max(0, innerWidth - r.right)}px ${Math.max(0, innerHeight - r.bottom)}px ${r.left}px round 8px)`;
-  const play = (el: Element | null, frames: Keyframe[], o: KeyframeAnimationOptions) => {
+  // keep: no fechar a animação fica parada no último quadro até a tela sair; cancelar antes devolvia a tela
+  // cheia por um quadro (o "pisca" ao tocar no X que o David viu no iPhone).
+  const play = (el: Element | null, frames: Keyframe[], o: KeyframeAnimationOptions, keep = false) => {
     if (!el || reduced()) return Promise.resolve();
-    const a = el.animate(frames, o);
-    return a.finished.then(() => a.cancel(), () => {});
+    const a = el.animate(frames, keep ? { ...o, fill: "forwards" } : o);
+    return a.finished.then(() => { if (!keep) a.cancel(); }, () => {});
   };
   useLayoutEffect(() => {
     const el = sheet.current;
@@ -657,11 +659,21 @@ function EventScreen({ ev, origin, readonly, tags, onClose, onEdit, onChanged }:
     leavingRef.current = true;
     setLeaving(true);
     const el = sheet.current;
-    void play(scrim.current, [{ opacity: 1 }, { opacity: 0 }], { duration: 260, easing: "ease", fill: "forwards" });
+    // o inverso da abertura: encolhe de volta para o compromisso tocado e só some no fim
+    void play(scrim.current, [{ opacity: 1 }, { opacity: 0 }], { duration: 340, easing: "ease" }, true);
     const done =
       origin && !fromY
-        ? play(el, [{ clipPath: "inset(0px 0px 0px 0px round 0px)", opacity: 1 }, { clipPath: clipOf(origin), opacity: 0 }], { duration: 320, easing: EASE, fill: "forwards" })
-        : play(el, [{ transform: `translate3d(0, ${fromY}px, 0)` }, { transform: "translate3d(0, 100%, 0)" }], { duration: fromY ? 240 : 300, easing: "cubic-bezier(.3, 0, .8, .15)", fill: "forwards" });
+        ? play(
+            el,
+            [
+              { clipPath: "inset(0px 0px 0px 0px round 0px)", opacity: 1 },
+              { opacity: 1, offset: 0.55 },
+              { clipPath: clipOf(origin), opacity: 0 },
+            ],
+            { duration: 400, easing: EASE },
+            true,
+          )
+        : play(el, [{ transform: `translate3d(0, ${fromY}px, 0)` }, { transform: "translate3d(0, 100%, 0)" }], { duration: fromY ? 240 : 300, easing: "cubic-bezier(.3, 0, .8, .15)" }, true);
     void done.then(onClose);
   };
   useEffect(() => {
