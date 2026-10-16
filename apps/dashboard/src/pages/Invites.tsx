@@ -46,7 +46,23 @@ export function InviteForm({ onDone }: { onDone?: (link: string) => void }) {
 
   if (made) {
     const first = made.name?.split(" ")[0];
-    const text = `${first ? `Oi, ${first}! ` : ""}Te convidei para o Planejai, um assistente no WhatsApp que organiza gastos, agenda e lembretes.\n\nEntre por este link: ${made.link}\nOu use o código ${made.code} em "Tenho um convite". Vale por 24 horas.`;
+    // formatação do WhatsApp: *negrito*, _itálico_ e ```mono``` (o código fica fácil de copiar)
+    const text = [
+      `${first ? `Oi, ${first}!` : "Oi!"} 👋✨`,
+      "",
+      "Te convidei pro *Planejai* 🎉, um assistente no WhatsApp que organiza a vida por você:",
+      "",
+      "💸 Anota seus gastos e mostra para onde vai o dinheiro",
+      "📅 Cuida da agenda e dos compromissos",
+      "⏰ Lembra do que importa na hora certa",
+      "",
+      "👉 *Entre por aqui:*",
+      made.link,
+      "",
+      `🔑 Ou use o código \`\`\`${made.code}\`\`\` em *"Tenho um convite"*`,
+      "",
+      "⏳ _Vale por 24 horas e serve para um cadastro._",
+    ].join("\n");
     return (
       <div className="invite-made">
         <span className="invite-code mono" aria-label={`Código ${made.code.split("").join(" ")}`}>

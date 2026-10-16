@@ -199,17 +199,18 @@ export async function sendInvite(inviteId: string) {
   if (pace.day >= config.INVITES_PER_DAY) return void (await later(3600));
   if (pace.since_last < config.INVITE_GAP_SECONDS) return void (await later(config.INVITE_GAP_SECONDS - pace.since_last + Math.random() * 30));
   const inviter = inv.inviter_user_id ? displayName({ full_name: inv.inviter_full_name, name: inv.inviter_name, phone: inv.inviter_phone }) : inv.account_name || "A equipe do Planejai";
-  const hello = inv.name ? `Oi, ${String(inv.name).split(" ")[0]}! ` : "Oi! ";
+  const hello = inv.name ? `Oi, ${String(inv.name).split(" ")[0]}!` : "Oi!";
   // quem já usa o Planejai não recebe o convite de novo: é só um pedido de contato
   const member = inv.inviter_user_id ? await one("SELECT 1 FROM users WHERE phone = ANY($1) AND status = 'active'", [phoneVariants(inv.phone)]) : null;
   const text = member
-    ? `${hello}${inviter} quer te adicionar como contato aqui no Planejai, pra vocês mandarem coisas um pro outro por mim.\n\nResponda *SIM* para aceitar ou *NÃO* para recusar.`
+    ? `${hello} ${inviter} quer te adicionar como contato aqui no Planejai, pra vocês mandarem coisas um pro outro por mim.\n\nResponda *SIM* para aceitar ou *NÃO* para recusar.`
     :
-    `${hello}${inviter} te convidou para o *Planejai*, um assistente aqui no WhatsApp que organiza gastos, lembretes e pesquisas` +
+    `${hello}👋✨\n\n${inviter} te convidou para o *Planejai* 🎉, um assistente aqui no WhatsApp que organiza a vida por você` +
     (inv.inviter_user_id ? `, e deixa vocês mandarem coisas um pro outro por aqui.` : ".") +
-    `\n\nResponda *SIM* para aceitar ou *NÃO* para recusar. Ao aceitar, você concorda com os termos e a política de privacidade: ` +
-    `${config.PUBLIC_URL.replace(/\/$/, "")}/privacidade` +
-    `\n\nSe quiser acessar o painel: ${inviteLink(inv.code)}`;
+    `\n\n💸 Anota gastos e mostra para onde vai o dinheiro\n📅 Cuida da agenda\n⏰ Lembra do que importa na hora certa` +
+    `\n\n👉 Responda *SIM* para aceitar ou *NÃO* para recusar.` +
+    `\n\n_Ao aceitar, você concorda com os termos e a política de privacidade:_ ${config.PUBLIC_URL.replace(/\/$/, "")}/privacidade` +
+    `\n\n🔗 Se quiser acessar o painel: ${inviteLink(inv.code)}`;
   const channel = outboundChannel();
   const jid = await jidFor(inv.phone, channel);
   await channel.sendText(jid, text);
