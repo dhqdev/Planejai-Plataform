@@ -60,6 +60,8 @@ async function run(ch: BaileysChannel, req: WaRpcJob): Promise<WaRpcResult> {
       return ch.sendImage(req.jid, req.image);
     case "poll":
       return ch.sendPoll(req.jid, req.poll);
+    case "status":
+      return ch.postStatus(req.status, req.jids);
     case "react":
       await ch.react(req.jid, req.messageId, req.emoji);
       return {};

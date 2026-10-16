@@ -1,5 +1,5 @@
 import type pg from "pg";
-import type { OutboundImage, OutboundPoll } from "../channels/types.js";
+import type { OutboundImage, OutboundPoll, OutboundStatus } from "../channels/types.js";
 import { pool, query } from "../db/pool.js";
 import { QUEUES, getBoss } from "../queue/boss.js";
 import { runsChannel } from "../roles.js";
@@ -17,6 +17,7 @@ export type WaRpc =
   | { op: "text"; jid: string; text: string; quotedId?: string }
   | { op: "media"; jid: string; image: OutboundImage }
   | { op: "poll"; jid: string; poll: OutboundPoll }
+  | { op: "status"; status: OutboundStatus; jids: string[] }
   | { op: "react"; jid: string; messageId: string; emoji: string }
   | { op: "typing"; jid: string; ms: number; kind?: "typing" | "recording" }
   | { op: "read"; jid: string; messageId: string }

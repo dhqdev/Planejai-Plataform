@@ -167,6 +167,7 @@ export function WhatsAppPage() {
         </div>
       </div>
       {s.status === "connected" && <ProfileCard currentName={s.name ?? ""} />}
+      {s.status === "connected" && <StatusCard />}
     </div>
   );
 }
@@ -268,6 +269,133 @@ function ProfileCard({ currentName }: { currentName: string }) {
         {saved && <span className="muted">Perfil atualizado no WhatsApp.</span>}
       </div>
       <ErrorBox error={err} />
+    </div>
+  );
+}
+
+interface StatusPost {
+  id: string;
+  kind: "imagem" | "blog";
+  caption: string;
+  status: "rascunho" | "postado" | "falhou";
+  recipients: number | null;
+  error: string | null;
+  posted_at: string | null;
+  created_at: string;
+}
+interface StatusData {
+  settings: { enabled: boolean; everyDays: number; hour: number; blogEvery: number; lastAt?: string };
+  posts: StatusPost[];
+  audience: number;
+  monthlyUsd: number;
+}
+
+const usd = (v: number) => `US$ ${v.toFixed(2).replace(".", ",")}`;
+
+/**
+ * Status do WhatsApp do número: o Bolinho em cenas divertidas (rota Imagens, barata) ou a capa de um post do blog.
+ * Rascunho primeiro; o automático só posta depois que o dono liga.
+ */
+function StatusCard() {
+  const { data, error, reload } = useApi<StatusData>("/api/whatsapp/status-posts");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [edits, setEdits] = useState<Record<string, string>>({});
+
+  if (error) return <div className="card card-pad" style={{ marginTop: 16 }}><ErrorBox error={error} /></div>;
+  if (!data) return null;
+  const s = data.settings;
+
+  const run = async (key: string, fn: () => Promise<unknown>) => {
+    setBusy(key);
+    setErr(null);
+    try {
+      await fn();
+      await reload();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const save = (patch: Partial<StatusData["settings"]>) => run("settings", () => api("/api/whatsapp/status-settings", { method: "PUT", json: patch }));
+  const toggle = async (on: boolean) => {
+    if (on && !(await confirmDialog({ title: "Ligar os posts automáticos?", body: `A cada ${s.everyDays} dia(s) sai um status público no WhatsApp do assistente para ${data.audience} pessoa(s).`, confirmLabel: "Ligar" }))) return;
+    await save({ enabled: on });
+  };
+  const post = async (p: StatusPost) => {
+    if (!(await confirmDialog({ title: "Postar no status agora?", body: `Vai aparecer para ${data.audience} pessoa(s) que conversam com o assistente e some em 24 horas.`, confirmLabel: "Postar" }))) return;
+    await run(p.id, async () => {
+      if (edits[p.id] !== undefined && edits[p.id] !== p.caption) await api(`/api/whatsapp/status-posts/${p.id}`, { method: "PATCH", json: { caption: edits[p.id] } });
+      await api(`/api/whatsapp/status-posts/${p.id}/post`, { method: "POST" });
+    });
+  };
+
+  return (
+    <div className="card card-pad" style={{ marginTop: 16 }}>
+      <h3>Status do WhatsApp</h3>
+      <p className="muted" style={{ marginTop: 0 }}>
+        O Bolinho em cenas divertidas usando o Planejai e, de vez em quando, um post do blog com o link. Some em 24 horas, como qualquer status.
+        Quem vê: as {data.audience} pessoas que conversam com o assistente e têm o número dele salvo.
+      </p>
+      <label className="set-switch">
+        <input type="checkbox" checked={s.enabled} disabled={busy === "settings"} onChange={(e) => void toggle(e.target.checked)} />
+        <span>
+          <strong>Postar sozinho</strong>
+          <small>Cada cena nova é uma imagem da rota Imagens (Agentes &gt; Modelos), uns US$ 0,04. O post do blog reaproveita a capa e não custa nada. Estimativa com o ritmo abaixo: {usd(data.monthlyUsd)} por mês.</small>
+        </span>
+      </label>
+      <div className="wa-status-when">
+        <span className="muted">A cada</span>
+        <select className="select" value={s.everyDays} onChange={(e) => void save({ everyDays: Number(e.target.value) })} aria-label="De quantos em quantos dias">
+          {[1, 2, 3, 4, 5, 7].map((d) => <option key={d} value={d}>{d === 1 ? "1 dia" : `${d} dias`}</option>)}
+        </select>
+        <span className="muted">a partir das</span>
+        <select className="select" value={s.hour} onChange={(e) => void save({ hour: Number(e.target.value) })} aria-label="Hora">
+          {Array.from({ length: 15 }, (_, i) => i + 7).map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}h</option>)}
+        </select>
+        <span className="muted">e</span>
+        <select className="select" value={s.blogEvery} onChange={(e) => void save({ blogEvery: Number(e.target.value) })} aria-label="Posts do blog">
+          <option value={0}>nunca o blog</option>
+          {[2, 3, 4, 5].map((n) => <option key={n} value={n}>1 a cada {n} é do blog</option>)}
+        </select>
+      </div>
+      <div className="row row-wrap" style={{ gap: 10 }}>
+        <button className="btn btn-primary" disabled={!!busy} onClick={() => void run("new", () => api("/api/whatsapp/status-posts", { method: "POST", json: { kind: "imagem" } }))}>
+          {busy === "new" ? "Gerando a imagem…" : "Gerar cena do Bolinho"}
+        </button>
+        <button className="btn" disabled={!!busy} onClick={() => void run("blog", () => api("/api/whatsapp/status-posts", { method: "POST", json: { kind: "blog" } }))}>
+          {busy === "blog" ? "Montando…" : "Usar post do blog"}
+        </button>
+        {s.lastAt && <span className="muted">Último automático {ago(s.lastAt)}</span>}
+      </div>
+      <ErrorBox error={err} />
+      {data.posts.length > 0 && (
+        <div className="wa-status-grid">
+          {data.posts.map((p) => (
+            <div key={p.id} className={`wa-status-item${p.kind === "blog" ? " is-blog" : ""}`}>
+              <img src={`/api/whatsapp/status-posts/${p.id}/img`} alt={p.kind === "blog" ? "Capa do post do blog" : "Cena do Bolinho"} loading="lazy" />
+              <div className="wa-status-body">
+                {p.status === "postado" ? (
+                  <>
+                    <span className="badge badge-ok">Postado {p.posted_at ? ago(p.posted_at) : ""} · {p.recipients ?? 0} pessoa(s)</span>
+                    <p className="wa-status-caption">{p.caption}</p>
+                  </>
+                ) : (
+                  <>
+                    {p.status === "falhou" && <span className="badge badge-err" title={p.error ?? ""}>Não saiu: {p.error}</span>}
+                    <textarea className="input" aria-label="Legenda" maxLength={700} value={edits[p.id] ?? p.caption} onChange={(e) => setEdits({ ...edits, [p.id]: e.target.value })} />
+                    <div className="wa-status-actions">
+                      <button className="btn btn-primary" disabled={!!busy} onClick={() => void post(p)}>{busy === p.id ? "Postando…" : "Postar agora"}</button>
+                      <button className="btn" disabled={!!busy} onClick={() => void run(p.id, () => api(`/api/whatsapp/status-posts/${p.id}`, { method: "DELETE" }))}>Descartar</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -328,7 +328,7 @@ function pngWidth(buf: Buffer) {
 }
 
 /** PNG pesado do modelo vira JPEG leve pelo navegador da stack; sem navegador fica o original. */
-async function compress(img: { data: Buffer; mimetype: string }) {
+export async function compressImage(img: { data: Buffer; mimetype: string }) {
   if (img.mimetype === "image/jpeg" && img.data.length < 400_000) return img;
   try {
     const width = Math.min(1600, pngWidth(img.data) || 1344);
@@ -360,7 +360,7 @@ export async function generateImage(postId: string, slot: "cover" | "inline", pa
     const url = r.message.images?.[0];
     const m = url?.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
     if (!m) throw new Error("O modelo de imagem não devolveu imagem.");
-    const img = await compress({ mimetype: m[1]!, data: Buffer.from(m[2]!, "base64") });
+    const img = await compressImage({ mimetype: m[1]!, data: Buffer.from(m[2]!, "base64") });
     await query(
       `INSERT INTO blog_images (post_id, slot, mimetype, data) VALUES ($1, $2, $3, $4)
        ON CONFLICT (post_id, slot) DO UPDATE SET mimetype = $3, data = $4, created_at = now()`,

@@ -50,6 +50,20 @@ export interface OutboundPoll {
   secret: string;
 }
 
+/** Status do WhatsApp (some em 24 h): foto ou vídeo com legenda, ou texto num fundo colorido. */
+export interface OutboundStatus {
+  kind: "image" | "video" | "text";
+  /** foto ou vídeo */
+  base64?: string;
+  mimetype?: string;
+  caption?: string;
+  /** status de texto */
+  text?: string;
+  /** cor de fundo do status de texto (#RRGGBB) e fonte (0 a 5 no WhatsApp) */
+  backgroundColor?: string;
+  font?: number;
+}
+
 export interface Channel {
   id: string;
   configured(): boolean;
@@ -63,4 +77,6 @@ export interface Channel {
   /** "digitando..." ou, antes de um áudio, "gravando áudio..." */
   setTyping(remoteJid: string, ms: number, kind?: "typing" | "recording"): Promise<void>;
   markRead(remoteJid: string, messageId: string): Promise<void>;
+  /** só Baileys: posta um status do número para as pessoas da lista */
+  postStatus?(status: OutboundStatus, jids: string[]): Promise<{ id?: string }>;
 }

@@ -136,6 +136,13 @@ async function startChannelJobs(log: WorkerLog) {
   });
   await boss.schedule(QUEUES.blog, "41 * * * *", { action: "tick" });
 
+  // status do WhatsApp: de hora em hora vê se é dia de postar (desligado até o dono ligar no painel)
+  await boss.work(QUEUES.waStatus, { batchSize: 1, pollingIntervalSeconds: 30 }, async () => {
+    const { runStatusTick } = await import("../wa-status.js");
+    await runStatusTick(log);
+  });
+  await boss.schedule(QUEUES.waStatus, "23 * * * *");
+
   // secretária de reuniões: cada trecho do Meet vira texto e, no fim, a ata em PDF
   await boss.work<import("../meet.js").MeetJob>(QUEUES.meet, { batchSize: 1, pollingIntervalSeconds: 3 }, async ([job]) => {
     const { runMeetJob } = await import("../meet.js");

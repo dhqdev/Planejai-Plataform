@@ -1,13 +1,15 @@
-import type { WASocket } from "baileys";
+import { jidNormalizedUser, type WASocket } from "baileys";
 import { safeFetch } from "../net.js";
 import { callChannel, holdsWhatsApp } from "../whatsapp/rpc.js";
 import { isConnectionError, whatsapp, type WhatsAppSession } from "../whatsapp/session.js";
-import type { Channel, InboundMessage, OutboundImage, OutboundPoll } from "./types.js";
+import type { Channel, InboundMessage, OutboundImage, OutboundPoll, OutboundStatus } from "./types.js";
 
 /** quanto um envio espera a conexão voltar (religação em andamento) antes de desistir */
 const SEND_WAIT_MS = 45_000;
 /** "digitando...", lido e reação são acessórios: esperam pouco */
 const EXTRA_WAIT_MS = 5_000;
+/** status vai criptografado para cada aparelho de cada pessoa da lista: com muita gente demora */
+const STATUS_WAIT_MS = 120_000;
 
 /**
  * Canal WhatsApp embutido (Baileys). No processo que segura a conexão (ROLE channel/worker/all) usa o socket
@@ -89,6 +91,25 @@ export class BaileysChannel implements Channel {
   async react(jid: string, messageId: string, emoji: string) {
     if (this.remote) return void (await callChannel({ op: "react", jid, messageId, emoji }, EXTRA_WAIT_MS));
     await this.run((s) => s.sendMessage(jid, { react: { text: emoji, key: { remoteJid: jid, id: messageId, fromMe: false } } }), EXTRA_WAIT_MS);
+  }
+
+  /**
+   * Status do número (status@broadcast). O WhatsApp só entrega para quem está em statusJidList; o próprio número
+   * entra na lista para o post aparecer no celular do dono.
+   */
+  async postStatus(status: OutboundStatus, jids: string[]) {
+    if (this.remote) return { id: (await callChannel({ op: "status", status, jids }, STATUS_WAIT_MS)).id };
+    const media = status.base64 ? Buffer.from(status.base64, "base64") : null;
+    const r = await this.run((s) => {
+      const me = s.user?.id ? jidNormalizedUser(s.user.id) : null;
+      const opts = { statusJidList: [...new Set([...(me ? [me] : []), ...jids])], broadcast: true, backgroundColor: status.backgroundColor, font: status.font };
+      if (status.kind === "text") return s.sendMessage("status@broadcast", { text: status.text ?? "" }, opts);
+      if (!media) throw new Error("status sem foto nem vídeo");
+      return status.kind === "video"
+        ? s.sendMessage("status@broadcast", { video: media, caption: status.caption, mimetype: status.mimetype ?? "video/mp4" }, opts)
+        : s.sendMessage("status@broadcast", { image: media, caption: status.caption, mimetype: status.mimetype }, opts);
+    }, STATUS_WAIT_MS);
+    return { id: r?.key?.id ?? undefined };
   }
 
   /** um "paused" pendente por conversa: chamar de novo renova o "digitando..." em vez de piscar */
