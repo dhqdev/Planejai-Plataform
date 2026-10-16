@@ -105,3 +105,58 @@
 .costs-grain small { color: var(--muted); font-size: 12px; }
 .costs-grain strong { font-size: 17px; font-variant-numeric: tabular-nums; }
 .costs-grain span { font-size: 12px; }
+
+/* ---------- Meu plano no jeito do Toki (2026-10-16) ----------
+   Título com voltar (no celular centralizado), faixa de indicação, faixa escura dos planos e, na carteira,
+   "grãos usados X%", o gasto dos últimos 14 dias e o botão grande de subir de plano. */
+.plan-bar { position: relative; display: flex; align-items: center; gap: 12px; margin: 0 0 18px; min-height: 44px; }
+.plan-bar h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -.03em; }
+.plan-back { display: none; place-items: center; width: 44px; height: 44px; border-radius: 99px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+.plan-banners { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.plan-gift { display: flex; align-items: center; gap: 14px; padding: 16px 16px 16px 18px; border-radius: 22px; color: var(--text); text-decoration: none; border: 1px solid var(--border);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--violet) 7%, var(--panel)), var(--panel) 60%, color-mix(in srgb, #ff7ab6 8%, var(--panel))); }
+.plan-gift-ico { font-size: 34px; line-height: 1; flex-shrink: 0; }
+.plan-gift-text { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.plan-gift-text b { font-size: 15px; }
+.plan-gift-text span { font-size: 13px; color: var(--muted); }
+.plan-gift > svg { flex-shrink: 0; color: var(--muted); }
+.plan-premium { position: relative; overflow: hidden; display: grid; justify-items: center; align-content: center; gap: 4px; padding: 20px 18px; border-radius: 22px; text-align: center; text-decoration: none; color: #fff;
+  background: radial-gradient(120% 140% at 100% 100%, rgba(140, 75, 255, .55), transparent 55%), radial-gradient(90% 120% at 0% 0%, #1d2a3d, transparent 60%), #111; }
+.plan-premium b { font-size: 21px; letter-spacing: -.02em; }
+.plan-premium > span:last-child { font-size: 14px; opacity: .82; }
+.plan-chips { display: flex; gap: 6px; margin-bottom: 4px; }
+.plan-chips i { font-style: italic; font-weight: 800; font-size: 12px; letter-spacing: .02em; padding: 2px 9px; border-radius: 7px; background: rgba(255, 255, 255, .9); color: #111; }
+.plan-chips i:nth-child(2) { background: linear-gradient(90deg, #e9d5ff, #f9a8d4); }
+.plan-chips i:nth-child(3) { background: linear-gradient(90deg, #c4b5fd, #8c4bff); color: #fff; }
+@media (hover: hover) and (pointer: fine) {
+  .plan-gift, .plan-premium { transition: transform .18s, box-shadow .18s; }
+  .plan-gift:hover, .plan-premium:hover { transform: translateY(-2px); box-shadow: 0 14px 30px -22px rgba(0, 0, 0, .5); }
+}
+.grain-used { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 0; font-size: 13.5px; color: var(--night-muted); }
+.grain-used b { color: var(--night-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.grain-used + .grain-bar { margin-top: 8px; }
+.grain-reset { margin: 10px 0 0; font-size: 12.5px; color: var(--night-muted); }
+.grain-days { margin-top: 14px; display: grid; gap: 6px; }
+.grain-days-bars { display: flex; align-items: flex-end; gap: 3px; height: 38px; }
+.grain-days-bars i { flex: 1; border-radius: 3px; background: color-mix(in srgb, var(--night-text) 55%, transparent); }
+.grain-days-bars i:last-child { background: var(--violet); }
+.grain-days-bars i.zero { background: color-mix(in srgb, var(--night-text) 14%, transparent); }
+.grain-days > span { font-size: 12px; color: var(--night-muted); }
+.plan-cta { display: block; width: 100%; margin: 16px 0 2px; min-height: 52px; border-radius: 18px; border: 1px solid var(--border); background: var(--panel-2); color: var(--violet); font: inherit; font-size: 16px; font-weight: 650; cursor: pointer; transition: background-color .15s, transform .12s; }
+.plan-cta:active { transform: scale(.985); }
+@media (hover: hover) and (pointer: fine) { .plan-cta:hover { background: var(--violet-soft); } }
+.grain-shop { scroll-margin-top: 16px; }
+
+@media (max-width: 767px) {
+  /* como no Toki: a tela tem o próprio topo (voltar + título), então o topo geral do app sai */
+  .layout:has(.grain-page) > .topbar { display: none; }
+  .grain-page { padding-top: calc(10px + env(safe-area-inset-top)); }
+  .plan-bar { justify-content: center; margin-bottom: 14px; }
+  .plan-bar h1 { font-size: 18px; letter-spacing: -.01em; }
+  .plan-back { display: grid; position: absolute; left: 0; top: 0; background: var(--panel); box-shadow: 0 1px 3px rgba(0, 0, 0, .06); }
+  .plan-banners { grid-template-columns: 1fr; gap: 10px; margin-bottom: 16px; }
+  .plan-premium { padding: 22px 16px; }
+  .grain-layout { grid-template-columns: 1fr; }
+}
+/* notebook: os planos já ficam ao lado da carteira, então o botão grande de subir sai */
+@media (min-width: 1024px) { .plan-cta { display: none; } }

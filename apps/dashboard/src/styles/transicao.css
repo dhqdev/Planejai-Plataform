@@ -1,0 +1,22 @@
+/* ---------- Transição entre telas (David, 2026-10-16: "efeito de tela" no PWA) ----------
+   O jeito vem do App (useRouteMotion): "push" quando uma tela abre a partir de outra, "pop" ao voltar e
+   "tab" ao trocar de aba na barra ou entre telas irmãs. Só a tela nova anima (a antiga sai na hora), então
+   não há duas telas montadas nem pulo de rolagem. No celular desliza um pouco no jeito do iOS; no notebook é
+   só um esmaecer com uma subidinha. "Reduzir movimento" vira só esmaecer (regra no motion.css). */
+.route-fade.route-push { animation: route-push .34s cubic-bezier(.32, .72, 0, 1) both; }
+.route-fade.route-pop { animation: route-pop .3s cubic-bezier(.32, .72, 0, 1) both; }
+.route-fade.route-tab { animation: route-tab .2s ease-out both; }
+
+@keyframes route-push { from { opacity: 0; transform: translate3d(36px, 0, 0); } to { opacity: 1; transform: none; } }
+@keyframes route-pop { from { opacity: 0; transform: translate3d(-28px, 0, 0); } to { opacity: 1; transform: none; } }
+@keyframes route-tab { from { opacity: 0; transform: scale(.992); } to { opacity: 1; transform: none; } }
+
+/* notebook e iPad: sem deslizar de lado, a tela só aparece subindo 6px */
+@media (min-width: 768px) {
+  .route-fade.route-push, .route-fade.route-pop { animation: route-rise .24s cubic-bezier(.2, .8, .2, 1) both; }
+  .route-fade.route-tab { animation: route-tab .18s ease-out both; }
+}
+@keyframes route-rise { from { opacity: 0; transform: translate3d(0, 6px, 0); } to { opacity: 1; transform: none; } }
+
+/* a tela que entra não deixa a barra de rolagem lateral aparecer no meio do deslize */
+@media (max-width: 767px) { .main:has(> .route-push, > .route-pop) { overflow-x: hidden; } }

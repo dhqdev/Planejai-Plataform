@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api, brl } from "../api";
-import { ErrorBox, Loading, Modal, PageHead, confirmDialog } from "../components";
+import { ErrorBox, Loading, Modal, confirmDialog } from "../components";
 import { useApi } from "../hooks";
+import { Icon } from "../icons";
+import { grainUse, pct } from "../plano";
+import { haptic } from "../touch";
 
 interface Plan {
   id: string;
@@ -97,6 +100,38 @@ async function payIn(run: () => Promise<string | null | undefined>) {
   }
 }
 
+/** Rola até os planos (no celular ficam embaixo da carteira; no notebook, ao lado). */
+function toPlans() {
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.getElementById("planos")?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+}
+
+/** Gasto dos últimos 14 dias em barrinhas (o extrato guarda o uso somado por dia). */
+function UsageDays({ ledger }: { ledger: { delta: number; reason: string; day: string | null }[] }) {
+  const byDay = new Map<string, number>();
+  for (const l of ledger) if (l.reason === "uso" && l.day) byDay.set(l.day.slice(0, 10), (byDay.get(l.day.slice(0, 10)) ?? 0) - l.delta);
+  if (!byDay.size) return null;
+  const days: { key: string; v: number }[] = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    days.push({ key, v: Math.max(0, byDay.get(key) ?? 0) });
+  }
+  const max = Math.max(1, ...days.map((d) => d.v));
+  const sum = days.reduce((a, d) => a + d.v, 0);
+  return (
+    <div className="grain-days" role="img" aria-label={`${grainsText(sum)} gastos nos últimos 14 dias`}>
+      <div className="grain-days-bars">
+        {days.map((d) => (
+          <i key={d.key} title={`${ddmm(d.key)}: ${grainsText(d.v)}`} style={{ height: `${Math.max(6, Math.round((d.v / max) * 100))}%` }} className={d.v ? "" : "zero"} />
+        ))}
+      </div>
+      <span>Últimos 14 dias · {grainsText(sum)}</span>
+    </div>
+  );
+}
+
 type Checkout = { kind: "plan"; plan: Plan } | { kind: "pack"; pack: Pack };
 
 /** Plano e grãos: saldo, planos, pacotes avulsos, desconto por indicação e extrato. O pagamento acontece na página do Asaas. */
@@ -105,6 +140,14 @@ export function BillingPage() {
   const [checkout, setCheckout] = useState<Checkout | null>(null);
   const [ledger, setLedger] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const nav = useNavigate();
+  const { hash } = useLocation();
+  // "Subir de plano" da Conta chega com #planos: rola até os planos depois de carregar
+  useEffect(() => {
+    if (hash !== "#planos" || !data) return;
+    const t = setTimeout(() => toPlans(), 320);
+    return () => clearTimeout(t);
+  }, [hash, Boolean(data)]);
   if (error) return <div className="page"><ErrorBox error={error} /></div>;
   if (!data) return <Loading />;
 
@@ -167,7 +210,6 @@ export function BillingPage() {
   const upToday = nextUp && sub?.lastPaymentAt ? Math.round((nextUp.price - currentPrice) * (1 - discount / 100) * 100) / 100 : null;
 
   const total = wallet?.total ?? 0;
-  const planShare = sub?.plan && wallet ? Math.min(1, wallet.plan / Math.max(1, sub.plan.grains)) : null;
   const days = data.burnPerDay && data.burnPerDay > 0 ? Math.floor(total / data.burnPerDay) : null;
   const status = !pricing.enabled
     ? "Por enquanto o Planejai é gratuito para você."
@@ -183,20 +225,60 @@ export function BillingPage() {
               ? `No seu ritmo, dá para ${days > 60 ? "mais de 2 meses" : days <= 1 ? "cerca de 1 dia" : `uns ${days} dias`}.`
               : "Cada resposta gasta alguns grãos, conforme o trabalho que deu.";
 
+  const use = grainUse(data);
+  const resets = sub?.nextDueDate ? new Date(`${sub.nextDueDate.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", { day: "numeric", month: "short" }).replace(/\.$/, "") : null;
+  const back = () => {
+    haptic(5);
+    if (history.state?.idx > 0) nav(-1);
+    else nav("/conta");
+  };
+
   return (
     <div className="page grain-page">
-      <PageHead title="Plano e grãos" />
+      <div className="plan-bar">
+        <button type="button" className="plan-back" onClick={back} aria-label="Voltar">
+          <Icon name="chevron-left" size={20} />
+        </button>
+        <h1>Meu plano</h1>
+      </div>
+      {live && (
+        <div className="plan-banners">
+          {referral && referral.step > 0 && (
+            <Link className="plan-gift" to="/convites" onClick={() => haptic(5)}>
+              <span className="plan-gift-ico" aria-hidden>🎁</span>
+              <span className="plan-gift-text">
+                <b>Indique amigos e pague menos</b>
+                <span>Cada amigo que assina tira {referral.step}% da sua mensalidade, até {referral.max}%.</span>
+              </span>
+              <Icon name="chevron-right" size={18} />
+            </Link>
+          )}
+          <Link className="plan-premium" to="/precos" onClick={() => haptic(5)}>
+            <span className="plan-chips" aria-hidden>
+              {pricing.plans.slice(0, 3).map((p) => <i key={p.id}>{p.name}</i>)}
+            </span>
+            <b>Planos Planejai</b>
+            <span>Compare o que cada plano faz e escolha o seu</span>
+          </Link>
+        </div>
+      )}
       <div className="grain-layout">
         <section className="bill grain-wallet" aria-label="Seus grãos">
           <div className="bill-head">
-            <p className="bill-plan">{sub?.plan ? `Plano ${sub.plan.name}` : "Sem plano"}</p>
+            <p className="bill-plan">{sub?.plan ? `Plano ${sub.plan.name}` : use ? "Grátis" : "Sem plano"}</p>
             <p className="bill-price">
               {nf.format(Math.max(0, total))} <span>{total === 1 ? "grão" : "grãos"}</span>
             </p>
-            {live && wallet && sub?.plan && (
-              <div className="grain-bar" role="img" aria-label={`${grainsText(wallet.plan)} de ${grainsText(sub.plan.grains)} do plano`}>
-                <i style={{ width: `${Math.round((planShare ?? 0) * 100)}%` }} />
-              </div>
+            {use?.used != null && (
+              <>
+                <p className="grain-used">
+                  <span>{sub?.plan ? "Grãos do plano usados" : "Grãos de presente usados"}</span>
+                  <b>{pct(use.used)}</b>
+                </p>
+                <div className="grain-bar" role="img" aria-label={sub?.plan && wallet ? `${grainsText(wallet.plan)} de ${grainsText(sub.plan.grains)} do plano` : `${pct(use.used)} usados`}>
+                  <i style={{ width: `${Math.round(use.used * 100)}%` }} />
+                </div>
+              </>
             )}
             {live && wallet && (wallet.plan > 0 || wallet.extra > 0) && (
               <p className="grain-split">
@@ -204,6 +286,8 @@ export function BillingPage() {
               </p>
             )}
             <p className="bill-status">{status}</p>
+            {live && <UsageDays ledger={data.ledger ?? []} />}
+            {live && resets && sub?.status !== "overdue" && <p className="grain-reset">Os grãos do plano recarregam em {resets}.</p>}
           </div>
           <div className="bill-body">
             {live && sub && (
@@ -247,6 +331,11 @@ export function BillingPage() {
                   {p.kind === "pack" ? `Pacote de ${grainsText(p.grains)}` : "Troca de plano"} esperando pagamento ({brl(p.value)})
                 </a>
               ))}
+            {live && data.linked && use?.canUpgrade && (
+              <button type="button" className="plan-cta" onClick={() => { haptic(10); toPlans(); }}>
+                {sub?.plan ? "Subir de plano" : "Escolher um plano"}
+              </button>
+            )}
             <div className="grain-actions">
               {data.ledger && data.ledger.length > 0 && <button className="btn btn-ghost" onClick={() => setLedger(true)}>Ver extrato</button>}
               {live && sub && <button className="btn btn-ghost btn-danger" onClick={cancel}>Cancelar plano</button>}
@@ -279,7 +368,7 @@ export function BillingPage() {
         </section>
 
         {live && data.linked && (
-          <section className="grain-shop" aria-label="Planos e pacotes">
+          <section className="grain-shop" id="planos" aria-label="Planos e pacotes">
             {data.ready && nextUp && sub?.plan && (
               <div className="grain-up">
                 <div>

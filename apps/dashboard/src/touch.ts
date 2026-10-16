@@ -125,5 +125,12 @@ export async function promptInstall() {
   deferredPrompt = null;
   return r?.outcome === "accepted";
 }
+// instalou (pelo botão ou pelo menu do navegador): some o convite para instalar
+window.addEventListener("appinstalled", () => {
+  deferredPrompt = null;
+  listeners.forEach((l) => l());
+});
 export const isStandalone = () => matchMedia("(display-mode: standalone)").matches || (navigator as any).standalone === true;
-export const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+/** iPhone e iPad (o iPad novo diz que é Mac, mas tem toque). */
+export const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+export const isAndroid = () => /android/i.test(navigator.userAgent);

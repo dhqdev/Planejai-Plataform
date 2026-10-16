@@ -1,24 +1,23 @@
 import { createContext, lazy, useCallback, Suspense, useContext, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
-import { MASCOTE } from "./mascote/nome";
-import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import { createPortal, flushSync } from "react-dom";
 import { api } from "./api";
 import { BlockLoader } from "./BlockLoader";
-import { Empty, Loading, Modal } from "./components";
+import { Empty, Loading } from "./components";
 import { clearApiCache, prefetchApi, useApi } from "./hooks";
 import { AgentFace, type Face } from "./faces";
 import { Icon } from "./icons";
-import { openWardrobe } from "./mascote/state";
 import { UserMascote } from "./mascote/UserMascote";
 import { MascoteStroll } from "./mascote/Stroll";
-import { MascoteButton, MascoteIcon, WardrobeHost } from "./mascote/Wardrobe";
+import { MascoteButton, WardrobeHost } from "./mascote/Wardrobe";
 import { useUnread } from "./notify";
 import { AuthPage } from "./pages/Login";
 import { PrivacyPage } from "./pages/Privacy";
 import { Welcome, type Onboarding } from "./pages/Welcome";
 import { Tour } from "./pages/Tour";
 import { PullToRefresh } from "./PullToRefresh";
-import { canInstall, haptic, isIos, isStandalone, onInstallAvailable, promptInstall } from "./touch";
+import { useInstallAction } from "./Install";
+import { haptic } from "./touch";
 import { applyUpdate, onUpdateAvailable } from "./update";
 
 // Cada tela é um pedaço à parte: baixa só quando abre (o app inicia leve no celular)
@@ -43,6 +42,7 @@ const load = {
   notifications: () => import("./pages/Notifications"),
   alarm: () => import("./pages/Alarm"),
   profile: () => import("./pages/Profile"),
+  conta: () => import("./pages/Conta"),
   queues: () => import("./pages/Queues"),
   resources: () => import("./pages/Resources"),
   settings: () => import("./pages/Settings"),
@@ -88,6 +88,7 @@ const SpecialistsPage = page(() => load.specialists().then((m) => m.SpecialistsP
 const SpecialistPage = page(() => load.specialists().then((m) => m.SpecialistPage));
 const ModelsPage = page(() => load.models().then((m) => m.ModelsPage));
 const ProfilePage = page(() => load.profile().then((m) => m.ProfilePage));
+const ContaPage = page(() => load.conta().then((m) => m.ContaPage));
 const CalendarPage = page(() => load.calendar().then((m) => m.CalendarPage));
 const SettingsPage = page(() => load.settings().then((m) => m.SettingsPage));
 const WatchesPage = page(() => load.watches().then((m) => m.WatchesPage));
@@ -129,6 +130,7 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/documentos": load.documents,
   "/settings": load.settings,
   "/profile": load.profile,
+  "/conta": load.conta,
   "/plano": load.billing,
   "/time": load.team,
   "/esteira": load.esteira,
@@ -181,7 +183,7 @@ const MY_DAY: NavItem[] = [
   { to: "/especialistas", label: "Especialistas", icon: "sparkle" },
 ];
 
-/** Barra de baixo do celular: só as telas do dia a dia; o resto fica organizado por seção no "Mais". */
+/** Barra de baixo do celular: só as telas do dia a dia; o resto fica em listas na Conta (último item). */
 const PHONE_TABS = ["/", "/agenda", "/finance"];
 
 /** Super admin (dono da stack): o dia a dia dele e, abaixo, a operação da plataforma. */
@@ -244,7 +246,7 @@ function adminNav(tabs: AppTabs | null, billing = false): NavItem[] {
     { to: "/convites", label: "Convites", icon: "user-plus" },
     { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
     // só aparece quando o dono ligou a cobrança
-    ...(billing ? [{ to: "/plano", label: "Plano e grãos", icon: "card", short: "Plano" }] : []),
+    ...(billing ? [{ to: "/plano", label: "Meu plano", icon: "card", short: "Plano" }] : []),
     { to: "/profile", label: "Minha conta", icon: "user" },
   ];
 }
@@ -275,9 +277,9 @@ function BellButton() {
 export function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? "light");
-  const [menu, setMenu] = useState(false);
-  const [installable, setInstallable] = useState(canInstall());
+  const install = useInstallAction();
   const loc = useLocation();
+  const motion = useRouteMotion(loc.pathname);
   const mainRef = useRef<HTMLElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   // barra de baixo: a aba aberta desliza para o meio (dá para rolar para os lados)
@@ -303,7 +305,6 @@ export function App() {
     return () => clearTimeout(t);
   }, [me?.id]);
   const nav = useNavigate();
-  useEffect(() => onInstallAvailable(() => setInstallable(true)), []);
   const tabs = useApi<AppTabs>(me ? `/api/me/tabs?for=${me.id}` : null);
   const isSuper = me?.role === "superadmin";
   const billing = useApi<{ pricing: { enabled: boolean } }>(me && !isSuper ? "/api/billing" : null);
@@ -389,14 +390,13 @@ export function App() {
   const rail = NAV.filter((i) => !("to" in i && (platform.includes(i) || team.includes(i) || i.to === "/notificacoes" || i.to === "/profile")) && !("section" in i && i.section === "Plataforma"));
   const logout = async () => {
     await api("/api/auth/logout", { method: "POST" });
-    setMenu(false);
     setMe(null);
   };
   const has = (m: string) => isSuper || (tabs.data?.modules ?? []).includes(m);
-  // barra do celular: 3 abas fixas e o "Mais" (ativo no modal ou em qualquer outra tela)
+  // barra do celular: 3 abas fixas e a Conta (acesa também em qualquer tela que se abre por ela)
   const phoneTabs = links.filter((t) => PHONE_TABS.includes(t.to));
   const here = phoneTabs.findIndex((t) => t.to === "/" + (loc.pathname.split("/")[1] ?? "") || groupOf(loc.pathname)?.[0]?.to === t.to);
-  const tabIndex = menu || here < 0 ? phoneTabs.length : here;
+  const tabIndex = here < 0 ? phoneTabs.length : here;
   return (
     <UnreadProvider>
     <div className="layout">
@@ -427,6 +427,11 @@ export function App() {
           </nav>
         )}
         <div className="frame-acts">
+          {install.mode === "prompt" && (
+            <button className="frame-act" onClick={install.run} aria-label="Instalar o app" title="Instalar o app">
+              <Icon name="download" size={18} />
+            </button>
+          )}
           <button className="frame-act" onClick={toggleTheme} aria-label={theme === "dark" ? "Tema claro" : "Tema escuro"} title={theme === "dark" ? "Tema claro" : "Tema escuro"}>
             <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
           </button>
@@ -442,7 +447,7 @@ export function App() {
         <PullToRefresh target={mainRef} />
         <Suspense fallback={<Loading />}>
         {isSuper && <SubTabs path={loc.pathname} />}
-        <div className="route-fade" key={loc.pathname}>
+        <div className={`route-fade route-${motion}`} key={loc.pathname}>
         <Routes>
           {isSuper ? (
             <>
@@ -469,6 +474,7 @@ export function App() {
             </>
           )}
           <Route path="/profile" element={<ProfilePage me={me} />} />
+          <Route path="/conta" element={<ContaRoute me={me} sections={sectionsOf(NAV).map((sec) => ({ ...sec, items: sec.items.filter((it) => !PHONE_TABS.includes(it.to)) }))} theme={theme} onTheme={toggleTheme} onLogout={logout} />} />
           <Route path="/notificacoes" element={<NotificationsPage />} />
           <Route path="/alarme" element={<AlarmPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
@@ -522,76 +528,45 @@ export function App() {
               </NavLink>
             ))}
           </div>
-          <button className={`tab tab-more${tabIndex === phoneTabs.length ? " active" : ""}`} aria-label="Mais" title="Mais" onClick={() => { haptic(); setMenu(true); }}>
-            <span className="tab-ico" key={tabIndex === phoneTabs.length ? "on" : "off"}><Icon name="apps" size={23} /><UnreadDot className="tab-dot" /></span>
-            <span className="tab-label">Mais</span>
-          </button>
+          <NavLink to="/conta" className={`tab tab-more${tabIndex === phoneTabs.length ? " active" : ""}`} aria-label="Conta" title="Conta" onClick={() => haptic(6)} onPointerEnter={() => preload("/conta")}>
+            <span className="tab-ico" key={tabIndex === phoneTabs.length ? "on" : "off"}><Icon name="user" size={23} /><UnreadDot className="tab-dot" /></span>
+            <span className="tab-label">Conta</span>
+          </NavLink>
         </div>
       </nav>
 
-      {menu && (
-        <Modal title="Mais" onClose={() => setMenu(false)} className="more-sheet">
-          {!isStandalone() && (installable || isIos()) && (
-            <div className="install-card">
-              <img className="brand-logo app-icon" src="/icons/logo-256.png" alt="" width={40} height={40} />
-              <div style={{ flex: 1 }}>
-                <strong>Instalar o Planejai</strong>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  {installable ? "Abre como app, em tela cheia." : "No Safari: toque em Compartilhar e depois em \"Adicionar à Tela de Início\"."}
-                </div>
-              </div>
-              {installable && <button className="btn btn-primary btn-sm" onClick={async () => { if (await promptInstall()) setInstallable(false); }}>Instalar</button>}
-            </div>
-          )}
-          <div className="me more-me">
-            <UserMascote me name={me.name ?? me.email} size={28} />
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div className="me-name">{me.name ?? me.email}</div>
-              <div className="role-tag">{me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · <span className="app-version">v{__APP_VERSION__}</span></div>
-            </div>
-          </div>
-          {sectionsOf(NAV).map((sec) => {
-            const items = sec.items.filter((it) => !PHONE_TABS.includes(it.to));
-            const last = sec.title === "Conta";
-            if (!items.length && !last) return null;
-            return (
-              <section key={sec.title} className="more-section">
-                <h4>{sec.title}</h4>
-                <div className="more-grid">
-                  {items.map((item) => (
-                    <button key={item.to} className={`more-tile ${isOn(loc.pathname, item.to) ? "active" : ""}`} onClick={() => { setMenu(false); nav(item.to); }}>
-                      <span className="tab-ico"><Icon name={item.icon} size={24} />{item.badge === "notif" && <UnreadDot className="tab-dot" />}</span>
-                      <span>{item.short ?? item.label}</span>
-                    </button>
-                  ))}
-                  {last && (
-                    <>
-                      <button className="more-tile" onClick={() => { setMenu(false); openWardrobe(); }}>
-                        <MascoteIcon size={30} />
-                        <span>{MASCOTE}</span>
-                      </button>
-                      <button className="more-tile" onClick={toggleTheme}>
-                        <Icon name={theme === "dark" ? "sun" : "moon"} size={24} />
-                        <span>{theme === "dark" ? "Tema claro" : "Tema escuro"}</span>
-                      </button>
-                      <button className="more-tile" onClick={logout}>
-                        <Icon name="logout" size={24} />
-                        <span>Sair</span>
-                      </button>
-                    </>
-                  )}
-                </div>
-              </section>
-            );
-          })}
-        </Modal>
-      )}
+      {install.sheet}
     </div>
     </UnreadProvider>
   );
 }
 
-/** Itens do menu agrupados pela seção (Meu dia, Plataforma, Conta…), para o "Mais" do celular. */
+/**
+ * Jeito da transição entre telas (CSS em styles/transicao.css): abrir uma tela a partir de outra entra da
+ * direita ("push"), voltar (botão voltar, gesto do Android) entra da esquerda ("pop") e trocar de aba na
+ * barra ou entre telas irmãs só esmaece ("tab"). O caminho anterior fica num ref, então o cálculo é feito
+ * uma vez por troca de endereço.
+ */
+function useRouteMotion(path: string) {
+  const type = useNavigationType();
+  const ref = useRef({ path, kind: "tab" as "tab" | "push" | "pop" });
+  if (ref.current.path !== path) {
+    const top = (p: string) => "/" + (p.split("/")[1] ?? "");
+    const flat = (p: string) => [...PHONE_TABS, "/conta"].includes(top(p));
+    const from = ref.current.path;
+    const siblings = groupOf(from) && groupOf(from) === groupOf(path);
+    const kind = type === "POP" ? "pop" : flat(path) || siblings ? "tab" : "push";
+    ref.current = { path, kind };
+  }
+  return ref.current.kind;
+}
+
+/** Conta com o número de avisos não lidos (o provedor fica dentro do App, então lê aqui). */
+function ContaRoute(props: Omit<Parameters<typeof ContaPage>[0], "unread">) {
+  return <ContaPage {...props} unread={useContext(UnreadContext)} />;
+}
+
+/** Itens do menu agrupados pela seção (Meu dia, Plataforma, Conta…), para as listas da Conta no celular. */
 function sectionsOf(items: NavItem[]) {
   const out: { title: string; items: NavLinkItem[] }[] = [];
   for (const it of items) {
@@ -609,6 +584,7 @@ const isOn = (path: string, to: string) => {
 
 function titleFor(path: string, items: NavItem[]) {
   const base = "/" + (path.split("/")[1] ?? "");
+  if (base === "/conta") return "Conta";
   const hit = (items.find((i) => "to" in i && i.to === path) ?? items.find((i) => "to" in i && i.to === base)) as { label: string } | undefined;
   return hit?.label ?? groupOf(path)?.find((t) => t.to === base)?.label ?? "Planejai";
 }
@@ -667,7 +643,7 @@ function Nav({ items, team, me, meTitle }: { items: NavItem[]; team: NavLinkItem
         <span className="nav-ico"><Icon name="bell" size={22} /><UnreadDot className="nav-dot" count /></span>
         <span className="label">Avisos</span>
       </NavLink>
-      <NavLink to="/profile" className={cls("/profile")} title={meTitle} onPointerEnter={() => preload("/profile")}>
+      <NavLink to="/conta" className={(st) => (st.isActive || loc.pathname === "/profile" ? "active" : "")} title={meTitle} onPointerEnter={() => preload("/conta")}>
         <span className="nav-ico nav-me"><UserMascote me name={me.name ?? me.email} size={30} /></span>
         <span className="label">Conta</span>
       </NavLink>
