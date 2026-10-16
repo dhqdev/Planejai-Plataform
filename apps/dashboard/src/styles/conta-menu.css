@@ -59,14 +59,29 @@
   :root[data-theme="dark"] .conta-card, :root[data-theme="dark"] .conta-rows { border-color: var(--border); }
 }
 
-/* notebook e iPad: cartão parado à esquerda, ajustes à direita; as telas já estão no trilho */
+.conta-head { display: none; }
+.conta-plan-note { margin: 10px 0 0; font-size: 13.5px; color: var(--muted); }
+
+/* notebook e iPad (David, 2026-10-16: "meio zuada" com o cartão solto e a lista estreita): mesmo cabeçalho e
+   largura das outras telas; o cartão vira uma faixa com a pessoa à esquerda e o plano à direita, e as listas
+   ficam lado a lado embaixo, ocupando a largura toda. As telas já estão no trilho, então as listas delas somem. */
 @media (min-width: 768px) {
-  .conta-page { padding-top: 28px; }
-  .conta-grid { grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 24px; align-items: start; max-width: 1080px; }
-  .conta-card { position: sticky; top: 24px; padding: 22px 22px 24px; }
+  .conta-sr { display: none; }
+  .conta-head { display: block; }
+  .conta-grid { gap: 20px; }
+  .conta-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 0; padding: 0; border-radius: 22px; }
+  .conta-card-who, .conta-card-plan { padding: 26px 28px; min-width: 0; }
+  .conta-card-plan { border-left: 1px solid var(--border); align-self: stretch; display: flex; flex-direction: column; justify-content: center; }
+  .conta-card-plan .conta-plan { margin-top: 0; }
+  .conta-who-text strong { font-size: 19px; }
   .conta-screens { display: none; }
-  .conta-row { min-height: 52px; font-size: 15px; }
-  .conta-version { text-align: left; margin-left: 6px; }
+  .conta-lists { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+  .conta-version { grid-column: 1 / -1; text-align: left; margin-left: 6px; }
+  .conta-row { min-height: 54px; font-size: 15px; }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .conta-card { grid-template-columns: 1fr; }
+  .conta-card-plan { border-left: 0; border-top: 1px solid var(--border); }
 }
 
 /* ---------- Instalar o app: passo a passo (iPhone e navegador sem o aviso) ---------- */

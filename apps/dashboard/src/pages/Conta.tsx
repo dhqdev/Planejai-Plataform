@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { Me } from "../App";
+import { PageHead } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { useInstallAction } from "../Install";
@@ -47,9 +48,14 @@ export function ContaPage({ me, sections, theme, onTheme, onLogout, unread }: {
 
   return (
     <div className="page conta-page">
-      <h1 className="sr-only">Conta</h1>
+      <h1 className="sr-only conta-sr">Conta</h1>
+      {/* notebook: mesmo cabeçalho das outras telas; no celular a tela começa direto no cartão, como no Toki */}
+      <div className="conta-head">
+        <PageHead title="Conta" subtitle="Seu perfil, seu plano e os ajustes do app." />
+      </div>
       <div className="conta-grid">
         <section className="conta-card" aria-label="Você">
+          <div className="conta-card-who">
           <div className="conta-who">
             <UserMascote me name={me.name ?? me.email} size={58} />
             <div className="conta-who-text">
@@ -60,6 +66,8 @@ export function ContaPage({ me, sections, theme, onTheme, onLogout, unread }: {
               <Icon name="edit" size={18} />
             </Link>
           </div>
+          </div>
+          <div className="conta-card-plan">
           {use ? (
             <>
               <div className="conta-plan">
@@ -87,6 +95,8 @@ export function ContaPage({ me, sections, theme, onTheme, onLogout, unread }: {
               {!isSuper && billing.data && !billing.data.linked && <Link className="btn btn-sm" state={FROM_CONTA} to="/profile">Ligar WhatsApp</Link>}
             </div>
           )}
+          {!use && <p className="conta-plan-note">{isSuper ? "Acesso completo à plataforma, sem gastar grãos." : "Por enquanto o Planejai é grátis para você."}</p>}
+          </div>
         </section>
 
         <div className="conta-lists">
