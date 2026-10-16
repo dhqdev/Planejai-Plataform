@@ -243,6 +243,8 @@ function adminNav(tabs: AppTabs | null, billing = false): NavItem[] {
   return [
     { section: "Meu dia" },
     ...MY_DAY,
+    // blog público só para ler (a gestão é do dono, em Plataforma > Blog); pedido do David em 2026-10-16
+    { to: "/blog", label: "Blog", icon: "book" },
     ...(extra.length ? [{ section: "Feito para você" }, ...extra] : []),
     { section: "Conta" },
     { to: "/convites", label: "Convites", icon: "user-plus" },
