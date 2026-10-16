@@ -19,6 +19,8 @@ export const QUEUES = {
   dev: "dev.pipeline",
   /** blog público: posts de partida, ilustrações que faltam e o post da semana (blog.ts) */
   blog: "blog.run",
+  /** secretária de reuniões (meet.ts): transcreve um trecho ou fecha a ata */
+  meet: "meet.run",
 } as const;
 
 let boss: PgBoss | null = null;
@@ -42,6 +44,7 @@ export async function getBoss(): Promise<PgBoss> {
   await b.createQueue(QUEUES.alarm, { name: QUEUES.alarm, policy: "standard" });
   await b.createQueue(QUEUES.dev, { name: QUEUES.dev, policy: "standard" });
   await b.createQueue(QUEUES.blog, { name: QUEUES.blog, policy: "standard" });
+  await b.createQueue(QUEUES.meet, { name: QUEUES.meet, policy: "standard" });
   boss = b;
   return b;
 }
@@ -67,6 +70,7 @@ export const QUEUE_LABELS: Record<string, string> = {
   [QUEUES.alarm]: "Alarmes",
   [QUEUES.dev]: "Esteira de desenvolvimento",
   [QUEUES.blog]: "Blog",
+  [QUEUES.meet]: "Reuniões do Meet",
 };
 
 /**

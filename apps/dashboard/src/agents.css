@@ -84,6 +84,8 @@
 .ap-pan { transform-origin: 18px 29px; transform-box: view-box !important; animation: ap-swing 2.6s ease-in-out infinite; }
 .ap-hammer { transform-origin: 28px 33px; transform-box: view-box !important; animation: ap-hammer 1.3s cubic-bezier(.5, 0, .3, 1) infinite; }
 @keyframes ap-hammer { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-28deg); } 45% { transform: rotate(4deg); } }
+.ap-write { animation: ap-write 1.6s ease-in-out infinite; }
+@keyframes ap-write { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-1.5px, 1px); } 50% { transform: translate(1px, -.5px); } 75% { transform: translate(-1px, .5px); } }
 .ap-wheel { transform-origin: 20px 20px; transform-box: view-box !important; animation: ap-steer 2.4s ease-in-out infinite; }
 @keyframes ap-steer { 0%, 100% { transform: rotate(-20deg); } 50% { transform: rotate(20deg); } }
 

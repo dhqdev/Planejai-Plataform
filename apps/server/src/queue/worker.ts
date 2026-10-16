@@ -136,6 +136,12 @@ async function startChannelJobs(log: WorkerLog) {
   });
   await boss.schedule(QUEUES.blog, "41 * * * *", { action: "tick" });
 
+  // secretária de reuniões: cada trecho do Meet vira texto e, no fim, a ata em PDF
+  await boss.work<import("../meet.js").MeetJob>(QUEUES.meet, { batchSize: 1, pollingIntervalSeconds: 3 }, async ([job]) => {
+    const { runMeetJob } = await import("../meet.js");
+    if (job) await runMeetJob(job.data, log);
+  });
+
   // mensagens pedidas pelo n8n / automações (API interna)
   await boss.work<OutboundJob>(QUEUES.outbound, { batchSize: 1, pollingIntervalSeconds: 2 }, async ([job]) => {
     if (job) await runOutboundJob(job.data);

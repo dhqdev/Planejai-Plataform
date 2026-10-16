@@ -8,6 +8,7 @@ import { GOAL_TOOLS } from "./tools/goals.js";
 import { categoriesTool } from "./tools/categories.js";
 import * as images from "./tools/images.js";
 import * as pdf from "./tools/pdf.js";
+import * as meet from "./tools/meet.js";
 import * as audio from "./tools/audio.js";
 import * as automations from "./tools/automations.js";
 import * as documents from "./tools/documents.js";
@@ -442,6 +443,8 @@ export const CLIENT_AGENT_TOOLS: Record<string, Tool> = Object.fromEntries(
     images.makeImage,
     images.getPicture,
     pdf.makePdf,
+    meet.meetingList,
+    meet.meetingRead,
   ].map((t) => [t.name, t]),
 );
 

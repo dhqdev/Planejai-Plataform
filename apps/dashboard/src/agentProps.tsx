@@ -31,6 +31,7 @@ Object.assign(ROLE_MOODS, {
   "skin:cozinha": ["working", "happy", "wink"],
   "skin:casa": ["working", "idle", "finished"],
   "skin:carro": ["working", "thinking", "happy"],
+  "skin:reunioes": ["thinking", "curious", "working"],
 } satisfies Record<string, Mood[]>);
 
 /** O que cada um está fazendo agora (frases curtas que se revezam no cartão do time). */
@@ -53,6 +54,7 @@ Object.assign(ROLE_DOING, {
   c_cozinha: ["escolhendo a receita", "montando o cardápio", "fazendo a lista do mercado"],
   c_casa: ["dividindo a faxina", "lembrando do filtro", "achando quem conserta"],
   c_carro: ["lembrando da revisão", "vendo o IPVA", "somando a gasolina"],
+  c_reunioes: ["ouvindo a reunião", "anotando as decisões", "montando a ata"],
 });
 
 /** Desenho do objeto de cada agente (viewBox 40x40). */
@@ -206,6 +208,17 @@ export function PropArt({ agent }: { agent: string }) {
           <circle cx={20} cy={20} r={12} fill="#fff" stroke={INK} strokeWidth={2.4} />
           <circle cx={20} cy={20} r={3.6} fill="var(--ap-accent)" stroke={INK} strokeWidth={1.8} />
           <path d="M20 16.4 V8.5 M16.6 21.4 L9.6 25 M23.4 21.4 L30.4 25" {...line} strokeWidth={2.2} />
+        </g>
+      );
+    case "skin:reunioes":
+      return (
+        <g>
+          <rect x={9} y={7} width={20} height={26} rx={2.6} fill="#fff" stroke={INK} strokeWidth={2.2} />
+          <path d="M13 14 H25 M13 19 H25 M13 24 H20" stroke={INK} strokeWidth={1.5} strokeLinecap="round" opacity={0.5} />
+          <g className="ap-write">
+            <path d="M24 31 L34 17" stroke="var(--ap-accent)" strokeWidth={3.2} strokeLinecap="round" />
+            <path d="M24 31 L23.2 34" {...line} strokeWidth={1.8} />
+          </g>
         </g>
       );
     default:

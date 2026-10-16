@@ -6,6 +6,7 @@ import { AgentFace, type Face } from "../faces";
 import { refreshAll, useApi } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
+import { MeetRecorder } from "./MeetRecorder";
 
 type Item = {
   slug: string;
@@ -123,6 +124,7 @@ export function SpecialistPage() {
               <p>{it.blurb}</p>
             </div>
           </section>
+          {it.slug === "reunioes" && (it.active || it.mine) && <MeetRecorder />}
           {it.active || it.mine ? (
             <section className="card store-asks">
               <h3>Peça no WhatsApp</h3>

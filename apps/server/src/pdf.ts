@@ -32,6 +32,10 @@ export interface PdfSpec {
   author?: string;
   /** busca da foto da capa */
   coverImage?: string;
+  /** linha acima do título na capa (padrão "Documento · N partes") */
+  kicker?: string;
+  /** false tira o sumário (documento curto que se lê de uma vez, como a ata de reunião) */
+  toc?: boolean;
   sections: PdfSection[];
 }
 
@@ -249,7 +253,7 @@ export function buildPdfHtml(spec: PdfSpec, today = new Date(), images: PdfImage
   const title = esc(clip(spec.title, 140));
   const subtitle = spec.subtitle ? esc(clip(spec.subtitle, 260)) : undefined;
   const metaLeft = spec.author ? `Feito para ${esc(clip(spec.author, 80))}` : "Feito pelo seu assistente";
-  const kicker = secs.length > 1 ? `Documento · ${secs.length} partes` : "Documento";
+  const kicker = spec.kicker ? clip(spec.kicker, 60) : secs.length > 1 ? `Documento · ${secs.length} partes` : "Documento";
   // os assuntos do documento em pílulas na capa (até 6), para a capa já dizer o que tem dentro
   const parts = secs.length > 1 ? `<div class="cv-parts">${secs.slice(0, 6).map((s) => `<span>${esc(clip(s.title, 40))}</span>`).join("")}</div>` : "";
 
@@ -260,7 +264,7 @@ export function buildPdfHtml(spec: PdfSpec, today = new Date(), images: PdfImage
     : coverHtml({ kicker, title, subtitle, extra: `${parts}<div class="cv-art">${mascote(300, "art")}</div>`, metaLeft, metaRight: esc(date) });
   // sumário só quando ajuda a navegar
   const toc =
-    secs.length >= 4
+    spec.toc !== false && secs.length >= 4
       ? `<div class="toc"><h2>Sumário</h2><ol>${secs.map((s, i) => `<li><span class="n">${n(i)}</span><span>${esc(s.title)}</span></li>`).join("")}</ol></div>`
       : "";
   const body = secs

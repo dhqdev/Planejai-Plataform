@@ -35,6 +35,7 @@ export const SKINS: Record<string, Outfit> = {
   cozinha: { head: "chef", neck: "apron" },
   casa: { head: "hardhat", neck: "toolbelt" },
   carro: { head: "mechanic", neck: "bandana" },
+  reunioes: { head: "headphones", eyes: "glasses", neck: "bowtie" },
 };
 export const skinOf = (face?: Face | null) => (face?.extra?.startsWith("skin:") ? face.extra.slice(5) : null);
 

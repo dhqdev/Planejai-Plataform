@@ -70,6 +70,11 @@ export class Tracer {
     return new Tracer(row!.id, opts.userId ?? null, Boolean(opts.noCharge));
   }
 
+  /** Continua uma execução já aberta (reunião longa: cada trecho transcrito vira um passo da mesma execução). */
+  static attach(executionId: string, userId: string | null) {
+    return new Tracer(executionId, userId);
+  }
+
   async step(opts: { agent: string; type: StepType; name: string; input?: unknown; parentId?: number | null; model?: string }): Promise<StepHandle> {
     const started = Date.now();
     const row = await one<{ id: number }>(

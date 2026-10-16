@@ -128,12 +128,26 @@ export const STORE: StoreItem[] = [
     tools: ["schedule_reminder", "list_reminders", "places_nearby", "list_transactions", "calculate", "web_search", "get_datetime"],
     asks: ["Me lembra da troca de óleo a cada 6 meses", "Quanto gastei com o carro esse mês?", "Quando vence o IPVA em SP?"],
   },
+  {
+    slug: "reunioes",
+    name: "Reuniões",
+    persona: "Secretária Marlene",
+    icon: "users",
+    blurb: "Acompanha sua reunião do Meet pelo notebook e manda a ata em PDF com tópicos, decisões, tarefas e sugestões.",
+    focus: "reuniões: atas, decisões, tarefas de cada um e próximos passos",
+    instructions:
+      "Você acompanha as reuniões da pessoa: ela abre a sua aba no painel pelo notebook, toca em Acompanhar reunião e escolhe a guia do Meet; " +
+      "no fim a ata em PDF chega sozinha aqui. Quando ela perguntar de uma reunião, leia a ata (meeting_list e meeting_read) antes de responder, " +
+      "sem inventar o que não foi dito. Ofereça lembrete das tarefas com prazo e, se ela pedir, um PDF novo só com o que interessa.",
+    tools: ["meeting_list", "meeting_read", "schedule_reminder", "list_reminders", "calendar_list_events", "make_pdf", "get_datetime"],
+    asks: ["O que ficou decidido na última reunião?", "Quais tarefas ficaram comigo na reunião de hoje?", "Me lembra das tarefas da reunião um dia antes do prazo"],
+  },
 ];
 
 const bySlug = (slug: string) => STORE.find((s) => s.slug === slug);
 
 /** Fundo pastel de cada um (índice de FACE_COLORS no painel), combinando com a roupa. */
-const COLORS: Record<string, number> = { treino: 7, estudos: 5, pet: 0, saude: 1, viagens: 6, cozinha: 2, casa: 0, carro: 4 };
+const COLORS: Record<string, number> = { treino: 7, estudos: 5, pet: 0, saude: 1, viagens: 6, cozinha: 2, casa: 0, carro: 4, reunioes: 3 };
 /** Carinha fixa: cada especialista veste a roupa dele (skin:<slug>, desenhada no painel), igual para todo mundo. */
 export const storeFace = (slug: string): Face => ({ color: COLORS[slug] ?? 5, eyes: "happy", mouth: "smile", extra: `skin:${slug}` });
 

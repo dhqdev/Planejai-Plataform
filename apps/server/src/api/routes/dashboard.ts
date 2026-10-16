@@ -14,6 +14,7 @@ import { financeRoutes } from "./dashboard/finance.js";
 import { integrationCallbackRoutes, integrationRoutes } from "./dashboard/integrations.js";
 import { inviteRoutes } from "./dashboard/invites.js";
 import { meRoutes } from "./dashboard/me.js";
+import { meetRoutes } from "./dashboard/meet.js";
 import { memoryRoutes } from "./dashboard/memories.js";
 import { phonebookRoutes } from "./dashboard/phonebook.js";
 import { shoppingRoutes } from "./dashboard/shopping.js";
@@ -51,6 +52,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     billingRoutes(base);
     shoppingRoutes(base);
     storeRoutes(base);
+    meetRoutes(base);
     goalRoutes(base);
 
     // ================= Só super admin =================
