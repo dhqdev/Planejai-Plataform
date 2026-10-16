@@ -112,6 +112,8 @@ export async function processConversation(
   conversationId: string,
   opts: ProcessOpts = { trigger: "message" },
 ): Promise<ProcessResult> {
+  // lembrete, recado e aviso que nasceram no chat do app saem pelo WhatsApp (é onde a pessoa recebe aviso)
+  if (opts.trigger === "reminder" || opts.trigger === "errand") conversationId = await proactiveTarget(conversationId);
   // Até PARALLEL_RUNS rodadas por conversa ao mesmo tempo: cada uma segura uma "vaga" (trava de 2 chaves)
   // e reserva as mensagens que vai responder; a mesma mensagem nunca entra em duas rodadas.
   const lock = await pool.connect();
@@ -133,6 +135,16 @@ export async function processConversation(
     await restore?.();
     lock.release();
   }
+}
+
+/** Conversa do app vira a conversa de WhatsApp da mesma pessoa; as outras ficam como estão. */
+async function proactiveTarget(conversationId: string): Promise<string> {
+  const c = await one<{ channel: string; user_id: string }>("SELECT channel, user_id FROM conversations WHERE id = $1", [conversationId]);
+  if (c?.channel !== "app") return conversationId;
+  const u = await one<{ id: string; phone: string }>("SELECT id, phone FROM users WHERE id = $1", [c.user_id]);
+  if (!u) return conversationId;
+  const { conversationOf } = await import("../social.js");
+  return (await conversationOf(u.id, u.phone)).conv.id as string;
 }
 
 export interface ProcessOpts {

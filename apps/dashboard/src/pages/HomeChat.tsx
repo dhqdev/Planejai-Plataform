@@ -1,0 +1,836 @@
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
+import { api, brl } from "../api";
+import { BellButton, type Me } from "../App";
+import { Modal } from "../components";
+import { AgentFace, CORE_FACES, type Face } from "../faces";
+import { useApi } from "../hooks";
+import { Icon } from "../icons";
+import { haptic } from "../touch";
+import "../styles/chat-inicio.css";
+
+/**
+ * Início no celular: em vez dos painéis, uma conversa com o time (o mesmo motor, as mesmas ferramentas e o
+ * mesmo "sim" do WhatsApp, rota /api/chat). Ao abrir, cada agente manda a sua primeira mensagem com o que
+ * importa hoje (agenda, gastos, o que está de olho), sem IA. Os agentes ficam no topo, em fila, para chamar
+ * qualquer um com um toque.
+ */
+
+interface MsgMedia {
+  kind: string;
+  mimetype: string;
+  fileName?: string | null;
+  seconds?: number | null;
+  gif?: boolean;
+  url?: string | null;
+}
+interface Msg {
+  id: number;
+  role: "user" | "assistant";
+  text: string | null;
+  media: MsgMedia | null;
+  reaction?: string | null;
+  at: string;
+  local?: "sending" | "failed";
+  /** o que mandar de novo se falhou */
+  retry?: Outgoing;
+}
+interface Hello {
+  name: string | null;
+  hour: number;
+  today: { title: string; at: string }[];
+  spent_month: string;
+  spent_today: string;
+  watches: string[];
+  errands_waiting: number;
+}
+interface ChatState {
+  ready: boolean;
+  reason?: string;
+  messages: Msg[];
+  reactions?: { id: number; reaction: string }[];
+  typing?: string | null;
+  working?: boolean;
+  more?: boolean;
+  hello?: Hello;
+}
+interface Agent {
+  id: string;
+  persona: string;
+  name: string;
+  role: string;
+  face?: Face | null;
+  kind: "cto" | "specialist" | "client";
+}
+interface Outgoing {
+  text?: string;
+  media?: { base64: string; mimetype: string; fileName?: string; seconds?: number };
+  preview?: MsgMedia;
+}
+type Chip = { label: string; text: string; send?: boolean };
+type Opener = { agent: Agent; text: string };
+
+/** O que pedir para cada agente do time fixo (os da loja usam o próprio foco). */
+const ASKS: Record<string, Chip[]> = {
+  cto: [
+    { label: "O que você consegue fazer?", text: "O que você e o time conseguem fazer por mim?", send: true },
+    { label: "Organiza minha semana", text: "Me ajuda a organizar minha semana", send: true },
+  ],
+  pesquisador: [
+    { label: "Pesquisar um preço", text: "Pesquisa o menor preço de " },
+    { label: "Previsão do tempo", text: "Como vai estar o tempo amanhã?", send: true },
+  ],
+  agenda: [
+    { label: "O que tenho amanhã?", text: "O que eu tenho amanhã?", send: true },
+    { label: "Criar um lembrete", text: "Me lembra de " },
+  ],
+  financeiro: [
+    { label: "Quanto gastei no mês?", text: "Quanto eu gastei este mês?", send: true },
+    { label: "Anotar um gasto", text: "Gastei " },
+  ],
+  comunicacao: [
+    { label: "E-mails importantes", text: "Tem algum e-mail importante pra mim hoje?", send: true },
+    { label: "Escrever um e-mail", text: "Escreve um e-mail para " },
+  ],
+  produtividade: [
+    { label: "Lista de tarefas", text: "Cria uma lista de tarefas para hoje com ", },
+    { label: "Anotar uma ideia", text: "Anota essa ideia: " },
+  ],
+  recados: [
+    { label: "Marcar um horário", text: "Marca um horário pra mim no " },
+    { label: "Mandar um recado", text: "Manda uma mensagem pra " },
+  ],
+};
+
+const START_CHIPS: Chip[] = [
+  { label: "📅 O que tenho amanhã?", text: "O que eu tenho amanhã?", send: true },
+  { label: "💸 Anotar um gasto", text: "Gastei " },
+  { label: "⏰ Me lembra de…", text: "Me lembra de " },
+  { label: "🔎 Pesquisar um preço", text: "Pesquisa o menor preço de " },
+  { label: "📊 Gastos do mês", text: "Quanto eu gastei este mês?", send: true },
+];
+
+const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+const hm = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+const dayLabel = (iso: string) => {
+  const d = new Date(iso);
+  const today = new Date();
+  const y = new Date(today);
+  y.setDate(today.getDate() - 1);
+  if (dayKey(d) === dayKey(today)) return "Hoje";
+  if (dayKey(d) === dayKey(y)) return "Ontem";
+  return d.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+};
+const isYesQuestion = (t: string | null) => !!t && /responda\s+\*?sim\*?/i.test(t);
+const firstName = (s: string | null | undefined) => (s ?? "").trim().split(/\s+/)[0] ?? "";
+
+/** Negrito, itálico, riscado e mono do WhatsApp, links clicáveis; sem HTML cru. */
+function rich(text: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  const re = /(\*[^*\n]+\*|_[^_\n]+_|~[^~\n]+~|```[\s\S]+?```|`[^`\n]+`|https?:\/\/[^\s<>()]+[^\s<>().,!?;:])/g;
+  let last = 0;
+  let k = 0;
+  for (const m of text.matchAll(re)) {
+    const i = m.index ?? 0;
+    if (i > last) out.push(text.slice(last, i));
+    const t = m[0];
+    if (t.startsWith("```")) out.push(<code key={k++} className="hc-code">{t.slice(3, -3)}</code>);
+    else if (t.startsWith("`")) out.push(<code key={k++}>{t.slice(1, -1)}</code>);
+    else if (t.startsWith("*")) out.push(<strong key={k++}>{t.slice(1, -1)}</strong>);
+    else if (t.startsWith("_")) out.push(<em key={k++}>{t.slice(1, -1)}</em>);
+    else if (t.startsWith("~")) out.push(<s key={k++}>{t.slice(1, -1)}</s>);
+    else {
+      let host = t;
+      try {
+        host = new URL(t).hostname.replace(/^www\./, "");
+      } catch {
+        /* fica o texto */
+      }
+      out.push(<a key={k++} href={t} target="_blank" rel="noopener noreferrer">{host}</a>);
+    }
+    last = i + t.length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+function RichText({ text }: { text: string }) {
+  // "👉 Responda *sim* para ..." vira botões embaixo; o texto continua para dar contexto
+  return (
+    <>
+      {text.split("\n").map((line, i) => (
+        <p key={i} className={line.startsWith("• ") ? "hc-li" : line.trim() ? undefined : "hc-gap"}>
+          {line.startsWith("• ") ? <><span aria-hidden>•</span><span>{rich(line.slice(2))}</span></> : rich(line)}
+        </p>
+      ))}
+    </>
+  );
+}
+
+function AudioBubble({ src, seconds }: { src: string; seconds?: number | null }) {
+  const el = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [p, setP] = useState(0);
+  const [dur, setDur] = useState(seconds ?? 0);
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  return (
+    <div className="hc-audio">
+      <button
+        className="hc-audio-btn"
+        aria-label={playing ? "Pausar" : "Ouvir"}
+        onClick={() => {
+          const a = el.current;
+          if (!a) return;
+          if (a.paused) void a.play();
+          else a.pause();
+        }}
+      >
+        <Icon name={playing ? "pause" : "play"} size={18} />
+      </button>
+      <span className="hc-audio-bar"><i style={{ transform: `scaleX(${p})` }} /></span>
+      <span className="hc-audio-time">{fmt(playing || p ? (el.current?.currentTime ?? 0) : dur)}</span>
+      <audio
+        ref={el}
+        src={src}
+        preload="metadata"
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => (setPlaying(false), setP(0))}
+        onLoadedMetadata={(e) => Number.isFinite(e.currentTarget.duration) && setDur(e.currentTarget.duration)}
+        onTimeUpdate={(e) => setP(e.currentTarget.duration ? e.currentTarget.currentTime / e.currentTarget.duration : 0)}
+      />
+    </div>
+  );
+}
+
+function MediaView({ m }: { m: MsgMedia }) {
+  if (!m.url) return <div className="hc-file"><Icon name="file" size={18} /><span>{m.fileName ?? "Arquivo"}</span></div>;
+  if (m.kind === "sticker") return <img className="hc-sticker" src={m.url} alt="figurinha" loading="lazy" />;
+  if (m.kind === "image") return <a href={m.url} target="_blank" rel="noopener noreferrer"><img className="hc-img" src={m.url} alt={m.fileName ?? "imagem"} loading="lazy" /></a>;
+  if (m.kind === "video") return <video className="hc-img" src={m.url} controls={!m.gif} autoPlay={m.gif} loop={m.gif} muted={m.gif} playsInline />;
+  if (m.kind === "audio") return <AudioBubble src={m.url} seconds={m.seconds} />;
+  return (
+    <a className="hc-file" href={m.url} target="_blank" rel="noopener noreferrer">
+      <span className="hc-file-ico"><Icon name="file" size={18} /></span>
+      <span className="hc-file-name">{m.fileName ?? "Documento"}</span>
+      <Icon name="download" size={16} />
+    </a>
+  );
+}
+
+function Typing({ label }: { label?: string }) {
+  return (
+    <div className="hc-typing" role="status" aria-label={label ?? "digitando"}>
+      <span /><span /><span />
+    </div>
+  );
+}
+
+/** Foto do celular vira JPEG de até 1600 px (cabe rápido e a IA lê igual). */
+async function shrinkImage(file: File): Promise<{ base64: string; mimetype: string }> {
+  const raw = await readBase64(file);
+  if (!/^image\/(jpeg|png|webp|heic|heif)/.test(file.type)) return { base64: raw, mimetype: file.type || "application/octet-stream" };
+  try {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * k);
+    c.height = Math.round(bmp.height * k);
+    c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+    const url = c.toDataURL("image/jpeg", 0.86);
+    return { base64: url.slice(url.indexOf(",") + 1), mimetype: "image/jpeg" };
+  } catch {
+    return { base64: raw, mimetype: file.type };
+  }
+}
+function readBase64(blob: Blob): Promise<string> {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const s = String(r.result);
+      res(s.slice(s.indexOf(",") + 1));
+    };
+    r.onerror = () => rej(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+
+function useRecorder(onDone: (o: Outgoing) => void) {
+  const rec = useRef<MediaRecorder | null>(null);
+  const chunks = useRef<Blob[]>([]);
+  const started = useRef(0);
+  const cancelled = useRef(false);
+  const [secs, setSecs] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (secs === null) return;
+    const t = setInterval(() => setSecs(Math.floor((Date.now() - started.current) / 1000)), 250);
+    return () => clearInterval(t);
+  }, [secs === null]);
+  useEffect(() => {
+    if (secs !== null && secs >= 180) rec.current?.stop();
+  }, [secs]);
+  const start = async () => {
+    setError(null);
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return setError("Este aparelho não grava áudio por aqui.");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const type = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find((t) => MediaRecorder.isTypeSupported?.(t));
+      const r = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      chunks.current = [];
+      cancelled.current = false;
+      r.ondataavailable = (e) => e.data.size && chunks.current.push(e.data);
+      r.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const seconds = Math.max(1, Math.round((Date.now() - started.current) / 1000));
+        setSecs(null);
+        if (cancelled.current || !chunks.current.length) return;
+        const blob = new Blob(chunks.current, { type: r.mimeType || type || "audio/webm" });
+        const base64 = await readBase64(blob);
+        const mimetype = blob.type.split(";")[0] || "audio/webm";
+        onDone({ media: { base64, mimetype, fileName: "audio", seconds }, preview: { kind: "audio", mimetype, seconds, url: URL.createObjectURL(blob) } });
+      };
+      rec.current = r;
+      started.current = Date.now();
+      r.start();
+      setSecs(0);
+      haptic(12);
+    } catch {
+      setError("Sem acesso ao microfone. Libere nas permissões do navegador.");
+    }
+  };
+  const stop = (cancel = false) => {
+    cancelled.current = cancel;
+    rec.current?.stop();
+    rec.current = null;
+  };
+  return { secs, error, start, stop, clearError: () => setError(null) };
+}
+
+/** Altura visível de verdade (teclado aberto no iPhone/Android): o chat encolhe e a barra de baixo some. */
+function useViewport(root: React.RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const el = root.current;
+    if (!vv || !el) return;
+    let raf = 0;
+    const fit = () => {
+      raf = 0;
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      el.style.setProperty("--vvh", `${vv.height}px`);
+      el.style.setProperty("--vvtop", `${vv.offsetTop}px`);
+      document.documentElement.classList.toggle("pj-kb", kb > 120);
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(fit);
+    };
+    fit();
+    vv.addEventListener("resize", schedule);
+    vv.addEventListener("scroll", schedule);
+    return () => {
+      vv.removeEventListener("resize", schedule);
+      vv.removeEventListener("scroll", schedule);
+      cancelAnimationFrame(raf);
+      document.documentElement.classList.remove("pj-kb");
+    };
+  }, [root]);
+}
+
+export function HomeChat({ me }: { me: Me }) {
+  const nav = useNavigate();
+  const team = useApi<{ core: Agent[]; mine: any[] }>("/api/me/team");
+  const [state, setState] = useState<ChatState | null>(null);
+  const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [text, setText] = useState("");
+  const [sheet, setSheet] = useState<Agent | "team" | null>(null);
+  const [attach, setAttach] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sentAt, setSentAt] = useState(0);
+  const [olderLoading, setOlderLoading] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const stick = useRef(true);
+  const lastId = useRef(0);
+  const busy = useRef(false);
+  const sentRef = useRef(0);
+  sentRef.current = sentAt;
+  const dock = useRef<HTMLDivElement>(null);
+  useViewport(root);
+  // a lista termina acima da caixa de mensagem (que cresce com atalhos, Sim/Não e texto longo)
+  useEffect(() => {
+    const d = dock.current;
+    if (!d || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      root.current?.style.setProperty("--hc-dock", `${d.offsetHeight + 12}px`);
+      if (stick.current) list.current?.scrollTo({ top: list.current.scrollHeight });
+    });
+    ro.observe(d);
+    return () => ro.disconnect();
+  }, []);
+
+  // a tela de conversa ocupa o lugar do cabeçalho do app (o sininho mora no topo do chat)
+  useLayoutEffect(() => {
+    document.documentElement.classList.add("pj-chat");
+    return () => document.documentElement.classList.remove("pj-chat");
+  }, []);
+
+  const agents = useMemo<Agent[]>(() => {
+    const core = team.data?.core ?? Object.entries(CORE_FACES).map(([id, f]) => ({ id, persona: f.persona, face: f.face, name: id, role: "", kind: id === "cto" ? "cto" : "specialist" }) as Agent);
+    const mine = (team.data?.mine ?? []).map((a: any) => ({ id: `c_${a.slug}`, persona: a.persona ?? a.name, name: a.name, role: a.focus ?? "", face: a.face, kind: "client" }) as Agent);
+    return [...core, ...mine];
+  }, [team.data]);
+  const cto = agents.find((a) => a.id === "cto") ?? agents[0]!;
+  const byId = (id: string) => agents.find((a) => a.id === id);
+
+  const merge = useCallback((incoming: Msg[]) => {
+    if (!incoming.length) return;
+    setMsgs((cur) => {
+      const ids = new Set(cur.map((m) => m.id));
+      const add = incoming.filter((m) => !ids.has(m.id));
+      if (!add.length) return cur;
+      return [...cur, ...add].sort((a, b) => (a.local ? 1 : 0) - (b.local ? 1 : 0) || a.id - b.id);
+    });
+    lastId.current = Math.max(lastId.current, ...incoming.map((m) => m.id));
+  }, []);
+
+  // primeira carga e depois só o que chegou (rápido enquanto o time trabalha, devagar parado)
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async (first = false) => {
+      try {
+        const r = await api<ChatState>(first ? "/api/chat" : `/api/chat?after=${lastId.current}`);
+        if (!alive) return;
+        if (first) {
+          setState(r);
+          setMsgs(r.messages);
+          lastId.current = Math.max(0, ...r.messages.map((m) => m.id));
+        } else {
+          merge(r.messages);
+          setState((s) => (s ? { ...s, typing: r.typing, working: r.working, ready: r.ready } : r));
+          if (r.reactions?.length) {
+            const map = new Map(r.reactions.map((x) => [x.id, x.reaction]));
+            setMsgs((cur) => (cur.some((m) => map.has(m.id) && m.reaction !== map.get(m.id)) ? cur.map((m) => (map.has(m.id) ? { ...m, reaction: map.get(m.id) } : m)) : cur));
+          }
+        }
+        busy.current = Boolean(r.working || r.typing);
+      } catch {
+        /* sem rede: tenta de novo no próximo tique */
+      }
+      if (!alive) return;
+      const fast = busy.current || Date.now() - sentRef.current < 90_000;
+      timer = setTimeout(() => (document.hidden ? (timer = setTimeout(() => tick(), 4000)) : tick()), fast ? 1400 : 7000);
+    };
+    void tick(true);
+    const wake = () => !document.hidden && (clearTimeout(timer), tick());
+    document.addEventListener("visibilitychange", wake);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", wake);
+    };
+  }, [merge]);
+
+  // primeiras mensagens do dia, uma de cada agente (sem IA): aparecem digitando uma vez por dia neste aparelho
+  const openers = useMemo<Opener[]>(() => {
+    const h = state?.hello;
+    if (!h || !agents.length) return [];
+    const name = h.name ?? firstName(me.name);
+    const greet = h.hour < 5 ? "Boa noite" : h.hour < 12 ? "Bom dia" : h.hour < 18 ? "Boa tarde" : "Boa noite";
+    const out: Opener[] = [];
+    const fresh = !msgs.some((m) => !m.local);
+    out.push({
+      agent: cto,
+      text: fresh
+        ? `${greet}${name ? `, ${name}` : ""}! 👋 Eu sou ${cto.persona} e aqui está o seu time. Tudo o que a gente faz no WhatsApp dá para fazer por aqui.`
+        : `${greet}${name ? `, ${name}` : ""}! Chamei o time pra te contar como tá o dia.`,
+    });
+    const ag = byId("agenda");
+    if (ag) {
+      const items = h.today.map((t) => `${hm(t.at)} ${t.title}`);
+      out.push({
+        agent: ag,
+        text: items.length
+          ? `Hoje você tem ${items.length === 1 ? "um compromisso" : `${items.length} compromissos`}:\n${items.map((i) => `• ${i}`).join("\n")}`
+          : "Sua agenda de hoje tá livre por enquanto 🗓️ Quer que eu marque alguma coisa?",
+      });
+    }
+    const fin = byId("financeiro");
+    if (fin) {
+      const today = Number(h.spent_today);
+      const month = Number(h.spent_month);
+      out.push({
+        agent: fin,
+        text: today > 0
+          ? `Hoje já foram *${brl(h.spent_today)}* em gastos, e *${brl(h.spent_month)}* no mês.`
+          : month > 0
+            ? `No mês você está em *${brl(h.spent_month)}* de gastos. Gastou algo hoje? Me conta que eu anoto.`
+            : "Gastou alguma coisa? Me manda tipo \"almoço 32 reais\" que eu anoto 💸",
+      });
+    }
+    const res = byId("pesquisador");
+    if (res && h.watches.length) out.push({ agent: res, text: `Sigo de olho em ${h.watches.map((w) => `*${w}*`).join(" e ")} pra você 👀` });
+    const rec = byId("recados");
+    if (rec && h.errands_waiting > 0)
+      out.push({ agent: rec, text: h.errands_waiting === 1 ? "Tem um recado esperando a sua resposta." : `Tem ${h.errands_waiting} recados esperando a sua resposta.` });
+    out.push({ agent: cto, text: "Do que você precisa agora?" });
+    return out;
+  }, [state?.hello, agents, msgs.length > 0]);
+
+  const seenKey = `pj-chat-oi-${dayKey(new Date())}`;
+  const [shown, setShown] = useState(() => {
+    try {
+      return localStorage.getItem(seenKey) ? 99 : 0;
+    } catch {
+      return 99;
+    }
+  });
+  useEffect(() => {
+    if (!openers.length || shown >= openers.length) {
+      if (openers.length && shown >= openers.length) {
+        try {
+          localStorage.setItem(seenKey, "1");
+        } catch {
+          /* sem armazenamento: só repete amanhã de novo */
+        }
+      }
+      return;
+    }
+    if (reduced()) return setShown(99);
+    const t = setTimeout(() => setShown((n) => n + 1), shown === 0 ? 450 : 650 + Math.min(900, openers[shown - 1]!.text.length * 9));
+    return () => clearTimeout(t);
+  }, [openers, shown, seenKey]);
+
+  // segue o fim da conversa enquanto a pessoa não rolou para ler o que passou
+  const toBottom = (smooth = true) => list.current?.scrollTo({ top: list.current.scrollHeight, behavior: smooth && !reduced() ? "smooth" : "auto" });
+  useLayoutEffect(() => {
+    if (stick.current) toBottom(state !== null && msgs.length > 0);
+  }, [msgs, shown, state?.working, state?.typing]);
+  const first = useRef(true);
+  useLayoutEffect(() => {
+    if (state && first.current) {
+      first.current = false;
+      toBottom(false);
+    }
+  }, [state]);
+
+  const loadOlder = async () => {
+    if (olderLoading || !state?.more || !msgs.length) return;
+    setOlderLoading(true);
+    const el = list.current!;
+    const h = el.scrollHeight;
+    try {
+      const r = await api<ChatState>(`/api/chat?before=${msgs[0]!.id}`);
+      setMsgs((cur) => [...r.messages.filter((m) => !cur.some((c) => c.id === m.id)), ...cur]);
+      setState((s) => (s ? { ...s, more: r.messages.length === 60 } : s));
+      requestAnimationFrame(() => (el.scrollTop = el.scrollHeight - h));
+    } finally {
+      setOlderLoading(false);
+    }
+  };
+
+  const send = async (o: Outgoing) => {
+    setError(null);
+    const tmp: Msg = { id: Date.now() * 1000, role: "user", text: o.text ?? null, media: o.preview ?? null, at: new Date().toISOString(), local: "sending" };
+    stick.current = true;
+    setMsgs((cur) => [...cur.filter((m) => m.retry !== o), tmp]);
+    setSentAt(Date.now());
+    haptic(8);
+    try {
+      const r = await api<{ message: Msg; queued: boolean; reason?: string }>("/api/chat", { method: "POST", json: { text: o.text, media: o.media }, headers: { "x-pj-quiet": "1" } });
+      setMsgs((cur) => cur.filter((m) => m !== tmp));
+      merge([o.preview?.url && r.message.media ? { ...r.message, media: { ...r.message.media, url: r.message.media.url ?? o.preview.url } } : r.message]);
+      if (!r.queued && r.reason && !/duplicada/.test(r.reason)) setError(r.reason === "ritmo alto: resposta segurada" ? null : `Não deu para mandar agora (${r.reason}).`);
+      else setState((s) => (s ? { ...s, working: true } : s));
+    } catch (e) {
+      setMsgs((cur) => cur.map((m) => (m === tmp ? { ...m, local: "failed", retry: o } : m)));
+      setError((e as Error).message);
+    }
+  };
+
+  const submit = () => {
+    const t = text.trim();
+    if (!t) return;
+    setText("");
+    void send({ text: t });
+    requestAnimationFrame(() => input.current?.focus());
+  };
+
+  const recorder = useRecorder((o) => void send(o));
+
+  const pickFile = async (file: File | undefined) => {
+    setAttach(false);
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) return setError("Arquivo grande demais (até 15 MB).");
+    const { base64, mimetype } = file.type.startsWith("image/") ? await shrinkImage(file) : { base64: await readBase64(file), mimetype: file.type || "application/octet-stream" };
+    const kind = mimetype.startsWith("image/") ? "image" : mimetype.startsWith("video/") ? "video" : mimetype.startsWith("audio/") ? "audio" : "document";
+    const caption = text.trim();
+    setText("");
+    void send({ text: caption || undefined, media: { base64, mimetype, fileName: file.name }, preview: { kind, mimetype, fileName: file.name, url: URL.createObjectURL(file) } });
+  };
+
+  const prefill = (c: Chip) => {
+    setSheet(null);
+    if (c.send) return void send({ text: c.text });
+    setText(c.text);
+    requestAnimationFrame(() => {
+      const el = input.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(c.text.length, c.text.length);
+    });
+  };
+
+  // mensagens do dia anterior para cima, a abertura do dia e depois o que veio hoje
+  const todayKey = dayKey(new Date());
+  const earlier = msgs.filter((m) => dayKey(new Date(m.at)) !== todayKey);
+  const today = msgs.filter((m) => dayKey(new Date(m.at)) === todayKey);
+  const last = [...msgs].reverse().find((m) => !m.local);
+  const working = Boolean(state?.working || state?.typing) && last?.role !== "assistant" ? true : Boolean(state?.typing);
+  const askYes = !working && last?.role === "assistant" && isYesQuestion(last.text);
+  const userToday = today.some((m) => m.role === "user");
+  const visibleOpeners = openers.slice(0, shown);
+  const openerTyping = shown < openers.length && shown > 0 ? openers[shown]?.agent : shown === 0 && openers.length ? openers[0]!.agent : null;
+  const strip = agents.filter((a) => a.kind === "specialist").slice(0, 6);
+  const left = strip.slice(0, Math.ceil(strip.length / 2));
+  const right = strip.slice(Math.ceil(strip.length / 2));
+  const status = recorder.secs !== null ? null : state?.typing === "recording" ? "gravando áudio…" : working ? "digitando…" : null;
+
+  const renderMsg = (m: Msg, prev?: Msg) => {
+    const gapTop = prev && prev.role !== m.role ? " hc-turn" : "";
+    if (m.role === "user")
+      return (
+        <div key={m.id} className={`hc-row hc-me${gapTop}${m.local ? ` is-${m.local}` : ""}`}>
+          <div className={`hc-bubble${m.media && !m.text && m.media.kind !== "audio" && m.media.kind !== "document" ? " bare" : ""}`}>
+            {m.media && <MediaView m={m.media} />}
+            {m.text && <div className="hc-text"><RichText text={m.text} /></div>}
+            {m.reaction && <span className="hc-reaction" aria-label={`reagiu com ${m.reaction}`}>{m.reaction}</span>}
+          </div>
+          {m.local === "failed" && m.retry && (
+            <button className="hc-retry" onClick={() => void send(m.retry!)}>
+              <Icon name="refresh" size={13} /> Não foi. Tocar para mandar de novo
+            </button>
+          )}
+        </div>
+      );
+    return (
+      <div key={m.id} className={`hc-row hc-bot${gapTop}`}>
+        {m.media && <MediaView m={m.media} />}
+        {m.text && <div className="hc-text"><RichText text={m.text} /></div>}
+      </div>
+    );
+  };
+  const renderList = (arr: Msg[], afterHeader = false) =>
+    arr.map((m, i) => {
+      const prev = arr[i - 1];
+      const newDay = !(afterHeader && i === 0) && (!prev || dayKey(new Date(prev.at)) !== dayKey(new Date(m.at)));
+      return (
+        <Fragment key={m.id}>
+          {newDay && <div className="hc-day">{dayLabel(m.at)}</div>}
+          {!newDay && prev && new Date(m.at).getTime() - new Date(prev.at).getTime() > 45 * 60_000 && <div className="hc-day">{hm(m.at)}</div>}
+          {renderMsg(m, prev)}
+        </Fragment>
+      );
+    });
+
+  const page = (
+    <div className="hc" ref={root}>
+      <header className="hc-top">
+        <button className="hc-icon" aria-label="Ver painel" title="Ver painel" onClick={() => { haptic(); nav("/?painel=1"); }}>
+          <Icon name="layout" size={20} />
+        </button>
+        <div className="hc-crew">
+          <div className="hc-side l">
+            {left.map((a, i) => (
+              <button key={a.id} className="hc-mini" style={{ ["--d" as any]: `${(left.length - i) * 60}ms` }} onClick={() => { haptic(); setSheet(a); }} aria-label={`Falar com ${a.persona}`}>
+                <AgentFace face={a.face} agent={a.id} size={34} title={a.persona} />
+              </button>
+            ))}
+          </div>
+          <button className="hc-lead" onClick={() => { haptic(); setSheet("team"); }} aria-label={`Seu time, com ${cto?.persona}`}>
+            <AgentFace face={cto?.face} size={60} title={cto?.persona} live />
+            <span className="hc-name">
+              <span className="hc-name-t">{cto?.persona}</span>
+              <span className={`hc-name-s${status ? " on" : ""}`}>{status ?? "e o time"}</span>
+            </span>
+          </button>
+          <div className="hc-side r">
+            {right.map((a, i) => (
+              <button key={a.id} className="hc-mini" style={{ ["--d" as any]: `${(i + 1) * 60}ms` }} onClick={() => { haptic(); setSheet(a); }} aria-label={`Falar com ${a.persona}`}>
+                <AgentFace face={a.face} agent={a.id} size={34} title={a.persona} />
+              </button>
+            ))}
+          </div>
+        </div>
+        <BellButton />
+      </header>
+
+      <div
+        className="hc-list"
+        ref={list}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+          if (el.scrollTop < 120) void loadOlder();
+        }}
+      >
+        {state && !state.ready ? (
+          <div className="hc-empty">
+            <AgentFace face={cto?.face} agent="cto" size={84} live />
+            <p>{state.reason ?? "O chat ainda não está disponível para esta conta."}</p>
+            <button className="btn" onClick={() => nav("/?painel=1")}>Ver o painel</button>
+          </div>
+        ) : (
+          <>
+            {olderLoading && <div className="hc-day">carregando…</div>}
+            {renderList(earlier)}
+            {state && <div className="hc-day">Hoje</div>}
+            {visibleOpeners.map((o, i) => {
+              const prevAgent = visibleOpeners[i - 1]?.agent.id;
+              return (
+                <div key={`o${i}`} className={`hc-row hc-bot hc-op${prevAgent === o.agent.id ? "" : " hc-turn"}`}>
+                  {prevAgent !== o.agent.id && (
+                    <div className="hc-who">
+                      <AgentFace face={o.agent.face} agent={o.agent.id} size={22} />
+                      <span>{o.agent.persona}</span>
+                    </div>
+                  )}
+                  <div className="hc-text"><RichText text={o.text} /></div>
+                </div>
+              );
+            })}
+            {openerTyping && (
+              <div className="hc-row hc-bot hc-turn">
+                <div className="hc-who"><AgentFace face={openerTyping.face} agent={openerTyping.id} size={22} /><span>{openerTyping.persona}</span></div>
+                <Typing />
+              </div>
+            )}
+            {renderList(today, true)}
+            {working && shown >= openers.length && <div className="hc-row hc-bot hc-turn"><Typing label={status ?? undefined} /></div>}
+          </>
+        )}
+      </div>
+
+      <div className="hc-dock" ref={dock}>
+        {error && (
+          <div className="hc-error" role="alert" onClick={() => setError(null)}>
+            {error}
+          </div>
+        )}
+        {recorder.error && (
+          <div className="hc-error" role="alert" onClick={recorder.clearError}>
+            {recorder.error}
+          </div>
+        )}
+        {askYes ? (
+          <div className="hc-chips yes">
+            <button className="hc-chip hc-yes" onClick={() => void send({ text: "sim" })}><Icon name="check" size={15} /> Sim</button>
+            <button className="hc-chip" onClick={() => void send({ text: "não" })}><Icon name="x" size={15} /> Não</button>
+          </div>
+        ) : (
+          !userToday && shown >= openers.length && !text && state?.ready !== false && (
+            <div className="hc-chips">
+              {START_CHIPS.map((c) => (
+                <button key={c.label} className="hc-chip" onClick={() => prefill(c)}>{c.label}</button>
+              ))}
+            </div>
+          )
+        )}
+        <div className={`hc-composer${recorder.secs !== null ? " rec" : ""}`}>
+          {recorder.secs !== null ? (
+            <>
+              <button className="hc-icon ghost" aria-label="Cancelar gravação" onClick={() => recorder.stop(true)}><Icon name="trash" size={20} /></button>
+              <span className="hc-rec"><i /> {Math.floor(recorder.secs / 60)}:{String(recorder.secs % 60).padStart(2, "0")}</span>
+              <button className="hc-send" aria-label="Mandar áudio" onClick={() => recorder.stop(false)}><Icon name="arrow-up" size={20} /></button>
+            </>
+          ) : (
+            <>
+              <button className={`hc-icon ghost${attach ? " on" : ""}`} aria-label="Anexar" aria-expanded={attach} onClick={() => { haptic(); setAttach((v) => !v); }}>
+                <Icon name="plus" size={22} />
+              </button>
+              <textarea
+                ref={input}
+                rows={1}
+                value={text}
+                placeholder={`Mensagem para ${cto?.persona ?? "o time"}`}
+                aria-label="Mensagem"
+                enterKeyHint="send"
+                disabled={state?.ready === false}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !("ontouchstart" in window)) {
+                    e.preventDefault();
+                    submit();
+                  }
+                }}
+              />
+              {text.trim() ? (
+                <button className="hc-send" aria-label="Enviar" onClick={submit}><Icon name="arrow-up" size={20} /></button>
+              ) : (
+                <button className="hc-mic" aria-label="Gravar áudio" disabled={state?.ready === false} onClick={() => void recorder.start()}><MicIcon /></button>
+              )}
+            </>
+          )}
+          {attach && (
+            <div className="hc-attach lg" role="menu">
+              <button role="menuitem" onClick={() => cameraRef.current?.click()}><Icon name="circle" size={18} /> Câmera</button>
+              <button role="menuitem" onClick={() => { if (fileRef.current) (fileRef.current.accept = "image/*,video/*", fileRef.current.click()); }}><Icon name="layout" size={18} /> Fotos</button>
+              <button role="menuitem" onClick={() => { if (fileRef.current) (fileRef.current.accept = "", fileRef.current.click()); }}><Icon name="file" size={18} /> Arquivo</button>
+            </div>
+          )}
+          <input ref={fileRef} type="file" hidden onChange={(e) => { void pickFile(e.target.files?.[0]); e.target.value = ""; }} />
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { void pickFile(e.target.files?.[0]); e.target.value = ""; }} />
+        </div>
+      </div>
+
+      {sheet && (
+        <Modal title={sheet === "team" ? "Seu time" : sheet.persona} onClose={() => setSheet(null)} className="hc-sheet">
+          {sheet === "team" ? (
+            <div className="hc-team">
+              {agents.map((a) => (
+                <button key={a.id} className="hc-team-row" onClick={() => setSheet(a)}>
+                  <AgentFace face={a.face} agent={a.kind === "client" ? undefined : a.id} size={44} />
+                  <span className="hc-team-txt">
+                    <strong>{a.persona}</strong>
+                    <small>{a.kind === "cto" ? "Lidera o time e fala com você" : a.kind === "client" ? a.role : a.name}</small>
+                  </span>
+                  <Icon name="chevron-right" size={16} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="hc-agent">
+              <AgentFace face={sheet.face} agent={sheet.kind === "client" ? undefined : sheet.id} size={92} live />
+              <p className="hc-agent-role">{sheet.kind === "cto" ? `${sheet.persona} conversa com você e chama o resto do time quando precisa.` : sheet.role || sheet.name}</p>
+              <div className="hc-chips col">
+                {(ASKS[sheet.id] ?? (sheet.role ? [{ label: `Pedir ajuda com ${sheet.role.toLowerCase()}`.slice(0, 60), text: `${sheet.persona}, me ajuda com ` }] : [])).map((c) => (
+                  <button key={c.label} className="hc-chip" onClick={() => prefill(c)}>{c.label}</button>
+                ))}
+                {sheet.kind !== "cto" && (
+                  <button className="hc-chip" onClick={() => prefill({ label: "", text: `${sheet.persona}, ` })}>
+                    <Icon name="send" size={14} /> Chamar {sheet.persona} na conversa
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+    </div>
+  );
+  return createPortal(page, document.body);
+}
+
+function MicIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+    </svg>
+  );
+}

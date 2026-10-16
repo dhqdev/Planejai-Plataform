@@ -41,9 +41,9 @@ export async function jidFor(phone: string, channel: Channel): Promise<string> {
   return (await findOnWhatsApp(phoneVariants(phone))) ?? `${phone}@s.whatsapp.net`;
 }
 
-/** Conversa de WhatsApp da pessoa (cria se ela ainda não falou com o assistente). */
+/** Conversa de WhatsApp da pessoa (cria se ela ainda não falou com o assistente). O chat do app não conta: aviso vai pelo WhatsApp. */
 export async function conversationOf(userId: string, phone: string) {
-  const conv = await one("SELECT * FROM conversations WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1", [userId]);
+  const conv = await one("SELECT * FROM conversations WHERE user_id = $1 AND channel <> 'app' ORDER BY updated_at DESC LIMIT 1", [userId]);
   if (conv) return { conv, channel: getChannelSafe(conv.channel) };
   const channel = outboundChannel();
   const jid = await jidFor(phone, channel);

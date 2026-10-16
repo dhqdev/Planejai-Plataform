@@ -77,7 +77,7 @@ apps/server/src/
   resources.ts             tela Servidor/Armazenamento
   alive.ts  healthcheck.ts  version.ts
                            vida do worker, healthcheck da imagem, versão
-  channels/                baileys.ts (padrão), evolution.ts, cloud.ts (Meta), telegram.ts, PlaygroundChannel; wa-message.ts parseia WAMessage
+  channels/                baileys.ts (padrão), evolution.ts, cloud.ts (Meta), telegram.ts, app.ts (chat do Início no celular), PlaygroundChannel; wa-message.ts parseia WAMessage
   whatsapp/                session.ts (conexão Baileys: QR, pareamento, reconexão, LISTEN wa_command), lease.ts (aluguel
                            holder/lease_until renovado a cada 15s, vence em 45s), pairing.ts, inbound.ts, outbound.ts,
                            commands.ts, status.ts, disconnect.ts, auth-state.ts (chaves Signal na tabela wa_auth),

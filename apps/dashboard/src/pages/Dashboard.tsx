@@ -1,5 +1,5 @@
 import { memo, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ago, brl, ms, usd, when } from "../api";
 import type { Me } from "../App";
 import { AgentTag, CATEGORY_COLORS, Donut, Empty, Modal, PageHead, Status } from "../components";
@@ -7,7 +7,10 @@ import { FIT_QUERY, useApi, useMedia } from "../hooks";
 import { Icon } from "../icons";
 import { TeamMap } from "../TeamMap";
 import { haptic } from "../touch";
+import { HomeChat } from "./HomeChat";
 import { InviteForm } from "./Invites";
+
+const PHONE_QUERY = "(max-width: 767px)";
 
 type Size = "s" | "m" | "l" | "xl";
 interface Widget {
@@ -403,7 +406,15 @@ function allowed(def: WidgetDef, isSuper: boolean) {
   return !def.only || def.only === (isSuper ? "super" : "admin");
 }
 
-export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; onTheme: () => void }) {
+/** Início: no celular é a conversa com o time (HomeChat); o painel de widgets fica no notebook e em /?painel=1. */
+export function DashboardPage(props: { me: Me; theme: string; onTheme: () => void }) {
+  const phone = useMedia(PHONE_QUERY);
+  const [params] = useSearchParams();
+  if (phone && !params.has("painel")) return <HomeChat me={props.me} />;
+  return <PanelPage {...props} phone={phone} />;
+}
+
+function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onTheme: () => void; phone: boolean }) {
   const isSuper = me.role === "superadmin";
   const sys = useApi<any>(isSuper ? "/api/overview" : null, { poll: 20000 });
   const mine = useApi<any>("/api/me/overview", { poll: 30000 });
@@ -520,6 +531,11 @@ export function DashboardPage({ me, theme, onTheme }: { me: Me; theme: string; o
             </>
           ) : (
             <div className="dash-actions">
+              {phone && (
+                <Link className="btn btn-brand" to="/">
+                  <Icon name="send" size={16} /> Conversar
+                </Link>
+              )}
               <button className={`btn ${fit ? "" : "phone-only"}`} onClick={() => setModal("quick")}>
                 <Icon name="settings" size={16} /> Ajustes
               </button>

@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { appChannel } from "./app.js";
 import { BaileysChannel } from "./baileys.js";
 import { CloudChannel } from "./cloud.js";
 import { EvolutionChannel } from "./evolution.js";
@@ -45,6 +46,9 @@ export class PlaygroundChannel implements Channel {
 
 export const playground = new PlaygroundChannel();
 channels.playground = playground;
+
+/** Chat do app (aba Início no celular): roda junto com o WhatsApp, cada pessoa tem a sua conversa. */
+channels.app = appChannel;
 
 export function activeChannel(): Channel | null {
   if (config.WHATSAPP_PROVIDER === "none") return null;

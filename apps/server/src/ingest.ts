@@ -42,14 +42,17 @@ export async function upsertConversation(userId: string, channel: string, remote
 export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; reason?: string }> {
   if (!msg.phone) return { queued: false, reason: "sem telefone" };
   // SAIR / VOLTAR de quem não é cliente: para (ou volta a) receber mensagens nossas
-  const { handleOptOut } = await import("./outreach.js");
-  if (await handleOptOut(msg)) return { queued: false, reason: "SAIR" };
-  // resposta de um estabelecimento com quem o assistente está falando por alguém (recado): não vira cliente
-  const { handleErrandInbound } = await import("./errands.js");
-  if (await handleErrandInbound(msg)) return { queued: false, reason: "recado" };
-  // resposta a uma mensagem avulsa (send_whatsapp): volta para quem mandou, sem cadastro
-  const { handleDirectReply } = await import("./direct.js");
-  if (await handleDirectReply(msg)) return { queued: false, reason: "resposta de mensagem avulsa" };
+  // chat do app: quem escreve é sempre a própria pessoa logada (nunca um estabelecimento ou contato de fora)
+  if (msg.channel !== "app") {
+    const { handleOptOut } = await import("./outreach.js");
+    if (await handleOptOut(msg)) return { queued: false, reason: "SAIR" };
+    // resposta de um estabelecimento com quem o assistente está falando por alguém (recado): não vira cliente
+    const { handleErrandInbound } = await import("./errands.js");
+    if (await handleErrandInbound(msg)) return { queued: false, reason: "recado" };
+    // resposta a uma mensagem avulsa (send_whatsapp): volta para quem mandou, sem cadastro
+    const { handleDirectReply } = await import("./direct.js");
+    if (await handleDirectReply(msg)) return { queued: false, reason: "resposta de mensagem avulsa" };
+  }
   // figurinha de cliente para o assistente não precisa do arquivo (ninguém lê): não vai para o banco
   if (msg.kind === "sticker") msg.media = undefined;
   const user = await upsertUser(msg.phone, msg.pushName);

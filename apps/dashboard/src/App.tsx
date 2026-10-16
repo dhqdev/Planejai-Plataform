@@ -263,7 +263,7 @@ function UnreadDot({ className, count }: { className: string; count?: boolean })
   const unread = useContext(UnreadContext);
   return unread > 0 ? <span className={className} aria-label={count ? `${unread} não lidas` : undefined} /> : null;
 }
-function BellButton() {
+export function BellButton() {
   const unread = useContext(UnreadContext);
   const nav = useNavigate();
   return (

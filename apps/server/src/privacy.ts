@@ -49,6 +49,7 @@ export async function resetContext(userId: string, opts: { memories?: boolean } 
   const ids = convs.map((c) => c.id);
   const msgs = await query("DELETE FROM messages WHERE conversation_id = ANY($1) AND processed = true", [ids]);
   await query("UPDATE conversations SET summary = NULL WHERE id = ANY($1)", [ids]);
+  await query("DELETE FROM app_chat WHERE user_id = $1", [userId]);
   await query("UPDATE pending_actions SET status = 'expired', resolved_at = now() WHERE conversation_id = ANY($1) AND status = 'pending'", [ids]);
   let cache = 0;
   for (const id of ids) {
