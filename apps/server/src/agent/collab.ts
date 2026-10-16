@@ -6,6 +6,7 @@ import { specialistSystemPrompt } from "./prompts.js";
 import { promptOverrides } from "./prompt-overrides.js";
 import { availableTools, isOwnerOnly, runToolLoop } from "./runner.js";
 import { isOwner } from "../ingest.js";
+import { noteTeamTalk } from "../channels/app.js";
 import { SPECIALISTS, type AgentDef } from "./team.js";
 import { defineTool, obj, type Tool, type ToolContext } from "./tools/types.js";
 
@@ -198,6 +199,7 @@ export function delegationTool(def: AgentDef): Tool<{ message: string }> {
         const original = !known && withMedia && ctx.inboundText ? `\n\n[Mensagem da pessoa, com a mídia já descrita]\n${ctx.inboundText}` : "";
         thread.push({ role: "user", content: `[CTO] ${args.message}${original}${ctx.room.boardText()}` });
         ctx.room.edges.push({ from: ctx.agent, to: def.id });
+        await noteTeamTalk(ctx, ctx.agent, def.id, args.message, "ask");
         if (def.clientAgentId) void query("UPDATE client_agents SET uses = uses + 1 WHERE id = $1", [def.clientAgentId]).catch(() => {});
         // prazo próprio: o especialista para antes e o CTO ainda tem tempo de responder com o que voltou
         const guard = ctx.guard?.sub(ASK_RESERVE_MS, ASK_BUDGET_MS[def.id] ?? ASK_BUDGET_MS.default);
@@ -206,6 +208,7 @@ export function delegationTool(def: AgentDef): Tool<{ message: string }> {
           ctx.room.threads.set(def.id, r.messages);
           if (r.timedOut) ctx.room.partial ??= `${def.persona ?? def.name} parou no prazo dele e devolveu o que tinha`;
           const report = r.text || partialReport(r.messages, r.timedOut);
+          if (r.text) await noteTeamTalk(ctx, def.id, ctx.agent, r.text, "reply");
           // relatório pela metade: pedir de novo costuma dar no mesmo e dobra a espera da pessoa
           return r.text ? { report } : { report, next: "Responda à pessoa com o que veio aqui (links e dados) e diga o que faltou; não peça de novo." };
         } finally {
@@ -245,6 +248,7 @@ export function consultTool(peers: AgentDef[]): Tool<{ colega: string; question:
       return ctx.room.withLock(key, async () => {
         const { own, hidden, all } = await toolsFor(def, chain, ctx, args.question);
         ctx.room.edges.push({ from: ctx.agent, to: def.id });
+        await noteTeamTalk(ctx, ctx.agent, def.id, args.question, "ask");
         if (def.clientAgentId) void query("UPDATE client_agents SET uses = uses + 1 WHERE id = $1", [def.clientAgentId]).catch(() => {});
         const thread = ctx.room.threads.get(key) ?? [{ role: "system", content: await systemFor(def, ctx, [...own, ...hidden]) } as ChatMessage];
         thread.push({ role: "user", content: `[${ctx.room.nameOf(ctx.agent)}, seu colega de time, pergunta] ${args.question}${ctx.room.boardText()}` });
@@ -260,6 +264,7 @@ export function consultTool(peers: AgentDef[]): Tool<{ colega: string; question:
             messages: thread,
           });
           ctx.room.threads.set(key, r.messages);
+          if (r.text) await noteTeamTalk(ctx, def.id, ctx.agent, r.text, "reply");
           return { answer: r.text || partialReport(r.messages, r.timedOut) };
         } finally {
           guard?.dispose();

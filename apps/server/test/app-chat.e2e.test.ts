@@ -92,6 +92,17 @@ describe.skipIf(!enabled)("chat do app (e2e)", () => {
     expect((await as("bia@x.com", "GET", "/api/chat")).json().messages).toEqual([]);
   });
 
+  it("o time conversando entre si aparece no chat do app, e só nele", async () => {
+    const { noteTeamTalk } = await import("../src/channels/app.js");
+    const conv = await db.one("SELECT * FROM conversations WHERE user_id = $1 AND channel = 'app'", [ana.id]);
+    const last = (await as("ana@x.com", "GET", "/api/chat")).json().messages.at(-1).id;
+    await noteTeamTalk({ conversation: conv }, "cto", "agenda", "[contexto] *Liste* os compromissos de amanhã da Ana. Fuso America/Sao_Paulo e mais detalhes.", "ask");
+    await noteTeamTalk({ conversation: { ...conv, channel: "whatsapp" } }, "cto", "agenda", "não aparece", "ask");
+    const after = (await as("ana@x.com", "GET", `/api/chat?after=${last}`)).json().messages;
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({ role: "team", text: "Liste os compromissos de amanhã da Ana.", media: { from: "cto", to: "agenda", kind: "ask" } });
+  });
+
   it("foto mandada pelo app só abre para quem mandou", async () => {
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64").toString("base64");
     const sent = (await as("ana@x.com", "POST", "/api/chat", { media: { base64: png, mimetype: "image/png", fileName: "a.png" } })).json();

@@ -101,9 +101,25 @@ html.pj-kb .hc { --hc-tab: 8px; }
   position: absolute; left: -10px; bottom: -10px; font-size: 15px; line-height: 1; padding: 4px 5px; border-radius: 99px;
   background: var(--panel); box-shadow: 0 0 0 2px var(--bg), 0 2px 8px rgba(0, 0, 0, .12); animation: hc-pop .4s var(--ios-spring, ease) both;
 }
-/* quem do time está falando (só nas mensagens de abertura) */
-.hc-who { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; font-size: 13px; font-weight: 600; color: var(--muted); }
-.hc-who .agent-face { box-shadow: none; }
+/* cada fala do time com a fotinha de quem falou ao lado e o nome em cima da primeira */
+.hc-av { display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 10px; align-items: start; }
+.hc-av-face { width: 34px; min-height: 1px; }
+.hc-av-face .agent-face { box-shadow: 0 0 0 2px var(--bg), 0 4px 12px -6px rgba(0, 0, 0, .3); animation: hc-pop .4s var(--ios-spring, ease) both; }
+.hc-av-body { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.hc-av-name { font-size: 13px; font-weight: 600; color: var(--muted); line-height: 1; margin-top: 2px; }
+.hc-av .hc-typing { padding-top: 4px; }
+
+/* o time conversando entre si enquanto trabalha: menor, num cantinho à parte */
+.hc-huddle {
+  margin: 14px 0 2px 44px; padding: 10px 12px; border-radius: 18px; display: flex; flex-direction: column; gap: 9px;
+  background: color-mix(in srgb, var(--text) 4%, var(--bg)); animation: hc-in .32s var(--ios-spring, ease) both;
+}
+.hc-talk { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; align-items: start; animation: hc-in .32s var(--ios-spring, ease) both; }
+.hc-talk .agent-face { box-shadow: none; }
+.hc-talk-b { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hc-talk-who { font-size: 12px; font-weight: 600; color: var(--muted); }
+.hc-talk-who i { font-style: normal; font-weight: 450; }
+.hc-talk-t { font-size: 14px; line-height: 1.4; color: color-mix(in srgb, var(--text) 82%, transparent); overflow-wrap: anywhere; }
 
 .hc-img { display: block; max-width: min(260px, 72vw); max-height: 340px; border-radius: 20px; object-fit: cover; background: var(--panel-2); }
 .hc-sticker { width: 132px; height: 132px; object-fit: contain; }
@@ -190,6 +206,6 @@ html.pj-kb .hc-dock { padding-bottom: 0; }
 .hc-team-txt small { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (prefers-reduced-motion: reduce) {
-  .hc-row, .hc-mini, .hc-chip, .hc-send, .hc-reaction { animation: none; }
+  .hc-row, .hc-mini, .hc-chip, .hc-send, .hc-reaction, .hc-huddle, .hc-talk, .hc-av-face .agent-face { animation: none; }
   .hc-typing span { animation: none; opacity: .6; }
 }

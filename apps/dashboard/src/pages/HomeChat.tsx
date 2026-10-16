@@ -27,9 +27,10 @@ interface MsgMedia {
 }
 interface Msg {
   id: number;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "team";
   text: string | null;
-  media: MsgMedia | null;
+  /** role "team": quem falou com quem ({ from, to, kind }) */
+  media: (MsgMedia & { from?: string; to?: string }) | null;
   reaction?: string | null;
   at: string;
   local?: "sending" | "failed";
@@ -457,75 +458,39 @@ export function HomeChat({ me }: { me: Me }) {
     };
   }, [merge]);
 
-  // primeiras mensagens do dia, uma de cada agente (sem IA): aparecem digitando uma vez por dia neste aparelho
+  // abertura sem IA: o time conversa entre si sobre o dia da pessoa (agenda, gastos, o que está de olho, recados).
+  // Sai de mensagens prontas com os dados do GET /api/chat; a IA só entra quando a pessoa manda alguma coisa.
   const openers = useMemo<Opener[]>(() => {
     const h = state?.hello;
     if (!h || !agents.length) return [];
-    const name = h.name ?? firstName(me.name);
-    const greet = h.hour < 5 ? "Boa noite" : h.hour < 12 ? "Bom dia" : h.hour < 18 ? "Boa tarde" : "Boa noite";
-    const out: Opener[] = [];
-    const fresh = !msgs.some((m) => !m.local);
-    out.push({
-      agent: cto,
-      text: fresh
-        ? `${greet}${name ? `, ${name}` : ""}! 👋 Eu sou ${cto.persona} e aqui está o seu time. Tudo o que a gente faz no WhatsApp dá para fazer por aqui.`
-        : `${greet}${name ? `, ${name}` : ""}! Chamei o time pra te contar como tá o dia.`,
-    });
-    const ag = byId("agenda");
-    if (ag) {
-      const items = h.today.map((t) => `${hm(t.at)} ${t.title}`);
-      out.push({
-        agent: ag,
-        text: items.length
-          ? `Hoje você tem ${items.length === 1 ? "um compromisso" : `${items.length} compromissos`}:\n${items.map((i) => `• ${i}`).join("\n")}`
-          : "Sua agenda de hoje tá livre por enquanto 🗓️ Quer que eu marque alguma coisa?",
-      });
-    }
-    const fin = byId("financeiro");
-    if (fin) {
-      const today = Number(h.spent_today);
-      const month = Number(h.spent_month);
-      out.push({
-        agent: fin,
-        text: today > 0
-          ? `Hoje já foram *${brl(h.spent_today)}* em gastos, e *${brl(h.spent_month)}* no mês.`
-          : month > 0
-            ? `No mês você está em *${brl(h.spent_month)}* de gastos. Gastou algo hoje? Me conta que eu anoto.`
-            : "Gastou alguma coisa? Me manda tipo \"almoço 32 reais\" que eu anoto 💸",
-      });
-    }
-    const res = byId("pesquisador");
-    if (res && h.watches.length) out.push({ agent: res, text: `Sigo de olho em ${h.watches.map((w) => `*${w}*`).join(" e ")} pra você 👀` });
-    const rec = byId("recados");
-    if (rec && h.errands_waiting > 0)
-      out.push({ agent: rec, text: h.errands_waiting === 1 ? "Tem um recado esperando a sua resposta." : `Tem ${h.errands_waiting} recados esperando a sua resposta.` });
-    out.push({ agent: cto, text: "Do que você precisa agora?" });
-    return out;
+    return buildOpeners(h, h.name ?? firstName(me.name), cto, byId, !msgs.some((m) => !m.local));
   }, [state?.hello, agents, msgs.length > 0]);
 
-  const seenKey = `pj-chat-oi-${dayKey(new Date())}`;
-  const [shown, setShown] = useState(() => {
+  // toca a abertura digitando ao abrir o chat (de novo depois de umas horas longe); senão ela já está na tela
+  const [opening] = useState(() => {
     try {
-      return localStorage.getItem(seenKey) ? 99 : 0;
+      const at = Number(localStorage.getItem(OPEN_KEY)) || 0;
+      if (at && dayKey(new Date(at)) === dayKey(new Date()) && Date.now() - at < REPLAY_MS) return { at, replay: false };
     } catch {
-      return 99;
+      /* sem armazenamento: toca toda vez */
     }
+    return { at: Date.now(), replay: true };
   });
+  const [shown, setShown] = useState(opening.replay ? 0 : 99);
   useEffect(() => {
-    if (!openers.length || shown >= openers.length) {
-      if (openers.length && shown >= openers.length) {
-        try {
-          localStorage.setItem(seenKey, "1");
-        } catch {
-          /* sem armazenamento: só repete amanhã de novo */
-        }
+    if (!openers.length) return;
+    if (shown >= openers.length) {
+      try {
+        if (opening.replay) localStorage.setItem(OPEN_KEY, String(opening.at));
+      } catch {
+        /* sem armazenamento */
       }
       return;
     }
     if (reduced()) return setShown(99);
-    const t = setTimeout(() => setShown((n) => n + 1), shown === 0 ? 450 : 650 + Math.min(900, openers[shown - 1]!.text.length * 9));
+    const t = setTimeout(() => setShown((n) => n + 1), shown === 0 ? 450 : 600 + Math.min(1000, openers[shown - 1]!.text.length * 10));
     return () => clearTimeout(t);
-  }, [openers, shown, seenKey]);
+  }, [openers, shown, opening]);
 
   // segue o fim da conversa enquanto a pessoa não rolou para ler o que passou
   const toBottom = (smooth = true) => list.current?.scrollTo({ top: list.current.scrollHeight, behavior: smooth && !reduced() ? "smooth" : "auto" });
@@ -607,14 +572,19 @@ export function HomeChat({ me }: { me: Me }) {
     });
   };
 
-  // mensagens do dia anterior para cima, a abertura do dia e depois o que veio hoje
+  // o que veio antes da abertura, a abertura (quando o chat foi aberto) e o que veio depois
   const todayKey = dayKey(new Date());
-  const earlier = msgs.filter((m) => dayKey(new Date(m.at)) !== todayKey);
-  const today = msgs.filter((m) => dayKey(new Date(m.at)) === todayKey);
-  const last = [...msgs].reverse().find((m) => !m.local);
+  const earlier = msgs.filter((m) => !m.local && new Date(m.at).getTime() < opening.at);
+  const today = msgs.filter((m) => m.local || new Date(m.at).getTime() >= opening.at);
+  const earlierToday = earlier.some((m) => dayKey(new Date(m.at)) === todayKey);
+  const last = [...msgs].reverse().find((m) => !m.local && m.role !== "team");
   const working = Boolean(state?.working || state?.typing) && last?.role !== "assistant" ? true : Boolean(state?.typing);
   const askYes = !working && last?.role === "assistant" && isYesQuestion(last.text);
-  const userToday = today.some((m) => m.role === "user");
+  const userToday = msgs.some((m) => m.role === "user" && dayKey(new Date(m.at)) === todayKey);
+  // quem aparece digitando: o colega que o líder acabou de chamar, ou o próprio líder
+  const lastUser = msgs.findLastIndex((m) => m.role === "user");
+  const lastTalk = msgs.slice(lastUser + 1).findLast((m) => m.role === "team");
+  const talker = (lastTalk?.media?.to && lastTalk.media.to !== "cto" && (lastTalk.media as any).kind === "ask" ? byId(lastTalk.media.to) : null) ?? cto;
   const visibleOpeners = openers.slice(0, shown);
   const openerTyping = shown < openers.length && shown > 0 ? openers[shown]?.agent : shown === 0 && openers.length ? openers[0]!.agent : null;
   const strip = agents.filter((a) => a.kind === "specialist").slice(0, 6);
@@ -639,22 +609,47 @@ export function HomeChat({ me }: { me: Me }) {
           )}
         </div>
       );
+    const head = !prev || prev.role !== "assistant";
     return (
-      <div key={m.id} className={`hc-row hc-bot${gapTop}`}>
+      <BotRow key={m.id} agent={cto} head={head} turn={Boolean(gapTop)}>
         {m.media && <MediaView m={m.media} />}
         {m.text && <div className="hc-text"><RichText text={m.text} /></div>}
-      </div>
+      </BotRow>
     );
   };
+  // o time conversando entre si enquanto trabalha: uma conversinha à parte, menor
+  const renderTalk = (group: Msg[]) => (
+    <div key={`t${group[0]!.id}`} className="hc-huddle" aria-label="Conversa do time">
+      {group.map((m) => {
+        const from = byId(m.media?.from ?? "") ?? cto;
+        const to = byId(m.media?.to ?? "");
+        return (
+          <div key={m.id} className="hc-talk">
+            <AgentFace face={from.face} agent={from.kind === "client" ? undefined : from.id} size={26} title={from.persona} />
+            <div className="hc-talk-b">
+              <span className="hc-talk-who">{from.persona}{to ? <> <i>para</i> {to.persona}</> : null}</span>
+              <span className="hc-talk-t">{m.text}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
   const renderList = (arr: Msg[], afterHeader = false) =>
     arr.map((m, i) => {
       const prev = arr[i - 1];
+      if (m.role === "team" && prev?.role === "team") return null;
       const newDay = !(afterHeader && i === 0) && (!prev || dayKey(new Date(prev.at)) !== dayKey(new Date(m.at)));
+      let group: Msg[] = [];
+      if (m.role === "team") {
+        let j = i;
+        while (arr[j]?.role === "team") group.push(arr[j++]!);
+      }
       return (
         <Fragment key={m.id}>
           {newDay && <div className="hc-day">{dayLabel(m.at)}</div>}
           {!newDay && prev && new Date(m.at).getTime() - new Date(prev.at).getTime() > 45 * 60_000 && <div className="hc-day">{hm(m.at)}</div>}
-          {renderMsg(m, prev)}
+          {m.role === "team" ? renderTalk(group) : renderMsg(m, prev?.role === "team" ? undefined : prev)}
         </Fragment>
       );
     });
@@ -710,29 +705,26 @@ export function HomeChat({ me }: { me: Me }) {
           <>
             {olderLoading && <div className="hc-day">carregando…</div>}
             {renderList(earlier)}
-            {state && <div className="hc-day">Hoje</div>}
+            {state && <div className="hc-day">{earlierToday ? hm(new Date(opening.at).toISOString()) : "Hoje"}</div>}
             {visibleOpeners.map((o, i) => {
               const prevAgent = visibleOpeners[i - 1]?.agent.id;
               return (
-                <div key={`o${i}`} className={`hc-row hc-bot hc-op${prevAgent === o.agent.id ? "" : " hc-turn"}`}>
-                  {prevAgent !== o.agent.id && (
-                    <div className="hc-who">
-                      <AgentFace face={o.agent.face} agent={o.agent.id} size={22} />
-                      <span>{o.agent.persona}</span>
-                    </div>
-                  )}
+                <BotRow key={`o${i}`} agent={o.agent} head={prevAgent !== o.agent.id} turn={prevAgent !== o.agent.id}>
                   <div className="hc-text"><RichText text={o.text} /></div>
-                </div>
+                </BotRow>
               );
             })}
             {openerTyping && (
-              <div className="hc-row hc-bot hc-turn">
-                <div className="hc-who"><AgentFace face={openerTyping.face} agent={openerTyping.id} size={22} /><span>{openerTyping.persona}</span></div>
+              <BotRow agent={openerTyping} head={visibleOpeners.at(-1)?.agent.id !== openerTyping.id} turn={visibleOpeners.at(-1)?.agent.id !== openerTyping.id}>
                 <Typing />
-              </div>
+              </BotRow>
             )}
             {renderList(today, true)}
-            {working && shown >= openers.length && <div className="hc-row hc-bot hc-turn"><Typing label={status ?? undefined} /></div>}
+            {working && shown >= openers.length && (
+              <BotRow agent={talker} head turn>
+                <Typing label={status ?? undefined} />
+              </BotRow>
+            )}
           </>
         )}
       </div>
@@ -893,6 +885,79 @@ function AttachIcon({ name }: { name: "camera" | "photo" | "file" }) {
       )}
     </svg>
   );
+}
+
+/** Linha de um agente: a fotinha dele ao lado e o nome em cima da primeira fala de cada vez. */
+function BotRow({ agent, head, turn, children }: { agent: Agent; head: boolean; turn: boolean; children: ReactNode }) {
+  return (
+    <div className={`hc-row hc-bot hc-av${turn ? " hc-turn" : ""}`}>
+      <span className="hc-av-face">{head && <AgentFace face={agent.face} agent={agent.kind === "client" ? undefined : agent.id} size={34} title={agent.persona} />}</span>
+      <div className="hc-av-body">
+        {head && <span className="hc-av-name">{agent.persona}</span>}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const OPEN_KEY = "pj-chat-abertura";
+/** Longe do chat por mais que isto (ou virou o dia): o time conversa de novo ao abrir. */
+const REPLAY_MS = 3 * 60 * 60_000;
+
+/** Escolhe uma das falas, a mesma o dia inteiro (não muda a cada abertura no mesmo dia). */
+function pick<T>(list: T[], salt: number): T {
+  const d = new Date();
+  return list[(d.getDate() * 7 + d.getMonth() * 3 + salt) % list.length]!;
+}
+
+/**
+ * A abertura do dia como uma conversa do time: o líder chama cada colega pelo nome, eles respondem um para o outro
+ * com o que importa para a pessoa e o líder devolve a conversa para ela. Tudo pronto, sem IA.
+ */
+function buildOpeners(h: Hello, name: string, cto: Agent, byId: (id: string) => Agent | undefined, fresh: boolean): Opener[] {
+  const greet = h.hour < 5 ? "Boa noite" : h.hour < 12 ? "Bom dia" : h.hour < 18 ? "Boa tarde" : "Boa noite";
+  const oi = `${greet}${name ? `, ${name}` : ""}!`;
+  const ela = name || "você";
+  const out: Opener[] = [];
+  const say = (agent: Agent | undefined, text: string) => agent && out.push({ agent, text });
+  const ag = byId("agenda");
+  const fin = byId("financeiro");
+  const res = byId("pesquisador");
+  const rec = byId("recados");
+  const first = ag ?? fin;
+  say(
+    cto,
+    fresh
+      ? `${oi} 👋 Eu sou ${cto.persona} e esse é o seu time. Tudo o que a gente faz no WhatsApp dá pra fazer por aqui.${first ? ` ${first.persona}, conta como tá o dia?` : ""}`
+      : `${oi} ${pick(["Juntei o time aqui rapidinho.", "Reuni a turma pra te atualizar.", "Passando com o time pra contar do dia."], 1)}${first ? ` ${first.persona}, começa você?` : ""}`,
+  );
+  if (ag) {
+    const items = h.today.map((t) => `${hm(t.at)} ${t.title}`);
+    say(
+      ag,
+      items.length
+        ? `Claro, ${cto.persona}! Hoje ${name ? `${name} tem` : "você tem"} ${items.length === 1 ? "um compromisso" : `${items.length} compromissos`}:\n${items.map((i) => `• ${i}`).join("\n")}`
+        : pick([`Agenda livre hoje, ${cto.persona} 🗓️ Se ${ela} quiser marcar algo, é comigo.`, `Nada marcado pra hoje por enquanto 🗓️ Tô a postos se precisar.`, `Dia tranquilo na agenda 🗓️ Quer que eu reserve um tempinho pra algo, ${ela}?`], 2),
+    );
+  }
+  if (fin) {
+    const today = Number(h.spent_today);
+    const month = Number(h.spent_month);
+    if (ag) say(cto, pick([`Valeu, ${ag.persona}! E as contas, ${fin.persona}?`, `Boa! ${fin.persona}, como tão os gastos?`, `E o dinheiro, ${fin.persona}?`], 3));
+    say(
+      fin,
+      today > 0
+        ? `Hoje já foram *${brl(h.spent_today)}*, e *${brl(h.spent_month)}* no mês.`
+        : month > 0
+          ? `No mês tá em *${brl(h.spent_month)}*. Hoje ainda nada anotado, é só me contar que eu registro 💸`
+          : "Nada anotado ainda. Me manda tipo \"almoço 32 reais\" que eu cuido 💸",
+    );
+  }
+  if (res && h.watches.length) say(res, `Ah, e eu sigo de olho em ${h.watches.map((w) => `*${w}*`).join(" e ")} 👀 Aviso se mudar.`);
+  if (rec && h.errands_waiting > 0)
+    say(rec, h.errands_waiting === 1 ? `${cto.persona}, tem um recado esperando resposta de ${ela}.` : `${cto.persona}, tem ${h.errands_waiting} recados esperando resposta de ${ela}.`);
+  say(cto, pick([`É isso! Do que você precisa agora${name ? `, ${name}` : ""}?`, "Fala com a gente: do que você precisa agora?", "Bora? Me diz o que você precisa que eu chamo quem resolve."], 4));
+  return out;
 }
 
 function MicIcon() {

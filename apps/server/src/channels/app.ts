@@ -35,7 +35,25 @@ export async function toMp3(base64: string, ext: string): Promise<string | null>
   }
 }
 
-export async function saveAppMessage(userId: string, m: { role: "user" | "assistant"; text?: string | null; media?: Record<string, unknown> | null; data?: string | null; externalId?: string | null }) {
+/** Primeira frase, sem marcação e sem os [colchetes] internos do time, até 160 caracteres. */
+function brief(text: string) {
+  const s = text.replace(/\[[^\]]{0,80}\]/g, " ").replace(/[*_`#>~]/g, "").replace(/\s+/g, " ").trim();
+  const first = s.split(/(?<=[.!?])\s/)[0] ?? s;
+  return first.length > 160 ? `${first.slice(0, 157).trimEnd()}…` : first;
+}
+
+/**
+ * Fala de um agente para outro durante a resposta (ask_<especialista> e consult_colega). Só na conversa do app:
+ * a tela mostra o time conversando enquanto trabalha. Nunca derruba a resposta se não gravar.
+ */
+export async function noteTeamTalk(ctx: { conversation?: { channel: string; user_id: string } | null }, from: string, to: string, text: string, kind: "ask" | "reply") {
+  if (ctx.conversation?.channel !== "app") return;
+  const t = brief(text);
+  if (!t) return;
+  await saveAppMessage(ctx.conversation.user_id, { role: "team", text: t, media: { from, to, kind } }).catch(() => {});
+}
+
+export async function saveAppMessage(userId: string, m: { role: "user" | "assistant" | "team"; text?: string | null; media?: Record<string, unknown> | null; data?: string | null; externalId?: string | null }) {
   const data = m.data && Buffer.byteLength(m.data, "base64") <= MAX_DATA_BYTES ? m.data : null;
   return one<{ id: string }>(
     "INSERT INTO app_chat (user_id, role, text, media, data, external_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
