@@ -129,6 +129,13 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     fallbacks: ["google/gemini-3.8-flash-lite-tts"],
   },
   {
+    task: "tts_caprichado",
+    label: "Voz caprichada (ocasiões especiais)",
+    why: "Áudio especial (história, parabéns, homenagem, quando a pessoa pede voz mais bonita). ElevenLabs soa bem mais natural, mas custa ~65x o Kokoro (US$ 40 por milhão de caracteres, ~US$ 0,04 por minuto), por isso só em áudio curto (até TTS_CAPRICHADO_MAX_CHARS) e sem passar disso volta para a voz normal. Voz em TTS_VOICE_CAPRICHADA.",
+    model: "elevenlabs/eleven-v4-turbo",
+    fallbacks: ["elevenlabs/eleven-flash-v2.5", "hexgrad/kokoro-82m"],
+  },
+  {
     task: "writer",
     label: "Redator (PDF, áudio, Notion)",
     why: "Escreve o texto longo das ferramentas (PDF, mensagem de voz, página do Notion) a partir do pedido. Os agentes só mandam o que querem: o teto de saída deles não cabe um documento. Aqui a saída é longa, por isso o teto alto.",

@@ -6,11 +6,18 @@ import { promisify } from "node:util";
 import { config } from "../config.js";
 import { LlmError } from "../llm/openrouter.js";
 import { resolveModel } from "../llm/router.js";
+import { voiceText } from "./voice-format.js";
 
 const run = promisify(execFile);
 
 /** Áudio longo demais custa e ninguém ouve: ~4 minutos de fala. */
 export const TTS_MAX_CHARS = 3500;
+/** Voz caprichada (ElevenLabs) custa ~65x o Kokoro: só em áudio curto (~1min20s); mais que isso vai na voz normal. */
+export const TTS_CAPRICHADO_MAX_CHARS = 1200;
+/** Som de fundo gerado no ffmpeg (sem custo nenhum): chuva fina, mar e um acorde suave. */
+export const BACKGROUNDS = ["chuva", "mar", "calmo"] as const;
+export type Background = (typeof BACKGROUNDS)[number];
+
 /** Pedaço por chamada (o Kokoro aceita ~4K): corta em fim de frase. */
 const CHUNK = 1200;
 
@@ -44,6 +51,7 @@ export function splitForSpeech(text: string, size = CHUNK) {
 /** Voz de cada família de modelo; a do Kokoro (padrão) vem de TTS_VOICE. */
 function voiceFor(model: string) {
   if (model.startsWith("hexgrad/kokoro")) return config.TTS_VOICE;
+  if (model.startsWith("elevenlabs/")) return config.TTS_VOICE_CAPRICHADA;
   if (model.startsWith("google/")) return "Kore";
   if (model.startsWith("openai/")) return "nova";
   return undefined;
@@ -64,7 +72,7 @@ async function priceOf(model: string) {
     }
     prices = { at: Date.now(), map };
   }
-  return prices.map.get(model) ?? { prompt: 0.62e-6, completion: 0 };
+  return prices.map.get(model) ?? { prompt: model.startsWith("elevenlabs/") ? 40e-6 : 0.62e-6, completion: 0 };
 }
 
 async function speech(model: string, input: string, signal?: AbortSignal) {
@@ -102,14 +110,25 @@ export interface Speech {
   costUsd: number;
 }
 
+export interface SpeechOptions {
+  signal?: AbortSignal;
+  /** voz bonita (rota "tts_caprichado"); texto longo demais cai na voz normal */
+  caprichado?: boolean;
+  /** som de fundo baixinho por baixo da voz */
+  fundo?: Background;
+}
+
 /**
- * Texto -> mensagem de voz do WhatsApp. Modelo da rota "tts" (o mais barato com voz em pt-BR),
- * um pedaço por chamada, e o ffmpeg junta tudo em Ogg/Opus mono (o formato da bolinha de voz).
+ * Texto -> mensagem de voz do WhatsApp. Modelo da rota "tts" (o mais barato com voz em pt-BR) ou "tts_caprichado",
+ * um pedaço por chamada, e o ffmpeg junta tudo em Ogg/Opus mono (o formato da bolinha de voz), com som de fundo se pedido.
+ * Antes da voz, `voiceText` passa valores, datas, horas e siglas para o jeito falado.
  */
-export async function synthesize(text: string, signal?: AbortSignal): Promise<Speech> {
-  const clean = speakable(text);
+export async function synthesize(text: string, opts: SpeechOptions = {}): Promise<Speech & { caprichado: boolean }> {
+  const { signal } = opts;
+  const clean = voiceText(speakable(text));
   if (!clean) throw new Error("Texto vazio para falar.");
-  const route = await resolveModel("tts");
+  const caprichado = Boolean(opts.caprichado) && clean.length <= TTS_CAPRICHADO_MAX_CHARS;
+  const route = await resolveModel(caprichado ? "tts_caprichado" : "tts");
   const models = [route.model, ...(route.fallbacks ?? [])];
   const parts = splitForSpeech(clean);
   let lastErr: unknown;
@@ -118,9 +137,9 @@ export async function synthesize(text: string, signal?: AbortSignal): Promise<Sp
       const mp3s: Buffer[] = [];
       for (const p of parts) mp3s.push(await speech(model, p, signal));
       const price = await priceOf(model);
-      const out = await toVoiceNote(mp3s);
+      const out = await toVoiceNote(mp3s, opts.fundo);
       const costUsd = ttsCost(price, clean.length, out.seconds || clean.length / 15);
-      return { ...out, chars: clean.length, model, costUsd };
+      return { ...out, chars: clean.length, model, costUsd, caprichado: caprichado && model.startsWith("elevenlabs/") };
     } catch (err) {
       if (signal?.aborted) throw err;
       lastErr = err;
@@ -139,7 +158,32 @@ export function ttsCost(price: { prompt: number; completion: number }, chars: nu
   return (chars / 4) * price.prompt + seconds * 25 * price.completion;
 }
 
-async function toVoiceNote(mp3s: Buffer[]): Promise<Pick<Speech, "base64" | "mimetype" | "ptt" | "seconds">> {
+/** Fonte do som de fundo no ffmpeg (lavfi), já baixinho: fica uns 20 dB abaixo da voz. */
+export function backgroundSource(kind: Background, seconds: number) {
+  const d = Math.max(1, Math.ceil(seconds));
+  switch (kind) {
+    case "chuva":
+      return `anoisesrc=color=pink:amplitude=0.5:duration=${d}:sample_rate=48000,highpass=f=300,lowpass=f=6000,volume=0.12`;
+    case "mar":
+      // ruído marrom subindo e descendo devagar, como onda
+      return `anoisesrc=color=brown:amplitude=0.7:duration=${d}:sample_rate=48000,lowpass=f=900,volume='0.02+0.05*pow(sin(PI*t/7),2)':eval=frame`;
+    case "calmo":
+      // acorde de lá maior bem suave, respirando
+      return `sine=f=220:sample_rate=48000:duration=${d}[a];sine=f=277.18:sample_rate=48000:duration=${d}[b];sine=f=329.63:sample_rate=48000:duration=${d}[c];[a][b][c]amix=inputs=3,tremolo=f=0.15:d=0.5,lowpass=f=1500,volume=0.1`;
+  }
+}
+
+/** Voz (Ogg) + som de fundo: a voz entra 0,8 s depois, o fundo sobe e desce suave e termina 1,5 s depois da voz. */
+async function mixBackground(dir: string, voice: string, seconds: number, kind: Background) {
+  const total = seconds + 2.3;
+  const out = join(dir, "voz-fundo.ogg");
+  const bed = `${backgroundSource(kind, total)},afade=t=in:d=1,afade=t=out:st=${(total - 1.5).toFixed(1)}:d=1.5[b]`;
+  const graph = `${bed};[0:a]adelay=800:all=1,apad=pad_dur=1.5[v];[v][b]amix=inputs=2:duration=first:normalize=0`;
+  await run("ffmpeg", ["-v", "error", "-i", voice, "-filter_complex", graph, "-ac", "1", "-ar", "48000", "-c:a", "libopus", "-b:a", "32k", out], { timeout: 60_000 });
+  return out;
+}
+
+async function toVoiceNote(mp3s: Buffer[], fundo?: Background): Promise<Pick<Speech, "base64" | "mimetype" | "ptt" | "seconds">> {
   const dir = await mkdtemp(join(tmpdir(), "pj-tts-"));
   try {
     const files: string[] = [];
@@ -152,7 +196,9 @@ async function toVoiceNote(mp3s: Buffer[]): Promise<Pick<Speech, "base64" | "mim
     await run("ffmpeg", ["-v", "error", "-i", `concat:${files.join("|")}`, "-vn", "-ac", "1", "-ar", "48000", "-c:a", "libopus", "-b:a", "24k", "-application", "voip", out], {
       timeout: 60_000,
     });
-    const ogg = await readFile(out);
+    let ogg = await readFile(out);
+    // som de fundo é enfeite: se o ffmpeg reclamar, vai só a voz
+    if (fundo) ogg = await readFile(await mixBackground(dir, out, oggSeconds(ogg), fundo)).catch(() => ogg);
     return { base64: ogg.toString("base64"), mimetype: "audio/ogg; codecs=opus", ptt: true, seconds: oggSeconds(ogg) };
   } catch {
     // sem ffmpeg: manda o mp3 como arquivo de áudio (toca igual, só não vira a bolinha de voz)

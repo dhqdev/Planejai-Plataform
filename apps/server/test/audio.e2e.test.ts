@@ -4,7 +4,8 @@ import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { oggSeconds, speakable, splitForSpeech, ttsCost } from "../src/agent/tts.js";
+import { backgroundSource, oggSeconds, speakable, splitForSpeech, ttsCost } from "../src/agent/tts.js";
+import { numberWords, voiceText } from "../src/agent/voice-format.js";
 
 /** Mensagem de voz: o CTO escreve o texto, a rota "tts" (OpenRouter falso) fala e o ffmpeg vira Ogg/Opus. */
 const enabled = Boolean(process.env.TEST_DATABASE_URL);
@@ -21,6 +22,27 @@ describe("voz (sem banco)", () => {
     const parts = splitForSpeech("Frase um. ".repeat(300), 1200);
     expect(parts.every((p) => p.length <= 1200 && p.endsWith("."))).toBe(true);
     expect(parts.join(" ").length).toBe("Frase um. ".repeat(300).trim().length);
+  });
+  it("passa valores, datas, horas e siglas para o jeito falado", () => {
+    expect(numberWords(1234)).toBe("mil duzentos e trinta e quatro");
+    expect(numberWords(1500000)).toBe("um milhão e quinhentos mil");
+    expect(numberWords(2, true)).toBe("duas");
+    expect(voiceText("Gastou R$ 1.234,56 e R$ 1, sobrou R$0,99.")).toBe(
+      "Gastou mil duzentos e trinta e quatro reais e cinquenta e seis centavos e um real, sobrou noventa e nove centavos.",
+    );
+    expect(voiceText("Dia 15/03/2026 às 14h30, depois 9h e 12h.")).toBe(
+      "Dia quinze de março de dois mil e vinte e seis às catorze e trinta, depois nove horas e meio-dia.",
+    );
+    expect(voiceText("Liga no (11) 98765-4321")).toBe("Liga no um um, nove oito sete seis cinco, quatro três dois um");
+    expect(voiceText("12,5% a mais, 1º lugar, 2 kg")).toBe("doze vírgula cinco por cento a mais, primeiro lugar, dois quilos");
+    expect(voiceText("Manda o CPF pelo WhatsApp")).toBe("Manda o cê pê éfe pelo uótzap");
+  });
+  it("som de fundo sai do ffmpeg, sem arquivo nem custo", () => {
+    expect(backgroundSource("chuva", 10.2)).toContain("duration=11");
+    if (!hasFfmpeg) return;
+    for (const k of ["chuva", "mar", "calmo"] as const) {
+      execFileSync("ffmpeg", ["-v", "error", "-filter_complex", backgroundSource(k, 2), "-f", "null", "-"]);
+    }
   });
   it("custo por caractere, por segundo ou por token", () => {
     expect(ttsCost({ prompt: 0.62e-6, completion: 0 }, 1000, 60)).toBeCloseTo(0.00062, 8);
