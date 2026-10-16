@@ -21,7 +21,7 @@ export function parseWAMessage(d: any, channel: string): InboundMessage | null {
   let text = "";
   let media: InboundMessage["media"];
   let reactionTo: string | undefined;
-  const ctx = m.extendedTextMessage?.contextInfo ?? m.imageMessage?.contextInfo ?? m.audioMessage?.contextInfo ?? m.videoMessage?.contextInfo;
+  const ctx = m.extendedTextMessage?.contextInfo ?? m.imageMessage?.contextInfo ?? m.audioMessage?.contextInfo ?? m.videoMessage?.contextInfo ?? m.stickerMessage?.contextInfo;
   if (m.conversation != null || m.extendedTextMessage) {
     kind = "text";
     text = m.conversation ?? m.extendedTextMessage?.text ?? "";
@@ -50,6 +50,7 @@ export function parseWAMessage(d: any, channel: string): InboundMessage | null {
     text = `[cartão de contato compartilhado]\n${lines.join("\n")}`;
   } else if (m.stickerMessage) {
     kind = "sticker";
+    media = { mimetype: m.stickerMessage.mimetype ?? "image/webp" };
   } else if (m.locationMessage) {
     kind = "location";
     text = `Localização: ${m.locationMessage.degreesLatitude}, ${m.locationMessage.degreesLongitude}${m.locationMessage.name ? ` (${m.locationMessage.name})` : ""}`;

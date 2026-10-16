@@ -244,8 +244,24 @@ export async function handleDirectReply(msg: InboundMessage): Promise<boolean> {
   const who = nickname || d.name || msg.pushName || `+${d.phone}`;
   const body = msg.kind === "text" ? msg.text : await describeInbound(msg, d.user_id);
   await logContactMessage(d.user_id, d.phone, d.name || msg.pushName || null, "in", String(body ?? ""));
-  await notifyUser(d.user_id, `*${who}* respondeu:\n\n${String(body ?? "").slice(0, 2000)}`, undefined, { from: who });
+  // figurinha, foto, áudio, vídeo ou arquivo: além do texto, a própria mídia segue para a pessoa
+  const file = await inboundFile(msg);
+  const head = file?.kind === "sticker" && !msg.text?.trim() ? `*${who}* respondeu com uma figurinha:` : `*${who}* respondeu:\n\n${String(body ?? "").slice(0, 2000)}`;
+  await notifyUser(d.user_id, head, file ?? undefined, { from: who });
   return true;
+}
+
+/** Até 16 MB, o limite de mídia do WhatsApp (documento vai até 100 MB, mas aí a pessoa recebe o aviso e pede o arquivo). */
+const FORWARD_MAX_BYTES = 16 * 1024 * 1024;
+
+/** O arquivo da resposta (já baixado na chegada ou pedido ao provedor), para encaminhar como veio. Sem ele, fica só o texto. */
+async function inboundFile(msg: InboundMessage) {
+  if (!msg.media || !["sticker", "image", "audio", "video", "document"].includes(msg.kind)) return null;
+  const got = await outboundChannel()
+    .downloadMedia(msg)
+    .catch(() => null);
+  if (!got?.base64 || got.base64.length * 0.75 > FORWARD_MAX_BYTES) return null;
+  return { kind: msg.kind as "sticker" | "image" | "audio" | "video" | "document", base64: got.base64, mimetype: got.mimetype || msg.media.mimetype, fileName: msg.media.fileName };
 }
 
 /**

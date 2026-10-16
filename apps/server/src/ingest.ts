@@ -50,6 +50,8 @@ export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; re
   // resposta a uma mensagem avulsa (send_whatsapp): volta para quem mandou, sem cadastro
   const { handleDirectReply } = await import("./direct.js");
   if (await handleDirectReply(msg)) return { queued: false, reason: "resposta de mensagem avulsa" };
+  // figurinha de cliente para o assistente não precisa do arquivo (ninguém lê): não vai para o banco
+  if (msg.kind === "sticker") msg.media = undefined;
   const user = await upsertUser(msg.phone, msg.pushName);
   const conv = await upsertConversation(user.id, msg.channel, msg.remoteJid);
 

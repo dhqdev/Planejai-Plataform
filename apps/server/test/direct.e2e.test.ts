@@ -123,6 +123,17 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     });
     expect(sentTexts().at(-1)).toMatch(/\*Rafael\* respondeu:\s+🎤 _áudio:_ Fechado, chego lá às três/);
     expect(await db.one("SELECT trigger FROM executions WHERE trigger = 'recado' LIMIT 1")).toEqual({ trigger: "recado" });
+    // o próprio áudio também chega, como mensagem de voz
+    expect(channels.playground.sent.at(-1)?.image).toMatchObject({ kind: "audio", ptt: true, base64: Buffer.from("fake-ogg").toString("base64") });
+
+    // resposta com figurinha: a figurinha chega de verdade, não só "mandou uma figurinha"
+    const webp = Buffer.from("RIFF-fake-webp").toString("base64");
+    await ingest({
+      channel: "playground", remoteJid: `${CLIENT}@s.whatsapp.net`, phone: CLIENT, externalId: `c${++seq}`, kind: "sticker", text: "",
+      media: { mimetype: "image/webp", base64: webp }, timestamp: new Date(), raw: {},
+    });
+    expect(sentTexts().at(-1)).toBe("*Rafael* respondeu com uma figurinha:");
+    expect(channels.playground.sent.at(-1)).toMatchObject({ type: "image", image: { kind: "sticker", base64: webp, mimetype: "image/webp" } });
   });
 
   it("documento de Documentos vai junto numa mensagem agendada e sai como arquivo com legenda", async () => {
