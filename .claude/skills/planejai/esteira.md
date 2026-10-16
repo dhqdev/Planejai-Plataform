@@ -6,6 +6,10 @@ Tela **Esteira** (menu Plataforma, só aparece para o dono da stack; `me.owner`)
 
 Cada coluna do quadro é um agente com rota própria em Modelos (`AGENTS` em `devpipeline/pipeline.ts`): **Lia** analista (`dev:refine`, etapa entendendo), **Beto** arquiteto (`dev:plan`, planejando, e responde dúvida do Caio uma vez), **Caio** desenvolvedor (`dev:code`, codando e corrigindo), **Vera** revisora (`dev:review`) e **Tito** testes (`dev:qa`, abre o PR, espera o CI e explica a falha ao Caio). Eles se passam recados curtos (`dev_ticket_steps.kind = 'msg'`, `agent` → `to_agent`, "dono" = você), que aparecem como "Conversa do time" no card e o último no quadro; cada agente lê os recados que recebeu (`inbox`).
 
+Quadro: todas as 8 colunas cabem na tela sem rolar de lado; à direita o painel **O time** (`/api/dev/team`, `teamOverview`) mostra cada agente com rosto de Mascote vestido para o papel (`AGENT_LOOK` no painel), o que faz (`AGENTS.does`), modelos, em que chamados está agora e o último recado. Abaixo de 1280 px o time desce para baixo do quadro; no celular as colunas viram seções empilhadas (só as que têm chamado) e "O time" é uma aba.
+
+Aba **Skills** (`/esteira-skills`, `pages/Skills.tsx`): lista os `.md` de `.claude/skills/` do repositório (planejai primeiro), edita e "Salvar e publicar" faz um commit no branch base só com aquele arquivo (`saveSkill`; `isSkillPath` só aceita `.md` dentro de `.claude/skills/`; o `sha` aberto mudou = 409). É a única escrita da esteira no branch base. A Lia aponta até 3 skills por chamado (`spec.skills`) e elas entram no guia do time, com teto pelo nível.
+
 Paradas: `precisa_de_voce` (o analista só pergunta se não dá para seguir; a resposta do dono entra no pedido e recomeça), `falhou` ("Tentar de novo" volta para `failed_stage`) e `cancelado`.
 
 ## Onde está

@@ -31,6 +31,7 @@ const load = {
   documents: () => import("./pages/Documents"),
   errands: () => import("./pages/Errands"),
   esteira: () => import("./pages/Esteira"),
+  skills: () => import("./pages/Skills"),
   blogAdmin: () => import("./pages/BlogAdmin"),
   contacts: () => import("./pages/Contacts"),
   convites: () => import("./pages/Convites"),
@@ -103,6 +104,7 @@ const DocumentsPage = page(() => load.documents().then((m) => m.DocumentsPage));
 const ErrandsPage = page(() => load.errands().then((m) => m.ErrandsPage));
 const EsteiraPage = page(() => load.esteira().then((m) => m.EsteiraPage));
 const EsteiraCustosPage = page(() => load.esteira().then((m) => m.EsteiraCustosPage));
+const SkillsPage = page(() => load.skills().then((m) => m.SkillsPage));
 const ContactsPage = page(() => load.contacts().then((m) => m.ContactsPage));
 const ConvitesPage = page(() => load.convites().then((m) => m.ConvitesPage));
 const WhatsAppPage = page(() => load.whatsapp().then((m) => m.WhatsAppPage));
@@ -135,6 +137,7 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/time": load.team,
   "/esteira": load.esteira,
   "/esteira-custos": load.esteira,
+  "/esteira-skills": load.skills,
   "/blog-posts": load.blogAdmin,
 };
 function preload(to: string) {
@@ -167,7 +170,7 @@ const GROUPS: { to: string; label: string }[][] = [
   [{ to: "/agents", label: "Agentes" }, { to: "/models", label: "Modelos" }],
   [{ to: "/whatsapp", label: "WhatsApp" }, { to: "/integrations", label: "Integrações" }],
   [{ to: "/servidor", label: "Servidor" }, { to: "/armazenamento", label: "Armazenamento" }],
-  [{ to: "/esteira", label: "Chamados" }, { to: "/esteira-custos", label: "Custos" }],
+  [{ to: "/esteira", label: "Chamados" }, { to: "/esteira-custos", label: "Custos" }, { to: "/esteira-skills", label: "Skills" }],
 ];
 const groupOf = (path: string) => GROUPS.find((g) => g.some((t) => t.to === "/" + (path.split("/")[1] ?? "")));
 
@@ -482,6 +485,7 @@ export function App() {
               <Route path="/blog-posts" element={<BlogAdminPage />} />
               {me.owner && <Route path="/esteira" element={<EsteiraPage />} />}
               {me.owner && <Route path="/esteira-custos" element={<EsteiraCustosPage />} />}
+              {me.owner && <Route path="/esteira-skills" element={<SkillsPage />} />}
             </>
           ) : (
             <>

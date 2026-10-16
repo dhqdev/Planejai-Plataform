@@ -39,12 +39,12 @@ export const STAGE_LABEL: Record<string, string> = {
  * O time da esteira: cada coluna do quadro é um agente com o próprio modelo (rota em Modelos).
  * Eles conversam entre si por recados curtos que ficam no card (dev_ticket_steps kind = 'msg').
  */
-export const AGENTS: Record<string, { name: string; role: string; route: string }> = {
-  lia: { name: "Lia", role: "Analista", route: "dev:refine" },
-  beto: { name: "Beto", role: "Arquiteto", route: "dev:plan" },
-  caio: { name: "Caio", role: "Desenvolvedor", route: "dev:code" },
-  vera: { name: "Vera", role: "Revisora", route: "dev:review" },
-  tito: { name: "Tito", role: "Testes", route: "dev:qa" },
+export const AGENTS: Record<string, { name: string; role: string; route: string; does: string }> = {
+  lia: { name: "Lia", role: "Analista", route: "dev:refine", does: "Lê o seu chamado e os prints, reescreve como problema, esperado e critérios de aceite, aponta os arquivos e as skills que importam e decide o nível." },
+  beto: { name: "Beto", role: "Arquiteto", route: "dev:plan", does: "Lê os arquivos apontados e monta o passo a passo da mudança. Responde as dúvidas do Caio. Em chamado simples ele não entra." },
+  caio: { name: "Caio", role: "Desenvolvedor", route: "dev:code", does: "Escreve o código seguindo o plano e as regras do repositório. Quando o CI fica vermelho, lê o log e conserta no mesmo PR." },
+  vera: { name: "Vera", role: "Revisora", route: "dev:review", does: "Revisa o diff contra os critérios de aceite e devolve para o Caio só por problema real. Em chamado simples com diff pequeno ela é pulada." },
+  tito: { name: "Tito", role: "Testes", route: "dev:qa", does: "Cria o branch, abre o PR em rascunho, espera o CI e explica ao Caio o que quebrou. Tira do rascunho quando fica verde." },
 };
 export const STAGE_AGENT: Record<string, string> = {
   entendendo: "lia",
@@ -66,9 +66,9 @@ export const FINAL = new Set(["pronto", "falhou", "cancelado", "precisa_de_voce"
  * O dono escolhe ao abrir o chamado ou deixa "automático" e a Lia decide.
  */
 export const LEVELS = {
-  simples: { label: "Simples", plan: false, reviewRounds: 0, fixRounds: 1, files: 6, context: 60_000, guide: 8_000, code: "dev:code:simples", imagesToCode: false },
-  medio: { label: "Médio", plan: true, reviewRounds: 1, fixRounds: 2, files: 12, context: 120_000, guide: 16_000, code: "dev:code", imagesToCode: false },
-  complexo: { label: "Complexo", plan: true, reviewRounds: 2, fixRounds: 3, files: 20, context: 200_000, guide: 24_000, code: "dev:code", imagesToCode: true },
+  simples: { label: "Simples", plan: false, reviewRounds: 0, fixRounds: 1, files: 6, context: 60_000, guide: 8_000, skills: 6_000, code: "dev:code:simples", imagesToCode: false },
+  medio: { label: "Médio", plan: true, reviewRounds: 1, fixRounds: 2, files: 12, context: 120_000, guide: 16_000, skills: 12_000, code: "dev:code", imagesToCode: false },
+  complexo: { label: "Complexo", plan: true, reviewRounds: 2, fixRounds: 3, files: 20, context: 200_000, guide: 24_000, skills: 20_000, code: "dev:code", imagesToCode: true },
 } as const;
 export type Level = keyof typeof LEVELS;
 const levelOf = (t: any) => LEVELS[(t.level as Level) in LEVELS ? (t.level as Level) : "medio"];
@@ -435,8 +435,21 @@ async function repoContext(run: StageRun) {
   const { gh } = run.cfg;
   const sha = await gh.branchSha(await gh.resolveBase(run.cfg.base));
   const tree = (await gh.tree(sha)).filter((f) => !SKIP.test(f.path));
+  const lv = levelOf(run.t);
   const [rules, skill] = await Promise.all([gh.file("CLAUDE.md", sha), gh.file(".claude/skills/planejai/SKILL.md", sha)]);
-  return { sha, tree, guide: [rules, skill].filter(Boolean).join("\n\n---\n\n").slice(0, levelOf(run.t).guide) };
+  let guide = [rules, skill].filter(Boolean).join("\n\n---\n\n").slice(0, lv.guide);
+  // skills que a Lia apontou para este chamado (tela Skills): entram no guia de todo o time, com teto pelo nível
+  const known = new Set(tree.map((f) => f.path));
+  const picked = ((run.t.spec?.skills ?? []) as string[]).filter((p) => isSkillPath(p) && known.has(p)).slice(0, 3);
+  let room = lv.skills;
+  for (const p of picked) {
+    const c = await gh.file(p, sha);
+    if (!c || room <= 0) continue;
+    const part = c.slice(0, room);
+    room -= part.length;
+    guide += `\n\n--- skill ${p} ---\n${part}`;
+  }
+  return { sha, tree, guide };
 }
 
 /** Lê os arquivos pedidos (só os que existem), até o teto de contexto. */
@@ -504,8 +517,9 @@ const STAGES = {
           role: "system",
           content:
             "Você é a Lia, analista de uma esteira de desenvolvimento automática (time: Lia analista, Beto arquiteto, Caio desenvolvedor, Vera revisora, Tito testes). Recebe um chamado do dono do produto e o descreve melhor para um desenvolvedor: problema, comportamento esperado, critérios de aceite verificáveis e os arquivos do repositório que provavelmente precisam mudar (só caminhos que existem na lista). Escreva em português do Brasil. Só faça perguntas se for impossível seguir sem a resposta; detalhe que dá para decidir, decida e diga qual escolheu.\n" +
+            "Na lista de arquivos, os .md em .claude/skills/ são as skills do sistema (como cada parte funciona e as regras dela): aponte em \"skills\" até 3 que o time deve ler para este chamado.\n" +
             `${levelRule} Em chamado simples não tem arquiteto: dê você "passos" (o passo a passo curto para o Caio) e "testes".\n` +
-            'Responda só com JSON: {"titulo": "...", "problema": "...", "esperado": "...", "criterios": ["..."], "arquivos": ["caminho"], "riscos": ["..."], "nivel": "medio", "passos": ["..."], "testes": "...", "perguntas": ["..."], "bloqueado": false, "recado": "uma ou duas frases para o próximo do time (o Beto; ou o Caio se for simples): o que importa e onde começar"}',
+            'Responda só com JSON: {"titulo": "...", "problema": "...", "esperado": "...", "criterios": ["..."], "arquivos": ["caminho"], "skills": [".claude/skills/planejai/arquivo.md"], "riscos": ["..."], "nivel": "medio", "passos": ["..."], "testes": "...", "perguntas": ["..."], "bloqueado": false, "recado": "uma ou duas frases para o próximo do time (o Beto; ou o Caio se for simples): o que importa e onde começar"}',
         },
         { role: "user", content: `Guia do repositório:\n${ctx.guide}\n\nArquivos do repositório:\n${ctx.tree.map((f) => f.path).join("\n")}\n\n${ticketBlock(run.t)}` },
       ],
@@ -514,7 +528,8 @@ const STAGES = {
     );
     if (!spec?.problema) throw new Error("O analista não devolveu a descrição no formato esperado.");
     const known = new Set(ctx.tree.map((f) => f.path));
-    spec.arquivos = (Array.isArray(spec.arquivos) ? spec.arquivos : []).filter((p: string) => known.has(p)).slice(0, 12);
+    spec.arquivos = (Array.isArray(spec.arquivos) ? spec.arquivos : []).filter((p: string) => known.has(p) && !isSkillPath(p)).slice(0, 12);
+    spec.skills = (Array.isArray(spec.skills) ? spec.skills : []).filter((p: string) => isSkillPath(p) && known.has(p)).slice(0, 3);
     const level: Level = fixed ? run.t.level : spec.nivel in LEVELS ? spec.nivel : "medio";
     spec.nivel = level;
     if (spec.bloqueado && spec.perguntas?.length) {
@@ -962,4 +977,103 @@ export async function costOverview(days: number) {
     [d],
   );
   return { days: d, total, done, byAgent: byAgent.map((a) => ({ ...a, name: AGENTS[a.agent]?.name ?? a.agent, role: AGENTS[a.agent]?.role ?? "" })), byStage: byStage.map((s) => ({ ...s, label: STAGE_LABEL[s.stage] ?? s.stage })), byModel, byDay, top };
+}
+
+/** Painel lateral do time: o que cada agente faz, qual modelo usa, em que chamados está agora e o último recado dele. */
+export async function teamOverview() {
+  const [last, week, now] = await Promise.all([
+    many(
+      `SELECT DISTINCT ON (agent) agent, to_agent, left(summary, 240) AS text, ticket_id, created_at
+         FROM dev_ticket_steps WHERE kind = 'msg' AND agent IS NOT NULL ORDER BY agent, id DESC`,
+    ),
+    many(
+      `SELECT agent, COUNT(*) FILTER (WHERE model IS NOT NULL)::int AS calls, COALESCE(SUM(cost_usd), 0)::float AS cost
+         FROM dev_ticket_steps WHERE kind = 'step' AND agent IS NOT NULL AND created_at > now() - interval '7 days' GROUP BY agent`,
+    ),
+    many("SELECT id, title, spec->>'titulo' AS spec_title, stage, stage_started_at FROM dev_tickets WHERE stage = ANY($1) ORDER BY stage_started_at", [Object.keys(STAGE_AGENT)]),
+  ]);
+  const out = [];
+  for (const [id, a] of Object.entries(AGENTS)) {
+    const routes = id === "caio" ? [a.route, "dev:code:simples"] : id === "lia" ? [a.route, "dev:vision"] : [a.route];
+    const models = [...new Set(await Promise.all(routes.map(async (r) => (await resolveModel(r)).model)))];
+    out.push({
+      id,
+      ...a,
+      models,
+      working: now.filter((t) => STAGE_AGENT[t.stage] === id).map((t) => ({ id: t.id, title: String(t.spec_title ?? "").trim().length > 3 ? t.spec_title : t.title, stage: t.stage, since: t.stage_started_at })),
+      last: last.find((l) => l.agent === id) ?? null,
+      week: week.find((w) => w.agent === id) ?? { calls: 0, cost: 0 },
+    });
+  }
+  return out;
+}
+
+// ============================== skills (tela Skills) ==============================
+
+/** Só arquivos .md dentro de .claude/skills/, sem subir de pasta: o resto do repositório não se edita por aqui. */
+export function isSkillPath(p: string) {
+  return /^\.claude\/skills\/[\w.-]+(\/[\w.-]+)*\.md$/.test(p) && !p.split("/").some((s) => /^\.+$/.test(s));
+}
+
+async function skillRepo() {
+  const cfg = await devConfig();
+  if ("missing" in cfg) throw new SkillError(cfg.missing, 409);
+  const base = await cfg.gh.resolveBase(cfg.base);
+  return { gh: cfg.gh, base };
+}
+
+export class SkillError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
+/** Skills do repositório, agrupadas pela pasta (planejai primeiro: é a do nosso sistema). */
+export async function listSkills() {
+  const { gh, base } = await skillRepo();
+  const sha = await gh.branchSha(base);
+  const files = (await gh.tree(sha)).filter((f) => isSkillPath(f.path));
+  const groups = new Map<string, { path: string; name: string; size: number }[]>();
+  for (const f of files) {
+    const [, , folder, ...rest] = f.path.split("/");
+    const key = rest.length ? folder! : "(soltas)";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push({ path: f.path, name: rest.length ? rest.join("/") : folder!, size: f.size });
+  }
+  const order = [...groups.keys()].sort((a, b) => (a === "planejai" ? -1 : b === "planejai" ? 1 : a.localeCompare(b)));
+  return { branch: base, repo: `${gh.repo.owner}/${gh.repo.name}`, groups: order.map((k) => ({ folder: k, files: groups.get(k)!.sort((a, b) => (a.name === "SKILL.md" ? -1 : b.name === "SKILL.md" ? 1 : a.name.localeCompare(b.name))) })) };
+}
+
+export async function readSkill(path: string) {
+  if (!isSkillPath(path)) throw new SkillError("Só arquivos .md dentro de .claude/skills/.", 400);
+  const { gh, base } = await skillRepo();
+  const f = await gh.fileWithSha(path, base);
+  if (!f) throw new SkillError("Essa skill não existe no repositório.", 404);
+  return { path, ...f };
+}
+
+/**
+ * Salva e publica: um commit no branch base só com esse arquivo (o deploy da main leva para produção).
+ * `sha` é o do arquivo quando a tela abriu: mudou no meio (outra sessão, outro push) = 409 em vez de apagar o trabalho alheio.
+ */
+export async function saveSkill(path: string, content: string, sha: string | null) {
+  if (!isSkillPath(path)) throw new SkillError("Só arquivos .md dentro de .claude/skills/.", 400);
+  if (!content.trim()) throw new SkillError("A skill não pode ficar vazia.", 400);
+  if (content.length > 200_000) throw new SkillError("Skill grande demais (até 200 mil caracteres).", 400);
+  const { gh, base } = await skillRepo();
+  for (let attempt = 0; ; attempt++) {
+    const head = await gh.branchSha(base);
+    const current = await gh.fileWithSha(path, head);
+    if ((current?.sha ?? null) !== (sha || null)) throw new SkillError(current ? "Essa skill mudou no repositório depois que você abriu. Recarregue para ver a versão nova." : "Essa skill não existe mais no repositório.", 409);
+    if (current && current.content === content) return { commit: null, sha: current.sha };
+    try {
+      const commit = await gh.commit(base, head, [{ path, content }], `Skill ${path.replace(/^\.claude\/skills\//, "")} ${current ? "atualizada" : "criada"} pelo painel`, false);
+      const saved = await gh.fileWithSha(path, commit);
+      return { commit, sha: saved?.sha ?? null };
+    } catch (err) {
+      // a main andou entre ler e gravar (outro push): tenta de novo em cima da nova
+      if (attempt < 1 && err instanceof GithubError && err.status === 422) continue;
+      throw err;
+    }
+  }
 }

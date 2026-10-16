@@ -1,5 +1,23 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { answerTicket, cancelTicket, costOverview, createTicket, decodeImage, devStatus, getTicket, listTickets, MAX_IMAGES, retryTicket, saveDevSettings, ticketImage } from "../../../devpipeline/pipeline.js";
+import {
+  answerTicket,
+  cancelTicket,
+  costOverview,
+  createTicket,
+  decodeImage,
+  devStatus,
+  getTicket,
+  listSkills,
+  listTickets,
+  MAX_IMAGES,
+  readSkill,
+  retryTicket,
+  saveDevSettings,
+  saveSkill,
+  SkillError,
+  teamOverview,
+  ticketImage,
+} from "../../../devpipeline/pipeline.js";
 
 /** Só o dono da stack (não basta ser super admin): a esteira escreve no repositório dele. */
 async function requireOwner(req: FastifyRequest, reply: FastifyReply) {
@@ -71,6 +89,19 @@ export async function devPipelineRoutes(api: FastifyInstance) {
       if (!text) return reply.code(400).send({ error: "Escreva a resposta." });
       return id && (await answerTicket(id, text)) ? { ok: true } : reply.code(409).send({ error: "Esse chamado não está esperando resposta." });
     });
+
+    dev.get("/api/dev/team", async () => teamOverview());
+
+    /** Tela Skills: lê do repositório e, ao salvar, faz um commit no branch base só com aquele .md. */
+    const skillErr = (reply: FastifyReply, err: unknown) => {
+      if (err instanceof SkillError) return reply.code(err.status).send({ error: err.message });
+      throw err;
+    };
+    dev.get("/api/dev/skills", async (_req, reply) => listSkills().catch((e) => skillErr(reply, e)));
+    dev.get<{ Querystring: { path?: string } }>("/api/dev/skills/file", async (req, reply) => readSkill(String(req.query.path ?? "")).catch((e) => skillErr(reply, e)));
+    dev.put<{ Body: { path?: string; content?: string; sha?: string | null } }>("/api/dev/skills/file", async (req, reply) =>
+      saveSkill(String(req.body?.path ?? ""), String(req.body?.content ?? ""), req.body?.sha ?? null).catch((e) => skillErr(reply, e)),
+    );
 
     dev.get<{ Querystring: { days?: string } }>("/api/dev/costs", async (req) => costOverview(Number(req.query.days ?? 30)));
   });

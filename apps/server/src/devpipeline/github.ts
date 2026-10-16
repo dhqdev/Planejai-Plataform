@@ -3,7 +3,8 @@ import { GH_HEADERS } from "../integrations/registry.js";
 /**
  * Cliente mínimo da API do GitHub para a esteira. O host é fixo (api.github.com) e o repositório
  * vem da tela Integrações (validado em `parseRepo`), então nenhuma URL de usuário ou modelo chega aqui.
- * Escreve só em branches `esteira/...` criados pela própria esteira: nunca no branch base.
+ * Código só em branches `esteira/...` criados pela própria esteira; no branch base só entra o que o dono salva
+ * na tela Skills (arquivos .md de .claude/skills/, `saveSkill`).
  */
 const API = "https://api.github.com";
 
@@ -113,6 +114,18 @@ export class Github {
       const r = await this.call("GET", `/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`);
       if (Array.isArray(r) || r.type !== "file") return null;
       return Buffer.from(String(r.content ?? ""), "base64").toString("utf8");
+    } catch (err) {
+      if (err instanceof GithubError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
+  /** Conteúdo e sha do blob (para saber se alguém mudou o arquivo no meio), ou null se não existe. */
+  async fileWithSha(path: string, ref: string): Promise<{ content: string; sha: string } | null> {
+    try {
+      const r = await this.call("GET", `/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`);
+      if (Array.isArray(r) || r.type !== "file") return null;
+      return { content: Buffer.from(String(r.content ?? ""), "base64").toString("utf8"), sha: String(r.sha) };
     } catch (err) {
       if (err instanceof GithubError && err.status === 404) return null;
       throw err;

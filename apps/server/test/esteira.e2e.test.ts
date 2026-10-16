@@ -68,7 +68,7 @@ async function fakeGithub(url: string, init: RequestInit = {}) {
   if ((m = path.match(/^\/git\/trees\/(\w+)$/)) && method === "GET") return ok({ tree: Object.entries(gh.commits.get(m[1]!)!).map(([p, c]) => ({ path: p, type: "blob", size: c.length })) });
   if ((m = path.match(/^\/contents\/(.+)$/))) {
     const files = gh.commits.get(resolve(u.searchParams.get("ref")!)!)!;
-    return m[1]! in files ? ok({ type: "file", content: Buffer.from(files[m[1]!]!).toString("base64") }) : ok({ message: "Not Found" }, 404);
+    return m[1]! in files ? ok({ type: "file", content: Buffer.from(files[m[1]!]!).toString("base64"), sha: `blob-${Buffer.from(files[m[1]!]!).toString("base64").slice(-12)}-${files[m[1]!]!.length}` }) : ok({ message: "Not Found" }, 404);
   }
   if ((m = path.match(/^\/git\/commits\/(\w+)$/))) return ok({ tree: { sha: `tree-of-${m[1]}` } });
   if (path === "/git/trees" && method === "POST") {
@@ -134,7 +134,7 @@ describe.skipIf(!enabled)("esteira de desenvolvimento (e2e)", () => {
     const { buildServer } = await import("../src/api/server.js");
     app = await buildServer();
     vi.stubGlobal("fetch", (url: any, init?: any) => (String(url).startsWith("https://api.github.com") ? fakeGithub(String(url), init) : realFetch(url, init)));
-    gh.commits.set("base", { "CLAUDE.md": "# Regras\nTextos em português.", "src/soma.ts": "export const soma = (a: number, b: number) => a - b;\n", "src/soma.test.ts": "expect(soma(1, 3)).toBe(4)\n" });
+    gh.commits.set("base", { "CLAUDE.md": "# Regras\nTextos em português.", "src/soma.ts": "export const soma = (a: number, b: number) => a - b;\n", "src/soma.test.ts": "expect(soma(1, 3)).toBe(4)\n", ".claude/skills/planejai/SKILL.md": "# Planejai\nMapa.\n" });
     gh.refs.set("main", "base");
   });
   afterAll(async () => {
@@ -319,5 +319,33 @@ describe.skipIf(!enabled)("esteira de desenvolvimento (e2e)", () => {
     expect(t.description).toContain("Resposta do dono: A tela de Recados");
     expect((await app.inject({ method: "POST", url: `/api/dev/tickets/${id}/cancel`, headers: { cookie: owner } })).statusCode).toBe(200);
     expect((await app.inject({ method: "POST", url: `/api/dev/tickets/${id}/retry`, headers: { cookie: owner } })).statusCode).toBe(200);
+  });
+
+  it("painel do time mostra cada agente e a tela Skills publica só .md de skills na main", async () => {
+    const owner = cookieOf(await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } }));
+    const team = (await app.inject({ method: "GET", url: "/api/dev/team", headers: { cookie: owner } })).json();
+    expect(team.map((m: any) => m.name)).toEqual(["Lia", "Beto", "Caio", "Vera", "Tito"]);
+    expect(team.find((m: any) => m.id === "caio").models.length).toBeGreaterThan(0);
+    expect(team.find((m: any) => m.id === "tito").last).toBeTruthy();
+
+    const list = (await app.inject({ method: "GET", url: "/api/dev/skills", headers: { cookie: owner } })).json();
+    expect(list.groups[0]).toMatchObject({ folder: "planejai", files: [{ path: ".claude/skills/planejai/SKILL.md", name: "SKILL.md" }] });
+    const file = (await app.inject({ method: "GET", url: "/api/dev/skills/file?path=.claude/skills/planejai/SKILL.md", headers: { cookie: owner } })).json();
+    expect(file.content).toContain("Mapa.");
+    for (const bad of ["src/soma.ts", ".claude/skills/../src/soma.md", ".claude/skills/planejai/x.ts"]) {
+      const r = await app.inject({ method: "PUT", url: "/api/dev/skills/file", headers: { cookie: owner }, payload: { path: bad, content: "x", sha: null } });
+      expect(r.statusCode, bad).toBe(400);
+    }
+    const stale = await app.inject({ method: "PUT", url: "/api/dev/skills/file", headers: { cookie: owner }, payload: { path: file.path, content: "# Novo", sha: "velho" } });
+    expect(stale.statusCode).toBe(409);
+    const before = gh.refs.get("main");
+    const saved = await app.inject({ method: "PUT", url: "/api/dev/skills/file", headers: { cookie: owner }, payload: { path: file.path, content: "# Planejai\nMapa novo.\n", sha: file.sha } });
+    expect(saved.statusCode).toBe(200);
+    expect(gh.refs.get("main")).not.toBe(before);
+    const main = gh.commits.get(gh.refs.get("main")!)!;
+    expect(main[".claude/skills/planejai/SKILL.md"]).toBe("# Planejai\nMapa novo.\n");
+    expect(main["src/soma.ts"]).toBe(gh.commits.get(before!)!["src/soma.ts"]);
+    const created = await app.inject({ method: "PUT", url: "/api/dev/skills/file", headers: { cookie: owner }, payload: { path: ".claude/skills/planejai/agenda.md", content: "# Agenda\n", sha: null } });
+    expect(created.statusCode).toBe(200);
   });
 });

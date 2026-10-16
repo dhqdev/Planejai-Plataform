@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ago, api, ms, usd } from "../api";
 import { Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
-import { useApi } from "../hooks";
+import { useApi, useMedia } from "../hooks";
 import { Icon } from "../icons";
+import { Mascote, type Mood, type Outfit } from "../mascote/Mascote";
 import { haptic } from "../touch";
 
 /**
@@ -12,6 +13,16 @@ import { haptic } from "../touch";
  * a linha do tempo com o que cada etapa viu, decidiu e custou.
  */
 
+interface TeamMember {
+  id: string;
+  name: string;
+  role: string;
+  does: string;
+  models: string[];
+  working: { id: number; title: string; stage: string; since: string }[];
+  last: { to_agent: string; text: string; ticket_id: number; created_at: string } | null;
+  week: { calls: number; cost: number };
+}
 interface Agent {
   name: string;
   role: string;
@@ -143,11 +154,27 @@ function columnsOf(st: Status): { key: string; label: string; agent?: string; ha
   ];
 }
 
-function AgentDot({ id, agents, size = 26 }: { id: string; agents: Record<string, Agent>; size?: number }) {
+/** Cada agente é um Mascote com a roupa do trabalho dele, numa bolinha da cor dele. */
+const AGENT_LOOK: Record<string, Outfit> = {
+  lia: { eyes: "glasses", head: "flower" },
+  beto: { head: "hardhat", neck: "toolbelt" },
+  caio: { head: "headphones", neck: "bandana" },
+  vera: { eyes: "monocle", neck: "pearls" },
+  tito: { head: "cap", neck: "stethoscope" },
+};
+
+function AgentDot({ id, agents, size = 26, mood, live = false }: { id: string; agents: Record<string, Agent>; size?: number; mood?: Mood; live?: boolean }) {
   const name = id === "dono" ? "Você" : agents[id]?.name ?? id;
+  if (!AGENT_LOOK[id]) {
+    return (
+      <span className="dev-agent" style={{ width: size, height: size, background: AGENT_TONE[id] ?? "#71717a", fontSize: size * 0.46 }} title={name} aria-hidden>
+        {name.slice(0, 1)}
+      </span>
+    );
+  }
   return (
-    <span className="dev-agent" style={{ width: size, height: size, background: AGENT_TONE[id] ?? "#71717a", fontSize: size * 0.46 }} title={name} aria-hidden>
-      {name.slice(0, 1)}
+    <span className="dev-agent dev-agent-face" style={{ width: size, height: size, background: AGENT_TONE[id] }} title={name} aria-hidden>
+      <Mascote size={Math.round(size * 0.86)} outfit={AGENT_LOOK[id]} mood={mood ?? "idle"} still={!live} crop />
     </span>
   );
 }
@@ -183,6 +210,8 @@ export function EsteiraPage() {
   const [params, setParams] = useSearchParams();
   const open = Number(params.get("t")) || null;
   const [creating, setCreating] = useState(false);
+  const phone = useMedia("(max-width: 767px)");
+  const [view, setView] = useState<"quadro" | "time">("quadro");
   const labels = status.data?.stages ?? {};
 
   const openTicket = (id: number | null) => {
@@ -212,63 +241,79 @@ export function EsteiraPage() {
         <div className="card card-pad dev-warn">{status.data.warnings!.map((w) => <p key={w}>{w}</p>)}</div>
       )}
 
-      {!tickets.length ? (
-        <div className="card">
-          <Empty>Nenhum chamado ainda. Escreva o que quer mudar, do jeito que você falaria para um dev, e a esteira cuida do resto.</Empty>
-        </div>
-      ) : (
-        <div className="dev-board">
-          {columnsOf(status.data).map((col) => {
-            const items = tickets.filter((t) => col.has(t.stage));
-            const a = col.agent ? status.data!.agents[col.agent] : null;
-            return (
-              <section key={col.key} className={`dev-col${a ? " dev-col-agent" : ""}`}>
-                <header>
-                  {a ? (
-                    <span className="dev-col-who">
-                      <AgentDot id={col.agent!} agents={status.data!.agents} />
-                      <span>
-                        <strong>{a.name}</strong>
-                        <small className="muted">{a.role}</small>
-                      </span>
-                    </span>
-                  ) : (
-                    <span>{col.label}</span>
-                  )}
-                  <span className="muted">{items.length}</span>
-                </header>
-                {items.map((t) => (
-                  <button key={t.id} className="dev-card" onClick={() => { haptic(5); openTicket(t.id); }}>
-                    <div className="dev-card-top">
-                      <span className="muted mono">#{t.id}</span>
-                      <span className="muted">{KIND[t.kind] ?? t.kind}</span>
-                      {t.level && <span className="muted">· {LEVEL[t.level] ?? t.level}</span>}
-                      {Number(t.images) > 0 && <span className="muted" title="Imagens anexadas">· {Number(t.images)} 📎</span>}
-                      <span className="spacer" />
-                      <span className="muted mono">{usd(t.cost_usd)}</span>
-                    </div>
-                    <strong className="dev-card-title">{titleOf(t)}</strong>
-                    <Flow stage={t.stage} failed={t.failed_stage} />
-                    {t.last_msg && (
-                      <div className="dev-card-msg">
-                        <AgentDot id={t.last_msg.agent} agents={status.data!.agents} size={18} />
-                        <span><b>{who(t.last_msg.agent, status.data!.agents)} → {who(t.last_msg.to, status.data!.agents)}:</b> {t.last_msg.text}</span>
-                      </div>
-                    )}
-                    <div className="dev-card-foot">
-                      <StageBadge stage={t.stage} label={labels[t.stage] ?? t.stage} />
-                      {t.pr_number && <span className="muted">PR #{t.pr_number}</span>}
-                      <span className="spacer" />
-                      <span className="muted">{ago(t.stage_started_at)}</span>
-                    </div>
-                  </button>
-                ))}
-                {!items.length && <div className="dev-col-empty muted">Nada aqui</div>}
-              </section>
-            );
-          })}
+      {phone && (
+        <div className="seg dev-view" role="tablist" aria-label="Ver">
+          <button className={view === "quadro" ? "active" : ""} aria-pressed={view === "quadro"} onClick={() => setView("quadro")}>Chamados ({tickets.length})</button>
+          <button className={view === "time" ? "active" : ""} aria-pressed={view === "time"} onClick={() => setView("time")}>O time</button>
         </div>
       )}
+      <div className="dev-layout">
+        {(!phone || view === "quadro") && (
+          <div className="dev-main">
+            {!tickets.length ? (
+              <div className="card">
+                <Empty>Nenhum chamado ainda. Escreva o que quer mudar, do jeito que você falaria para um dev, e a esteira cuida do resto.</Empty>
+              </div>
+            ) : (
+              <div className="dev-board">
+                {columnsOf(status.data).map((col) => {
+                  const items = tickets.filter((t) => col.has(t.stage));
+                  const a = col.agent ? status.data!.agents[col.agent] : null;
+                  if (phone && !items.length) return null;
+                  return (
+                    <section key={col.key} className={`dev-col${a ? " dev-col-agent" : ""}`}>
+                      <header>
+                        {a ? (
+                          <span className="dev-col-who">
+                            <AgentDot id={col.agent!} agents={status.data!.agents} size={phone ? 34 : 28} mood={items.length ? "working" : "idle"} />
+                            <span>
+                              <strong>{a.name}</strong>
+                              <small className="muted">{a.role}</small>
+                            </span>
+                          </span>
+                        ) : (
+                          <span>{col.label}</span>
+                        )}
+                        <span className="dev-col-count">{items.length}</span>
+                      </header>
+                      {items.map((t) => (
+                        <button key={t.id} className="dev-card" onClick={() => { haptic(5); openTicket(t.id); }}>
+                          <div className="dev-card-top">
+                            <span className="muted mono">#{t.id}</span>
+                            <span className="spacer" />
+                            <span className="muted mono">{usd(t.cost_usd)}</span>
+                          </div>
+                          <strong className="dev-card-title">{titleOf(t)}</strong>
+                          <div className="dev-card-tags muted">
+                            {KIND[t.kind] ?? t.kind}
+                            {t.level && ` · ${LEVEL[t.level] ?? t.level}`}
+                            {Number(t.images) > 0 && ` · ${Number(t.images)} 📎`}
+                          </div>
+                          <Flow stage={t.stage} failed={t.failed_stage} />
+                          {t.last_msg && (
+                            <div className="dev-card-msg">
+                              <AgentDot id={t.last_msg.agent} agents={status.data!.agents} size={18} />
+                              <span><b>{who(t.last_msg.agent, status.data!.agents)} → {who(t.last_msg.to, status.data!.agents)}:</b> {t.last_msg.text}</span>
+                            </div>
+                          )}
+                          <div className="dev-card-foot">
+                            <StageBadge stage={t.stage} label={labels[t.stage] ?? t.stage} />
+                            {t.pr_number && <span className="muted">PR #{t.pr_number}</span>}
+                            <span className="spacer" />
+                            <span className="muted">{ago(t.stage_started_at)}</span>
+                          </div>
+                        </button>
+                      ))}
+                      {!items.length && <div className="dev-col-empty muted">Nada aqui</div>}
+                    </section>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+        {(!phone || view === "time") && <TeamPanel agents={status.data.agents} labels={labels} onOpen={openTicket} />}
+      </div>
 
       {creating && <NewTicket onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); void list.reload(); openTicket(id); }} />}
       {open && <TicketModal id={open} labels={labels} agents={status.data.agents} onClose={() => openTicket(null)} onChange={() => void list.reload()} />}
@@ -328,6 +373,56 @@ function Setup({ st, onSaved }: { st: Status; onSaved: (s: Status) => void }) {
       )}
       {err && <ErrorBox error={err} />}
     </div>
+  );
+}
+
+/** Painel do lado do quadro (no celular, aba "O time"): quem é cada um, o que faz e o que está fazendo agora. */
+function TeamPanel({ agents, labels, onOpen }: { agents: Record<string, Agent>; labels: Record<string, string>; onOpen: (id: number) => void }) {
+  const team = useApi<TeamMember[]>("/api/dev/team", { poll: 5000 });
+  return (
+    <aside className="dev-team" aria-label="O time da esteira">
+      <h3>O time</h3>
+      {team.error && <ErrorBox error={team.error} />}
+      {!team.data ? (
+        <Loading />
+      ) : (
+        team.data.map((m) => (
+          <article key={m.id} className={`dev-member${m.working.length ? " busy" : ""}`} style={{ ["--tone" as string]: AGENT_TONE[m.id] }}>
+            <div className="dev-member-head">
+              <AgentDot id={m.id} agents={agents} size={56} mood={m.working.length ? "working" : "sleepy"} live />
+              <div>
+                <strong>{m.name}</strong>
+                <span className="muted">{m.role}</span>
+                <span className={`dev-member-state${m.working.length ? " on" : ""}`}>{m.working.length ? `Trabalhando em ${m.working.length}` : "Livre"}</span>
+              </div>
+            </div>
+            <p className="dev-member-does">{m.does}</p>
+            {m.working.length > 0 && (
+              <ul className="dev-member-now">
+                {m.working.map((w) => (
+                  <li key={w.id}>
+                    <button onClick={() => onOpen(w.id)}>
+                      <span className="mono muted">#{w.id}</span> <span className="ellipsis">{w.title}</span>
+                      <small className="muted">{labels[w.stage] ?? w.stage} · {ago(w.since)}</small>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {m.last && (
+              <button className="dev-member-last" onClick={() => onOpen(m.last!.ticket_id)}>
+                <small className="muted">Último recado para {who(m.last.to_agent, agents)} · #{m.last.ticket_id} · {ago(m.last.created_at)}</small>
+                <span>{m.last.text}</span>
+              </button>
+            )}
+            <div className="dev-member-meta muted">
+              <span className="mono ellipsis" title={m.models.join(", ")}>{m.models.map((x) => x.split("/").pop()).join(" · ")}</span>
+              <span>{m.week.calls} chamadas · {usd(m.week.cost)} em 7 dias</span>
+            </div>
+          </article>
+        ))
+      )}
+    </aside>
   );
 }
 
