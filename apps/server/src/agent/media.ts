@@ -153,7 +153,7 @@ export function describeMessage(m: any): string {
   const parts: string[] = [];
   const meta = m.meta ?? {};
   if (meta.kind === "audio") parts.push(`[áudio] ${meta.transcript ?? "(não consegui transcrever)"}`);
-  if (meta.kind === "image") parts.push(`[foto] ${meta.image_description ?? "(não consegui ver a imagem)"}`);
+  if (meta.kind === "image") parts.push(`[foto] ${meta.image_description ?? (meta.image_error ? `(não consegui descrever: ${meta.image_error})` : "(não consegui ver a imagem)")}`);
   if (meta.kind === "video") parts.push(`[vídeo] ${meta.video_description ?? ""}${meta.transcript ? ` Fala no vídeo: ${meta.transcript}` : ""}`);
   if (meta.kind === "document") {
     const name = meta.fileName ?? "documento";
@@ -210,7 +210,9 @@ export async function preprocessMedia(pending: any[], channel: Channel, tracer: 
         await step.ok({ transcript: m.meta.transcript }, usage);
       } else if (kind === "image") {
         usage = await describeImages([media]);
-        m.meta.image_description = usage.message.content?.trim();
+        const desc = usage.message.content?.trim();
+        if (!desc) throw new Error("modelo de visão não devolveu descrição");
+        m.meta.image_description = desc;
         await step.ok({ description: m.meta.image_description }, usage);
       } else if (kind === "document") {
         const buf = Buffer.from(media.base64, "base64");
@@ -257,6 +259,7 @@ export async function preprocessMedia(pending: any[], channel: Channel, tracer: 
       }
     } catch (err) {
       if (kind === "document") m.meta.doc_error = (err as Error).message;
+      if (kind === "image") m.meta.image_error = (err as Error).message;
       await step.fail(err);
     }
     // o arquivo só serve até aqui; não guarda mídia pesada no banco
