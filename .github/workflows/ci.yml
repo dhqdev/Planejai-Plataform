@@ -169,20 +169,32 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Opcional: redeploy automático no Portainer. Crie um webhook na stack/serviço
-      # (Portainer > Stack > Webhook) e salve a URL no secret PORTAINER_WEBHOOK_URL.
+      # Redeploy automático no Portainer (CE serve): em Services, abra o serviço app e ligue "Service webhook";
+      # repita no worker. Salve as URLs no secret PORTAINER_WEBHOOK_URL, uma por linha (ou separadas por espaço).
+      # Cada serviço recebe a imagem da versão nova (?tag=X.Y.Z), assim o Swarm não fica com um "latest" velho em cache.
       # Cada build ganha a tag sha-XXXXXXX e a da versão (X.Y.Z e X.Y; cada push na main é uma patch nova):
       # para voltar uma versão, troque :latest por uma delas na stack.
       - name: Redeploy no Portainer
+        # webhook com erro não pode impedir a tag e a release da versão já publicada
+        continue-on-error: true
         if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
         env:
           PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+          V: ${{ steps.ver.outputs.version }}
         run: |
-          if [ -n "$PORTAINER_WEBHOOK_URL" ]; then
-            curl -fsS -X POST "$PORTAINER_WEBHOOK_URL" && echo "Portainer avisado"
-          else
-            echo "PORTAINER_WEBHOOK_URL não configurado; pulando"
-          fi
+          urls=$(printf '%s' "$PORTAINER_WEBHOOK_URL" | tr -s ' ,\r\n' '\n' | grep -v '^$' || true)
+          if [ -z "$urls" ]; then echo "PORTAINER_WEBHOOK_URL não configurado; pulando"; exit 0; fi
+          n=0; falhou=0
+          while IFS= read -r url; do
+            n=$((n + 1))
+            sep='?'; case "$url" in *\?*) sep='&';; esac
+            if curl -fsS -X POST --retry 3 --retry-all-errors --max-time 60 -o /dev/null "${url}${sep}tag=${V}"; then
+              echo "serviço $n: Portainer avisado (versão $V)"
+            else
+              echo "::error::serviço $n: o Portainer não aceitou o webhook"; falhou=1
+            fi
+          done <<< "$urls"
+          exit $falhou
 
       # imagem publicada: marca o commit com a tag da versão e abre a release com os commits desde a anterior
       # (push feito pelo GITHUB_TOKEN não dispara outro CI, então não constrói duas vezes)
