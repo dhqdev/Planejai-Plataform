@@ -1,0 +1,43 @@
+/* ---------- Login no celular: sem cartão, sem mascotes boiando, só o essencial ----------
+   Pedido do David (2026-10-16): mais minimalista. O notebook continua igual. */
+@media (max-width: 767px) {
+  .auth-form { display: block; padding: 0; overflow: visible; }
+  .auth-form > .float-mascotes { display: none; }
+
+  /* voltar: só a seta, num botão redondo de vidro */
+  .auth-back {
+    width: 40px; height: 40px; padding: 0; justify-content: center; border: none;
+    background: var(--lg-sheen), var(--lg-tint); box-shadow: var(--lg-rim);
+    -webkit-backdrop-filter: blur(14px) saturate(1.6); backdrop-filter: blur(14px) saturate(1.6);
+  }
+  .auth-back span { display: none; }
+
+  .auth-form .card {
+    width: 100%; min-height: 100dvh; display: flex; flex-direction: column;
+    padding: calc(76px + env(safe-area-inset-top)) 24px calc(20px + env(safe-area-inset-bottom));
+    background: none; border: none; border-radius: 0; box-shadow: none;
+  }
+  /* o bloco fica um pouco acima do meio e o convite desce para o pé da tela */
+  .auth-form .card > :first-child { margin-top: auto; }
+  .auth-form .card > p.muted:last-child { margin-top: auto; padding-top: 24px; font-size: 14px !important; }
+
+  .auth-logo { text-align: left; margin-bottom: 18px; }
+  .auth-logo .stage-mascote { align-items: flex-start; margin: 0; }
+  .auth-logo .stage-mascote { zoom: .72; }
+
+  .auth-form h1 { font-size: 30px; line-height: 1.1; letter-spacing: -0.03em; font-weight: 650; margin-bottom: 6px; }
+  .auth-form h1 + p.muted { font-size: 15px; margin-bottom: 28px !important; }
+
+  .auth-form .field { gap: 0; margin-bottom: 12px; }
+  /* rótulo pequeno e cinza; o campo é cheio, sem borda, e acende no foco */
+  .auth-form .field > label:not(.terms-check) { font-size: 13px; color: var(--muted); font-weight: 500; margin: 0 0 6px 4px; }
+  .auth-form .input {
+    height: 52px; padding: 0 16px; font-size: 16px; border-radius: 14px;
+    background: var(--panel-2); border-color: transparent;
+  }
+  .auth-form .input:focus { background: var(--panel); }
+  .auth-form .forgot-link { align-self: flex-end; margin-top: 10px; font-size: 13px; font-weight: 500; color: var(--muted); text-decoration: none; background: none; }
+
+  .auth-form .btn-primary, .auth-form .signup-actions .btn { min-height: 52px; font-size: 16px; }
+  .auth-form .btn-primary { margin-top: 16px !important; }
+}
