@@ -247,7 +247,7 @@ function ProfileCard({ currentName }: { currentName: string }) {
             <div className="row row-wrap" style={{ gap: 10 }}>
               {photo && <img src={photo} alt="Nova foto do perfil" style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover" }} />}
               <button className="btn" type="button" disabled={busy} onClick={() => file.current?.click()}>Escolher foto</button>
-              <button className="btn" type="button" disabled={busy} onClick={() => pick("/icons/icon-512.png")}>Usar o ícone do Planejai</button>
+              <button className="btn" type="button" disabled={busy} onClick={() => pick("/icons/maskable-512.png")}>Usar o ícone do Planejai</button>
             </div>
             <input
               ref={file}
