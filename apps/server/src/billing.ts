@@ -1,5 +1,5 @@
 import { config } from "./config.js";
-import { GRAIN_TEXT, creditGrains, ensureWallet, grains, grainsExempt, grainsLink, packById, planById, plansOf, tellPerson } from "./credits.js";
+import { GRAIN_TEXT, creditGrains, ensureWallet, grains, grainsExempt, grainsLink, hasPaid, packById, planById, plansOf, tellPerson, trialEndsAt } from "./credits.js";
 import { emitEvent } from "./events.js";
 import { many, one, query } from "./db/pool.js";
 import { isOwner } from "./ingest.js";
@@ -111,6 +111,7 @@ export const hasPlan = (sub: SubscriptionRow | null | undefined): sub is Subscri
 
 export type Access =
   | { allowed: true; state: "off" | "exempt" | "grains"; balance?: number }
+  | { allowed: true; state: "trial"; until: string }
   | { allowed: false; state: "empty"; balance: 0 };
 
 /** A pessoa pode usar o assistente agora? Regra única, usada pelo assistente e pela tela de grãos. */
@@ -118,6 +119,8 @@ export async function billingAccess(user: any, s?: AgentSettings): Promise<Acces
   s ??= await getSettings();
   if (!s.billingEnabled) return { allowed: true, state: "off" };
   if (grainsExempt(user, s)) return { allowed: true, state: "exempt" };
+  const trial = trialEndsAt(user, s);
+  if (trial) return { allowed: true, state: "trial", until: trial.toISOString() };
   const w = await ensureWallet(user.id, s);
   if (w.total > 0) return { allowed: true, state: "grains", balance: w.total };
   return { allowed: false, state: "empty", balance: 0 };
@@ -127,9 +130,9 @@ export function billingLink() {
   return grainsLink();
 }
 
-/** Texto para a pessoa quando o assistente está parado por falta de grãos. */
-export function blockedMessage(_a?: unknown) {
-  return GRAIN_TEXT.empty(grainsLink());
+/** Texto para a pessoa quando o assistente está parado por falta de grãos (quem nunca pagou ouve que o grátis acabou). */
+export async function blockedMessage(userId: string) {
+  return (await hasPaid(userId)) ? GRAIN_TEXT.empty(grainsLink()) : GRAIN_TEXT.freeOver(grainsLink());
 }
 
 /** Preço com o desconto de indicação, em centavos certos. */
@@ -657,6 +660,49 @@ export async function billingOverview() {
   return { counts, mrr, packsMonth: packs?.v ?? 0, people };
 }
 
+const PAYMENT_STATUS: Record<string, string> = {
+  PENDING: "Aguardando pagamento",
+  RECEIVED: "Pago",
+  CONFIRMED: "Pago",
+  RECEIVED_IN_CASH: "Pago",
+  OVERDUE: "Vencida",
+  REFUNDED: "Estornada",
+  REFUND_REQUESTED: "Estorno pedido",
+  CHARGEBACK_REQUESTED: "Contestada",
+  AWAITING_RISK_ANALYSIS: "Em análise",
+};
+const PAYMENT_METHOD: Record<string, string> = { CREDIT_CARD: "Cartão", PIX: "Pix", BOLETO: "Boleto", UNDEFINED: "Pix, cartão ou boleto" };
+
+/**
+ * Cobranças da pessoa direto do Asaas (aba Pagamentos): mensalidades, trocas de plano e pacotes, das mais novas para as
+ * mais velhas. Só leitura; quem não tem cadastro no Asaas ainda não tem cobrança.
+ */
+export async function paymentsOf(userId: string) {
+  const sub = await getSubscription(userId);
+  if (!sub?.asaas_customer_id) return [];
+  const list: any[] = (await asaas("GET", `/payments?customer=${encodeURIComponent(sub.asaas_customer_id)}&limit=50`))?.data ?? [];
+  return list
+    .filter((p) => p && !p.deleted)
+    .map((p) => {
+      const status = String(p.status ?? "");
+      return {
+        id: String(p.id ?? ""),
+        description: String(p.description ?? "Planejai").slice(0, 140),
+        value: Number(p.value ?? 0),
+        dueDate: p.dueDate ? String(p.dueDate).slice(0, 10) : null,
+        paidAt: (p.clientPaymentDate ?? p.paymentDate) ? String(p.clientPaymentDate ?? p.paymentDate).slice(0, 10) : null,
+        status: PAYMENT_STATUS[status] ?? status,
+        paid: ["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"].includes(status),
+        open: status === "PENDING" || status === "OVERDUE",
+        method: PAYMENT_METHOD[String(p.billingType ?? "")] ?? null,
+        // só links do próprio Asaas vão para a tela
+        invoiceUrl: /^https:\/\/([a-z0-9-]+\.)*asaas\.com\//i.test(String(p.invoiceUrl ?? "")) ? String(p.invoiceUrl) : null,
+        receiptUrl: /^https:\/\/([a-z0-9-]+\.)*asaas\.com\//i.test(String(p.transactionReceiptUrl ?? "")) ? String(p.transactionReceiptUrl) : null,
+      };
+    })
+    .sort((a, b) => String(b.dueDate ?? "").localeCompare(String(a.dueDate ?? "")));
+}
+
 /** Vitrine pública (landing e tela de grãos): planos, pacotes e as regras em números. */
 export function pricingOf(s: AgentSettings) {
   return {
@@ -664,6 +710,7 @@ export function pricingOf(s: AgentSettings) {
     plans: plansOf(s).map((p) => ({ ...p, perks: perksOf(p) })),
     packs: s.billingPacks ?? [],
     welcome: Number(s.billingWelcomeGrains ?? 0),
+    trialDays: Number(s.billingTrialDays ?? 0),
     grainsPerUsd: Number(s.billingGrainsPerUsd ?? 1000),
     referral: { step: Number(s.billingReferralStep ?? 0), max: Number(s.billingReferralMax ?? 0) },
   };

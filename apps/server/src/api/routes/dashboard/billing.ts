@@ -9,13 +9,14 @@ import {
   changePlan,
   getSubscription,
   hasPlan,
+  paymentsOf,
   pricingOf,
   referralDiscount,
   subscribe,
   withDiscount,
 } from "../../../billing.js";
 import { config } from "../../../config.js";
-import { creditGrains, dailyBurn, ensureWallet, grainsExempt, ledgerOf, planById } from "../../../credits.js";
+import { creditGrains, dailyBurn, ensureWallet, grainsExempt, hasPaid, ledgerOf, planById } from "../../../credits.js";
 import { many, one, query } from "../../../db/pool.js";
 import { isConnected } from "../../../integrations/registry.js";
 import { getSettings } from "../../../settings.js";
@@ -35,13 +36,14 @@ export function billingRoutes(base: FastifyInstance) {
     const pricing = pricingOf(s);
     const user = await me(req);
     if (!user) return { pricing, linked: false };
-    const [wallet, ledger, burn, sub, access, referral] = await Promise.all([
+    const [wallet, ledger, burn, sub, access, referral, paid] = await Promise.all([
       ensureWallet(user.id, s),
       ledgerOf(user.id, 30),
       dailyBurn(user.id),
       getSubscription(user.id),
       billingAccess(user, s),
       referralDiscount(user.id, s),
+      hasPaid(user.id),
     ]);
     // amigos que a pessoa trouxe: quem já paga conta para o desconto
     const friends = await many(
@@ -67,7 +69,9 @@ export function billingRoutes(base: FastifyInstance) {
       email: user.email ?? req.account.email ?? "",
       wallet,
       burnPerDay: Math.round(burn),
-      access: { allowed: access.allowed, state: access.state },
+      access: { allowed: access.allowed, state: access.state, until: access.state === "trial" ? access.until : null },
+      // já pagou alguma vez: o menu mostra a aba Pagamentos
+      paid,
       ledger,
       pending: pending.map((p) => ({ kind: p.kind, itemId: p.item_id, grains: Number(p.grains), value: Number(p.value), invoiceUrl: p.invoice_url })),
       subscription: hasPlan(sub)
@@ -92,6 +96,17 @@ export function billingRoutes(base: FastifyInstance) {
         prices: pricing.plans.map((p) => ({ id: p.id, price: p.price, withDiscount: withDiscount(p.price, referral.percent) })),
       },
     };
+  });
+
+  // aba Pagamentos: cobranças da pessoa no Asaas (só de quem já pagou alguma vez)
+  base.get("/api/billing/payments", async (req, reply) => {
+    const user = await me(req);
+    if (!user) return { payments: [] };
+    try {
+      return { payments: await paymentsOf(user.id) };
+    } catch (err) {
+      return fail(reply, err);
+    }
   });
 
   base.post<{ Body: { planId?: string; method?: string; name?: string; cpfCnpj?: string; email?: string } }>("/api/billing/subscribe", async (req, reply) => {

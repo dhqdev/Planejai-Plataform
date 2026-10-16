@@ -125,7 +125,8 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     await saveCredentials("asaas", { api_key: "$aact_hmlg_teste", webhook_token: TOKEN });
     const { upsertUser, upsertConversation } = await import("../src/ingest.js");
     user = await upsertUser("5519944440000", "Carla");
-    await db.query("UPDATE users SET status = 'active', full_name = 'Carla Dias' WHERE id = $1", [user.id]);
+    // conta antiga: o período livre (3 dias depois do cadastro) já passou; o teste dele cria outra pessoa
+    await db.query("UPDATE users SET status = 'active', full_name = 'Carla Dias', created_at = now() - interval '30 days' WHERE id = $1", [user.id]);
     await reloadUser();
     convId = (await upsertConversation(user.id, "playground", "jid-carla")).id;
     app = await (await import("../src/api/server.js")).buildServer();
@@ -190,8 +191,28 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     expect(await wallet()).toEqual({ plan_grains: 0, extra_grains: 0 });
     sent = await outbox();
     expect(sent).toHaveLength(2);
-    expect(sent[1].text).toMatch(/grãos acabaram[\s\S]*\/plano$/);
+    // nunca pagou: o aviso é de que o período grátis acabou
+    expect(sent[1].text).toMatch(/período grátis acabou[\s\S]*chat do app[\s\S]*\/plano$/);
     expect(await billing.billingAccess(user)).toEqual({ allowed: false, state: "empty", balance: 0 });
+  });
+
+  it("período livre: nos 3 primeiros dias não gasta grão; depois desconta do presente e avisa uma vez", async () => {
+    const { upsertUser } = await import("../src/ingest.js");
+    const novo = await upsertUser("5519944449999", "Nina");
+    await db.query("UPDATE users SET status = 'active' WHERE id = $1", [novo.id]);
+    const row = async () => (await db.one("SELECT * FROM users WHERE id = $1", [novo.id]))!;
+    const access = await billing.billingAccess(await row());
+    expect(access).toMatchObject({ allowed: true, state: "trial" });
+    expect(await credits.chargeUsage(novo.id, 1)).toBeNull();
+    // passou dos 3 dias: desconta do presente e o primeiro desconto avisa que agora gasta grãos
+    await db.query("UPDATE users SET created_at = now() - interval '4 days' WHERE id = $1", [novo.id]);
+    expect(await billing.billingAccess(await row())).toEqual({ allowed: true, state: "grains", balance: 300 });
+    const before = (await outbox()).length;
+    expect(await credits.chargeUsage(novo.id, 0.01)).toEqual({ charged: 10, left: 290 });
+    await credits.chargeUsage(novo.id, 0.01);
+    const sent = (await outbox()).slice(before);
+    expect(sent.filter((m: any) => /uso livre acabaram/.test(m.text))).toHaveLength(1);
+    expect(sent.find((m: any) => /uso livre acabaram/.test(m.text))!.text).toMatch(/3 dias de uso livre[\s\S]*300 grãos de presente/);
   });
 
   it("carteira zerada: o assistente não chama a IA e avisa no máximo uma vez por dia", async () => {
@@ -211,7 +232,7 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     await db.query("UPDATE users SET profile = profile - 'billing_notice_at' WHERE id = $1", [user.id]);
     const next = await say("oi?", "b2");
     expect(next.channel.sent).toHaveLength(1);
-    expect(next.channel.sent[0]!.text).toMatch(/grãos acabaram[\s\S]*\/plano$/);
+    expect(next.channel.sent[0]!.text).toMatch(/período grátis acabou[\s\S]*\/plano$/);
     expect((await say("alô", "b3")).channel.sent).toEqual([]);
 
     // lembrete sai com o texto pronto, sem IA; automação sem texto pronto fica em silêncio

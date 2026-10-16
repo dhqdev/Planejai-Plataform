@@ -47,6 +47,27 @@ export function grainsExempt(user: { phone: string; billing_exempt?: boolean | n
   return !s.billingEnabled || isOwner(user.phone) || Boolean(user.billing_exempt);
 }
 
+/**
+ * Período livre: nos primeiros billingTrialDays dias depois do cadastro a pessoa usa sem gastar grãos. Depois disso o uso
+ * desconta dos grãos de presente e, quando acabam, a IA para (o painel continua). Devolve o fim do período, ou null fora dele.
+ */
+export function trialEndsAt(user: { created_at?: Date | string | null }, s: AgentSettings): Date | null {
+  const days = Number(s.billingTrialDays ?? 0);
+  if (!(days > 0) || !user.created_at) return null;
+  const end = new Date(new Date(user.created_at).getTime() + days * 86_400_000);
+  return end.getTime() > Date.now() ? end : null;
+}
+
+/** Já pagou alguma vez (mensalidade ou pacote)? Muda o texto do aviso e libera a aba Pagamentos. */
+export async function hasPaid(userId: string) {
+  const r = await one<{ paid: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM subscriptions WHERE user_id = $1 AND last_payment_at IS NOT NULL)
+         OR EXISTS (SELECT 1 FROM grain_purchases WHERE user_id = $1 AND status = 'paid') AS paid`,
+    [userId],
+  );
+  return Boolean(r?.paid);
+}
+
 /** Carteira da pessoa; na primeira vez nasce com os grãos de boas-vindas (uma vez só, mesmo apagando a carteira). */
 export async function ensureWallet(userId: string, s?: AgentSettings): Promise<Wallet> {
   s ??= await getSettings();
@@ -147,7 +168,12 @@ export const GRAIN_TEXT = {
   low: (left: number, link: string) =>
     `Seus grãos estão acabando: sobraram ${grains(left)}. Para eu não parar no meio, dá para comprar um pacote avulso ou subir de plano aqui: ${link}`,
   empty: (link: string) =>
-    `Seus grãos acabaram, então pausei por aqui 🙏 É só comprar um pacote avulso ou subir de plano e eu volto na hora: ${link}`,
+    `Seus grãos acabaram, então pausei por aqui 🙏 O painel continua aberto, e para eu voltar a responder aqui e no chat do app é só comprar um pacote avulso ou subir de plano: ${link}`,
+  /** nunca pagou: o período grátis (dias livres + grãos de presente) acabou */
+  freeOver: (link: string) =>
+    `Seu período grátis acabou 🙏 Você continua com o painel, e para eu voltar a te ajudar aqui e no chat do app é só assinar um plano ou comprar grãos. Leva um minutinho: ${link}`,
+  trialOver: (days: number, left: number, link: string) =>
+    `Seus ${days} ${days === 1 ? "dia" : "dias"} de uso livre acabaram 🎉 Daqui pra frente cada pedido gasta grãos, e você ainda tem ${grains(left)} de presente. Quando acabarem, dá para assinar um plano ou comprar mais aqui: ${link}`,
 };
 
 /** Fila de envio do WhatsApp + sininho do painel (o aviso não some se o número cair). */
@@ -166,9 +192,20 @@ export async function chargeUsage(userId: string, costUsd: number) {
   if (!s.billingEnabled) return null;
   const amount = grainsForCost(costUsd, s);
   if (amount <= 0) return null;
-  const user = await one("SELECT phone, billing_exempt FROM users WHERE id = $1", [userId]);
+  const user = await one("SELECT phone, billing_exempt, created_at, profile->>'trial_notice_at' AS trial_notice_at FROM users WHERE id = $1", [userId]);
   if (!user || grainsExempt(user, s)) return null;
+  // período livre: não desconta nada
+  if (trialEndsAt(user, s)) return null;
   const before = await ensureWallet(userId, s);
+  // primeiro desconto depois do período livre (de quem saiu dele nesta semana): avisa uma vez que agora gasta grãos
+  const days = Number(s.billingTrialDays ?? 0);
+  if (days > 0 && !user.trial_notice_at && new Date(user.created_at).getTime() + days * 86_400_000 > Date.now() - 7 * 86_400_000) {
+    const marked = await one(
+      "UPDATE users SET profile = profile || jsonb_build_object('trial_notice_at', now()) WHERE id = $1 AND profile->>'trial_notice_at' IS NULL RETURNING id",
+      [userId],
+    );
+    if (marked && before.total > 0) await tellPerson(userId, GRAIN_TEXT.trialOver(days, before.total, grainsLink())).catch(() => {});
+  }
   const r = await one(
     `UPDATE wallets SET plan_grains = GREATEST(plan_grains - $2, 0),
             extra_grains = GREATEST(extra_grains - GREATEST($2 - plan_grains, 0), 0), updated_at = now()
@@ -186,7 +223,7 @@ export async function chargeUsage(userId: string, costUsd: number) {
     // o aviso de zerado sai na hora; a trava do orquestrador não repete hoje
     await query("UPDATE wallets SET empty_notice_at = now() WHERE user_id = $1", [userId]);
     await query("UPDATE users SET profile = profile || jsonb_build_object('billing_notice_at', now()) WHERE id = $1", [userId]);
-    await tellPerson(userId, GRAIN_TEXT.empty(grainsLink())).catch(() => {});
+    await tellPerson(userId, (await hasPaid(userId)) ? GRAIN_TEXT.empty(grainsLink()) : GRAIN_TEXT.freeOver(grainsLink())).catch(() => {});
   } else if (left > 0 && !r.low_notice_at) {
     const line = await lowLine(userId, s);
     if (before.total > line && left <= line) {

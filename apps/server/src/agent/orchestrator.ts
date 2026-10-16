@@ -273,7 +273,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
            AND COALESCE((profile->>'billing_notice_at')::timestamptz, 'epoch') < now() - interval '24 hours' RETURNING id`,
         [user.id],
       );
-      if (notified) await channel.sendText(conversation.remote_jid, blockedMessage()).catch(() => {});
+      if (notified) await channel.sendText(conversation.remote_jid, await blockedMessage(user.id)).catch(() => {});
       await tracer.finish(notified ? "[grãos: avisado]" : "[grãos: silêncio]");
       return { executionId: tracer.executionId, bubbles: [], outbox: new Outbox() };
     }

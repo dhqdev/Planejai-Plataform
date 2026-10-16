@@ -34,6 +34,8 @@ export interface AgentSettings {
   billingPacks: BillingPack[];
   /** grãos de boas-vindas que cada pessoa ganha uma vez */
   billingWelcomeGrains: number;
+  /** dias de uso livre (sem gastar grãos) depois do cadastro; 0 = sem período livre */
+  billingTrialDays: number;
   /** quantos grãos custa US$ 1 de IA (custo real do OpenRouter) */
   billingGrainsPerUsd: number;
   /** desconto (%) na mensalidade por amigo convidado que paga um plano */
@@ -164,6 +166,7 @@ export const GUARD_LIMITS: Record<string, [number, number]> = {
   dailyCostLimitUsd: [0, 1000],
   maxMessageChars: [200, 50_000],
   billingWelcomeGrains: [0, 100_000],
+  billingTrialDays: [0, 30],
   billingGrainsPerUsd: [10, 1_000_000],
   billingReferralStep: [0, 50],
   billingReferralMax: [0, 90],
@@ -188,6 +191,7 @@ const defaults = (): AgentSettings => ({
   billingPlans: DEFAULT_PLANS,
   billingPacks: DEFAULT_PACKS,
   billingWelcomeGrains: 300,
+  billingTrialDays: 3,
   billingGrainsPerUsd: 1000,
   billingReferralStep: 5,
   billingReferralMax: 30,
