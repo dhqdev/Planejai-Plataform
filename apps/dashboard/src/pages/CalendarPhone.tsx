@@ -71,9 +71,24 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
   });
   const [center, setCenter] = useState(() => startOfDay(new Date()));
   const [visible, setVisible] = useState(() => startOfDay(new Date()));
-  const [weekFrom, setWeekFrom] = useState(() => weekStart(new Date()));
+  const [weekFrom, setWeekFromRaw] = useState(() => weekStart(new Date()));
+  // direção das transições: aba e semana entram do lado de onde vieram; Agenda/Semana/Mês trocam com um esmaecer
+  const [enter, setEnter] = useState<"fade" | "left" | "right">("fade");
+  const [weekDir, setWeekDir] = useState<"left" | "right">("right");
+  const setWeekFrom = (d: Date) => {
+    setWeekDir(d < weekFrom ? "left" : "right");
+    setWeekFromRaw(d);
+  };
+  const titleDir = useRef<"up" | "down">("up");
   const [rev, setRev] = useState(0);
   const [open, setOpen] = useState<Ev | null>(null);
+  // onde estava o compromisso tocado: a tela dele cresce dali e volta para lá ao fechar
+  const [origin, setOrigin] = useState<DOMRect | null>(null);
+  const openEv = (e: Ev, from?: Element | null) => {
+    haptic(5);
+    setOrigin(from ? from.getBoundingClientRect() : null);
+    setOpen(e);
+  };
   const [editing, setEditing] = useState<Ev | null>(null);
   const [day, setDay] = useState<Date | null>(null);
   const [creating, setCreating] = useState<Date | null>(null);
@@ -97,6 +112,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
   const pickMode = (m: Mode) => {
     haptic(5);
     setMode(m);
+    setEnter("fade");
     setTab("cal");
     try {
       localStorage.setItem("pj-cal-phone-mode", m);
@@ -167,7 +183,12 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
         const top = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
         if (!top) return;
         const [y, m] = (top.target as HTMLElement).dataset.month!.split("-").map(Number) as [number, number];
-        setVisible((v) => (v.getFullYear() === y && v.getMonth() === m ? v : new Date(y, m, 1)));
+        setVisible((v) => {
+          if (v.getFullYear() === y && v.getMonth() === m) return v;
+          // o nome do mês sobe quando a rolagem vai para frente e desce quando volta
+          titleDir.current = y * 12 + m > v.getFullYear() * 12 + v.getMonth() ? "up" : "down";
+          return new Date(y, m, 1);
+        });
       },
       { root: box, rootMargin: "0px 0px -85% 0px" },
     );
@@ -231,8 +252,8 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
       <header className="pc-head">
         <div className="pc-row">
           <div ref={tabsEl} className="pc-tabs" role="tablist" aria-label="Agenda">
-            <button role="tab" aria-selected={tab === "cal"} className={tab === "cal" ? "on" : ""} onClick={() => { haptic(5); setTab("cal"); }}>Calendário</button>
-            <button role="tab" aria-selected={tab === "rem"} className={tab === "rem" ? "on" : ""} onClick={() => { haptic(5); setTab("rem"); }}>Lembretes</button>
+            <button role="tab" aria-selected={tab === "cal"} className={tab === "cal" ? "on" : ""} onClick={() => { haptic(5); if (tab !== "cal") setEnter("left"); setTab("cal"); }}>Calendário</button>
+            <button role="tab" aria-selected={tab === "rem"} className={tab === "rem" ? "on" : ""} onClick={() => { haptic(5); if (tab !== "rem") setEnter("right"); setTab("rem"); }}>Lembretes</button>
             <i className="pc-tab-line" aria-hidden="true" />
           </div>
           <span className="spacer" />
@@ -264,7 +285,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
             </button>
           )}
           <button className="pc-title" aria-label={`${title}: escolher outro mês`} onClick={() => { haptic(5); setJump(true); }}>
-            <span key={title} className="pc-title-txt">{title}</span>
+            <span key={title} className={`pc-title-txt ${titleDir.current}`}>{title}</span>
             <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7z" fill="currentColor" /></svg>
           </button>
           {tab === "cal" && mode === "week" && (
@@ -286,7 +307,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
       <div
         key={bodyKey}
         ref={scroller}
-        className={`pc-body pc-body-${bodyKey}`}
+        className={`pc-body pc-body-${bodyKey} enter-${enter}`}
         onTouchStart={(e) => (swipe.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY })}
         onTouchEnd={(e) => {
           if (!swipe.current || mode !== "week" || tab !== "cal") return;
@@ -309,18 +330,20 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
               rev={rev}
               keep={keep}
               onMeta={meta}
-              onOpen={(e) => { haptic(5); setOpen(e); }}
+              onOpen={openEv}
               onDay={(d) => { haptic(5); setDay(d); }}
             />
           ))}
         {tab === "cal" && mode === "week" && range && (
-          <WeekView from={range.from} days={7} byDay={listByDay} onOpen={setOpen} onCreate={create} onMove={() => {}} />
+          <div key={key(weekFrom)} className={`pc-slide ${weekDir}`}>
+            <WeekView from={range.from} days={7} byDay={listByDay} onOpen={(e) => openEv(e)} onCreate={create} onMove={() => {}} />
+          </div>
         )}
         {(tab === "rem" || mode === "list") && range && (
           single.data && !listByDay.size ? (
             <p className="muted pc-empty">{tab === "rem" ? "Nenhum lembrete nos próximos 45 dias. Peça um no WhatsApp ou toque no +." : "Nada nos próximos 45 dias."}</p>
           ) : (
-            <ListView from={range.from} byDay={listByDay} onOpen={setOpen} />
+            <ListView from={range.from} byDay={listByDay} onOpen={(e) => openEv(e)} />
           )
         )}
       </div>
@@ -384,7 +407,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
           rev={rev}
           keep={keep}
           readonly={readonly}
-          onOpen={(e) => { setDay(null); setOpen(e); }}
+          onOpen={(e) => { setDay(null); openEv(e); }}
           onCreate={() => { const d = day; setDay(null); create(d); }}
           onClose={() => setDay(null)}
         />
@@ -394,6 +417,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
       {open && open.kind !== "message" && (
         <EventScreen
           ev={open}
+          origin={origin}
           readonly={readonly}
           onClose={() => setOpen(null)}
           onEdit={() => setEditing(open)}
@@ -440,7 +464,7 @@ function MonthBlock(p: {
   rev: number;
   keep: (e: Ev) => boolean;
   onMeta: (d: { readonly?: boolean; tags?: Tag[]; events: Ev[] }) => void;
-  onOpen: (e: Ev) => void;
+  onOpen: (e: Ev, from?: Element | null) => void;
   onDay: (d: Date) => void;
 }) {
   const el = useRef<HTMLElement>(null);
@@ -503,7 +527,7 @@ function MonthBlock(p: {
                     key={e.id}
                     className={`pc-chip ${e.kind} ${n > 0 ? "line" : ""}`}
                     style={{ ["--ev" as string]: evColor(e), ["--n" as string]: n }}
-                    onClick={(c) => { c.stopPropagation(); p.onOpen(e); }}
+                    onClick={(c) => { c.stopPropagation(); p.onOpen(e, c.currentTarget); }}
                   >
                     <span className="pc-chip-t">{e.title}</span>
                     {!e.allDay && n === 0 && <small>{hhmm(new Date(e.start)).replace(/^0/, "")}</small>}
@@ -572,7 +596,7 @@ function MonthJump({ current, onPick, onClose }: { current: Date; onPick: (d: Da
 const leadText = (m: number) => (m === 0 ? "na hora" : m % 1440 === 0 ? `${m / 1440} dia antes` : m % 60 === 0 ? `${m / 60}h antes` : `${m}min antes`);
 
 /** O compromisso em tela cheia, no jeito do Toki: cor dele no topo, quando, aviso, detalhes e atalhos embaixo. */
-function EventScreen({ ev, readonly, onClose, onEdit, onChanged }: { ev: Ev; readonly: boolean; onClose: () => void; onEdit: () => void; onChanged: (next?: Ev) => void }) {
+function EventScreen({ ev, origin, readonly, onClose, onEdit, onChanged }: { ev: Ev; origin: DOMRect | null; readonly: boolean; onClose: () => void; onEdit: () => void; onChanged: (next?: Ev) => void }) {
   const sheet = useRef<HTMLDivElement>(null);
   const [leaving, setLeaving] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -594,10 +618,38 @@ function EventScreen({ ev, readonly, onClose, onEdit, onChanged }: { ev: Ev; rea
   const source =
     ev.kind === "google" ? "Google Agenda" : ev.kind === "holiday" ? "Feriado no Brasil" : ev.tag ? ev.tag : ev.remindAt ? "Compromisso" : "Lembrete";
 
-  const close = () => {
-    if (leaving) return;
+  // Movimento todo por Web Animations e cancelado ao terminar: animação CSS com fill "both" prendia o transform
+  // e o puxar para baixo não mexia a folha (o "travando" que o David viu).
+  const scrim = useRef<HTMLDivElement>(null);
+  const leavingRef = useRef(false);
+  const EASE = "cubic-bezier(.32, .72, 0, 1)";
+  const clipOf = (r: DOMRect) =>
+    `inset(${r.top}px ${Math.max(0, innerWidth - r.right)}px ${Math.max(0, innerHeight - r.bottom)}px ${r.left}px round 8px)`;
+  const play = (el: Element | null, frames: Keyframe[], o: KeyframeAnimationOptions) => {
+    if (!el || reduced()) return Promise.resolve();
+    const a = el.animate(frames, o);
+    return a.finished.then(() => a.cancel(), () => {});
+  };
+  useLayoutEffect(() => {
+    const el = sheet.current;
+    // abre crescendo a partir do compromisso tocado (como no Toki); sem ele, sobe do pé da tela
+    void play(scrim.current, [{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: "ease" });
+    if (origin) void play(el, [{ clipPath: clipOf(origin), opacity: 0.6 }, { clipPath: "inset(0px 0px 0px 0px round 0px)", opacity: 1 }], { duration: 460, easing: EASE });
+    else void play(el, [{ transform: "translate3d(0, 100%, 0)" }, { transform: "none" }], { duration: 440, easing: EASE });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const close = (fromY = 0) => {
+    if (leavingRef.current) return;
+    leavingRef.current = true;
     setLeaving(true);
-    setTimeout(onClose, reduced() ? 0 : 260);
+    const el = sheet.current;
+    void play(scrim.current, [{ opacity: 1 }, { opacity: 0 }], { duration: 260, easing: "ease", fill: "forwards" });
+    const done =
+      origin && !fromY
+        ? play(el, [{ clipPath: "inset(0px 0px 0px 0px round 0px)", opacity: 1 }, { clipPath: clipOf(origin), opacity: 0 }], { duration: 320, easing: EASE, fill: "forwards" })
+        : play(el, [{ transform: `translate3d(0, ${fromY}px, 0)` }, { transform: "translate3d(0, 100%, 0)" }], { duration: fromY ? 240 : 300, easing: "cubic-bezier(.3, 0, .8, .15)", fill: "forwards" });
+    void done.then(onClose);
   };
   useEffect(() => {
     const k = (x: KeyboardEvent) => x.key === "Escape" && close();
@@ -610,30 +662,68 @@ function EventScreen({ ev, readonly, onClose, onEdit, onChanged }: { ev: Ev; rea
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // puxar para baixo fecha
-  const drag = useRef<{ y: number; dy: number } | null>(null);
-  const onDown = (x: React.TouchEvent) => {
-    const body = sheet.current?.querySelector(".pe-body");
-    if (body && body.scrollTop > 0) return;
-    drag.current = { y: x.touches[0]!.clientY, dy: 0 };
-  };
-  const onMove = (x: React.TouchEvent) => {
-    if (!drag.current || !sheet.current) return;
-    drag.current.dy = Math.max(0, x.touches[0]!.clientY - drag.current.y);
-    sheet.current.style.transition = "none";
-    sheet.current.style.transform = `translate3d(0, ${drag.current.dy}px, 0)`;
-  };
-  const onUp = () => {
-    if (!drag.current || !sheet.current) return;
-    const far = drag.current.dy > 110;
-    drag.current = null;
-    sheet.current.style.transition = "";
-    sheet.current.style.transform = "";
-    if (far) {
-      haptic(6);
-      close();
-    }
-  };
+  // puxar para baixo fecha: só quando o texto está no topo e o dedo vai para baixo (o lado fica para os atalhos).
+  // Escuta nativa com passive: false para o iPhone não rolar a página junto enquanto a folha desce.
+  useEffect(() => {
+    const el = sheet.current;
+    if (!el) return;
+    let g: { x: number; y: number; t: number; dy: number; v: number; on: boolean; off: boolean } | null = null;
+    const paint = (dy: number) => {
+      el.style.transform = dy ? `translate3d(0, ${dy}px, 0)` : "";
+      // vira cartão enquanto desce: cantos arredondam aos poucos
+      el.style.borderRadius = dy ? `${Math.min(28, dy / 4)}px ${Math.min(28, dy / 4)}px 0 0` : "";
+      if (scrim.current) scrim.current.style.opacity = String(Math.max(0, 1 - dy / (innerHeight * 0.9)));
+    };
+    const down = (x: TouchEvent) => {
+      if (leavingRef.current || (x.target as HTMLElement).closest("input, .pe-chips")) return;
+      const body = el.querySelector(".pe-body");
+      g = { x: x.touches[0]!.clientX, y: x.touches[0]!.clientY, t: performance.now(), dy: 0, v: 0, on: false, off: Boolean(body && body.scrollTop > 0) };
+    };
+    const move = (x: TouchEvent) => {
+      if (!g || g.off) return;
+      const dx = x.touches[0]!.clientX - g.x;
+      const raw = x.touches[0]!.clientY - g.y;
+      if (!g.on) {
+        if (Math.abs(raw) < 6 && Math.abs(dx) < 6) return;
+        // para cima ou de lado: deixa rolar normal
+        if (raw <= 0 || Math.abs(dx) > Math.abs(raw)) return void (g.off = true);
+        g.on = true;
+      }
+      x.preventDefault();
+      const now = performance.now();
+      const dy = Math.max(0, raw);
+      g.v = (dy - g.dy) / Math.max(1, now - g.t);
+      g.t = now;
+      g.dy = dy;
+      paint(dy);
+    };
+    const up = () => {
+      if (!g?.on) return void (g = null);
+      const { dy, v } = g;
+      g = null;
+      if (dy > 120 || (v > 0.6 && dy > 30)) {
+        haptic(6);
+        el.style.transform = "";
+        return close(dy);
+      }
+      // volta para cima com mola curta
+      el.style.transform = "";
+      el.style.borderRadius = "";
+      if (scrim.current) scrim.current.style.opacity = "";
+      void play(el, [{ transform: `translate3d(0, ${dy}px, 0)` }, { transform: "none" }], { duration: 320, easing: "cubic-bezier(.34, 1.3, .64, 1)" });
+    };
+    el.addEventListener("touchstart", down, { passive: true });
+    el.addEventListener("touchmove", move, { passive: false });
+    el.addEventListener("touchend", up);
+    el.addEventListener("touchcancel", up);
+    return () => {
+      el.removeEventListener("touchstart", down);
+      el.removeEventListener("touchmove", move);
+      el.removeEventListener("touchend", up);
+      el.removeEventListener("touchcancel", up);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const patch = async (label: string, json: Record<string, unknown>, next?: Partial<Ev>) => {
     setBusy(label);
@@ -692,10 +782,10 @@ function EventScreen({ ev, readonly, onClose, onEdit, onChanged }: { ev: Ev; rea
 
   return createPortal(
     <div className={`pe-wrap ${leaving ? "leaving" : ""}`} role="dialog" aria-modal="true" aria-label={ev.title}>
-      <div className="pe-scrim" onClick={close} />
-      <div ref={sheet} className="pe" style={{ ["--ev" as string]: evColor(ev) }} onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}>
+      <div ref={scrim} className="pe-scrim" onClick={() => close()} />
+      <div ref={sheet} className="pe" style={{ ["--ev" as string]: evColor(ev) }}>
         <div className="pe-top">
-          <button className="pc-ico" aria-label="Fechar" onClick={close}><Icon name="x" size={24} /></button>
+          <button className="pc-ico" aria-label="Fechar" onClick={() => close()}><Icon name="x" size={24} /></button>
           <span className="pe-src"><i />{source}</span>
           {canEdit ? (
             <button className="pc-ico" aria-label="Editar ou excluir" onClick={onEdit}><Icon name="more" size={24} /></button>

@@ -32,14 +32,21 @@
 .pc-search { margin: 2px 0 6px; animation: pc-drop .26s var(--pc-ease); }
 .pc-row-2 { min-height: 58px; border-top: 1px solid var(--border); }
 .pc-title { display: inline-flex; align-items: center; gap: 8px; border: none; background: none; padding: 6px 0; font: inherit; color: var(--text); cursor: pointer; min-width: 0; }
-.pc-title-txt { font-size: 26px; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: pc-title .32s var(--pc-ease); }
+.pc-title-txt { font-size: 26px; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: pc-title .36s var(--pc-ease); }
+.pc-title-txt.down { animation-name: pc-title-down; }
 .pc-today { border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; font-size: 15px; font-weight: 500; height: 40px; padding: 0 18px; border-radius: 99px; cursor: pointer; transition: transform .2s var(--pc-ease), background .15s; }
 .pc-today:active { transform: scale(.95); background: var(--panel-2); }
 .pc-wd { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 4px 0 8px; border-bottom: 1px solid var(--border); margin: 0 calc(-1 * max(16px, env(safe-area-inset-right))) 0 calc(-1 * max(16px, env(safe-area-inset-left))); }
 .pc-wd span { text-align: center; font-size: 13px; font-weight: 600; color: var(--muted); }
 
 /* ---------- corpo ---------- */
-.pc-body { position: relative; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-bottom: var(--pc-tab); animation: pc-fade .28s var(--pc-ease); overscroll-behavior: contain; }
+.pc-body { position: relative; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-bottom: var(--pc-tab); overscroll-behavior: contain; }
+/* troca de aba entra do lado dela; troca de Agenda/Semana/Mês esmaece e cresce um tico */
+.pc-body.enter-fade { animation: pc-swap .34s var(--pc-ease); }
+.pc-body.enter-right { animation: pc-from-right .42s var(--pc-ease); }
+.pc-body.enter-left { animation: pc-from-left .42s var(--pc-ease); }
+.pc-slide.right { animation: pc-from-right .38s var(--pc-ease); }
+.pc-slide.left { animation: pc-from-left .38s var(--pc-ease); }
 .pc-body-week, .pc-body-list, .pc-body-rem { padding: 10px max(12px, env(safe-area-inset-right)) var(--pc-tab) max(12px, env(safe-area-inset-left)); }
 .pc-empty { padding: 32px 20px; text-align: center; }
 
@@ -103,19 +110,17 @@
 
 /* ---------- compromisso em tela cheia ---------- */
 .pe-wrap { position: fixed; inset: 0; z-index: 48; }
-.pe-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .28); animation: pc-fade .3s ease both; }
+.pe-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .28); }
 .pe {
   position: absolute; inset: 0; display: flex; flex-direction: column; color: var(--text);
   background:
     radial-gradient(120% 55% at 10% 0%, color-mix(in srgb, var(--ev) 30%, transparent), transparent 70%),
     linear-gradient(to bottom, color-mix(in srgb, var(--ev) 14%, var(--panel)) 0%, var(--bg) 46%);
   background-color: var(--bg);
-  animation: pe-up .46s var(--pc-ease) both;
-  transition: transform .34s var(--pc-ease);
+  /* abrir, fechar e puxar para baixo são feitos no componente (Web Animations), nada de animação CSS aqui */
   will-change: transform;
 }
-.pe-wrap.leaving .pe { animation: pe-down .26s cubic-bezier(.4, 0, 1, 1) both; }
-.pe-wrap.leaving .pe-scrim { animation: pc-fade-out .26s ease both; }
+.pe-wrap.leaving { pointer-events: none; }
 .pe-top { flex: none; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; padding: calc(8px + env(safe-area-inset-top)) 14px 8px; }
 .pe-src { justify-self: center; display: inline-flex; align-items: center; gap: 8px; max-width: 100%; font-size: 15.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pe-src i { width: 22px; height: 16px; border-radius: 5px; background: var(--ev); flex: none; }
@@ -156,7 +161,11 @@
 /* ---------- movimento ---------- */
 @keyframes pc-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pc-fade-out { from { opacity: 1; } to { opacity: 0; } }
-@keyframes pc-title { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pc-title { from { opacity: 0; transform: translateY(10px); filter: blur(2px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes pc-title-down { from { opacity: 0; transform: translateY(-10px); filter: blur(2px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes pc-swap { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes pc-from-right { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes pc-from-left { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
 @keyframes pc-drop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 @keyframes pc-chip { from { opacity: 0; transform: translateY(4px) scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes pe-up { from { transform: translate3d(0, 100%, 0); } to { transform: none; } }
