@@ -48,11 +48,18 @@ export async function whatsappReady() {
   return Boolean(s);
 }
 
+/**
+ * Texto que acompanha um código. O código vai sozinho na mensagem seguinte (campo copy do envio),
+ * porque no WhatsApp tocar e segurar copia a mensagem inteira.
+ */
+export const codeText = (para: string, minutes: number, notYou: string) =>
+  `🔐 *Seu código para ${para}*\n\nEle chega na próxima mensagem: toque e segure para copiar.\nVale por ${minutes} minutos.\n\n_Não foi você? ${notYou[0]!.toUpperCase()}${notYou.slice(1)}_`;
+
 const mask = (p: string) => `+${p.slice(0, 2)} •••• ${p.slice(-4)}`;
 
 export type Challenge = { needs_code: true; challenge: string; to: string } | { needs_code: false; reason: string };
 
-export async function startChallenge(account: Account, sendCode: (phone: string, text: string) => Promise<unknown>): Promise<Challenge> {
+export async function startChallenge(account: Account, sendCode: (phone: string, text: string, code: string) => Promise<unknown>): Promise<Challenge> {
   if (!config.LOGIN_CODE) return { needs_code: false, reason: "desligado" };
   const phone = await phoneFor(account);
   if (!phone) return { needs_code: false, reason: "sem número" };
@@ -66,7 +73,7 @@ export async function startChallenge(account: Account, sendCode: (phone: string,
     [account.id],
   );
   await query("UPDATE login_codes SET code_hash = $2 WHERE id = $1", [row!.id, codeHash(row!.id, code)]);
-  await sendCode(phone, `Seu código de acesso ao painel do Planejai: ${code}\n\nVale por ${CODE_TTL_MIN} minutos. Se não foi você, ignore e troque sua senha.`);
+  await sendCode(phone, codeText("acessar o painel do Planejai", CODE_TTL_MIN, "ignore esta mensagem e troque sua senha."), code);
   return { needs_code: true, challenge: row!.id, to: mask(phone) };
 }
 
@@ -93,14 +100,14 @@ export async function verifyChallenge(challenge: string, code: string): Promise<
  */
 const signupKey = (phone: string, email: string) => `signup:${sha(`${phone}|${email}`)}`;
 
-export async function startSignupChallenge(phone: string, email: string, sendCode: (phone: string, text: string) => Promise<unknown>) {
+export async function startSignupChallenge(phone: string, email: string, sendCode: (phone: string, text: string, code: string) => Promise<unknown>) {
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
   const row = await one<{ id: string }>(
     `INSERT INTO login_codes (account_id, code_hash, expires_at, purpose) VALUES ($1, 'x', now() + interval '${CODE_TTL_MIN} minutes', 'signup') RETURNING id`,
     [signupKey(phone, email)],
   );
   await query("UPDATE login_codes SET code_hash = $2 WHERE id = $1", [row!.id, codeHash(row!.id, code)]);
-  await sendCode(phone, `Seu código para criar a conta no Planejai: ${code}\n\nVale por ${CODE_TTL_MIN} minutos. Se não foi você que pediu, pode ignorar.`);
+  await sendCode(phone, codeText("criar sua conta no Planejai", CODE_TTL_MIN, "é só ignorar."), code);
   return { challenge: row!.id, to: mask(phone) };
 }
 
@@ -141,7 +148,7 @@ export async function startReset(
     [account.id],
   );
   await query("UPDATE login_codes SET code_hash = $2 WHERE id = $1", [row!.id, codeHash(row!.id, code)]);
-  const text = `Seu código para criar uma senha nova no Planejai: ${code}\n\nVale por ${RESET_TTL_MIN} minutos. Se não foi você que pediu, pode ignorar: sua senha continua a mesma.`;
+  const text = codeText("criar uma senha nova no Planejai", RESET_TTL_MIN, "é só ignorar: sua senha continua a mesma.");
   await deliver({ phone, code, text, accountId: account.id, userId: account.userId ?? null, name: account.name ?? "" });
   return { challenge: row!.id };
 }

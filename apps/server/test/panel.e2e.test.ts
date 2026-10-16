@@ -52,7 +52,7 @@ describe.skipIf(!enabled)("painel: notificações, documentos e login (e2e)", ()
     void verifyChallenge;
     const row = await db.one("SELECT id FROM accounts WHERE email = $1", [email]);
     let code = "";
-    const ch: any = await startChallenge((await loadAccount(row.id))!, async (_p, text) => (code = text.match(/\d{6}/)![0]));
+    const ch: any = await startChallenge((await loadAccount(row.id))!, async (_p, _text, c) => (code = c));
     const r = await app.inject({ method: "POST", url: "/api/auth/login/verify", payload: { challenge: ch.challenge, code } });
     expect(r.statusCode).toBe(200);
     return { session: cookieOf(r), device: cookieOf(r, "pj_dev") };
@@ -77,7 +77,7 @@ describe.skipIf(!enabled)("painel: notificações, documentos e login (e2e)", ()
     // sem n8n configurado, o código vai pela nossa fila para o WhatsApp da conta
     const job = await db.one("SELECT data FROM pgboss.job WHERE name = 'outbound.send' ORDER BY created_on DESC LIMIT 1");
     expect(job.data).toMatchObject({ type: "send", phone: "5519911110003" });
-    const code = job.data.text.match(/\d{6}/)[0];
+    const code = job.data.copy;
     // o código de senha não serve para o login de navegador novo
     expect((await app.inject({ method: "POST", url: "/api/auth/login/verify", payload: { challenge: r.json().challenge, code } })).statusCode).toBe(401);
     expect((await app.inject({ method: "POST", url: "/api/auth/reset", payload: { challenge: r.json().challenge, code, password: "curta" } })).statusCode).toBe(400);
@@ -102,12 +102,12 @@ describe.skipIf(!enabled)("painel: notificações, documentos e login (e2e)", ()
     // o código foi para a fila de saída, para o número da conta
     const job = await db.one("SELECT data FROM pgboss.job WHERE name = 'outbound.send' ORDER BY created_on DESC LIMIT 1");
     expect(job.data).toMatchObject({ type: "send", phone: "5519911110001", channel: "whatsapp" });
-    expect(job.data.text).toMatch(/\d{6}/);
+    expect(job.data.copy).toMatch(/^\d{6}$/);
 
     for (let i = 0; i < 5; i++)
       expect((await app.inject({ method: "POST", url: "/api/auth/login/verify", payload: { challenge: body.challenge, code: "000000" } })).statusCode).toBe(401);
     // 5 erros: nem o código certo vale mais
-    const real = job.data.text.match(/\d{6}/)[0];
+    const real = job.data.copy;
     const locked = await app.inject({ method: "POST", url: "/api/auth/login/verify", payload: { challenge: body.challenge, code: real } });
     expect(locked.statusCode).toBe(401);
 
@@ -133,7 +133,7 @@ describe.skipIf(!enabled)("painel: notificações, documentos e login (e2e)", ()
     expect(await db.one("SELECT 1 AS ok FROM accounts WHERE email = 'caio@x.com'")).toBeUndefined();
     const job = await db.one("SELECT data FROM pgboss.job WHERE name = 'outbound.send' ORDER BY created_on DESC LIMIT 1");
     expect(job.data).toMatchObject({ phone: "5519911110009", channel: "whatsapp" });
-    const real = job.data.text.match(/\d{6}/)[0];
+    const real = job.data.copy;
     const { challenge } = first.json();
     // código errado não cria; o código não serve para outro e-mail
     expect((await app.inject({ method: "POST", url: "/api/auth/register", payload: { ...form, challenge, verify_code: "000000" } })).statusCode).toBe(401);
@@ -152,7 +152,7 @@ describe.skipIf(!enabled)("painel: notificações, documentos e login (e2e)", ()
     const { loadAccount } = await import("../src/accounts.js");
     const row = await db.one("SELECT id FROM accounts WHERE email = 'bia@x.com'");
     let code = "";
-    const ch: any = await startChallenge((await loadAccount(row.id))!, async (_p, t) => (code = t.match(/\d{6}/)![0]));
+    const ch: any = await startChallenge((await loadAccount(row.id))!, async (_p, _t, c) => (code = c));
     expect(await verifyChallenge(ch.challenge, code)).toMatchObject({ ok: true });
     expect(await verifyChallenge(ch.challenge, code)).toMatchObject({ ok: false });
     // daqui em diante: WhatsApp embutido (Baileys) e desconectado

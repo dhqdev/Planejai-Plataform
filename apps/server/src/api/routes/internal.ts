@@ -49,6 +49,8 @@ export interface OutboundJob {
   phone?: string | null;
   channel?: "whatsapp" | "telegram" | "auto";
   text?: string;
+  /** mensagem à parte, logo depois do texto, só com o que a pessoa vai copiar (código, senha): no WhatsApp copia a mensagem inteira */
+  copy?: string;
   media?: { kind?: "image" | "video" | "document"; url?: string; base64?: string; mimetype?: string; caption?: string; fileName?: string };
   instruction?: string;
 }
@@ -153,6 +155,7 @@ export async function registerInternalRoutes(app: FastifyInstance) {
         kind?: "image" | "video" | "document";
         caption?: string;
         file_name?: string;
+        copy?: string;
       };
     }>("/api/internal/send", async (req, reply) => {
       const b = req.body ?? {};
@@ -180,6 +183,7 @@ export async function registerInternalRoutes(app: FastifyInstance) {
         phone: u ? u.phone : normalizePhone(b.phone!),
         channel: b.channel ?? "auto",
         text: b.text,
+        copy: b.copy ? String(b.copy).trim().slice(0, 200) || undefined : undefined,
         media: b.media_url || base64 ? { kind, url: b.media_url, base64, mimetype: b.mimetype, caption: b.caption, fileName: b.file_name } : undefined,
       };
       const id = await (await getBoss()).send(QUEUES.outbound, job, { retryLimit: 2, retryDelay: 20 });
@@ -285,6 +289,7 @@ export async function runOutboundJob(job: OutboundJob) {
     to = await jidFor(job.phone!, channel);
   }
   if (job.text) await channel.sendText(to, job.text);
+  if (job.copy) await channel.sendText(to, job.copy);
   if (job.media) await channel.sendImage(to, job.media);
   // o assistente fica sabendo do que foi mandado em nome dele
   if (convId) await pushShort(convId, [{ id: Date.now(), role: "assistant", text: `${job.text ?? ""}${job.media ? `\n[${job.media.kind === "document" ? "arquivo" : "mídia"} enviada por automação]` : ""}`.trim(), ts: Date.now() }]);

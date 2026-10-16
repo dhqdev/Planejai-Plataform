@@ -129,8 +129,8 @@ export async function buildServer() {
   // Senha certa: navegador conhecido entra direto; navegador novo recebe um código no WhatsApp
   async function finishLogin(req: FastifyRequest, reply: FastifyReply, account: Account) {
     if (!(await isTrustedDevice(account.id, req.cookies[DEVICE_COOKIE]))) {
-      const ch = await startChallenge(account, (phone, text) =>
-        getBoss().then((b) => b.send(QUEUES.outbound, { type: "send", userId: null, phone, channel: "whatsapp", text }, { retryLimit: 1 })),
+      const ch = await startChallenge(account, (phone, text, code) =>
+        getBoss().then((b) => b.send(QUEUES.outbound, { type: "send", userId: null, phone, channel: "whatsapp", text, copy: code }, { retryLimit: 1 })),
       );
       if (ch.needs_code) return { needs_code: true, challenge: ch.challenge, to: ch.to };
     }
@@ -166,8 +166,9 @@ export async function buildServer() {
     if ((await hit(`forgot:mail:${email}`, 3600)) > 3) return tooMany(reply);
     const row = await one("SELECT * FROM accounts WHERE email = $1", [email]);
     const r = await startReset(row ? toAccount(row) : null, async (d) => {
-      const sent = await emitEvent("password.reset_requested", { user_id: d.userId, account_id: d.accountId, phone: d.phone, name: d.name, code: d.code, text: d.text, minutes: 15 });
-      if (!sent) await (await getBoss()).send(QUEUES.outbound, { type: "send", userId: null, phone: d.phone, channel: "whatsapp", text: d.text }, { retryLimit: 1 });
+      // intro + code = texto e código em mensagens separadas (o fluxo do n8n manda o código no campo copy); text traz tudo junto
+      const sent = await emitEvent("password.reset_requested", { user_id: d.userId, account_id: d.accountId, phone: d.phone, name: d.name, code: d.code, intro: d.text, text: `${d.text.split("\n\n")[0]}\n\n${d.code}\n\nVale por 15 minutos.`, minutes: 15 });
+      if (!sent) await (await getBoss()).send(QUEUES.outbound, { type: "send", userId: null, phone: d.phone, channel: "whatsapp", text: d.text, copy: d.code }, { retryLimit: 1 });
     });
     return { challenge: r.challenge };
   });
@@ -246,8 +247,8 @@ export async function buildServer() {
       if (!req.body?.challenge) {
         if ((await hit(`register:phone:${phone}`, 3600)) > 5) return tooMany(reply);
         if (!(await whatsappReady())) return reply.code(503).send({ error: "Não consegui mandar o código no WhatsApp agora. Tente de novo em alguns minutos." });
-        const ch = await startSignupChallenge(phone, email, (to, text) =>
-          getBoss().then((b) => b.send(QUEUES.outbound, { type: "send", userId: null, phone: to, channel: "whatsapp", text }, { retryLimit: 1 })),
+        const ch = await startSignupChallenge(phone, email, (to, text, code) =>
+          getBoss().then((b) => b.send(QUEUES.outbound, { type: "send", userId: null, phone: to, channel: "whatsapp", text, copy: code }, { retryLimit: 1 })),
         );
         return { needs_code: true, challenge: ch.challenge, to: ch.to };
       }

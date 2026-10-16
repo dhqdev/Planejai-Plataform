@@ -45,7 +45,7 @@ export const contactOwner = defineTool<{ topic: (typeof TOPICS)[number]; message
     if ((today?.n ?? 0) >= PER_DAY) return { ok: false, error: "A pessoa já mandou 3 recados hoje; o responsável responde assim que puder." };
     const row = await one<{ id: string }>("INSERT INTO support_requests (user_id, topic, message) VALUES ($1, $2, $3) RETURNING id", [ctx.user.id, topic, message]);
     const who = (ctx.user as { full_name?: string | null }).full_name ?? ctx.user.name ?? "Cliente";
-    const ownerText = `${TOPIC_LABEL[topic]} de ${who} (+${ctx.user.phone}):\n\n${message}\n\nResponda direto no WhatsApp dessa pessoa.`;
+    const ownerText = `📩 *${TOPIC_LABEL[topic]} de ${who}*\n+${ctx.user.phone}\n\n${message}\n\n_Responda direto no WhatsApp dessa pessoa._`;
     await notify({ userId: null, kind: "suporte", title: `${TOPIC_LABEL[topic]} de ${who}`, body: message, link: "/clients" });
     const sent = await emitEvent("support.requested", { user_id: ctx.user.id, request_id: row!.id, topic, message, name: who, phone: ctx.user.phone, owner_text: ownerText });
     const ownerPhone = config.OWNER_PHONES[0];
