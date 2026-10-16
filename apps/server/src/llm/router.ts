@@ -140,11 +140,18 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
   {
     task: "blog",
     label: "Blog (post da semana)",
-    why: "Escreve sozinho o post semanal do blog público (/blog): texto longo e organizado em seções, uma vez por semana. As ilustrações saem da rota Imagens.",
+    why: "Escreve sozinho o post semanal do blog público (/blog): texto longo e organizado em seções, uma vez por semana. Também o post de novidades quando o sistema muda. As ilustrações saem da rota Blog (ilustrações).",
     model: "deepseek/deepseek-v4.1-flash",
     fallbacks: ["google/gemini-3.8-flash"],
     temperature: 0.7,
     maxTokens: 9000,
+  },
+  {
+    task: "blog:image",
+    label: "Blog (ilustrações)",
+    why: "Capa e ilustração do meio de cada post do blog, no nível de revista: Gemini 3 Pro Image (~US$ 0,14 por imagem, ~US$ 0,28 por post). Só o blog usa; o cliente continua na rota Imagens, barata.",
+    model: "google/gemini-3-pro-image-preview",
+    fallbacks: ["google/gemini-2.5-flash-image"],
   },
   {
     task: "image",

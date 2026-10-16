@@ -14,6 +14,8 @@ COPY . .
 # versão do push (CI) também no painel; vazio = a do package.json
 ARG APP_VERSION=""
 RUN APP_VERSION=$APP_VERSION npm run build
+# mudanças publicadas para o post de novidades do blog (o CI grava; build local fica sem)
+RUN test -f apps/server/novidades.json || echo '[]' > apps/server/novidades.json
 
 FROM --platform=$BUILDPLATFORM node:22-alpine AS prod-deps
 WORKDIR /app
@@ -36,6 +38,7 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 COPY apps/server/package.json ./apps/server/package.json
 COPY --from=build /app/apps/server/dist ./apps/server/dist
 COPY --from=build /app/apps/server/public ./apps/server/public
+COPY --from=build /app/apps/server/novidades.json ./apps/server/novidades.json
 USER node
 EXPOSE 3000
 # api: /health responde; worker: processo vivo e conexão do WhatsApp sem travar (ver src/healthcheck.ts)

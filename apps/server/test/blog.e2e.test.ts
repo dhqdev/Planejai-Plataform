@@ -5,7 +5,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 /**
  * Blog público: posts de partida entram uma vez, ilustrações saem da rota "image", o redator semanal é conferido
- * (JSON ruim volta uma vez), a lista e o post abrem sem login, post escondido some e só o super admin mexe.
+ * (JSON ruim volta uma vez), a lista e o post abrem sem login, post escondido some e só o super admin mexe. O post de novidades sai das
+ * mudanças do sistema (novidades.json) e o estilo novo das ilustrações refaz todas.
  */
 process.env.OPENROUTER_API_KEY ||= "sk-test";
 const enabled = Boolean(process.env.TEST_DATABASE_URL);
@@ -13,10 +14,12 @@ const enabled = Boolean(process.env.TEST_DATABASE_URL);
 const png = Buffer.concat([Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"), Buffer.alloc(4000, 7)]).toString("base64");
 const writer: string[] = [];
 const calls: any[] = [];
+const choices: any[] = [];
 vi.mock("../src/llm/openrouter.js", async (orig) => ({
   ...(await orig<typeof import("../src/llm/openrouter.js")>()),
-  chatCompletion: vi.fn(async (_choice: any, req: any) => {
+  chatCompletion: vi.fn(async (choice: any, req: any) => {
     calls.push(req);
+    choices.push(choice);
     if (req.modalities) return { message: { content: "", images: [`data:image/png;base64,${png}`] }, model: "fake/image", tokensIn: 10, tokensOut: 1290, costUsd: 0.039 };
     return { message: { content: writer.shift() ?? "{}" }, model: "fake/blog", tokensIn: 900, tokensOut: 2500, costUsd: 0.002 };
   }),
@@ -50,6 +53,16 @@ describe("blog: conferência do redator", () => {
     for (const p of SEED_POSTS) expect(typeof cleanDraft(p), p.slug).toBe("object");
     expect(new Set(SEED_POSTS.map((p) => p.slug)).size).toBe(SEED_POSTS.length);
   });
+
+  it("novidades.json: lê a lista do CI e ignora arquivo ausente ou torto", async () => {
+    const { readNovidades } = await import("../src/blog.js");
+    const dir = mkdtempSync(join(tmpdir(), "pj-nov-"));
+    writeFileSync(join(dir, "a.json"), JSON.stringify([{ sha: "a1", date: "2026-10-15T10:00:00Z", subject: "Coisa nova" }, { sha: 3 }]));
+    writeFileSync(join(dir, "b.json"), "{nao e json");
+    expect(readNovidades(join(dir, "a.json"))).toEqual([{ sha: "a1", date: "2026-10-15T10:00:00Z", subject: "Coisa nova" }]);
+    expect(readNovidades(join(dir, "b.json"))).toEqual([]);
+    expect(readNovidades(join(dir, "nao-existe.json"))).toEqual([]);
+  });
 });
 
 describe.skipIf(!enabled)("blog (e2e)", () => {
@@ -79,9 +92,12 @@ describe.skipIf(!enabled)("blog (e2e)", () => {
     const posts = await db.many<{ slug: string; source: string }>("SELECT slug, source FROM blog_posts");
     expect(posts.length).toBe(4);
     expect((await db.one<{ n: number }>("SELECT count(*)::int AS n FROM blog_images"))!.n).toBe(4);
-    const img = calls.find((c) => c.modalities);
+    const at = calls.findIndex((c) => c.modalities);
+    const img = calls[at];
     expect(img.imageConfig).toEqual({ aspect_ratio: "16:9" });
     expect(img.messages[0].content).toContain("gouache");
+    expect(choices[at].model).toBe("google/gemini-3-pro-image-preview"); // rota só do blog, não a barata do cliente
+    expect((await blog.blogSettings()).styleVersion).toBe(blog.IMAGE_STYLE_VERSION);
     // apagar tudo não traz os de partida de volta
     await db.query("DELETE FROM blog_posts WHERE source = 'seed' AND slug = $1", [posts[0]!.slug]);
     await blog.runBlogJob(log, { action: "tick" });
@@ -151,6 +167,57 @@ describe.skipIf(!enabled)("blog (e2e)", () => {
     expect(await blog.weeklyDue(now)).toBe(false);
     await blog.saveBlogSettings({ auto: false, weekday: local.getUTCDay() });
     expect(await blog.weeklyDue(now)).toBe(false);
+  });
+
+  it("post de novidades: só com 3 mudanças novas, conta o que o cliente vê e marca como lidas", async () => {
+    const now = new Date();
+    const day = (n: number) => new Date(now.getTime() - n * 86_400_000).toISOString();
+    const list = [
+      { sha: "c5", date: day(0), subject: "Recados mais leve no celular" },
+      { sha: "c4", date: day(1), subject: "Esteira só do dono" },
+      { sha: "c3", date: day(2), subject: "Lembrete da fatura às 9h" },
+      { sha: "c2", date: day(3), subject: "Testes do CI" },
+      { sha: "c1", date: day(30), subject: "Coisa velha" },
+    ];
+    await blog.saveBlogSettings({ updates: false });
+    expect(await blog.updatesDue(list, now)).toBeNull();
+    await blog.saveBlogSettings({ updates: true });
+    // primeira vez: só os últimos 10 dias
+    expect((await blog.updatesDue(list, now))!.map((c) => c.sha)).toEqual(["c5", "c4", "c3", "c2"]);
+
+    calls.length = 0;
+    writer.push('{"skip":true,"reason":"nada para o cliente"}');
+    expect(await blog.writeUpdatesPost(list.slice(0, 4), log)).toBeNull();
+    expect((await blog.blogSettings()).updatesSha).toBe("c5");
+    expect(await blog.updatesDue(list, now)).toBeNull(); // nada novo depois de c5
+
+    const more = [{ sha: "c8", date: day(0), subject: "Contatos pelo .vcf" }, { sha: "c7", date: day(0), subject: "x" }, { sha: "c6", date: day(0), subject: "y" }, ...list];
+    expect((await blog.updatesDue(more, now))!.map((c) => c.sha)).toEqual(["c8", "c7", "c6"]);
+    calls.length = 0;
+    writer.push(JSON.stringify({ ...JSON.parse(good("Novidades da semana: contatos e recados mais leves")), category: "Comparações" }));
+    const post = await blog.writeUpdatesPost(more.slice(0, 3), log);
+    const row = await db.one<{ category: string }>("SELECT category FROM blog_posts WHERE id = $1", [post!.id]);
+    expect(row!.category).toBe(blog.UPDATES_CATEGORY);
+    const ask = calls.find((c) => !c.modalities);
+    expect(ask.messages[0].content).toContain("só do dono");
+    expect(ask.messages[1].content).toContain("Contatos pelo .vcf");
+    expect((await blog.blogSettings()).updatesSha).toBe("c8");
+    // saiu um post de novidades agora: o próximo espera 3 dias, mesmo com mudanças novas
+    const next = [{ sha: "d3", date: day(0), subject: "a" }, { sha: "d2", date: day(0), subject: "b" }, { sha: "d1", date: day(0), subject: "c" }, ...more];
+    expect(await blog.updatesDue(next, now)).toBeNull();
+    // o post da semana não conta o de novidades
+    const list2 = (await app.inject({ method: "GET", url: `/api/blog/posts?category=${encodeURIComponent(blog.UPDATES_CATEGORY)}` })).json();
+    expect(list2.posts.length).toBe(1);
+  });
+
+  it("estilo novo das ilustrações: os de partida pegam as cenas novas e tudo é refeito", async () => {
+    await db.query("UPDATE blog_posts SET cover_prompt = 'velho' WHERE source = 'seed'");
+    expect(await blog.restyleImages()).toBe(false);
+    await blog.saveBlogSettings({ styleVersion: 1 });
+    expect(await blog.restyleImages()).toBe(true);
+    expect((await db.one<{ n: number }>("SELECT count(*)::int AS n FROM blog_images"))!.n).toBe(0);
+    expect((await db.one<{ n: number }>("SELECT count(*)::int AS n FROM blog_posts WHERE cover_prompt = 'velho'"))!.n).toBe(0);
+    expect(await blog.fillMissingImages(2)).toBe(2);
   });
 
   it("painel: só super admin; esconder tira do blog público", async () => {

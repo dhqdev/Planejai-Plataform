@@ -124,6 +124,15 @@ jobs:
           echo "minor=${v%.*}" >> "$GITHUB_OUTPUT"
           echo "Versão: $v"
 
+      # Mudanças publicadas (assunto de cada commit), lidas pelo blog para o post de novidades (blog.ts, updatesDue)
+      - name: Novidades para o blog
+        run: |
+          git log -150 --no-merges --format='%H%x09%cI%x09%s' | node -e '
+            const lines = require("fs").readFileSync(0, "utf8").split("\n").filter(Boolean);
+            const list = lines.map((l) => { const [sha, date, ...s] = l.split("\t"); return { sha, date, subject: s.join("\t") }; });
+            require("fs").writeFileSync("apps/server/novidades.json", JSON.stringify(list));
+            console.log(list.length + " mudanças");'
+
       - name: Nome da imagem em minúsculas
         run: echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
 

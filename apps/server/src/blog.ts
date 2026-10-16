@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Tracer } from "./agent/trace.js";
 import { htmlToPng } from "./charts.js";
 import { config } from "./config.js";
@@ -10,19 +13,31 @@ import { tzOffsetMs } from "./time.js";
 
 /**
  * Blog público (/blog), no jeito de revista: posts longos com ilustração no topo e outra no meio do texto.
- * Toda semana o worker escreve um post novo sozinho (rota "blog" em Modelos) e gera as ilustrações (rota "Imagens").
+ * Toda semana o worker escreve um post novo sozinho (rota "blog" em Modelos) e gera as ilustrações (rota "blog:image").
+ * Além do semanal, sai um post "Novidades do Planejai" quando o sistema ganha mudanças que o cliente vê (novidades.json, feito pelo CI).
  * Nada aqui fala com cliente nem mexe em dado de ninguém: é conteúdo público da plataforma, o custo não sai de grãos.
  */
 
-export const BLOG_CATEGORIES = ["Dicas de produtividade", "Dinheiro e finanças", "Comparações", "Inteligência artificial"] as const;
+export const UPDATES_CATEGORY = "Novidades do Planejai";
+export const BLOG_CATEGORIES = ["Dicas de produtividade", "Dinheiro e finanças", "Comparações", "Inteligência artificial", UPDATES_CATEGORY] as const;
+/** categorias do post semanal (novidades só sai das mudanças do sistema) */
+const TOPIC_CATEGORIES = BLOG_CATEGORIES.filter((c) => c !== UPDATES_CATEGORY);
 export const BLOG_AUTHOR = "Equipe Planejai";
 
-/** Estilo único das ilustrações (pintura guache, cores vivas, fundo pastel): todas as capas parecem da mesma revista. */
+/**
+ * Estilo único das ilustrações (guache com textura, cena cheia de ponta a ponta): todas as capas parecem da mesma revista.
+ * Testado com google/gemini-3-pro-image-preview em out/2026 (~US$ 0,14 por imagem). Mudou o estilo? Suba IMAGE_STYLE_VERSION
+ * e as ilustrações de todos os posts são refeitas aos poucos pelo worker.
+ */
 export const IMAGE_STYLE =
-  "Editorial illustration for a lifestyle magazine, hand-painted gouache look with visible brush texture and soft paper grain, " +
-  "bold simple shapes, vibrant saturated palette (coral red, bubblegum pink, cobalt blue, sunflower yellow, leaf green, cream) " +
-  "over a solid pastel background, warm and playful, clean composition with breathing room, rich detail on the objects. " +
-  "Absolutely no text, no letters, no numbers, no logos, no brand names, no watermark, no realistic human faces. Scene: ";
+  "Richly detailed contemporary editorial illustration for a premium lifestyle blog. Hand-painted gouache look with dry-brush texture, " +
+  "fine grain and subtle colored-pencil hatching; flat shapes with soft painterly shading and a slight risograph speckle. " +
+  "Bold, saturated but harmonious palette: coral and tomato red, bubblegum pink, lavender and periwinkle, cobalt blue, sunflower yellow, " +
+  "sage and leaf green, warm cream paper tones. Dense, layered composition that fills the whole frame edge to edge, objects overlapping " +
+  "with depth and some cropped by the borders, playful dynamic angles, small hand-drawn motion dashes and sparkles around key objects. " +
+  "Any screens, calendars, cards or chat bubbles show only abstract colored bars and blocks, never readable words. " +
+  "No text, letters, numbers, logos or brand names anywhere, no realistic human faces, no watermark. Scene: ";
+export const IMAGE_STYLE_VERSION = 2;
 
 export interface BlogSettings {
   /** escreve um post novo toda semana */
@@ -30,11 +45,19 @@ export interface BlogSettings {
   /** dia da semana (0 = domingo) e hora local do post semanal */
   weekday: number;
   hour: number;
+  /** post de novidades quando o sistema ganha mudanças que o cliente vê */
+  updates: boolean;
   /** os posts de partida já entraram uma vez (apagar todos não traz de volta) */
   seeded?: boolean;
+  /** versão do estilo com que as ilustrações foram feitas (menor que IMAGE_STYLE_VERSION = refazer) */
+  styleVersion?: number;
+  /** último commit já lido para o post de novidades */
+  updatesSha?: string;
+  /** última tentativa de post de novidades que falhou (espera um dia para tentar de novo) */
+  updatesFailedAt?: string;
 }
 
-const DEFAULTS: BlogSettings = { auto: true, weekday: 1, hour: 9 };
+const DEFAULTS: BlogSettings = { auto: true, weekday: 1, hour: 9, updates: true };
 
 export async function blogSettings(): Promise<BlogSettings> {
   const row = await one<{ value: Partial<BlogSettings> }>("SELECT value FROM settings WHERE key = 'blog'");
@@ -47,7 +70,11 @@ export async function saveBlogSettings(patch: Partial<BlogSettings>) {
     auto: patch.auto === undefined ? cur.auto : Boolean(patch.auto),
     weekday: patch.weekday === undefined ? cur.weekday : Math.min(6, Math.max(0, Math.trunc(Number(patch.weekday)) || 0)),
     hour: patch.hour === undefined ? cur.hour : Math.min(23, Math.max(0, Math.trunc(Number(patch.hour)) || 0)),
+    updates: patch.updates === undefined ? cur.updates : Boolean(patch.updates),
     seeded: patch.seeded ?? cur.seeded,
+    styleVersion: patch.styleVersion ?? cur.styleVersion,
+    updatesSha: patch.updatesSha ?? cur.updatesSha,
+    updatesFailedAt: patch.updatesFailedAt === undefined ? cur.updatesFailedAt : patch.updatesFailedAt || undefined,
   };
   await query(
     "INSERT INTO settings (key, value) VALUES ('blog', $1) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = now()",
@@ -186,34 +213,62 @@ const WRITER_SYSTEM =
   "parágrafos curtos; pelo menos uma lista com '- ' ou '1. ' (item pode começar com **negrito**); uma tabela simples com '|' quando ajudar a comparar; " +
   "uma dica destacada numa linha começando com '> **Dica:** '; a linha [[imagem]] sozinha entre a segunda e a terceira seção; termine com '## Perguntas frequentes' " +
   "com 3 a 5 perguntas em '### ' e a resposta curta embaixo. Sem título '# ' no body, sem links. De 1000 a 1500 palavras.\n" +
-  "cover_prompt e inline_prompt em inglês: descreva só a cena da ilustração (objetos do dia a dia ligados ao tema, arrumados como natureza-morta vista de cima " +
-  "ou uma cena aberta e lúdica, com a cor de fundo pastel), sem pessoas com rosto, sem texto, sem logos e sem marcas.\n" +
+  "cover_prompt e inline_prompt em inglês, 50 a 90 palavras cada: descreva só a cena da ilustração, rica e cheia, como capa de revista. Escolha um de dois jeitos: " +
+  "(a) natureza-morta vista de cima sobre um fundo de cor viva (rosa, menta, lilás, azul-céu, amarelo), com 8 a 12 objetos do dia a dia ligados ao tema, " +
+  "concretos e com detalhe (material, cor), uns sobre os outros e alguns cortados pela borda; ou (b) uma paisagem ou cena lúdica e simbólica " +
+  "(colinas, mar, céu, cidade pequena) onde coisas do tema aparecem grandes e fora de escala, como balões de conversa virando nuvens ou um calendário gigante, " +
+  "com primeiro plano, meio e fundo. As duas ilustrações do post não repetem o mesmo jeito nem a mesma cor de fundo. " +
+  "Sem pessoas com rosto, sem texto, sem números, sem logos e sem marcas.\n" +
   'Responda só JSON: {"title":"...","subtitle":"uma frase","category":"<uma das categorias>","body":"...","cover_prompt":"...","inline_prompt":"..."}';
+
+const UPDATES_SYSTEM =
+  "AGORA é um post de novidades do Planejai, feito a partir da lista de mudanças publicadas no sistema (mensagens de commit, escritas para a equipe). " +
+  "Conte só o que um cliente comum percebe usando o assistente no WhatsApp ou o painel dele: recursos novos, coisas que ficaram mais fáceis, mais rápidas ou mais claras. " +
+  "Deixe de fora: telas e ajustes só do dono da plataforma (Esteira, Blog, Mapa do time, Clientes, Execuções, Gravações, Modelos, Configurações da plataforma, " +
+  "integrações do dono como n8n, Mercado Pago, Stripe e Asaas), testes, CI, deploy, versões, refatoração, custos internos, detalhes de segurança, " +
+  "nomes de arquivos e de código, e tudo que uma mudança mais nova da lista desligou, tirou ou desfez (Compras e ligações estão desligadas). " +
+  "Junte mudanças do mesmo assunto numa seção só, com título que diz o que a pessoa ganha, e um exemplo de como pedir no WhatsApp quando couber. " +
+  "Não prometa nada que não esteja na lista. Aqui o Planejai é o assunto, então pode aparecer o post todo, com o mesmo tom leve. " +
+  "Pode ter de 600 a 1100 palavras e de 3 a 6 seções; a seção '## Perguntas frequentes' continua no fim. " +
+  "As ilustrações mostram de forma lúdica as novidades principais (objetos e cenas, nunca telas com texto). " +
+  'Se nenhuma mudança da lista importa para o cliente, responda só {"skip":true,"reason":"..."}.';
 
 /** Categoria da semana: a menos usada nos últimos posts, para o blog variar. */
 async function nextCategory() {
   const recent = await many<{ category: string }>("SELECT category FROM blog_posts ORDER BY published_at DESC LIMIT 8");
   const count = (c: string) => recent.filter((r) => r.category === c).length;
-  return [...BLOG_CATEGORIES].sort((a, b) => count(a) - count(b))[0]!;
+  return [...TOPIC_CATEGORIES].sort((a, b) => count(a) - count(b))[0]!;
 }
 
-/** Escreve e publica um post novo (redator + ilustrações). Chamado pelo worker toda semana ou pelo botão do painel. */
-export async function writePost(source: "auto" | "manual", log?: { info: (...a: any[]) => void }) {
+/**
+ * Escreve e publica um post novo (redator + ilustrações). Chamado pelo worker toda semana ou pelo botão do painel.
+ * Com `updates`, é o post de novidades: o redator escreve só sobre o que o cliente vê nessas mudanças, ou devolve skip.
+ * null = o redator achou que não havia novidade para o cliente.
+ */
+export async function writePost(source: "auto" | "manual", log?: { info: (...a: any[]) => void }, updates?: Novidade[]) {
   if (!config.OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY não configurada");
-  const category = await nextCategory();
+  const category = updates ? UPDATES_CATEGORY : await nextCategory();
   const existing = await many<{ title: string }>("SELECT title FROM blog_posts ORDER BY published_at DESC LIMIT 60");
-  const tracer = await Tracer.start({ trigger: "blog", input: `Post novo do blog (${category})`, noCharge: true });
+  const tracer = await Tracer.start({
+    trigger: "blog",
+    input: updates ? `Post de novidades (${updates.length} mudanças no sistema)` : `Post novo do blog (${category})`,
+    noCharge: true,
+  });
   try {
     const model = await resolveModel("blog");
     const today = new Intl.DateTimeFormat("pt-BR", { timeZone: config.DEFAULT_TIMEZONE, dateStyle: "long" }).format(new Date());
     const messages: { role: "system" | "user" | "assistant"; content: string }[] = [
-      { role: "system", content: WRITER_SYSTEM },
+      { role: "system", content: updates ? `${WRITER_SYSTEM}\n${UPDATES_SYSTEM}` : WRITER_SYSTEM },
       {
         role: "user",
-        content:
-          `Categorias: ${BLOG_CATEGORIES.join(", ")}.\nCategoria desta semana: ${category}.\nHoje é ${today}.\n` +
-          `Posts que já existem (não repita o tema nem o ângulo):\n${existing.map((e) => `- ${e.title}`).join("\n") || "- nenhum"}\n` +
-          "Escolha um tema novo, útil e com cara de busca real no Google, e escreva o post.",
+        content: updates
+          ? `Categoria: ${UPDATES_CATEGORY}.\nHoje é ${today}.\n` +
+            `Posts que já existem (não conte de novo o que já foi contado):\n${existing.map((e) => `- ${e.title}`).join("\n") || "- nenhum"}\n` +
+            `Mudanças publicadas no sistema desde o último post de novidades (mais nova primeiro):\n` +
+            updates.map((u) => `- ${u.date.slice(0, 10)}: ${u.subject}`).join("\n")
+          : `Categorias: ${TOPIC_CATEGORIES.join(", ")}.\nCategoria desta semana: ${category}.\nHoje é ${today}.\n` +
+            `Posts que já existem (não repita o tema nem o ângulo):\n${existing.map((e) => `- ${e.title}`).join("\n") || "- nenhum"}\n` +
+            "Escolha um tema novo, útil e com cara de busca real no Google, e escreva o post.",
       },
     ];
     let draft: PostDraft | null = null;
@@ -232,7 +287,13 @@ export async function writePost(source: "auto" | "manual", log?: { info: (...a: 
       } catch {
         parsed = null;
       }
+      if (updates && (parsed as any)?.skip === true) {
+        await step.ok({ skip: String((parsed as any).reason ?? "").slice(0, 300) }, { model: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut, costUsd: r.costUsd });
+        await tracer.finish("Sem novidade para o cliente nessas mudanças");
+        return null;
+      }
       const res = cleanDraft(parsed);
+      if (typeof res !== "string") res.category = updates ? UPDATES_CATEGORY : res.category === UPDATES_CATEGORY ? category : res.category;
       const usage = { model: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut, costUsd: r.costUsd };
       if (typeof res === "string") {
         await step.ok({ recusado: res, trecho: text.slice(0, 400) }, usage);
@@ -291,7 +352,7 @@ export async function generateImage(postId: string, slot: "cover" | "inline", pa
   const tracer = parent ?? (await Tracer.start({ trigger: "blog", input: `Ilustração (${slot === "cover" ? "capa" : "meio"}): ${post.title}`, noCharge: true }));
   const step = await tracer.step({ agent: "imagem", type: "llm", name: slot === "cover" ? "capa do blog" : "ilustração do blog", input: { scene } });
   try {
-    const r = await chatCompletion(await resolveModel("image"), {
+    const r = await chatCompletion(await resolveModel("blog:image"), {
       modalities: ["image", "text"],
       imageConfig: { aspect_ratio: "16:9" },
       messages: [{ role: "user", content: `Generate one wide 16:9 image. ${IMAGE_STYLE}${scene}` }],
@@ -346,6 +407,71 @@ export async function fillMissingImages(limit = 2) {
   return n;
 }
 
+// ---------------------------------------------------------------- novidades do sistema
+
+/** Uma mudança publicada (commit na main). O CI grava a lista em apps/server/novidades.json antes de montar a imagem. */
+export interface Novidade {
+  sha: string;
+  date: string;
+  subject: string;
+}
+
+const NOVIDADES_FILE = join(dirname(fileURLToPath(import.meta.url)), "..", "novidades.json");
+
+/** Mudanças da imagem em execução, a mais nova primeiro. Sem o arquivo (rodando local) = nenhuma. */
+export function readNovidades(file = NOVIDADES_FILE): Novidade[] {
+  try {
+    const list = JSON.parse(readFileSync(file, "utf8"));
+    if (!Array.isArray(list)) return [];
+    return list
+      .filter((c) => c && typeof c.sha === "string" && typeof c.subject === "string" && typeof c.date === "string")
+      .map((c) => ({ sha: c.sha, date: c.date, subject: c.subject.slice(0, 400) }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Hora do post de novidades: pelo menos 3 mudanças desde o último commit lido e o último post de novidades tem mais de 3 dias.
+ * Na primeira vez entram as mudanças dos últimos 10 dias. Devolve as mudanças (até 60) ou null.
+ */
+export async function updatesDue(list = readNovidades(), now = new Date()): Promise<Novidade[] | null> {
+  const s = await blogSettings();
+  if (!s.updates || !list.length) return null;
+  if (s.updatesFailedAt && now.getTime() - new Date(s.updatesFailedAt).getTime() < 86_400_000) return null;
+  const idx = s.updatesSha ? list.findIndex((c) => c.sha === s.updatesSha) : -1;
+  const fresh = idx >= 0 ? list.slice(0, idx) : list.filter((c) => now.getTime() - Date.parse(c.date) < 10 * 86_400_000);
+  if (fresh.length < 3) return null;
+  const last = await one<{ at: Date | null }>("SELECT max(published_at) AS at FROM blog_posts WHERE category = $1", [UPDATES_CATEGORY]);
+  if (last?.at && now.getTime() - new Date(last.at).getTime() < 3 * 86_400_000) return null;
+  return fresh.slice(0, 60);
+}
+
+/** Escreve o post de novidades (ou não, se nada importa ao cliente) e marca as mudanças como lidas. */
+export async function writeUpdatesPost(list: Novidade[], log?: { info: (...a: any[]) => void }) {
+  try {
+    const post = await writePost("auto", log, list);
+    await saveBlogSettings({ updatesSha: list[0]!.sha, updatesFailedAt: "" });
+    return post;
+  } catch (err) {
+    await saveBlogSettings({ updatesFailedAt: new Date().toISOString() });
+    throw err;
+  }
+}
+
+/** Estilo novo das ilustrações: os de partida pegam as cenas novas e todas as ilustrações são refeitas pelo worker. */
+export async function restyleImages() {
+  const s = await blogSettings();
+  if ((s.styleVersion ?? 1) >= IMAGE_STYLE_VERSION) return false;
+  for (const p of SEED_POSTS) {
+    await query("UPDATE blog_posts SET cover_prompt = $2, inline_prompt = $3 WHERE slug = $1 AND source = 'seed'", [p.slug, p.cover_prompt, p.inline_prompt]);
+  }
+  await query("DELETE FROM blog_images");
+  await query("DELETE FROM blog_image_failures");
+  await saveBlogSettings({ styleVersion: IMAGE_STYLE_VERSION });
+  return true;
+}
+
 // ---------------------------------------------------------------- agenda semanal
 
 /** Hora de postar: é o dia e a hora escolhidos (fuso da stack) e o último post tem mais de 6 dias. */
@@ -354,7 +480,7 @@ export async function weeklyDue(now = new Date()) {
   if (!s.auto) return false;
   const local = new Date(now.getTime() + tzOffsetMs(now, config.DEFAULT_TIMEZONE));
   if (local.getUTCDay() !== s.weekday || local.getUTCHours() < s.hour) return false;
-  const last = await one<{ at: Date }>("SELECT max(published_at) AS at FROM blog_posts WHERE source <> 'seed'");
+  const last = await one<{ at: Date }>("SELECT max(published_at) AS at FROM blog_posts WHERE source <> 'seed' AND category <> $1", [UPDATES_CATEGORY]);
   const lastAny = await one<{ at: Date }>("SELECT max(published_at) AS at FROM blog_posts");
   const ref = last?.at ?? lastAny?.at ?? null;
   return !ref || now.getTime() - new Date(ref).getTime() > 6 * 86_400_000;
@@ -370,8 +496,12 @@ export async function runBlogJob(log: { info: (...a: any[]) => void; error: (...
     return void (await generateImage(job.postId, job.slot ?? "cover"));
   }
   await seedBlog();
+  await restyleImages();
   await fillMissingImages(4);
-  if (config.OPENROUTER_API_KEY && (await weeklyDue())) {
+  if (!config.OPENROUTER_API_KEY) return;
+  if (await weeklyDue()) {
     await writePost("auto", log).catch((err) => log.error({ err }, "blog: post da semana falhou (tento na próxima hora)"));
   }
+  const updates = await updatesDue();
+  if (updates) await writeUpdatesPost(updates, log).catch((err) => log.error({ err }, "blog: post de novidades falhou (tento amanhã)"));
 }

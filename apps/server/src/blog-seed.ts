@@ -1,6 +1,6 @@
 /**
  * Posts de partida do blog (entram uma vez, no primeiro boot com o blog vazio). Texto original do time; as ilustrações
- * saem da rota "Imagens" no worker, a partir de cover_prompt e inline_prompt (blog.ts, fillMissingImages).
+ * saem da rota "Blog (ilustrações)" (blog:image) no worker, a partir de cover_prompt e inline_prompt (blog.ts, fillMissingImages).
  */
 export interface SeedPost {
   slug: string;
@@ -21,9 +21,9 @@ export const SEED_POSTS: SeedPost[] = [
     category: "Dicas de produtividade",
     daysAgo: 1,
     cover_prompt:
-      "Top-down still life on a soft pink background: an open weekly planner with colorful time blocks, a ceramic coffee mug, a green fountain pen, sticky notes, a small potted plant, a phone showing a chat, a croissant on a plate, scattered paper clips.",
+      "Lush top-down still life on a soft blush pink background: an open weekly planner filled with colorful time blocks in the center, a swirly ceramic mug of steaming coffee, a green fountain pen, a stack of pastel sticky notes, round tortoiseshell glasses, a red alarm clock, a smartphone with abstract chat bubbles, a croissant on a patterned plate, a closed notebook with ribbon tabs, a monstera leaf, scattered paper clips.",
     inline_prompt:
-      "A cozy desk scene seen from above on a pale yellow background: a wall calendar page with seven colorful columns, an hourglass, a checklist on a clipboard, a cup of tea, a pair of reading glasses and a small alarm clock.",
+      "Dreamy landscape at golden hour: a giant wall calendar page standing on rolling sage and lavender hills like a billboard, seven colorful columns of blocks, a winding path of stepping stones leading to it, an oversized hourglass and a checklist clipboard in the foreground among wildflowers, a paper airplane trailing dashes across a peach sky, small clouds shaped like chat bubbles.",
     body: `Segunda-feira chega, as mensagens se acumulam e, quando você percebe, a semana já decidiu tudo por você. Não precisa ser assim. Um planejamento curto, feito uma vez por semana, resolve boa parte da sensação de estar sempre correndo atrás.
 
 A ideia aqui não é montar um plano perfeito. É gastar quinze minutos para olhar a semana inteira de uma vez, escolher o que importa e deixar o resto com hora marcada.
@@ -94,9 +94,9 @@ O melhor lugar é o que você abre todos os dias. Se o celular está sempre na m
     category: "Dinheiro e finanças",
     daysAgo: 4,
     cover_prompt:
-      "Top-down still life on a mint green background: a pink piggy bank, stacks of golden coins, a leather wallet with a credit card peeking out, a small paper receipt, a calculator, a glass jar with coins and a sprout growing from it, a pen.",
+      "Lush top-down still life on a fresh mint green background: a glossy pink piggy bank, three glass jars holding different amounts of coins marked only with colored dots, a leather wallet with cards peeking out, a vintage calculator with blank keys, curled paper receipts with abstract lines, a small potted money plant, a ceramic cup of coffee, a pen and scattered golden coins with sparkles.",
     inline_prompt:
-      "Three glass jars of different sizes on a cream background, filled with coins and small paper notes, labeled only with simple colored dots (no text), with a few coins scattered and a small plant leaf, warm light.",
+      "Playful scene on a sunflower yellow background: a big pie split into three slices of different sizes in coral, cobalt and sage, each slice topped with small objects (a tiny house and grocery bag, a movie ticket and a sneaker, a piggy bank and a growing sprout), coins rolling around, a striped tablecloth corner, a fork and a teacup cropped at the border.",
     body: `Chega o salário, as contas saem, e no dia 20 vem aquela pergunta: para onde foi o dinheiro? Antes de pensar em cortar tudo, vale ter uma regra simples para dividir o que entra. A regra 50-30-20 é uma das mais fáceis de aplicar e não exige planilha.
 
 Ela não é uma lei. É um ponto de partida para você enxergar o seu mês e ajustar com calma.
@@ -170,9 +170,9 @@ Não. Basta anotar os gastos com categoria e olhar o total de cada parte no fim 
     category: "Comparações",
     daysAgo: 8,
     cover_prompt:
-      "Playful scene on a lilac background: a big smartphone showing colorful chat bubbles next to a tidy stack of app icons as wooden blocks, a checklist notepad, a paper airplane, a small alarm clock and a cactus, flat bold shapes.",
+      "Dreamy landscape at a lilac and peach sunset: rolling violet and sage hills, a winding path leading to a giant speech-bubble shaped house with round glowing windows, colorful chat bubbles floating in the sky like clouds, a huge smartphone standing among wildflowers like a monument, a paper airplane trailing dashes across the sky, a small alarm clock and a potted cactus big in the foreground.",
     inline_prompt:
-      "Two paths diverging in a stylized landscape at sunset: one leads to a giant chat bubble shaped house, the other to a tower of colorful app tiles, a signpost without text in the middle, warm coral and violet palette.",
+      "Lush top-down still life on a periwinkle background: a smartphone with abstract colorful chat bubbles next to a tangled pile of app tiles as glossy wooden blocks, a checklist notepad with ticked boxes, a pencil, a cup of tea, a small succulent, a bunch of keys, a wristwatch, a rubber band ball and a few sticky notes, some objects cropped by the borders.",
     body: `Quase todo mundo já baixou um aplicativo de tarefas cheio de boas intenções e abandonou depois de duas semanas. Não é falta de disciplina. Muitas vezes o problema é ter mais um lugar para lembrar de abrir.
 
 Os assistentes no WhatsApp surgiram justamente para isso: em vez de levar sua rotina para um aplicativo novo, eles vão até onde você já está. Mas será que servem para todo mundo? Vamos comparar.
@@ -242,9 +242,9 @@ Não. A graça de um assistente é entender a linguagem do dia a dia, inclusive 
     category: "Inteligência artificial",
     daysAgo: 12,
     cover_prompt:
-      "Whimsical scene on a sky blue background: a team of small friendly round robots with different colored bodies working together around a big desk with a calendar, a wallet, a magnifying glass and an envelope, paper planes flying, simple flat shapes.",
+      "Whimsical workshop on a sky blue background: a team of small friendly round robots in coral, yellow, sage and lavender working together around a big wooden desk, one holding up a calendar page, one counting coins from a wallet, one peering through a magnifying glass, one sealing an envelope, paper planes and message cards flowing through the air between them, potted plants and stacked books around.",
     inline_prompt:
-      "Stylized network of round colorful nodes connected by curved lines on a cream background, each node holding a simple icon object (a calendar page, a coin, a magnifying glass, an envelope), playful and clean composition.",
+      "Seaside scene with big cobalt and turquoise waves: small round friendly robots sailing little paper boats, each boat carrying a symbolic cargo (a calendar page, a coin, a magnifying glass, an envelope), a lighthouse shaped like a chat bubble on a rocky island, seagulls, sparkles on the water, a cream sky with soft coral clouds.",
     body: `Você provavelmente já conversou com um chatbot: pergunta algo, recebe uma resposta. Os agentes de IA vão um passo além. Em vez de só responder, eles fazem coisas por você: consultam a agenda, anotam um gasto, pesquisam um preço, montam um lembrete.
 
 Essa mudança, de responder para agir, é o que torna os assistentes pessoais realmente úteis no dia a dia.

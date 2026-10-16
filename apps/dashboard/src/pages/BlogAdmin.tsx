@@ -25,7 +25,7 @@ interface AdminPost {
   image_error: string | null;
 }
 interface Data {
-  settings: { auto: boolean; weekday: number; hour: number };
+  settings: { auto: boolean; weekday: number; hour: number; updates: boolean };
   posts: AdminPost[];
   busy: boolean;
   ready: boolean;
@@ -95,7 +95,7 @@ export function BlogAdminPage() {
           <input type="checkbox" checked={s.auto} onChange={(e) => save({ auto: e.target.checked })} />
           <span>
             <strong>Postar sozinho toda semana</strong>
-            <small>O redator escolhe um tema novo, alternando as categorias, e o modelo de imagem faz a capa e a ilustração do meio. Os modelos ficam em Agentes &gt; Modelos (Blog e Imagens).</small>
+            <small>O redator escolhe um tema novo, alternando as categorias, e o modelo de imagem faz a capa e a ilustração do meio. Os modelos ficam em Agentes &gt; Modelos (Blog e Blog ilustrações).</small>
           </span>
         </label>
         <div className="blog-admin-when">
@@ -108,6 +108,13 @@ export function BlogAdminPage() {
             {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}h</option>)}
           </select>
         </div>
+        <label className="set-switch">
+          <input type="checkbox" checked={s.updates} onChange={(e) => save({ updates: e.target.checked })} />
+          <span>
+            <strong>Postar as novidades do sistema</strong>
+            <small>Quando saem pelo menos três mudanças novas, no máximo a cada três dias, o redator conta em um post só o que o cliente percebe. O que é só seu (Esteira, Blog, Clientes...) e o que é interno fica de fora.</small>
+          </span>
+        </label>
       </div>
       {busy && <p className="muted blog-admin-note">O time está escrevendo ou ilustrando. O post aparece aqui em um ou dois minutos.</p>}
       {data.posts.length === 0 ? (

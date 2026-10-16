@@ -22,9 +22,9 @@ export function blogAdminRoutes(api: FastifyInstance) {
     return { settings: await blogSettings(), posts, busy: (writing?.n ?? 0) > 0, ready: Boolean(config.OPENROUTER_API_KEY), timezone: config.DEFAULT_TIMEZONE };
   });
 
-  api.put<{ Body: { auto?: boolean; weekday?: number; hour?: number } }>("/api/blog-admin/settings", async (req) => {
-    const { auto, weekday, hour } = req.body ?? {};
-    return { settings: await saveBlogSettings({ auto, weekday, hour }) };
+  api.put<{ Body: { auto?: boolean; weekday?: number; hour?: number; updates?: boolean } }>("/api/blog-admin/settings", async (req) => {
+    const { auto, weekday, hour, updates } = req.body ?? {};
+    return { settings: await saveBlogSettings({ auto, weekday, hour, updates }) };
   });
 
   // escreve um post agora (o worker faz; leva um ou dois minutos)
