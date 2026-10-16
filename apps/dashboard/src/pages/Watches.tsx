@@ -30,17 +30,35 @@ const DAYS = [1, 3, 7, 14, 30];
 const offerLink = (u?: string) => (u && /^https?:\/\//i.test(u) ? u : null);
 const daysLeft = (iso: string) => Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000));
 
+const isWatchError = (summary?: string | null) => {
+  if (!summary) return false;
+  const s = summary.toLowerCase();
+  return s.includes("nenhuma loja conectada") || s.includes("não está conectado") || s.includes("falta a busca") || s.includes("não consegui");
+};
+
+type TabMode = "active" | "ended";
+type StatusFilter = "all" | "found" | "empty" | "error";
+type SortMode = "newest" | "oldest" | "found_first";
+
 /**
- * Acompanhamentos: o agente olha sozinho por uma semana (ajustável) e manda no WhatsApp o que achou,
+ * Acompanhamentos: o assistente olha sozinho por uma semana (ajustável) e manda no WhatsApp o que achou,
  * ou que não achou nada, a cada olhada. Dá para criar, ajustar, pausar, olhar agora e reativar por aqui.
  */
 export function WatchesPage() {
   const { data, error, reload } = useApi<Watch[]>("/api/watches", { poll: 60000 });
+  const [tab, setTab] = useState<TabMode>("active");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortOrder, setSortOrder] = useState<SortMode>("newest");
   const [editing, setEditing] = useState<Watch | "new" | null>(null);
+  const [viewing, setViewing] = useState<Watch | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+
   if (!data) return error ? <div className="page"><ErrorBox error={error} /></div> : <Loading />;
-  const active = data.filter((w) => w.active);
-  const old = data.filter((w) => !w.active);
+
+  const totalActive = data.filter((w) => w.active).length;
+  const totalEnded = data.filter((w) => !w.active).length;
+  const totalFound = data.filter((w) => w.last_result?.found).length;
+  const totalErrors = data.filter((w) => isWatchError(w.last_result?.summary)).length;
 
   const act = async (w: Watch, path: string, init: Parameters<typeof api>[1]) => {
     setBusy(w.id);
@@ -55,71 +73,181 @@ export function WatchesPage() {
     }
   };
 
+  const listInTab = data.filter((w) => (tab === "active" ? w.active : !w.active));
+
+  const filtered = listInTab.filter((w) => {
+    const isErr = isWatchError(w.last_result?.summary);
+    const isFound = Boolean(w.last_result?.found);
+    if (statusFilter === "found") return isFound;
+    if (statusFilter === "error") return isErr;
+    if (statusFilter === "empty") return !isFound && !isErr;
+    return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortOrder === "found_first") {
+      const aF = a.last_result?.found ? 1 : 0;
+      const bF = b.last_result?.found ? 1 : 0;
+      if (aF !== bF) return bF - aF;
+    }
+    const dateA = new Date(a.last_check_at ?? a.created_at).getTime();
+    const dateB = new Date(b.last_check_at ?? b.created_at).getTime();
+    return sortOrder === "oldest" ? dateA - dateB : dateB - dateA;
+  });
+
   const card = (w: Watch) => {
-    const status = !w.active ? "Encerrado" : w.paused ? "Pausado" : "Ativo";
+    const isErr = isWatchError(w.last_result?.summary);
+    const hasFound = Boolean(w.last_result?.found);
+    const statusClass = !w.active ? "chip-ended" : w.paused ? "chip-paused" : "chip-active";
+    const statusLabel = !w.active ? "Encerrado" : w.paused ? "Pausado" : "Ativo";
+
+    let resultClass = "watch-result-neutral";
+    if (hasFound) resultClass = "watch-result-found";
+    else if (isErr) resultClass = "watch-result-warn";
+
     return (
-      <div key={w.id} className={`watch-card${w.active && !w.paused ? "" : " off"}`}>
-        <div className="watch-top">
-          <span className="watch-ico"><Icon name={w.kind === "price" ? "target" : "globe"} /></span>
-          <div className="watch-main">
-            <strong className="watch-title">{w.query}</strong>
-            <div className="watch-meta">
-              <span className={`chip chip-${status === "Ativo" ? "on" : "off"}`}>{status}</span>
-              <span>{w.kind === "price" ? "Preço" : "Novidades"}</span>
-              <span>a cada {w.every_hours}h</span>
-              {w.active && <span>{daysLeft(w.expires_at) ? `termina em ${daysLeft(w.expires_at)} dia(s)` : "termina hoje"}</span>}
-              <span>{w.notify_mode === "always" ? "avisa a cada olhada" : "só avisa quando achar"}</span>
+      <div key={w.id} className={`watch-card ${!w.active ? "off" : ""} ${hasFound ? "watch-card-highlight" : ""}`}>
+        <div className="watch-header">
+          <div className="watch-head-left">
+            <span className={`watch-ico ${w.kind === "price" ? "watch-ico-price" : "watch-ico-news"}`}>
+              <Icon name={w.kind === "price" ? "target" : "globe"} size={18} />
+            </span>
+            <div className="watch-heading">
+              <div className="watch-query-row">
+                <strong className="watch-title" title={w.query}>{w.query}</strong>
+              </div>
+              <div className="watch-badges">
+                <span className={`chip ${statusClass}`}>{statusLabel}</span>
+                <span className="chip chip-neutral">{w.kind === "price" ? "Preço" : "Novidades"}</span>
+                <span className="chip chip-neutral">a cada {w.every_hours}h</span>
+                {w.active && (
+                  <span className="chip chip-time">
+                    {daysLeft(w.expires_at) ? `${daysLeft(w.expires_at)} dia(s) restando` : "termina hoje"}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
+
         {(w.target || w.best?.price) && (
-          <div className="watch-meta">
-            {w.target && <span>meta {brl(Number(w.target))}</span>}
-            {w.best?.price != null && <span>menor até agora {brl(Number(w.best.price))}</span>}
+          <div className="watch-prices-bar">
+            {w.target && (
+              <div className="watch-price-item">
+                <span className="watch-price-label">Meta</span>
+                <strong className="watch-price-val">{brl(Number(w.target))}</strong>
+              </div>
+            )}
+            {w.best?.price != null && (
+              <div className="watch-price-item">
+                <span className="watch-price-label">Menor visto</span>
+                <strong className="watch-price-val val-best">{brl(Number(w.best.price))}</strong>
+              </div>
+            )}
             {w.kind === "price" && offerLink(w.best?.link) && (
-              <a href={offerLink(w.best?.link)!} target="_blank" rel="noopener noreferrer">Ver na loja</a>
+              <a className="watch-store-link" href={offerLink(w.best?.link)!} target="_blank" rel="noopener noreferrer">
+                Ver na loja <Icon name="external" size={12} />
+              </a>
             )}
           </div>
         )}
-        <div className="watch-last">
-          {w.last_result ? (
-            <>
-              <span className={`dot ${w.last_result.found ? "dot-ok" : ""}`} />
-              <span>
-                {w.last_result.found ? "Achou: " : "Última olhada: "}
-                {w.last_result.summary}
-                <span className="muted"> · {ago(w.last_check_at!)} · {w.checks} olhada(s)</span>
+
+        <div className={`watch-result-box ${resultClass}`}>
+          <div className="watch-result-head">
+            <div className="watch-result-lead">
+              <span className={`dot ${hasFound ? "dot-ok" : isErr ? "dot-warn" : ""}`} />
+              <span className="watch-result-title">
+                {hasFound ? "Novidade encontrada" : isErr ? "Atenção necessária" : "Última checagem"}
               </span>
-            </>
-          ) : (
-            <span className="muted">{w.active ? `Primeira olhada ${when(w.next_check_at)}` : `Criado ${ago(w.created_at)}`}</span>
-          )}
+            </div>
+            {w.last_check_at && <span className="watch-result-time">{ago(w.last_check_at)}</span>}
+          </div>
+          <div className="watch-result-body">
+            {w.last_result ? (
+              <>
+                <p className="watch-result-text">{w.last_result.summary}</p>
+                {isErr && (
+                  <a href="/integrations" className="watch-warn-link">
+                    <Icon name="plug" size={13} /> Ir para Integrações
+                  </a>
+                )}
+              </>
+            ) : (
+              <p className="watch-result-text muted">
+                {w.active ? `Primeira olhada agendada ${when(w.next_check_at)}` : `Criado ${ago(w.created_at)}`}
+              </p>
+            )}
+          </div>
+          <div className="watch-result-foot">
+            <span>{w.checks} olhada(s) realizada(s)</span>
+            <span>{w.notify_mode === "always" ? "Avisa sempre" : "Avisa só quando achar"}</span>
+          </div>
         </div>
-        <div className="watch-actions">
+
+        <div className="watch-actions-bar">
           {w.active ? (
             <>
-              <button className="btn btn-sm" disabled={busy === w.id || w.paused} onClick={() => act(w, `/api/watches/${w.id}/check`, { method: "POST" })}>
-                <Icon name="refresh" size={15} /> Olhar já
+              <button
+                className="btn btn-sm"
+                disabled={busy === w.id || w.paused}
+                onClick={() => act(w, `/api/watches/${w.id}/check`, { method: "POST" })}
+                title="Roda uma verificação imediata"
+              >
+                <Icon name="refresh" size={14} /> Olhar já
               </button>
-              <button className="btn btn-sm" disabled={busy === w.id} onClick={() => act(w, `/api/watches/${w.id}`, { method: "PATCH", json: { paused: !w.paused } })}>
-                <Icon name={w.paused ? "play" : "pause"} size={15} /> {w.paused ? "Retomar" : "Pausar"}
+              <button
+                className="btn btn-sm"
+                disabled={busy === w.id}
+                onClick={() => act(w, `/api/watches/${w.id}`, { method: "PATCH", json: { paused: !w.paused } })}
+              >
+                <Icon name={w.paused ? "play" : "pause"} size={14} /> {w.paused ? "Retomar" : "Pausar"}
               </button>
-              <button className="btn btn-sm" onClick={() => setEditing(w)}><Icon name="edit" size={15} /> Ajustar</button>
+              <button className="btn btn-sm" onClick={() => setEditing(w)}>
+                <Icon name="edit" size={14} /> Ajustar
+              </button>
+              <button className="btn btn-sm btn-ghost" onClick={() => setViewing(w)}>
+                <Icon name="eye" size={14} /> Detalhes
+              </button>
               <span className="spacer" />
               <button
-                className="icon-btn"
-                aria-label="Parar de acompanhar"
+                className="icon-btn text-danger"
+                title="Encerrar este acompanhamento"
+                aria-label="Encerrar"
                 onClick={async () => {
-                  if (await confirmDialog({ title: "Parar de acompanhar?", body: w.query, confirmLabel: "Parar", danger: true })) void act(w, `/api/watches/${w.id}`, { method: "DELETE" });
+                  if (await confirmDialog({ title: "Parar de acompanhar?", body: `Deseja parar de acompanhar "${w.query}"?`, confirmLabel: "Parar", danger: true })) {
+                    void act(w, `/api/watches/${w.id}`, { method: "DELETE" });
+                  }
                 }}
               >
-                <Icon name="trash" size={16} />
+                <Icon name="trash" size={15} />
               </button>
             </>
           ) : (
-            <button className="btn btn-sm" disabled={busy === w.id} onClick={() => act(w, `/api/watches/${w.id}`, { method: "PATCH", json: { reactivate: true } })}>
-              <Icon name="refresh" size={15} /> Acompanhar mais 7 dias
-            </button>
+            <>
+              <button
+                className="btn btn-sm btn-primary-soft"
+                disabled={busy === w.id}
+                onClick={() => act(w, `/api/watches/${w.id}`, { method: "PATCH", json: { reactivate: true } })}
+              >
+                <Icon name="refresh" size={14} /> Acompanhar mais 7 dias
+              </button>
+              <button className="btn btn-sm btn-ghost" onClick={() => setViewing(w)}>
+                <Icon name="eye" size={14} /> Ver detalhes
+              </button>
+              <span className="spacer" />
+              <button
+                className="icon-btn text-muted"
+                title="Remover acompanhamento"
+                aria-label="Excluir"
+                onClick={async () => {
+                  if (await confirmDialog({ title: "Remover do histórico?", body: `Remover o acompanhamento de "${w.query}"?`, confirmLabel: "Remover", danger: true })) {
+                    void act(w, `/api/watches/${w.id}`, { method: "DELETE" });
+                  }
+                }}
+              >
+                <Icon name="trash" size={15} />
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -127,24 +255,232 @@ export function WatchesPage() {
   };
 
   return (
-    <div className="page">
+    <div className="page watches-page">
       <PageHead
         title="Acompanhamentos"
-        subtitle="O assistente olha sozinho por 7 dias e te conta no WhatsApp o que achou, ou que não achou nada. Também dá para pedir lá: &quot;fica de olho no preço do PS5&quot;."
+        subtitle="O assistente olha sozinho por 7 dias e te conta no WhatsApp o que achou. Dá para pedir aqui ou no chat direto."
         actions={<button className="btn btn-brand" onClick={() => setEditing("new")}><Icon name="plus" size={16} /> Novo</button>}
       />
-      <div className="watch-list">
-        {active.map(card)}
-        {!active.length && <div className="card"><Empty>Nada sendo acompanhado agora. Toque em Novo ou peça no WhatsApp.</Empty></div>}
+
+      <div className="watches-stats-grid">
+        <div className="watch-stat-card">
+          <span className="watch-stat-num text-brand">{totalActive}</span>
+          <span className="watch-stat-label">Ativos agora</span>
+        </div>
+        <div className="watch-stat-card">
+          <span className="watch-stat-num text-success">{totalFound}</span>
+          <span className="watch-stat-label">Com novidade</span>
+        </div>
+        <div className="watch-stat-card">
+          <span className="watch-stat-num text-warn">{totalErrors}</span>
+          <span className="watch-stat-label">Precisam de atenção</span>
+        </div>
+        <div className="watch-stat-card">
+          <span className="watch-stat-num text-muted">{totalEnded}</span>
+          <span className="watch-stat-label">Encerrados</span>
+        </div>
       </div>
-      {old.length > 0 && (
-        <>
-          <h3 style={{ marginTop: 22 }}>Encerrados</h3>
-          <div className="watch-list">{old.slice(0, 20).map(card)}</div>
-        </>
+
+      <div className="watches-controls-bar">
+        <div className="watches-nav-tabs">
+          <button
+            className={`watches-nav-tab ${tab === "active" ? "active" : ""}`}
+            onClick={() => setTab("active")}
+          >
+            Ativos <span className="tab-badge">{totalActive}</span>
+          </button>
+          <button
+            className={`watches-nav-tab ${tab === "ended" ? "active" : ""}`}
+            onClick={() => setTab("ended")}
+          >
+            Encerrados <span className="tab-badge">{totalEnded}</span>
+          </button>
+        </div>
+
+        <div className="watches-filter-group">
+          <div className="watches-select-wrap">
+            <label htmlFor="watch-filter-status" className="watches-control-label">Status:</label>
+            <select
+              id="watch-filter-status"
+              className="select select-sm"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            >
+              <option value="all">Todos</option>
+              <option value="found">Com novidade</option>
+              <option value="empty">Sem novidade</option>
+              <option value="error">Com erro / lojas</option>
+            </select>
+          </div>
+
+          <div className="watches-select-wrap">
+            <label htmlFor="watch-sort-order" className="watches-control-label">Ordenar por:</label>
+            <select
+              id="watch-sort-order"
+              className="select select-sm"
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as SortMode)}
+            >
+              <option value="newest">Mais recente</option>
+              <option value="oldest">Mais antigo</option>
+              <option value="found_first">Novidades primeiro</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {sorted.length > 0 ? (
+        <div className="watch-list-grid">
+          {sorted.map(card)}
+        </div>
+      ) : (
+        <div className="card watch-empty-card">
+          <div className="watch-empty-icon">
+            <Icon name="eye" size={34} />
+          </div>
+          <h3>{tab === "active" ? "Nenhum acompanhamento ativo por aqui" : "Nenhum acompanhamento encerrado"}</h3>
+          <p className="watch-empty-text">
+            Você pode criar um novo por aqui ou falar direto no WhatsApp: <br />
+            <span className="watch-phrase-chip">"fica de olho no preço do PS5"</span> ou <span className="watch-phrase-chip">"acompanha notícias de tecnologia"</span>
+          </p>
+          {tab === "active" && (
+            <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={() => setEditing("new")}>
+              <Icon name="plus" size={16} /> Criar acompanhamento
+            </button>
+          )}
+        </div>
       )}
+
+      {viewing && (
+        <WatchDetailsModal
+          watch={viewing}
+          onClose={() => setViewing(null)}
+          onReactivate={() => {
+            const target = viewing;
+            setViewing(null);
+            void act(target, `/api/watches/${target.id}`, { method: "PATCH", json: { reactivate: true } });
+          }}
+        />
+      )}
+
       {editing && <WatchForm initial={editing === "new" ? null : editing} onClose={() => { setEditing(null); reload(); }} />}
     </div>
+  );
+}
+
+function WatchDetailsModal({ watch, onClose, onReactivate }: { watch: Watch; onClose: () => void; onReactivate: () => void }) {
+  const hasFound = Boolean(watch.last_result?.found);
+  const isErr = isWatchError(watch.last_result?.summary);
+
+  return (
+    <Modal
+      title="Detalhes do acompanhamento"
+      icon={<Icon name="eye" />}
+      onClose={onClose}
+      footer={
+        <>
+          {!watch.active && (
+            <button className="btn btn-primary-soft" onClick={onReactivate}>
+              <Icon name="refresh" size={14} /> Acompanhar mais 7 dias
+            </button>
+          )}
+          <button className="btn btn-secondary" onClick={onClose}>Fechar</button>
+        </>
+      }
+    >
+      <div className="watch-modal-details">
+        <div className="watch-modal-heading">
+          <h3>{watch.query}</h3>
+          <div className="watch-badges" style={{ marginTop: 6 }}>
+            <span className={`chip ${watch.active ? (watch.paused ? "chip-paused" : "chip-active") : "chip-ended"}`}>
+              {watch.active ? (watch.paused ? "Pausado" : "Ativo") : "Encerrado"}
+            </span>
+            <span className="chip chip-neutral">{watch.kind === "price" ? "Monitor de Preço" : "Novidades & Notícias"}</span>
+            <span className="chip chip-neutral">A cada {watch.every_hours} horas</span>
+          </div>
+        </div>
+
+        <div className="watch-modal-section">
+          <h4>Último resultado</h4>
+          <div className={`watch-result-box ${hasFound ? "watch-result-found" : isErr ? "watch-result-warn" : "watch-result-neutral"}`}>
+            <div className="watch-result-head">
+              <span className="watch-result-title">{hasFound ? "Encontrou novidade" : isErr ? "Aviso" : "Status"}</span>
+              {watch.last_check_at && <span className="watch-result-time">{ago(watch.last_check_at)}</span>}
+            </div>
+            <p className="watch-result-text" style={{ marginTop: 8 }}>
+              {watch.last_result?.summary ?? "Ainda não foi realizada nenhuma checagem."}
+            </p>
+            {isErr && (
+              <div style={{ marginTop: 8 }}>
+                <a href="/integrations" className="watch-warn-link">
+                  <Icon name="plug" size={13} /> Configurar integrações
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {(watch.target || watch.best) && (
+          <div className="watch-modal-section">
+            <h4>Preços registrados</h4>
+            <div className="watch-prices-bar">
+              {watch.target && (
+                <div className="watch-price-item">
+                  <span className="watch-price-label">Sua meta</span>
+                  <strong className="watch-price-val">{brl(Number(watch.target))}</strong>
+                </div>
+              )}
+              {watch.best?.price != null && (
+                <div className="watch-price-item">
+                  <span className="watch-price-label">Melhor preço visto</span>
+                  <strong className="watch-price-val val-best">{brl(Number(watch.best.price))}</strong>
+                </div>
+              )}
+            </div>
+            {watch.best?.title && (
+              <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>
+                Oferta: {watch.best.title}
+              </p>
+            )}
+            {offerLink(watch.best?.link) && (
+              <a className="watch-store-link" style={{ marginTop: 6, display: "inline-flex" }} href={offerLink(watch.best?.link)!} target="_blank" rel="noopener noreferrer">
+                Ver link da oferta <Icon name="external" size={13} />
+              </a>
+            )}
+          </div>
+        )}
+
+        <div className="watch-modal-section">
+          <h4>Informações de execução</h4>
+          <div className="watch-info-grid">
+            <div>
+              <span className="muted">Criado em:</span>
+              <div>{when(watch.created_at)}</div>
+            </div>
+            <div>
+              <span className="muted">Expira em:</span>
+              <div>{when(watch.expires_at)}</div>
+            </div>
+            <div>
+              <span className="muted">Total de olhadas:</span>
+              <div>{watch.checks} checagens</div>
+            </div>
+            <div>
+              <span className="muted">Notificações enviadas:</span>
+              <div>{watch.notified} mensagens</div>
+            </div>
+            <div>
+              <span className="muted">Próxima checagem:</span>
+              <div>{watch.active && !watch.paused ? when(watch.next_check_at) : "Em pausa / encerrado"}</div>
+            </div>
+            <div>
+              <span className="muted">Modo de aviso:</span>
+              <div>{watch.notify_mode === "always" ? "A cada checagem" : "Apenas quando houver novidade"}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
