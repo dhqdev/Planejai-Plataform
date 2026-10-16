@@ -4,7 +4,7 @@ Blog no jeito de revista (referência visual: blog da Toki), aberto com ou sem l
 
 ## Onde fica
 - Servidor: `apps/server/src/blog.ts` (redator, ilustrações, agenda semanal, conferência `cleanDraft`), posts de partida em `blog-seed.ts`, rotas públicas e o `<head>` do Google em `api/routes/blog.ts`, painel em `api/routes/dashboard/blog.ts`. Tabelas `blog_posts`, `blog_images` e `blog_image_failures` (migração `apps/server/src/db/migrations/064_blog.sql`).
-- Painel: `pages/Blog.tsx` (lista, post e o markdown desenhado com elementos React, sem HTML cru) com `blog.css`; tela do dono `pages/BlogAdmin.tsx` em `/blog-posts` (menu Plataforma > Blog). A landing tem link para `/blog` no topo e no rodapé.
+- Painel: `pages/Blog.tsx` (lista, post e o markdown desenhado com elementos React, sem HTML cru) com `blog.css`; tela do dono `pages/BlogAdmin.tsx` em `/blog-posts` (menu Plataforma > Blog). A landing tem link para `/blog` no topo e no rodapé e a seção "Do nosso blog" (`LandingBlog` em `pages/Landing.tsx`) com os 3 posts mais novos, que some sem post.
 
 ## Como funciona
 - Fila `blog.run` (`QUEUES.blog`), de hora em hora no minuto 41: põe os 4 posts de partida uma vez só (apagar não traz de volta), refaz as ilustrações se o estilo mudou (`restyleImages`), gera até 4 ilustrações que faltam (3 tentativas cada), escreve o post da semana no dia e hora escolhidos no painel (padrão segunda 9h, fuso da stack) se o último post semanal tem mais de 6 dias, e o post de novidades quando é hora.

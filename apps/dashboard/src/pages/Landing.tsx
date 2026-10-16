@@ -605,6 +605,8 @@ export function LandingPage() {
 
         {pricing && <Plans pricing={pricing} closed={closed} go={go} cta={(p) => (invite ? cta : `Começar no ${p.name}`)} />}
 
+        <LandingBlog />
+
         <section id="perguntas" className="lp-section">
           <div className="lp-wrap lp-faq-wrap">
             <h2 className="lp-h2" data-reveal>
@@ -645,5 +647,47 @@ export function LandingPage() {
         </div>
       </footer>
     </div>
+  );
+}
+
+interface BlogCard {
+  slug: string;
+  title: string;
+  category: string;
+  cover: string | null;
+  reading_minutes: number;
+}
+
+/** Os três posts mais novos do blog, com a capa. Sem post publicado, a seção some. */
+function LandingBlog() {
+  const [posts, setPosts] = useState<BlogCard[]>([]);
+  useEffect(() => {
+    api<{ posts: BlogCard[] }>("/api/blog/posts").then((r) => setPosts(r.posts.slice(0, 3)), () => {});
+  }, []);
+  if (!posts.length) return null;
+  return (
+    <section id="blog" className="lp-section">
+      <div className="lp-wrap">
+        <div className="lp-blog-head">
+          <Words className="lp-h2" text="Do nosso blog." />
+          <a className="lp-btn ghost" href="/blog">
+            Ver o blog
+          </a>
+        </div>
+        <div className="lp-blog" data-reveal style={{ ["--d" as string]: 2 }}>
+          {posts.map((p) => (
+            <a key={p.slug} className="lp-blog-card" href={`/blog/${p.slug}`}>
+              <span className="lp-blog-cover">
+                {p.cover ? <img src={p.cover} alt="" loading="lazy" decoding="async" /> : <Mascote size={64} mood="happy" still />}
+              </span>
+              <small>
+                {p.category} · {p.reading_minutes} min
+              </small>
+              <strong>{p.title}</strong>
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
