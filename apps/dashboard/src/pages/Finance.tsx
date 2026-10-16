@@ -170,11 +170,6 @@ export function FinancePage() {
   const monthTitle = `${monthName(month)}${month.slice(0, 4) !== String(now.getFullYear()) ? ` ${month.slice(0, 4)}` : ""}`;
   const totalBudget = budgets.find((b) => !b.category);
   const today = new Date();
-  // próximos lembretes só nas próprias finanças (a agenda de um contato tem permissão separada)
-  const reminders = useApi<{ events: any[] }>(
-    user ? null : `/api/calendar?from=${new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()}&to=${new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14).toISOString()}`,
-  );
-  const upcoming = (reminders.data?.events ?? []).filter((e) => e.kind === "reminder").slice(0, 4);
   const periodLabel = `1 - ${daysIn} de ${monthName(month).slice(0, 3)}, ${month.slice(0, 4)}`;
   // atalho grande para as categorias: no celular logo abaixo dos totais, no notebook no pé do card da rosca
   const CategoriesBar = ({ className }: { className: string }) => (
@@ -416,20 +411,6 @@ export function FinancePage() {
                 )}
               </div>
 
-              <div className="card fin-side-card">
-                <div className="fin-card-head">
-                  <span className="tone-ico" style={{ ["--c" as any]: "var(--brand-4)" }}><Icon name="bell" size={15} /></span>
-                  <h3>Próximos lembretes</h3>
-                </div>
-                {upcoming.map((e) => (
-                  <div key={e.id} className="fin-rem">
-                    <span className="fin-rem-date"><strong>{new Date(e.start).getDate()}</strong><small>{monthName(new Date(e.start).toISOString().slice(0, 7)).slice(0, 3)}</small></span>
-                    <span className="ellipsis" style={{ flex: 1 }} title={e.title}>{e.title || "(sem título)"}</span>
-                    <small className="muted">{new Date(e.start).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small>
-                  </div>
-                ))}
-                {reminders.data && !upcoming.length && <p className="muted fin-empty-side">Nenhum lembrete nos próximos 14 dias.</p>}
-              </div>
             </div>
           </div>
         </>
