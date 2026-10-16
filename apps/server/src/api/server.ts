@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import cookie from "@fastify/cookie";
 import { COMMIT, VERSION } from "../version.js";
 import fastifyStatic from "@fastify/static";
@@ -164,6 +165,13 @@ export async function buildServer() {
     if ((await hit(`forgot:ip:${req.ip}`, LOGIN_WINDOW)) > 10) return tooMany(reply);
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return reply.code(400).send({ error: "Informe o e-mail da sua conta." });
     if ((await hit(`forgot:mail:${email}`, 3600)) > 3) return tooMany(reply);
+    // o dono não tem senha no banco (vem da ADMIN_PASSWORD da stack): avisa no WhatsApp dele como trocar, em vez de ficar mudo
+    const ownerPhone = config.OWNER_PHONES[0];
+    if (email === config.ADMIN_EMAIL.toLowerCase() && ownerPhone) {
+      const text = "🔐 *Pediram uma senha nova para a conta do dono*\n\nA senha do dono não muda pelo painel: ela é a *ADMIN_PASSWORD* da stack. Para trocar, mude essa variável no Portainer e atualize o serviço.\n\n_Não foi você? Pode ignorar, nada mudou._";
+      await (await getBoss()).send(QUEUES.outbound, { type: "send", userId: null, phone: ownerPhone, channel: "whatsapp", text }, { retryLimit: 1 });
+      return { challenge: randomUUID() };
+    }
     const row = await one("SELECT * FROM accounts WHERE email = $1", [email]);
     const r = await startReset(row ? toAccount(row) : null, async (d) => {
       // intro + code = texto e código em mensagens separadas (o fluxo do n8n manda o código no campo copy); text traz tudo junto
