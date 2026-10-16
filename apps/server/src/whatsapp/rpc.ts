@@ -21,6 +21,7 @@ export type WaRpc =
   | { op: "edit"; jid: string; messageId: string; text: string }
   | { op: "delete"; jid: string; messageId: string }
   | { op: "pin"; jid: string; messageId: string; days: 1 | 7 | 30 }
+  | { op: "contact"; phone: string; name: string; lid?: string }
   | { op: "album"; jid: string; items: OutboundImage[] }
   | { op: "react"; jid: string; messageId: string; emoji: string }
   | { op: "typing"; jid: string; ms: number; kind?: "typing" | "recording" }

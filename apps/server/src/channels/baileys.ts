@@ -104,6 +104,17 @@ export class BaileysChannel implements Channel {
     await this.run((s) => s.sendMessage(jid, { pin: { remoteJid: jid, id: messageId, fromMe: true }, type: proto.PinInChat.Type.PIN_FOR_ALL, time }));
   }
 
+  /** Salva a pessoa na agenda do celular do assistente (sincroniza com o aparelho principal). */
+  async saveContact(phone: string, name: string, lid?: string) {
+    if (this.remote) return void (await callChannel({ op: "contact", phone, name, lid }, EXTRA_WAIT_MS * 2));
+    const pn = `${phone.replace(/\D/g, "")}@s.whatsapp.net`;
+    const fullName = name.trim().slice(0, 60);
+    await this.run(
+      (s) => s.addOrEditContact(pn, { fullName, firstName: fullName.split(/\s+/)[0], pnJid: pn, lidJid: lid?.endsWith("@lid") ? lid : undefined, saveOnPrimaryAddressbook: true }),
+      EXTRA_WAIT_MS * 2,
+    );
+  }
+
   /** Álbum: a mensagem-mãe diz quantas fotos e vídeos vêm, e cada mídia aponta para ela. */
   async sendAlbum(jid: string, items: OutboundImage[]) {
     if (this.remote) return { ids: (await callChannel({ op: "album", jid, items }, SEND_WAIT_MS * 2)).ids ?? [] };

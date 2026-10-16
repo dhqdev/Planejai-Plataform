@@ -100,4 +100,6 @@ export interface Channel {
   sendAlbum?(remoteJid: string, items: OutboundImage[]): Promise<{ ids: (string | undefined)[] }>;
   /** só Baileys: posta um status do número para as pessoas da lista */
   postStatus?(status: OutboundStatus, jids: string[]): Promise<{ id?: string }>;
+  /** só Baileys: salva a pessoa na agenda do celular do número do assistente (para ela ver os status) */
+  saveContact?(phone: string, name: string, lid?: string): Promise<void>;
 }

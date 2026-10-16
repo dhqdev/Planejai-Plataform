@@ -1,6 +1,7 @@
 import { getChannel } from "../channels/index.js";
 import { RICH_KINDS, type Channel, type OutboundImage } from "../channels/types.js";
 import { rememberOurs } from "./sent-ids.js";
+import { introduceOnce } from "../wa-save.js";
 import { many, one, pool, query, waitLonger } from "../db/pool.js";
 import { INTEGRATIONS, isConnected } from "../integrations/registry.js";
 import { chatCompletion, LlmError } from "../llm/openrouter.js";
@@ -584,6 +585,9 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     const keepInDb = !(await redisAlive());
     await deliver(bubbles, { channel, conversation, outbox, tracer, keepInDb });
     const askedText = byPoll && what ? await askYes(what, { channel, conversation, tracer, keepInDb }) : null;
+    // primeira conversa no WhatsApp (pedido do David): pede para salvar o número, porque status só aparece assim,
+    // e salva a pessoa no celular do assistente
+    if (opts.trigger === "message" && !silent) await introduceOnce(channel, conversation, user).catch(() => {});
     await rememberSentMedia(conversationId, outbox).catch(() => {});
     // A conversa já está no WhatsApp e na memória curta (Redis): com o Redis no ar, a mensagem sai do banco
     // só agora a rodada entra na memória curta: se der erro passageiro e a fila tentar de novo, nada fica duplicado

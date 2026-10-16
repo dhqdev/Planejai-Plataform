@@ -201,6 +201,27 @@ describe.skipIf(!enabled)("WhatsApp: cartões, fixar, apagar e álbum (e2e)", ()
     expect(ch.sent.map((s: any) => s.image?.caption)).toEqual(["legenda"]);
   });
 
+  it("primeira conversa no WhatsApp: pede para salvar o número com o cartão e salva a pessoa, uma vez só", async () => {
+    const { introduceOnce, SAVE_ME_TEXT } = await import("../src/wa-save.js");
+    const { upsertUser } = await import("../src/ingest.js");
+    await db.query("UPDATE wa_sessions SET phone = '5519988887777', name = 'Planejai' WHERE id = 'default'");
+    const u = await upsertUser("5519911112222", "Carla Souza");
+    const ch = new Rich();
+    ch.id = "baileys";
+    const saved: unknown[] = [];
+    ch.saveContact = async (...a: unknown[]) => void saved.push(a);
+    const conv = { remote_jid: "123456@lid" };
+    expect(await introduceOnce(ch, conv, u)).toBe(true);
+    expect(ch.sent.find((s: any) => s.type === "text").text).toBe(SAVE_ME_TEXT);
+    expect(ch.sent.find((s: any) => s.type === "image").image).toMatchObject({ kind: "contact", contact: { name: "Planejai", phone: "5519988887777" } });
+    expect(saved).toEqual([["5519911112222", "Carla Souza", "123456@lid"]]);
+    expect(await introduceOnce(ch, conv, u)).toBe(false);
+    expect(ch.sent.length).toBe(2);
+    // fora do WhatsApp embutido não faz nada
+    const u2 = await upsertUser("5519933334444", "Rui");
+    expect(await introduceOnce(new Rich(), { remote_jid: "5519933334444@s.whatsapp.net" }, u2)).toBe(false);
+  });
+
   it("o \"ainda tô nisso\" edita o aviso de antes em vez de mandar outro balão", async () => {
     const { Progress } = await import("../src/agent/progress.js");
     const { Tracer } = await import("../src/agent/trace.js");

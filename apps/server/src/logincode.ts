@@ -107,7 +107,9 @@ export async function startSignupChallenge(phone: string, email: string, sendCod
     [signupKey(phone, email)],
   );
   await query("UPDATE login_codes SET code_hash = $2 WHERE id = $1", [row!.id, codeHash(row!.id, code)]);
-  await sendCode(phone, codeText("criar sua conta no Planejai", CODE_TTL_MIN, "é só ignorar."), code);
+  // primeira mensagem que a pessoa recebe do número: o status do WhatsApp só aparece para quem salvou o contato
+  const text = `${codeText("criar sua conta no Planejai", CODE_TTL_MIN, "é só ignorar.")}\n\n📌 Já salva este número: é por aqui que eu te respondo e posto as novidades no status.`;
+  await sendCode(phone, text, code);
   return { challenge: row!.id, to: mask(phone) };
 }
 
