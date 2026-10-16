@@ -1,4 +1,4 @@
-import { jidNormalizedUser, proto, type AnyMessageContent, type WASocket } from "baileys";
+import { generateMessageIDV2, jidNormalizedUser, proto, WAMessageStatus, type AnyMessageContent, type WASocket } from "baileys";
 import { safeFetch } from "../net.js";
 import { callChannel, holdsWhatsApp } from "../whatsapp/rpc.js";
 import { isConnectionError, whatsapp, type WhatsAppSession } from "../whatsapp/session.js";
@@ -141,18 +141,26 @@ export class BaileysChannel implements Channel {
   /**
    * Status do número (status@broadcast). O WhatsApp só entrega para quem está em statusJidList; o próprio número
    * entra na lista para o post aparecer no celular do dono.
+   * Conta já migrada para LID: a lista toda vai em LID (o servidor recusa lista com PN, ou misturada, com o erro 479
+   * e o Baileys não avisa: WhiskeySockets/Baileys#2794). Por isso o envio espera alguns segundos por um ack de erro.
    */
   async postStatus(status: OutboundStatus, jids: string[]) {
     if (this.remote) return { id: (await callChannel({ op: "status", status, jids }, STATUS_WAIT_MS)).id };
     const media = status.base64 ? Buffer.from(status.base64, "base64") : null;
-    const r = await this.run((s) => {
-      const me = s.user?.id ? jidNormalizedUser(s.user.id) : null;
-      const opts = { statusJidList: [...new Set([...(me ? [me] : []), ...jids])], broadcast: true, backgroundColor: status.backgroundColor, font: status.font };
-      if (status.kind === "text") return s.sendMessage("status@broadcast", { text: status.text ?? "" }, opts);
-      if (!media) throw new Error("status sem foto nem vídeo");
-      return status.kind === "video"
-        ? s.sendMessage("status@broadcast", { video: media, caption: status.caption, mimetype: status.mimetype ?? "video/mp4" }, opts)
-        : s.sendMessage("status@broadcast", { image: media, caption: status.caption, mimetype: status.mimetype }, opts);
+    const r = await this.run(async (s) => {
+      const list = await statusAudienceJids(s, jids);
+      if (!list.length) throw new Error("ninguém para ver o status");
+      const messageId = generateMessageIDV2(s.user?.id);
+      const rejected = waitBadAck(s, messageId, 8_000);
+      const opts = { messageId, statusJidList: list, broadcast: true, backgroundColor: status.backgroundColor, font: status.font };
+      let sent;
+      if (status.kind === "text") sent = await s.sendMessage("status@broadcast", { text: status.text ?? "" }, opts);
+      else if (!media) throw new Error("status sem foto nem vídeo");
+      else if (status.kind === "video") sent = await s.sendMessage("status@broadcast", { video: media, caption: status.caption, mimetype: status.mimetype ?? "video/mp4" }, opts);
+      else sent = await s.sendMessage("status@broadcast", { image: media, caption: status.caption, mimetype: status.mimetype }, opts);
+      const err = await rejected;
+      if (err) throw new Error(`o WhatsApp recusou o status (erro ${err})`);
+      return sent;
     }, STATUS_WAIT_MS);
     return { id: r?.key?.id ?? undefined };
   }
@@ -177,6 +185,47 @@ export class BaileysChannel implements Channel {
     if (this.remote) return void (await callChannel({ op: "read", jid, messageId }, EXTRA_WAIT_MS));
     await this.run((s) => s.readMessages([{ remoteJid: jid, id: messageId, fromMe: false }]), EXTRA_WAIT_MS);
   }
+}
+
+/**
+ * Lista do status: com LID (conta migrada) tudo em LID, inclusive o próprio número; PN sem LID conhecido fica de fora
+ * (lista misturada é recusada). Conta sem LID segue em PN, como antes.
+ */
+export async function statusAudienceJids(s: Pick<WASocket, "user" | "authState" | "signalRepository">, jids: string[]) {
+  const meLid = s.authState?.creds?.me?.lid ? jidNormalizedUser(s.authState.creds.me.lid) : null;
+  const mePn = s.user?.id ? jidNormalizedUser(s.user.id) : null;
+  const out = new Set<string>();
+  if (!meLid) {
+    if (mePn) out.add(mePn);
+    for (const j of jids) if (j.endsWith("@s.whatsapp.net")) out.add(jidNormalizedUser(j));
+    return [...out];
+  }
+  out.add(meLid);
+  for (const j of jids) {
+    if (j.endsWith("@lid")) out.add(jidNormalizedUser(j));
+    else {
+      const lid = await s.signalRepository.lidMapping.getLIDForPN(jidNormalizedUser(j)).catch(() => null);
+      if (lid) out.add(jidNormalizedUser(lid));
+    }
+  }
+  return [...out];
+}
+
+/** Espera um ack de erro do servidor para a mensagem (o sendMessage resolve mesmo quando o servidor recusa). */
+function waitBadAck(s: Pick<WASocket, "ev">, id: string, ms: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    const onUpdate = (updates: { key: { id?: string | null }; update: { status?: number | null; messageStubParameters?: string[] | null } }[]) => {
+      const u = updates.find((x) => x.key.id === id && x.update.status === WAMessageStatus.ERROR);
+      if (u) done(u.update.messageStubParameters?.[0] ?? "desconhecido");
+    };
+    const timer = setTimeout(() => done(null), ms);
+    const done = (v: string | null) => {
+      clearTimeout(timer);
+      s.ev.off("messages.update", onUpdate);
+      resolve(v);
+    };
+    s.ev.on("messages.update", onUpdate);
+  });
 }
 
 /** Cartão nativo (evento, localização, contato) no formato do Baileys, ou null se é mídia comum. */

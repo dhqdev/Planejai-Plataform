@@ -53,6 +53,20 @@ describe("status do WhatsApp: regras", () => {
     for (const x of s.SCENES) expect(x.caption.length, x.id).toBeLessThan(200);
   });
 
+  it("conta com LID: lista toda em LID com o próprio número; PN sem LID fica de fora; sem LID segue em PN", async () => {
+    await import("../src/channels/index.js");
+    const { statusAudienceJids } = await import("../src/channels/baileys.js");
+    const map: Record<string, string> = { "5511900000001@s.whatsapp.net": "111@lid" };
+    const sock: any = {
+      user: { id: "5511999990000:7@s.whatsapp.net" },
+      authState: { creds: { me: { id: "5511999990000:7@s.whatsapp.net", lid: "999:7@lid" } } },
+      signalRepository: { lidMapping: { getLIDForPN: async (pn: string) => map[pn] ?? null } },
+    };
+    expect(await statusAudienceJids(sock, ["5511900000001@s.whatsapp.net", "5511900000002@s.whatsapp.net", "222@lid"])).toEqual(["999@lid", "111@lid", "222@lid"]);
+    sock.authState.creds.me.lid = undefined;
+    expect(await statusAudienceJids(sock, ["5511900000001@s.whatsapp.net", "222@lid"])).toEqual(["5511999990000@s.whatsapp.net", "5511900000001@s.whatsapp.net"]);
+  });
+
   it("só posta ligado, depois da hora escolhida, até 21h e passados os dias", async () => {
     const { statusDue } = await import("../src/wa-status.js");
     const s = { enabled: true, everyDays: 2, hour: 10, blogEvery: 3 };
