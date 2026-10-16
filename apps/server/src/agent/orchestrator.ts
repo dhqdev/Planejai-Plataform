@@ -92,18 +92,27 @@ const albumable = (m: OutboundImage | undefined) => Boolean(m && (!m.kind || m.k
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function loadMemories(userId: string, text: string) {
-  // o básico (cidade, família, trabalho) sempre entra, mesmo depois de muitas memórias novas
-  const profile = await many("SELECT id, content FROM memories WHERE user_id = $1 AND 'perfil' = ANY(tags) ORDER BY created_at DESC LIMIT 6", [userId]);
-  const recent = await many("SELECT id, content FROM memories WHERE user_id = $1 ORDER BY created_at DESC LIMIT 8", [userId]);
-  const related = text
-    ? await many(
-        `SELECT id, content FROM memories WHERE user_id = $1 AND search @@ plainto_tsquery('portuguese', $2)
-          ORDER BY ts_rank(search, plainto_tsquery('portuguese', $2)) DESC LIMIT 5`,
-        [userId, text.slice(0, 500)],
-      )
-    : [];
+  // Uma única ida ao banco unindo perfil, recentes e relacionadas por busca textual
+  const q = text ? text.slice(0, 500) : null;
+  const rows = await many<{
+    id: string;
+    content: string;
+    grp: number;
+  }>(
+    `WITH p AS (
+       SELECT id, content, created_at, 1 as grp, 0 as rank FROM memories WHERE user_id = $1 AND 'perfil' = ANY(tags) ORDER BY created_at DESC LIMIT 6
+     ), r AS (
+       SELECT id, content, created_at, 3 as grp, 0 as rank FROM memories WHERE user_id = $1 ORDER BY created_at DESC LIMIT 8
+     )${q ? `, rel AS (
+       SELECT id, content, created_at, 2 as grp, ts_rank(search, plainto_tsquery('portuguese', $2)) as rank FROM memories WHERE user_id = $1 AND search @@ plainto_tsquery('portuguese', $2) ORDER BY rank DESC LIMIT 5
+     )` : ""}
+     SELECT id, content, grp FROM p
+     ${q ? "UNION ALL SELECT id, content, grp FROM rel " : ""}UNION ALL SELECT id, content, grp FROM r
+     ORDER BY grp ASC, created_at DESC`,
+    q ? [userId, q] : [userId],
+  );
   const seen = new Set<string>();
-  return [...profile, ...related, ...recent].filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)));
+  return rows.filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)));
 }
 
 export interface ProcessResult {
@@ -468,8 +477,15 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     await rememberInboundMedia(conversationId, ctx.inboundFiles);
     // ordem estável primeiro (núcleo + time): o prefixo igual entre mensagens sai mais barato no cache do provedor
     const extra = [...groups.flatMap((g) => g.tools), ...(wantsTeam ? TEAM_TOOLS : [])];
-    const tools = [...(await availableTools(CTO_TOOLS, user)), ...team.map(delegationTool), ...(await availableTools(extra, user))];
-    const hiddenTools = (await availableTools([...CTO_TOOL_GROUPS.flatMap((g) => g.tools), ...TEAM_TOOLS], user)).filter((t) => !extra.includes(t));
+    const extraSet = new Set(extra);
+    const allPossibleGroupTools = [...new Set([...CTO_TOOL_GROUPS.flatMap((g) => g.tools), ...TEAM_TOOLS])];
+    const [availableCto, availableExtra, availableHiddenCandidates] = await Promise.all([
+      availableTools(CTO_TOOLS, user),
+      availableTools(extra, user),
+      availableTools(allPossibleGroupTools.filter((t) => !extraSet.has(t)), user),
+    ]);
+    const tools = [...availableCto, ...team.map(delegationTool), ...availableExtra];
+    const hiddenTools = availableHiddenCandidates;
     // "sim"/"não" da pessoa para a ação guardada: o servidor executa (ou descarta) antes do CTO responder
     const confirmNotes = await resolvePending(
       waiting,

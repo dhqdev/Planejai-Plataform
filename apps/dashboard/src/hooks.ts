@@ -6,13 +6,31 @@ import { api } from "./api";
  * com o último dado e se atualiza por trás. Some ao trocar de conta.
  */
 const cache = new Map<string, unknown>();
+const inFlight = new Map<string, Promise<unknown>>();
+
+function fetchShared<T>(path: string): Promise<T> {
+  const existing = inFlight.get(path);
+  if (existing) return existing as Promise<T>;
+  const p = api<T>(path)
+    .then((d) => {
+      cache.set(path, d);
+      return d;
+    })
+    .finally(() => {
+      inFlight.delete(path);
+    });
+  inFlight.set(path, p);
+  return p;
+}
+
 export function clearApiCache() {
   cache.clear();
+  inFlight.clear();
 }
 /** Esquenta o cache de uma rota (ex.: telas que a pessoa mais abre), sem travar nada. */
 export function prefetchApi(path: string) {
-  if (cache.has(path)) return;
-  api(path).then((d) => cache.set(path, d), () => {});
+  if (cache.has(path) || inFlight.has(path)) return;
+  fetchShared(path).catch(() => {});
 }
 
 /** Puxar para atualizar: cada tela aberta recarrega e quem disparou espera todas terminarem. */
@@ -44,8 +62,7 @@ export function useApi<T = any>(path: string | null, opts: { poll?: number } = {
   const reload = useCallback(async () => {
     if (!path) return;
     try {
-      const d = await api<T>(path);
-      cache.set(path, d);
+      const d = await fetchShared<T>(path);
       if (current.current === path) {
         setDataState(d);
         setError(null);
