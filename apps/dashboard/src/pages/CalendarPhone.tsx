@@ -30,6 +30,7 @@ import {
   type Tag,
 } from "./Calendar";
 import "../styles/agenda-celular.css";
+import "../styles/agenda-celular-chips.css";
 import { GoogleSync } from "./GoogleSync";
 
 /**
@@ -102,6 +103,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
   const [googleSeen, setGoogleSeen] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const tabsEl = useRef<HTMLDivElement>(null);
+  const ownerTabs = useRef<HTMLDivElement>(null);
   // sublinhado das abas: mais curto que o nome, no meio dele, e desliza ao trocar
   useLayoutEffect(() => {
     const on = tabsEl.current?.querySelector<HTMLElement>("button.on");
@@ -109,6 +111,11 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
     tabsEl.current.style.setProperty("--x", `${on.offsetLeft + on.offsetWidth * 0.22}px`);
     tabsEl.current.style.setProperty("--w", `${on.offsetWidth * 0.56}px`);
   }, [tab]);
+  // mantém o chip da pessoa selecionada visível quando a fileira rola
+  useEffect(() => {
+    const on = ownerTabs.current?.querySelector<HTMLElement>("button.on");
+    on?.scrollIntoView({ behavior: reduced() ? "auto" : "smooth", inline: "center", block: "nearest" });
+  }, [person]);
   const reload = () => setRev((r) => r + 1);
 
   const pickMode = (m: Mode) => {
@@ -282,15 +289,15 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
         )}
         {tab === "cal" && <GoogleSync isSuper={isSuper} variant="phone" />}
         {owners.length > 0 && (
-          <div className="pc-owner-tabs seg seg-scroll" role="tablist" aria-label="De quem">
-            <button role="tab" aria-selected={!person} className={!person ? "active" : ""} onClick={() => onPerson("")}>
+          <div ref={ownerTabs} className="pc-owner-chips" role="tablist" aria-label="De quem">
+            <button role="tab" aria-selected={!person} className={!person ? "on" : ""} onClick={() => onPerson("")}>
               Minha agenda
             </button>
-            <button role="tab" aria-selected={person === "all"} className={person === "all" ? "active" : ""} onClick={() => onPerson("all")}>
+            <button role="tab" aria-selected={person === "all"} className={person === "all" ? "on" : ""} onClick={() => onPerson("all")}>
               {owners.length === 1 ? "Os dois" : "Todos"}
             </button>
             {owners.map((p) => (
-              <button key={p.id} role="tab" aria-selected={person === p.id} className={person === p.id ? "active" : ""} onClick={() => onPerson(p.id)}>
+              <button key={p.id} role="tab" aria-selected={person === p.id} className={person === p.id ? "on" : ""} onClick={() => onPerson(p.id)}>
                 {p.name}
               </button>
             ))}
