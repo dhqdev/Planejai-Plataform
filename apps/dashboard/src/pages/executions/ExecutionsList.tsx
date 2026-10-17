@@ -185,11 +185,17 @@ export function ExecutionsPage() {
 function ExecRow({ e, onOpen }: { e: any; onOpen: () => void }) {
   const agents: string[] = (e.agents ?? []).filter(Boolean).sort((a: string, b: string) => (a === "cto" ? -1 : b === "cto" ? 1 : 0));
   const channel = channelOf(e);
+  const saidText = e.content_purged
+    ? "Conversa de cliente · só métricas"
+    : e.input
+    ? firstWords(e.input, 18)
+    : "Sem texto de entrada";
   return (
     <button className={`ex-row ${e.status}`} onClick={onOpen}>
       <StatusIcon status={e.status} />
       <span className="ex-main">
         <span className={`ex-title ${e.content_purged ? "purged" : ""}`}>{executionTitle(e, 16)}</span>
+        <span className={`ex-said ${e.content_purged || !e.input ? "empty" : ""}`}>{saidText}</span>
         <span className="ex-meta">
           <span className="ex-who">{personOf(e) ?? "Sistema"}</span>
           {channel && <span className="ex-chan">{channel}</span>}
