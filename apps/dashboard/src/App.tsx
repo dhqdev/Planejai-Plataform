@@ -419,11 +419,11 @@ export function App() {
   const tabIndex = here < 0 ? phoneTabs.length : here;
   return (
     <UnreadProvider>
-    <div className="layout">
+    <div className={`layout${me?.impersonating ? " impersonating" : ""}`}>
       {me?.impersonating && (
         <div className="impersonate-banner" role="status">
           <span>
-            Você está como <strong>{me.name || me.email}</strong>
+            Você está na conta de <strong>{me.name || me.email}</strong>
           </span>
           <button
             className="impersonate-btn"
