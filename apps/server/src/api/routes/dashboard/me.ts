@@ -4,7 +4,7 @@ import { config } from "../../../config.js";
 import { many, one, query } from "../../../db/pool.js";
 import { eraseUserData } from "../../../privacy.js";
 import { getOnboarding, ONBOARDING, saveOnboarding } from "../../../onboarding.js";
-import { NOBODY, selfUserId } from "../../../sharing.js";
+import { myShares, NOBODY, selfUserId, setShare, type ShareScope, sharedWithMe } from "../../../sharing.js";
 import { activeStoreAgents } from "../../../agent/store.js";
 import { ESSENTIAL, getTabs, OPTIONAL } from "../../../tabs.js";
 import { botUsername, connections, telegramLink, unlink } from "../../../telegram.js";
@@ -174,6 +174,26 @@ export function meRoutes(base: FastifyInstance) {
     const uid = await selfUserId(req.account);
     if (uid) await unlink(uid, "telegram");
     return { ok: true };
+  });
+
+  // ---------- Compartilhamento de telas particulares (Finanças, Agenda) ----------
+  base.get("/api/shares", async (req) => {
+    const uid = await selfUserId(req.account);
+    if (!uid) return { mine: [], withMe: [] };
+    return { mine: await myShares(uid), withMe: await sharedWithMe(uid) };
+  });
+  base.put<{ Body: { contact?: string; user?: string; scope?: ShareScope; on?: boolean } }>("/api/shares", async (req, reply) => {
+    const uid = await selfUserId(req.account);
+    if (!uid) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil para compartilhar suas telas" });
+    const target = req.body?.contact || req.body?.user;
+    const scope = req.body?.scope;
+    if (!target || !scope) return reply.code(400).send({ error: "Contato e tela são obrigatórios" });
+    try {
+      await setShare(uid, target, scope, req.body?.on === true);
+      return { ok: true };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
   });
 
   // ---------- Abas do app: essencial para todo mundo, o resto liberado pela reunião noturna ----------
