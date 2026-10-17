@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { randomBytes } from "node:crypto";
-import { normalizePhone } from "../../../accounts.js";
+import { normalizePhone, toAccount } from "../../../accounts.js";
 import { many, one, query } from "../../../db/pool.js";
 import { emitEvent } from "../../../events.js";
 import { phoneVariants } from "../../../ingest.js";
@@ -10,6 +10,8 @@ import { getSettings } from "../../../settings.js";
 import { selfUserId } from "../../../sharing.js";
 import { inviteLink } from "../../../social.js";
 import { getTabs, saveTabs } from "../../../tabs.js";
+import { config } from "../../../config.js";
+import { IMPERSONATE_COOKIE, publicAccount, requireAuth, requireSuper } from "../../server.js";
 import { isUuid, withLook } from "./shared.js";
 
 /** Clientes e pessoas (só super admin): cadastro, exclusão (LGPD), custo de IA e uso de cada um. */
@@ -59,6 +61,28 @@ export function clientRoutes(api: FastifyInstance) {
     }
     return { client, link: inviteLink(code) };
   });
+  api.post<{ Params: { id: string } }>("/api/clients/:id/impersonate", { preHandler: [requireAuth, requireSuper] }, async (req, reply) => {
+    const id = req.params.id;
+    if (!isUuid(id)) return reply.code(404).send({ error: "não encontrado" });
+    const row = await one(
+      "SELECT id, email, name, role, status, user_id, phone, session_version FROM accounts WHERE user_id = $1 AND status = 'active'",
+      [id],
+    );
+    if (!row) return reply.code(404).send({ error: "Cliente sem conta ativa no painel" });
+    await query(
+      "INSERT INTO impersonations (owner_account_id, target_user_id, target_account_id) VALUES ($1, $2, $3)",
+      [req.account.id, id, row.id],
+    );
+    reply.setCookie(IMPERSONATE_COOKIE, row.id, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: config.PUBLIC_URL.startsWith("https"),
+      maxAge: 7 * 86_400,
+    });
+    return publicAccount(toAccount(row));
+  });
+
   api.patch<{ Params: { id: string }; Body: { status?: string; full_name?: string; email?: string } }>("/api/clients/:id", async (req, reply) =>
     !isUuid(req.params.id) ? reply.code(404).send({ error: "não encontrado" }) : one(
       `UPDATE users SET status = COALESCE($2, status), full_name = COALESCE($3, full_name), email = COALESCE($4, email) WHERE id = $1 RETURNING *`,

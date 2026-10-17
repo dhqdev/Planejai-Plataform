@@ -13,6 +13,8 @@ export function ClientsPage() {
   const [detail, setDetail] = useState<any | null>(null);
   const [q, setQ] = useState("");
   const list = (data ?? []).filter((c) => !q || `${c.full_name ?? ""} ${c.name ?? ""} ${c.phone} ${c.email ?? ""}`.toLowerCase().includes(q.toLowerCase()));
+  const me = useApi<{ role: string }>("/api/auth/me");
+  const isSuper = me.data?.role === "superadmin";
   const pending = (data ?? []).filter((c) => c.status === "pending" || c.account_status === "pending").length;
 
   return (
@@ -74,7 +76,7 @@ export function ClientsPage() {
         )}
       </div>
       {adding && <NewClient onClose={() => { setAdding(false); void reload(); }} />}
-      {detail && <ClientDetail client={detail} onClose={() => { setDetail(null); void reload(); }} />}
+      {detail && <ClientDetail client={detail} isSuper={isSuper} onClose={() => { setDetail(null); void reload(); }} />}
     </div>
   );
 }
@@ -131,7 +133,7 @@ function NewClient({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ClientDetail({ client, onClose }: { client: any; onClose: () => void }) {
+function ClientDetail({ client, onClose, isSuper }: { client: any; onClose: () => void; isSuper?: boolean }) {
   const memories = useApi<any[]>(`/api/memories?user=${client.id}`);
   const finance = useApi<any>(`/api/finance?user=${client.id}`);
   const [status, setStatus] = useState(client.status);
@@ -168,6 +170,18 @@ function ClientDetail({ client, onClose }: { client: any; onClose: () => void })
         <span className="spacer" />
         {status !== "active" && <button className="btn btn-sm btn-primary" onClick={() => patch({ status: "active" })}>Liberar</button>}
         {status !== "blocked" && <button className="btn btn-sm btn-danger" onClick={() => patch({ status: "blocked" })}>Bloquear</button>}
+        {isSuper && client.account_id && client.account_status === "active" && (
+          <button
+            className="btn btn-sm btn-secondary"
+            title="Entrar no painel como este cliente"
+            onClick={async () => {
+              await api(`/api/clients/${client.id}/impersonate`, { method: "POST" });
+              window.location.reload();
+            }}
+          >
+            Entrar como
+          </button>
+        )}
         <button
           className="btn btn-sm"
           title="O assistente esquece a conversa com esta pessoa e começa do zero; a conta e os dados ficam"

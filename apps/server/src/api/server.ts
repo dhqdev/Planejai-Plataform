@@ -28,6 +28,7 @@ import { notify } from "../notifications.js";
 import { QUEUES, getBoss } from "../queue/boss.js";
 
 const COOKIE = "pj_session";
+export const IMPERSONATE_COOKIE = "pj_impersonate";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -40,7 +41,21 @@ export async function sessionAccount(req: FastifyRequest): Promise<Account | nul
   const session = verifySession(req.cookies?.[COOKIE]);
   const account = session ? await loadAccount(session.sub) : null;
   // senha trocada, conta desativada ou "sair de todos os aparelhos": token antigo não vale mais
-  return account && session?.v === account.sessionVersion ? account : null;
+  if (!account || session?.v !== account.sessionVersion) return null;
+
+  // Se for superadmin e houver cookie de impersonação, assume a conta do cliente
+  const impersonateTargetId = req.cookies?.[IMPERSONATE_COOKIE];
+  if (account.role === "superadmin" && impersonateTargetId) {
+    const target = await loadAccount(impersonateTargetId);
+    if (target && target.status === "active") {
+      return {
+        ...target,
+        impersonatedBy: { id: account.id, name: account.name },
+      };
+    }
+  }
+
+  return account;
 }
 
 /** Exige login. Coloca a conta em req.account (recarregada a cada pedido: bloqueio vale na hora). */
@@ -67,7 +82,17 @@ export function setSession(reply: FastifyReply, account: Account) {
   });
 }
 
-const publicAccount = (a: Account) => ({ id: a.id, email: a.email, name: a.name, role: a.role, status: a.status, phone: a.phone, owner: a.owner, linked: Boolean(a.userId) });
+export const publicAccount = (a: Account) => ({
+  id: a.id,
+  email: a.email,
+  name: a.name,
+  role: a.role,
+  status: a.status,
+  phone: a.phone,
+  owner: a.owner,
+  linked: Boolean(a.userId),
+  impersonating: a.impersonatedBy ? { name: a.impersonatedBy.name } : null,
+});
 
 export async function buildServer() {
   const app = Fastify({
@@ -320,6 +345,13 @@ export async function buildServer() {
   });
 
   app.get("/api/auth/me", { preHandler: requireAuth }, async (req) => publicAccount(req.account));
+
+  app.post("/api/auth/stop-impersonate", { preHandler: requireAuth }, async (req, reply) => {
+    reply.clearCookie(IMPERSONATE_COOKIE, { path: "/" });
+    const session = verifySession(req.cookies?.[COOKIE]);
+    const realAccount = session ? await loadAccount(session.sub) : null;
+    return realAccount ? publicAccount(realAccount) : { ok: true };
+  });
 
   // Sair de todos os aparelhos: derruba todos os logins desta conta, inclusive este
   app.post("/api/auth/logout-all", { preHandler: requireAuth }, async (req, reply) => {

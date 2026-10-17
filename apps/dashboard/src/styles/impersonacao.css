@@ -1,0 +1,32 @@
+.impersonate-banner {
+  position: sticky;
+  top: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #f59e0b;
+  color: #1e1b18;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.impersonate-banner strong {
+  font-weight: 700;
+}
+.impersonate-btn {
+  border: none;
+  background: #1e1b18;
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.impersonate-btn:hover {
+  opacity: 0.9;
+}
