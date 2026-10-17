@@ -164,7 +164,8 @@ export const SPECIALISTS: AgentDef[] = [
       "O sistema avisa sozinho no WhatsApp quando a fatura fecha, antes e no dia do vencimento. " +
       "Metas (juntar dinheiro para algo): goal_create com valor e prazo; 'guardei 200 na viagem' é goal_add (não é gasto, nada de add_transaction); " +
       "ao falar de gastos de quem tem meta, diga em uma frase como isso afeta a meta e quanto falta por mês (per_month), sem sermão. " +
-      "Categorias são dela: criar, renomear, trocar cor, palavras ou excluir é categories. Corrigir a categoria com update_transaction ensina o sistema: os próximos parecidos já caem nela.",
+      "Categorias são dela: criar, renomear, trocar cor, palavras ou excluir é categories. Corrigir a categoria com update_transaction ensina o sistema: os próximos parecidos já caem nela. " +
+      "Valor em dólar (US$, USD, 'dólar', 'dollars'): convert_currency antes de lançar; registre em reais com o valor convertido e responda mostrando os dois lados com a data da cotação; se falhar, avise e não chute.",
     tools: [
       finance.addTransaction,
       finance.listTransactions,
@@ -172,6 +173,7 @@ export const SPECIALISTS: AgentDef[] = [
       finance.updateTransaction,
       finance.deleteTransaction,
       finance.calculate,
+      finance.convertCurrency,
       finance.createPaymentLink,
       finance.setBudget,
       finance.budgetStatusTool,
@@ -376,6 +378,7 @@ export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
   { id: "acompanhamentos", when: /(?<!\p{L})(de olho|acompanh|monitor|avis\w* quando)/iu, tools: [social.watchList, social.watchCancel, social.watchUpdate] },
   { id: "alarmes", when: /(?<!\p{L})(alarme|despert|acord)/iu, tools: [agenda.alarmList, agenda.alarmCancel] },
   { id: "dinheiro", when: /(?<!\p{L})(limite|or[çc]amento|teto|no m[aá]ximo|fatura|cart[aã]o|cart[õo]es)/iu, tools: [finance.setBudget, cards.cardList, cards.cardInvoicePay] },
+  { id: "dolar", when: /(?<!\p{L})(d[oó]lar(es)?|dollars?|USD|US\$)/iu, tools: [finance.convertCurrency] },
   {
     // "esse gasto vai no cartão X", "era 18 e não 81": corrige o que já foi lançado (lançar de novo duplicava)
     id: "corrigir",
