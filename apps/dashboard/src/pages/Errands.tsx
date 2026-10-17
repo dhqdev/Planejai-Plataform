@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ago, api, day } from "../api";
 import { Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
 import { FIT_QUERY, useApi, useMedia } from "../hooks";
@@ -54,7 +54,8 @@ type Prefs = {
   archived: boolean;
   follow: Follow;
 };
-type Data = { errands: Errand[]; drafts: Draft[]; contacts?: ContactChat[]; follow: string; prefs?: Record<string, Prefs> };
+type AgendaContact = { id: string; name: string; phone: string; label: string | null };
+type Data = { errands: Errand[]; drafts: Draft[]; contacts?: ContactChat[]; agenda?: AgendaContact[]; follow: string; prefs?: Record<string, Prefs> };
 type Filter = "tudo" | "lugares" | "pessoas" | "arquivadas";
 
 const COLORS: { id: string; label: string }[] = [
@@ -102,6 +103,7 @@ const contactState = (c: ContactChat) => (c.waiting_you ? "Respondeu" : c.schedu
  * Mostra a próxima mensagem antes do "sim" e deixa cancelar sem mandar nada.
  */
 export function ErrandsPage() {
+  const navigate = useNavigate();
   const { data, error, reload } = useApi<Data>("/api/errands", { poll: 10000 });
   const fit = useMedia(FIT_QUERY);
   const phone = useMedia("(max-width: 767px)");
@@ -124,7 +126,10 @@ export function ErrandsPage() {
   const archivedOf = (phone: string) => Boolean(pref(phone)?.archived);
   const list = data.errands;
   const people = data.contacts ?? [];
-  const archivedCount = list.filter((e) => archivedOf(e.phone)).length + people.filter((c) => archivedOf(c.phone)).length;
+  const agenda = data.agenda ?? [];
+  const knownPhones = new Set([...list.map((e) => e.phone), ...people.map((c) => c.phone)]);
+  const agendaOnly = agenda.filter((a) => !knownPhones.has(a.phone));
+  const archivedCount = list.filter((e) => archivedOf(e.phone)).length + people.filter((c) => archivedOf(c.phone)).length + agendaOnly.filter((a) => archivedOf(a.phone)).length;
   // no notebook sempre há um aberto à direita; no celular a conversa abre no lugar da lista
   const first = draft ? `draft:${draft.id}` : [...list.map((e) => ({ id: e.id, at: e.updated_at })), ...people.map((c) => ({ id: `c:${c.phone}`, at: c.updated_at }))].sort((a, b) => (a.at < b.at ? 1 : -1))[0]?.id;
   const selId = picked ?? (fit ? first : null) ?? null;
@@ -201,8 +206,9 @@ export function ErrandsPage() {
   const places = filter === "pessoas" ? [] : errandsIn(placeList);
   const talks = filter === "lugares" ? [] : errandsIn(talkList);
   const contacts = filter === "lugares" ? [] : byPin(people.filter((c) => shelf(c.phone) && match(c.name, pref(c.phone)?.nickname, c.phone, c.last?.text)), (c) => Boolean(pref(c.phone)?.pinned));
+  const agendaFiltered = filter === "lugares" ? [] : byPin(agendaOnly.filter((a) => shelf(a.phone) && match(a.name, pref(a.phone)?.nickname, a.phone, a.label)), (a) => Boolean(pref(a.phone)?.pinned));
   const showDraftRow = draft && filter !== "pessoas" && filter !== "arquivadas" && match(draft.place, draft.goal);
-  const total = list.length + people.length + (draft ? 1 : 0);
+  const total = list.length + people.length + agendaOnly.length + (draft ? 1 : 0);
   const errandRow = (e: Errand) => (
     <button key={e.id} className={`errand-row${e.id === selId ? " active" : ""}`} onClick={() => setPicked(e.id)}>
       <Avatar name={placeName(e, pref(e.phone))} place={e.kind !== "conversa"} color={pref(e.phone)?.color} />
@@ -236,7 +242,7 @@ export function ErrandsPage() {
                   : f === "lugares"
                     ? `Lugares${placeList.length + (draft ? 1 : 0) ? ` ${placeList.length + (draft ? 1 : 0)}` : ""}`
                     : f === "pessoas"
-                      ? `Pessoas${people.length + talkList.length ? ` ${people.length + talkList.length}` : ""}`
+                      ? `Pessoas${people.length + talkList.length + agendaOnly.length ? ` ${people.length + talkList.length + agendaOnly.length}` : ""}`
                       : `Arquivadas ${archivedCount}`}
               </button>
             ))}
@@ -285,7 +291,27 @@ export function ErrandsPage() {
           </span>
         </button>
       ))}
-      {total > 0 && !showDraftRow && !places.length && !contacts.length && (
+      {agendaFiltered.map((a) => {
+        const aName = pref(a.phone)?.nickname || a.name || phoneLabel(a.phone);
+        return (
+          <button key={a.phone} className="errand-row" onClick={() => navigate("/")}>
+            <Avatar name={aName} color={pref(a.phone)?.color} />
+            <span className="errand-row-body">
+              <span className="errand-row-top">
+                <strong>
+                  {pref(a.phone)?.pinned && <Icon name="bookmark" size={12} className="errand-pin" />}
+                  {aName}
+                </strong>
+                <span className="errand-state them">Disponível</span>
+              </span>
+              <span className="errand-row-last muted">
+                {a.label ? `${a.label} · ` : ""}Toque para pedir no chat
+              </span>
+            </span>
+          </button>
+        );
+      })}
+      {total > 0 && !showDraftRow && !places.length && !contacts.length && !agendaFiltered.length && (
         <Empty>{term ? "Nada com esse nome." : filter === "arquivadas" ? "Nenhuma conversa arquivada." : filter === "pessoas" ? "Nenhuma conversa com pessoas ainda." : "Nenhum recado com lugares ainda."}</Empty>
       )}
       {!total && (
