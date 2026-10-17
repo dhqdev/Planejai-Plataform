@@ -112,7 +112,7 @@ export function mainText(html: string) {
 const usable = (text: string | null) => Boolean(text && text.length >= THIN_PAGE && !(text.length < 2_000 && BLOCKED_PAGE.test(text)));
 
 /** HTTP direto, sem navegador: resolve a maioria das páginas em 1 ou 2 segundos. */
-async function plainPage(url: string): Promise<string | null> {
+export async function plainPage(url: string): Promise<string | null> {
   try {
     const res = await safeFetch(url, {
       headers: { "User-Agent": BROWSER_UA, "Accept-Language": "pt-BR,pt;q=0.9", Accept: "text/html,application/xhtml+xml,*/*;q=0.8" },
@@ -127,7 +127,7 @@ async function plainPage(url: string): Promise<string | null> {
 }
 
 /** Tavily Extract: lê páginas de JavaScript e de sites que barram servidor, sem abrir Chrome aqui. */
-async function tavilyExtract(url: string): Promise<string | null> {
+export async function tavilyExtract(url: string): Promise<string | null> {
   const tavily = await getCredentials("tavily");
   if (!tavily?.api_key) return null;
   try {

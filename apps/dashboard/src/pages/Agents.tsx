@@ -15,6 +15,7 @@ export function AgentsPage() {
   const [sel, setSel] = useState<any | null>(null);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [lastCreated, setLastCreated] = useState<any | null>(null);
   if (error) return <div className="page"><ErrorBox error={error} /></div>;
   if (!data) return <Loading />;
 
@@ -24,7 +25,12 @@ export function AgentsPage() {
     try {
       const r = await api<any>("/api/improve/run", { method: "POST", json: {} });
       setResult(`Analisou ${r?.users ?? 0} pessoa(s), criou ${r?.created ?? 0} agente(s).`);
-      clients.reload();
+      const updated = await clients.reload();
+      if (r?.new_agent) {
+        setLastCreated(r.new_agent);
+      } else if (r?.created > 0 && Array.isArray(updated) && updated.length > 0) {
+        setLastCreated(updated[0]);
+      }
       topics.reload();
     } catch (e) {
       setResult((e as Error).message);
@@ -53,6 +59,21 @@ export function AgentsPage() {
         }
       />
       {result && <div className="notice" style={{ marginBottom: 14 }}>{result}</div>}
+      {lastCreated && (
+        <div className="card card-pad" style={{ marginBottom: 14, background: "var(--bg-accent, #f3f9f5)", border: "1px solid var(--accent, #2b825b)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span className="face-tile"><AgentFace face={lastCreated.face} size={50} /></span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--accent, #2b825b)" }}>Novo especialista criado</div>
+              <strong style={{ fontSize: 16 }}>{lastCreated.persona ?? lastCreated.name}</strong>
+              <div className="muted" style={{ fontSize: 13 }}>{lastCreated.focus ?? lastCreated.role}</div>
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={() => setSel(lastCreated)}>
+              Abrir / Editar
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="agents-body">
       <div className="card card-pad agents-map" style={{ marginBottom: 14 }}>
