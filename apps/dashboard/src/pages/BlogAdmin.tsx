@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { ago, api } from "../api";
 import { confirmDialog, Empty, ErrorBox, Loading, PageHead } from "../components";
 import { useApi } from "../hooks";
@@ -75,9 +76,9 @@ export function BlogAdminPage() {
         subtitle="Um post novo por semana, escrito e ilustrado pelo time. O blog é público e fica em /blog."
         actions={
           <>
-            <a className="btn" href="/blog" target="_blank" rel="noopener">
-              <Icon name="external" size={16} /> Abrir o blog
-            </a>
+            <Link className="btn" to="/blog">
+              <Icon name="book" size={16} /> Abrir o blog
+            </Link>
             <button className="btn btn-primary" onClick={write} disabled={!data.ready || busy}>
               <Icon name="edit" size={16} /> {busy ? "Escrevendo..." : "Escrever um post agora"}
             </button>
@@ -123,9 +124,9 @@ export function BlogAdminPage() {
         <div className="card blog-admin-list">
           {data.posts.map((p) => (
             <div key={p.id} className="blog-admin-row">
-              <a className="blog-admin-thumb" href={`/blog/${p.slug}`} target="_blank" rel="noopener" aria-label={`Abrir ${p.title}`}>
+              <Link className="blog-admin-thumb" to={`/blog/${p.slug}`} aria-label={`Abrir ${p.title}`}>
                 {p.has_cover ? <img src={`/api/blog/img/${p.id}/cover?v=${new Date(p.updated_at).getTime()}`} alt="" loading="lazy" /> : <Icon name="book" size={20} />}
-              </a>
+              </Link>
               <div className="blog-admin-main">
                 <strong>{p.title}</strong>
                 <div className="blog-admin-meta">
