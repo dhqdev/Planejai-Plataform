@@ -32,7 +32,7 @@ Princípios que não podem quebrar:
 | Por que travou / respondeu pela metade? | `agent/guard.ts`, `agent/collab.ts`, status `partial` com motivo em `error` (ver `agentes.md`) |
 | Variável de ambiente | `apps/server/src/config.ts` + `.env.example` |
 | Ajuste que o dono muda no painel (travas, assinatura, cadastro) | `settings.ts` (chaves e faixas) e Configurações no painel |
-| Quem vê o quê no painel | `painel.md`, `accounts.ts`, `sharing.ts`, `api/routes/dashboard/shared.ts` |
+| Quem vê o quê no painel | `painel.md`, `accounts.ts`, `sharing.ts` (`personalUser`/`personalUsers`), `api/routes/dashboard/shared.ts` |
 | Rota do painel | `api/routes/dashboard/<área>.ts` (agenda, finance, clients, executions, integrations, invites, memories, whatsapp) e `api/routes/dashboard.ts` |
 | Tela do painel | `apps/dashboard/src/pages/<Tela>.tsx`; menu e abas em `App.tsx` |
 | Tabela do banco | `grep -rln "create table <nome>" apps/server/src/db/migrations` |

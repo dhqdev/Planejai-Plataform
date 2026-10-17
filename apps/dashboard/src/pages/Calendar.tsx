@@ -27,6 +27,8 @@ export type Ev = {
   allDay?: boolean;
   recurring?: boolean;
   person?: string | null;
+  ownerId?: string;
+  ownerName?: string;
   location?: string | null;
   link?: string | null;
   /** compromisso: tag (assunto), cor, o texto completo e quando sai o aviso no WhatsApp */
@@ -112,7 +114,22 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
   const [selected, setSelected] = useState(() => startOfDay(new Date()));
   const [open, setOpen] = useState<Ev | null>(null);
   const [creating, setCreating] = useState<Date | null>(null);
-  const [person, setPerson] = useState("");
+  const [person, setPerson] = useState(() => {
+    try {
+      return sessionStorage.getItem("pj-origin-agenda") ?? "";
+    } catch {
+      return "";
+    }
+  });
+
+  const changePerson = (p: string) => {
+    setPerson(p);
+    try {
+      sessionStorage.setItem("pj-origin-agenda", p);
+    } catch {
+      /* sem storage */
+    }
+  };
   const [side, setSide] = useState(true);
   // agendas e tags escondidas ("reminder", "google", "tag:Saúde"...)
   const [hidden, setHidden] = useState<string[]>(loadHidden);
@@ -281,7 +298,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
         {creating && <NewReminder at={creating} tags={[]} onClose={(saved) => { setCreating(null); if (saved) void first.reload(); }} />}
       </div>
     );
-  if (phone) return <PhoneAgenda isSuper={isSuper} hidden={hidden} onToggle={toggleCal} owners={owners} person={person} onPerson={setPerson} />;
+  if (phone) return <PhoneAgenda isSuper={isSuper} hidden={hidden} onToggle={toggleCal} owners={owners} person={person} onPerson={changePerson} />;
 
   return (
     <div className={`page cal-page fit ${side && !phone ? "with-side" : ""}`}>
@@ -297,8 +314,9 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
           {owners.length > 0 && (
             <div className="cal-side-block">
               <h4>De quem</h4>
-              <select className="select" aria-label="De quem" value={person} onChange={(e) => setPerson(e.target.value)}>
+              <select className="select" aria-label="De quem" value={person} onChange={(e) => changePerson(e.target.value)}>
                 <option value="">Minha agenda</option>
+                <option value="all">{owners.length === 1 ? "Os dois" : "Todos"}</option>
                 {owners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
@@ -348,8 +366,9 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
                 <CalendarList title="Agendas" items={calendars} hidden={hidden} onToggle={toggleCal} />
                 <CalendarList title="Tags" items={tagItems(tags)} hidden={hidden} onToggle={toggleCal} />
                 {owners.length > 0 && (
-                  <select className="select" aria-label="De quem" style={{ marginTop: 10 }} value={person} onChange={(e) => setPerson(e.target.value)}>
+                  <select className="select" aria-label="De quem" style={{ marginTop: 10 }} value={person} onChange={(e) => changePerson(e.target.value)}>
                     <option value="">Minha agenda</option>
+                    <option value="all">{owners.length === 1 ? "Os dois" : "Todos"}</option>
                     {owners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 )}
@@ -777,6 +796,7 @@ export function EventRow({ ev, onOpen }: { ev: Ev; onOpen: (e: Ev) => void }) {
       <span className="cal-row-text">
         <span className="ellipsis" title={ev.title}>{ev.title}</span>
         <small className="muted">
+          {ev.ownerName ? `${ev.ownerName} · ` : ""}
           {ev.kind === "message" ? MSG_STATUS[ev.status ?? ""] ?? "Mensagem agendada" : ev.kind === "google" ? "Google Agenda" : ev.kind === "holiday" ? "Feriado nacional" : ev.tag ?? (ev.recurring ? "Lembrete recorrente" : ev.remindAt ? "Compromisso" : "Lembrete")}
           {ev.person && ev.kind !== "message" ? ` · ${ev.person}` : ""}
         </small>
@@ -1055,6 +1075,7 @@ export function EventDetail({ ev, tags, readonly, onClose, onChanged }: { ev: Ev
             {ev.tag && (<><dt>Tag</dt><dd>{ev.tag}</dd></>)}
             {ev.person && (<><dt>Pessoa</dt><dd>{ev.person}</dd></>)}
             {ev.location && (<><dt>Local</dt><dd>{ev.location}</dd></>)}
+            {ev.ownerName && (<><dt>Dono</dt><dd>{ev.ownerName}</dd></>)}
             {details && details !== ev.title && (<><dt>Detalhes</dt><dd>{details}</dd></>)}
           </dl>
         </>
