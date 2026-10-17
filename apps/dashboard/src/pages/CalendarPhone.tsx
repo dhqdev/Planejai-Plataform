@@ -281,6 +281,21 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
           />
         )}
         {tab === "cal" && <GoogleSync isSuper={isSuper} variant="phone" />}
+        {owners.length > 0 && (
+          <div className="pc-owner-tabs seg seg-scroll" role="tablist" aria-label="De quem">
+            <button role="tab" aria-selected={!person} className={!person ? "active" : ""} onClick={() => onPerson("")}>
+              Minha agenda
+            </button>
+            <button role="tab" aria-selected={person === "all"} className={person === "all" ? "active" : ""} onClick={() => onPerson("all")}>
+              {owners.length === 1 ? "Os dois" : "Todos"}
+            </button>
+            {owners.map((p) => (
+              <button key={p.id} role="tab" aria-selected={person === p.id} className={person === p.id ? "active" : ""} onClick={() => onPerson(p.id)}>
+                {p.name}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="pc-row pc-row-2">
           {tab === "cal" && mode === "week" && (
             <button className="pc-ico sm" aria-label="Semana anterior" onClick={() => { haptic(5); setWeekFrom(addDays(weekFrom, -7)); }}>
@@ -389,16 +404,6 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
               </button>
             ))}
           </section>
-          {owners.length > 0 && (
-            <section className="pc-opt-sec">
-              <h4>De quem</h4>
-              <select className="select" aria-label="De quem" value={person} onChange={(e) => onPerson(e.target.value)}>
-                <option value="">Minha agenda</option>
-                <option value="all">{owners.length === 1 ? "Os dois" : "Todos"}</option>
-                {owners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </section>
-          )}
         </Modal>
       )}
 
