@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ago, api, ms, usd } from "../api";
 import { Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
@@ -22,6 +22,10 @@ interface TeamMember {
   working: { id: number; title: string; stage: string; since: string }[];
   last: { to_agent: string; text: string; ticket_id: number; created_at: string } | null;
   week: { calls: number; cost: number };
+  jeito?: string;
+  bordao?: string;
+  delivered?: number;
+  lessons?: { id: number; text: string; weight: number; ticket_id: number | null }[];
 }
 interface Agent {
   name: string;
@@ -156,11 +160,11 @@ function columnsOf(st: Status): { key: string; label: string; agent?: string; ha
 
 /** Cada agente é um Mascote com a roupa do trabalho dele, numa bolinha da cor dele. */
 const AGENT_LOOK: Record<string, Outfit> = {
-  lia: { eyes: "glasses", head: "flower" },
+  lia: { eyes: "glasses", head: "flower", neck: "scarf" },
   beto: { head: "hardhat", neck: "toolbelt" },
-  caio: { head: "headphones", neck: "bandana" },
-  vera: { eyes: "monocle", neck: "pearls" },
-  tito: { head: "cap", neck: "stethoscope" },
+  caio: { head: "headphones", neck: "bandana", eyes: "sunglasses" },
+  vera: { eyes: "monocle", neck: "pearls", head: "beret" },
+  tito: { head: "mechanic", neck: "stethoscope", eyes: "glasses" },
 };
 
 function AgentDot({ id, agents, size = 26, mood, live = false }: { id: string; agents: Record<string, Agent>; size?: number; mood?: Mood; live?: boolean }) {
@@ -255,13 +259,12 @@ export function EsteiraPage() {
                 <Empty>Nenhum chamado ainda. Escreva o que quer mudar, do jeito que você falaria para um dev, e a esteira cuida do resto.</Empty>
               </div>
             ) : (
-              <div className="dev-board">
+              <Board phone={phone} cols={columnsOf(status.data).map((col) => ({ ...col, count: tickets.filter((t) => col.has(t.stage)).length }))}>
                 {columnsOf(status.data).map((col) => {
                   const items = tickets.filter((t) => col.has(t.stage));
                   const a = col.agent ? status.data!.agents[col.agent] : null;
-                  if (phone && !items.length) return null;
                   return (
-                    <section key={col.key} className={`dev-col${a ? " dev-col-agent" : ""}`}>
+                    <section key={col.key} data-col={col.key} className={`dev-col${a ? " dev-col-agent" : ""}`}>
                       <header>
                         {a ? (
                           <span className="dev-col-who">
@@ -287,7 +290,7 @@ export function EsteiraPage() {
                           <div className="dev-card-tags muted">
                             {KIND[t.kind] ?? t.kind}
                             {t.level && ` · ${LEVEL[t.level] ?? t.level}`}
-                            {Number(t.images) > 0 && ` · ${Number(t.images)} 📎`}
+                            {Number(t.images) > 0 && ` · ${Number(t.images)} ${Number(t.images) > 1 ? "imagens" : "imagem"}`}
                           </div>
                           <Flow stage={t.stage} failed={t.failed_stage} />
                           {t.last_msg && (
@@ -308,7 +311,7 @@ export function EsteiraPage() {
                     </section>
                   );
                 })}
-              </div>
+              </Board>
             )}
           </div>
         )}
@@ -318,6 +321,54 @@ export function EsteiraPage() {
       {creating && <NewTicket onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); void list.reload(); openTicket(id); }} />}
       {open && <TicketModal id={open} labels={labels} agents={status.data.agents} onClose={() => openTicket(null)} onChange={() => void list.reload()} />}
     </div>
+  );
+}
+
+/**
+ * Quadro: no notebook as colunas cabem lado a lado; no celular vira kanban de verdade, uma coluna por tela
+ * deslizando de lado (scroll-snap), com a fila de nomes em cima para pular direto e mostrar onde você está.
+ */
+function Board({ phone, cols, children }: { phone: boolean; cols: { key: string; label: string; count: number }[]; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [at, setAt] = useState(cols[0]?.key ?? "");
+  useEffect(() => {
+    const el = ref.current;
+    if (!phone || !el) return;
+    // começa na primeira coluna que tem chamado andando (a fila vazia não ocupa a tela)
+    const first = cols.find((c) => c.count > 0 && c.key !== "pronto" && c.key !== "parado") ?? cols.find((c) => c.count > 0);
+    const target = first && el.querySelector<HTMLElement>(`[data-col="${first.key}"]`);
+    if (target) el.scrollLeft = target.offsetLeft - el.offsetLeft;
+    const onScroll = () => {
+      const kids = [...el.querySelectorAll<HTMLElement>("[data-col]")];
+      const mid = el.scrollLeft + el.clientWidth / 2;
+      const hit = kids.find((k) => k.offsetLeft - el.offsetLeft <= mid && k.offsetLeft - el.offsetLeft + k.offsetWidth >= mid);
+      if (hit) setAt(hit.dataset.col!);
+    };
+    onScroll();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [phone]);
+  const go = (key: string) => {
+    const el = ref.current;
+    const target = el?.querySelector<HTMLElement>(`[data-col="${key}"]`);
+    if (!el || !target) return;
+    haptic(5);
+    el.scrollTo({ left: target.offsetLeft - el.offsetLeft, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
+  return (
+    <>
+      {phone && (
+        <nav className="dev-colnav" aria-label="Colunas do quadro">
+          {cols.map((c) => (
+            <button key={c.key} className={at === c.key ? "active" : ""} aria-current={at === c.key} onClick={() => go(c.key)}>
+              {c.label}
+              {c.count > 0 && <span className="mono">{c.count}</span>}
+            </button>
+          ))}
+        </nav>
+      )}
+      <div ref={ref} className={`dev-board${phone ? " dev-kanban" : ""}`}>{children}</div>
+    </>
   );
 }
 
@@ -396,7 +447,9 @@ function TeamPanel({ agents, labels, onOpen }: { agents: Record<string, Agent>; 
                 <span className={`dev-member-state${m.working.length ? " on" : ""}`}>{m.working.length ? `Trabalhando em ${m.working.length}` : "Livre"}</span>
               </div>
             </div>
-            <p className="dev-member-does">{m.does}</p>
+            {m.bordao && <p className="dev-member-quote">“{m.bordao}”</p>}
+            {m.jeito && <p className="dev-member-does">{m.jeito}</p>}
+            <p className="dev-member-does muted">{m.does}</p>
             {m.working.length > 0 && (
               <ul className="dev-member-now">
                 {m.working.map((w) => (
@@ -418,11 +471,75 @@ function TeamPanel({ agents, labels, onOpen }: { agents: Record<string, Agent>; 
             <div className="dev-member-meta muted">
               <span className="mono ellipsis" title={m.models.join(", ")}>{m.models.map((x) => x.split("/").pop()).join(" · ")}</span>
               <span>{m.week.calls} chamadas · {usd(m.week.cost)} em 7 dias</span>
+              <span>{m.delivered ?? 0} {m.delivered === 1 ? "entrega" : "entregas"} · {m.lessons?.length ?? 0} {m.lessons?.length === 1 ? "lição aprendida" : "lições aprendidas"}</span>
             </div>
+            <Lessons member={m} onChange={() => void team.reload()} onOpen={onOpen} />
           </article>
         ))
       )}
     </aside>
+  );
+}
+
+/** O que o agente aprendeu nas retrospectivas (entra no prompt dele). O dono apaga a ruim ou ensina uma nova. */
+function Lessons({ member, onChange, onOpen }: { member: TeamMember; onChange: () => void; onOpen: (id: number) => void }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const lessons = member.lessons ?? [];
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await fn();
+      haptic(5);
+      onChange();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="dev-lessons">
+      <button className="dev-lessons-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span>O que {member.name} aprendeu</span>
+        <Icon name="chevron-right" size={14} className={open ? "dev-rot" : undefined} />
+      </button>
+      {open && (
+        <>
+          {!lessons.length && <p className="muted dev-lessons-empty">Nada ainda. Depois de cada chamado que dá trabalho, o time faz uma retrospectiva e anota aqui o que mudar.</p>}
+          <ul>
+            {lessons.map((l) => (
+              <li key={l.id}>
+                <span>
+                  {l.text}
+                  <small className="muted">
+                    {l.weight > 1 ? ` · repetiu ${l.weight}x` : ""}
+                    {l.ticket_id ? <> · <button className="dev-link" onClick={() => onOpen(l.ticket_id!)}>#{l.ticket_id}</button></> : " · você ensinou"}
+                  </small>
+                </span>
+                <button className="dev-lesson-del" aria-label="Esquecer esta lição" disabled={busy} onClick={() => run(() => api(`/api/dev/lessons/${l.id}`, { method: "DELETE" }))}>
+                  <Icon name="x" size={12} />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <form
+            className="dev-teach"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (text.trim().length >= 8) void run(async () => { await api("/api/dev/lessons", { method: "POST", json: { agent: member.id, lesson: text } }); setText(""); });
+            }}
+          >
+            <input className="input" value={text} maxLength={220} onChange={(e) => setText(e.target.value)} placeholder={`Ensinar algo para ${member.name}`} aria-label={`Ensinar algo para ${member.name}`} />
+            <button className="btn" disabled={busy || text.trim().length < 8}>Ensinar</button>
+          </form>
+          {err && <ErrorBox error={err} />}
+        </>
+      )}
+    </div>
   );
 }
 

@@ -14,7 +14,9 @@ vi.mock("../src/llm/openrouter.js", async (orig) => ({
   ...(await orig<typeof import("../src/llm/openrouter.js")>()),
   chatCompletion: vi.fn(async (_choice: any, req: any) => {
     const sys = String(req.messages[0].content);
-    const key = sys.startsWith("Você é a Lia, analista da esteira. O dono anexou")
+    const key = sys.startsWith("Você conduz a retrospectiva")
+      ? "retro"
+      : sys.startsWith("Você é a Lia, analista da esteira. O dono anexou")
       ? "vision"
       : sys.startsWith("Você é a Lia")
       ? "refine"
@@ -253,6 +255,19 @@ describe.skipIf(!enabled)("esteira de desenvolvimento (e2e)", () => {
     const execs = await db.many("SELECT trigger, user_id FROM executions WHERE trigger = 'esteira'");
     expect(execs.length).toBe(6);
     expect(execs.every((e) => e.user_id === null)).toBe(true);
+
+    // retrospectiva: o atrito (dúvida, troca recusada, CI vermelho) vira lição do Caio, uma vez só
+    replies.retro = [JSON.stringify({ licoes: [{ agente: "caio", licao: "Copie o search direto do arquivo lido, com a mesma indentação." }, { agente: "ninguem", licao: "ignorar" }] })];
+    await runStage({ ticketId: id, retro: true });
+    await runStage({ ticketId: id, retro: true });
+    const facts = String(lastReq.retro!.req.messages[1].content);
+    expect(facts).toContain("trocas que não aplicaram");
+    expect(facts).toContain("CI vermelho");
+    const lessons = await db.many("SELECT agent, lesson, ticket_id FROM dev_lessons");
+    expect(lessons).toEqual([{ agent: "caio", lesson: "Copie o search direto do arquivo lido, com a mesma indentação.", ticket_id: id }]);
+    const after = (await app.inject({ method: "GET", url: `/api/dev/tickets/${id}`, headers: { cookie: owner } })).json();
+    expect(after.steps.at(-1).name).toBe("retrospectiva: o que o time aprendeu");
+    expect(after.steps.some((s: any) => s.kind === "msg" && s.agent === "caio" && s.to_agent === "dono" && s.summary.includes("Copie o search"))).toBe(true);
   });
 
   it("chamado simples com print: a Lia olha a imagem, pula o Beto e a Vera e o Caio usa o modelo barato", async () => {
@@ -282,6 +297,9 @@ describe.skipIf(!enabled)("esteira de desenvolvimento (e2e)", () => {
     expect(String(lastReq.refine!.req.messages[1].content)).toContain("escrito 'Subtrair'");
     expect(typeof lastReq.code!.req.messages[1].content).toBe("string");
     expect(lastReq.code!.model).toBe("deepseek/deepseek-v4.1-flash");
+    // o Caio já trabalha com o jeito dele e a lição do chamado anterior no prompt
+    expect(String(lastReq.code!.req.messages[0].content)).toContain("Seu jeito: Caprichoso");
+    expect(String(lastReq.code!.req.messages[0].content)).toContain("- Copie o search direto do arquivo lido");
     const detail = (await app.inject({ method: "GET", url: `/api/dev/tickets/${id}`, headers: { cookie: owner } })).json();
     expect(detail).toMatchObject({ level: "simples", level_auto: true });
     expect(detail.image_notes).toContain("Subtrair");
@@ -327,6 +345,16 @@ describe.skipIf(!enabled)("esteira de desenvolvimento (e2e)", () => {
     expect(team.map((m: any) => m.name)).toEqual(["Lia", "Beto", "Caio", "Vera", "Tito"]);
     expect(team.find((m: any) => m.id === "caio").models.length).toBeGreaterThan(0);
     expect(team.find((m: any) => m.id === "tito").last).toBeTruthy();
+    const caio = team.find((m: any) => m.id === "caio");
+    expect(caio).toMatchObject({ bordao: "Bora codar.", delivered: 2 });
+    expect(caio.lessons.length).toBe(1);
+    // o dono ensina e apaga lição; lição repetida só reforça
+    const taught = await app.inject({ method: "POST", url: "/api/dev/lessons", headers: { cookie: owner }, payload: { agent: "vera", lesson: "Confira se o texto novo está em português do Brasil." } });
+    expect(taught.statusCode).toBe(200);
+    await app.inject({ method: "POST", url: "/api/dev/lessons", headers: { cookie: owner }, payload: { agent: "vera", lesson: "confira se o texto novo está em português do Brasil." } });
+    expect((await db.one("SELECT weight FROM dev_lessons WHERE id = $1", [taught.json().id])).weight).toBe(2);
+    expect((await app.inject({ method: "POST", url: "/api/dev/lessons", headers: { cookie: owner }, payload: { agent: "hacker", lesson: "qualquer coisa aqui" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "DELETE", url: `/api/dev/lessons/${taught.json().id}`, headers: { cookie: owner } })).statusCode).toBe(200);
 
     const list = (await app.inject({ method: "GET", url: "/api/dev/skills", headers: { cookie: owner } })).json();
     expect(list.groups[0]).toMatchObject({ folder: "planejai", files: [{ path: ".claude/skills/planejai/SKILL.md", name: "SKILL.md" }] });

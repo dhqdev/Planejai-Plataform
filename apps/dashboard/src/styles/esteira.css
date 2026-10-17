@@ -98,7 +98,18 @@
 .dev-page a.costs-row { cursor: pointer; }
 
 @media (max-width: 767px) {
-  .dev-board { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
+  /* kanban no celular: uma coluna por tela, desliza de lado e encaixa; a vizinha aparece na borda */
+  .dev-board.dev-kanban { display: flex; flex-direction: row; align-items: flex-start; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory; scroll-padding-inline: 16px; margin-inline: -16px; padding: 0 16px 12px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .dev-board.dev-kanban::-webkit-scrollbar { display: none; }
+  .dev-kanban > .dev-col { flex: 0 0 84%; scroll-snap-align: start; max-height: calc(100dvh - 230px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+  .dev-kanban > .dev-col::-webkit-scrollbar { display: none; }
+  .dev-kanban > .dev-col > header { position: sticky; top: -10px; z-index: 1; background: var(--panel-2); margin: -10px -10px 0; padding: 12px 14px 8px; border-radius: 16px 16px 0 0; }
+  .dev-colnav { display: flex; gap: 6px; overflow-x: auto; margin: 0 -16px 10px; padding: 0 16px; scrollbar-width: none; }
+  .dev-colnav::-webkit-scrollbar { display: none; }
+  .dev-colnav > button { all: unset; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--muted); background: var(--panel-2); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .dev-colnav > button.active { background: var(--ink); color: var(--on-ink); }
+  .dev-colnav > button span { font-size: 11.5px; opacity: .8; }
   .dev-col { padding: 10px; min-height: 0; }
   .dev-col > header { font-size: 14px; padding: 2px 4px 8px; }
   .dev-col-who strong { font-size: 15px; }
@@ -173,3 +184,25 @@
   .skills-list button { padding: 10px; font-size: 14px; }
   .skills-text { font-size: 13px; min-height: 60dvh; }
 }
+
+/* personagens e o que cada um aprendeu */
+.dev-member-quote { margin: 0; font-size: 12.5px; font-style: italic; color: var(--tone); }
+.dev-lessons { border-top: 1px solid var(--border); padding-top: 6px; }
+.dev-lessons-toggle { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 4px 2px; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.dev-lessons-toggle .ico { transition: transform .18s ease; }
+.dev-lessons-toggle .ico.dev-rot { transform: rotate(90deg); }
+.dev-lessons-toggle:focus-visible { outline: 2px solid var(--violet, currentColor); border-radius: 8px; }
+.dev-lessons ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.dev-lessons li { display: flex; gap: 6px; align-items: flex-start; padding: 7px 9px; border-radius: 10px; background: var(--panel-2); font-size: 12.5px; line-height: 1.35; }
+.dev-lessons li > span { flex: 1; min-width: 0; }
+.dev-lessons small { font-size: 11.5px; }
+.dev-lessons-empty { margin: 6px 2px 0; font-size: 12px; line-height: 1.4; }
+.dev-link { all: unset; cursor: pointer; text-decoration: underline; }
+.dev-lesson-del { all: unset; cursor: pointer; flex-shrink: 0; width: 22px; height: 22px; border-radius: 999px; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.dev-lesson-del:focus-visible { outline: 2px solid var(--violet, currentColor); }
+@media (hover: hover) and (pointer: fine) { .dev-lesson-del:hover { background: var(--panel); color: var(--text); } }
+.dev-teach { display: flex; gap: 6px; margin-top: 6px; }
+.dev-teach .input { flex: 1; min-width: 0; font-size: 13px; padding: 7px 10px; }
+.dev-teach .btn { flex-shrink: 0; }
+@media (max-width: 767px) { .dev-teach .input { font-size: 16px; } .dev-lessons li, .dev-lessons-toggle { font-size: 13.5px; } }
+@media (prefers-reduced-motion: reduce) { .dev-lessons-toggle .ico { transition: none; } }

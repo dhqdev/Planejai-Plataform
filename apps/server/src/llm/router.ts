@@ -273,6 +273,15 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     temperature: 0,
     maxTokens: 800,
   },
+  {
+    task: "dev:retro",
+    label: "Esteira: retrospectiva do time",
+    why: "Quando um chamado termina com atrito (revisão devolvida, troca que não aplicou, CI vermelho), transforma o que deu errado em até 3 lições curtas que entram no prompt do agente nos próximos chamados. Lê só fatos resumidos; chamado que saiu de primeira não chama modelo.",
+    model: "deepseek/deepseek-v4.1-flash",
+    fallbacks: ["xiaomi/mimo-v2.6-flash"],
+    temperature: 0.2,
+    maxTokens: 700,
+  },
 ];
 
 let cache: { at: number; rows: Map<string, ModelChoice> } | null = null;

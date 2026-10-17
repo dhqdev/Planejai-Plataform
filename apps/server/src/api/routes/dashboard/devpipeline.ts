@@ -1,10 +1,12 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
+  addLesson,
   answerTicket,
   cancelTicket,
   costOverview,
   createTicket,
   decodeImage,
+  deleteLesson,
   devStatus,
   getTicket,
   listSkills,
@@ -91,6 +93,16 @@ export async function devPipelineRoutes(api: FastifyInstance) {
     });
 
     dev.get("/api/dev/team", async () => teamOverview());
+
+    /** Lições do time: a retrospectiva grava sozinha; o dono pode ensinar uma ou apagar a que não presta. */
+    dev.post<{ Body: { agent?: string; lesson?: string } }>("/api/dev/lessons", async (req, reply) => {
+      const saved = await addLesson(String(req.body?.agent ?? ""), String(req.body?.lesson ?? ""));
+      return saved ?? reply.code(400).send({ error: "Escolha um agente e escreva a lição (pelo menos 8 letras)." });
+    });
+    dev.delete<{ Params: { id: string } }>("/api/dev/lessons/:id", async (req, reply) => {
+      const id = idOf(req.params.id);
+      return id && (await deleteLesson(id)) ? { ok: true } : reply.code(404).send({ error: "Lição não encontrada." });
+    });
 
     /** Tela Skills: lê do repositório e, ao salvar, faz um commit no branch base só com aquele .md. */
     const skillErr = (reply: FastifyReply, err: unknown) => {

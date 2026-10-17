@@ -39,12 +39,64 @@ export const STAGE_LABEL: Record<string, string> = {
  * O time da esteira: cada coluna do quadro é um agente com o próprio modelo (rota em Modelos).
  * Eles conversam entre si por recados curtos que ficam no card (dev_ticket_steps kind = 'msg').
  */
-export const AGENTS: Record<string, { name: string; role: string; route: string; does: string }> = {
-  lia: { name: "Lia", role: "Analista", route: "dev:refine", does: "Lê o seu chamado e os prints, reescreve como problema, esperado e critérios de aceite, aponta os arquivos e as skills que importam e decide o nível." },
-  beto: { name: "Beto", role: "Arquiteto", route: "dev:plan", does: "Lê os arquivos apontados e monta o passo a passo da mudança. Responde as dúvidas do Caio. Em chamado simples ele não entra." },
-  caio: { name: "Caio", role: "Desenvolvedor", route: "dev:code", does: "Escreve o código seguindo o plano e as regras do repositório. Quando o CI fica vermelho, lê o log e conserta no mesmo PR." },
-  vera: { name: "Vera", role: "Revisora", route: "dev:review", does: "Revisa o diff contra os critérios de aceite e devolve para o Caio só por problema real. Em chamado simples com diff pequeno ela é pulada." },
-  tito: { name: "Tito", role: "Testes", route: "dev:qa", does: "Cria o branch, abre o PR em rascunho, espera o CI e explica ao Caio o que quebrou. Tira do rascunho quando fica verde." },
+export interface DevAgent {
+  name: string;
+  role: string;
+  route: string;
+  does: string;
+  /** quem ele é (aparece no painel do time) */
+  jeito: string;
+  /** bordão do personagem, no painel */
+  bordao: string;
+  /** como ele trabalha: entra no fim do prompt dele (curto, é token em toda chamada) */
+  persona: string;
+}
+export const AGENTS: Record<string, DevAgent> = {
+  lia: {
+    name: "Lia",
+    role: "Analista",
+    route: "dev:refine",
+    does: "Lê o seu chamado e os prints, reescreve como problema, esperado e critérios de aceite, aponta os arquivos e as skills que importam e decide o nível.",
+    jeito: "Veio do suporte e já ouviu todo tipo de pedido. Curiosa e detalhista, transforma um \"tá estranho\" em critério que dá para testar.",
+    bordao: "Deixa eu ver se entendi direito.",
+    persona: "Detalhista e prática: cada critério de aceite tem de ser verificável olhando a tela ou o teste; aponte só arquivos que você viu na lista e prefira poucos e certeiros.",
+  },
+  beto: {
+    name: "Beto",
+    role: "Arquiteto",
+    route: "dev:plan",
+    does: "Lê os arquivos apontados e monta o passo a passo da mudança. Responde as dúvidas do Caio. Em chamado simples ele não entra.",
+    jeito: "Calmo e pé no chão. Detesta gambiarra e detesta ainda mais complicar o que é simples: sempre o caminho mais curto que não quebra nada.",
+    bordao: "Primeiro a planta, depois o tijolo.",
+    persona: "Pé no chão: reaproveite o que já existe no código, cite funções e trechos reais dos arquivos lidos, e diga como provar que funcionou.",
+  },
+  caio: {
+    name: "Caio",
+    role: "Desenvolvedor",
+    route: "dev:code",
+    does: "Escreve o código seguindo o plano e as regras do repositório. Quando o CI fica vermelho, lê o log e conserta no mesmo PR.",
+    jeito: "Rápido e caprichoso, fone no ouvido. Mexe só no que precisa e confere tudo antes de entregar.",
+    bordao: "Bora codar.",
+    persona: "Caprichoso: antes de responder confira se cada search existe igual no arquivo, se os imports, nomes e tipos batem e se não sobrou nada pela metade.",
+  },
+  vera: {
+    name: "Vera",
+    role: "Revisora",
+    route: "dev:review",
+    does: "Revisa o diff contra os critérios de aceite e devolve para o Caio só por problema real. Em chamado simples com diff pequeno ela é pulada.",
+    jeito: "Exigente mas justa. Não implica com gosto pessoal; quando devolve, diz exatamente o que está errado e como resolver.",
+    bordao: "Bonito. Agora prova que funciona.",
+    persona: "Exigente mas justa: cada problema diz arquivo, o que está errado e como resolver; confira cada critério de aceite um por um.",
+  },
+  tito: {
+    name: "Tito",
+    role: "Testes",
+    route: "dev:qa",
+    does: "Cria o branch, abre o PR em rascunho, espera o CI e explica ao Caio o que quebrou. Tira do rascunho quando fica verde.",
+    jeito: "Desconfiado por profissão. Lê log de CI como quem lê romance policial e acha a linha que entregou o culpado.",
+    bordao: "O CI não mente.",
+    persona: "Investigador: aponte a primeira falha real do log (não o efeito cascata), o arquivo e a linha, e o que provavelmente causou.",
+  },
 };
 export const STAGE_AGENT: Record<string, string> = {
   entendendo: "lia",
@@ -242,6 +294,8 @@ async function setStage(id: number, stage: string, extra: Record<string, unknown
     [id, stage, FINAL.has(stage), ...keys.map((k) => (extra[k] != null && typeof extra[k] === "object" ? JSON.stringify(extra[k]) : extra[k]))],
   );
   if (RUNNABLE.has(stage)) await enqueue(id, stage);
+  // terminou (bem ou mal): o time faz a retrospectiva e aprende para os próximos chamados
+  if (stage === "pronto" || stage === "falhou") await (await getBoss()).send(QUEUES.dev, { ticketId: id, retro: true }, { retryLimit: 0, expireInSeconds: 10 * 60 });
 }
 
 /** Dono pediu de novo: volta para a etapa em que parou (ou do começo). */
@@ -273,9 +327,13 @@ export async function answerTicket(id: number, text: string) {
 // ============================== worker ==============================
 
 /** Um job da fila: roda a etapa se o chamado ainda está nela (job repetido ou atrasado não faz nada). */
-export async function runStage(job: { ticketId?: number; stage?: string; attempt?: number; token?: string; sweep?: boolean }) {
+export async function runStage(job: { ticketId?: number; stage?: string; attempt?: number; token?: string; sweep?: boolean; retro?: boolean }) {
   if (job.sweep) {
     await sweepStuck();
+    return;
+  }
+  if (job.retro) {
+    await retrospective(Number(job.ticketId)).catch((err) => console.warn("[esteira] retrospectiva falhou:", err instanceof Error ? err.message : err));
     return;
   }
   const t = await one("SELECT * FROM dev_tickets WHERE id = $1", [job.ticketId]);
@@ -320,6 +378,7 @@ const TASK_AGENT: Record<string, string> = {
   ...Object.fromEntries(Object.entries(AGENTS).map(([id, a]) => [a.route, id])),
   "dev:vision": "lia",
   "dev:code:simples": "caio",
+  "dev:retro": "time",
 };
 
 const textOnly = (m: ChatMessage): ChatMessage =>
@@ -333,7 +392,20 @@ const traceInput = (m: ChatMessage | undefined) =>
 class StageRun {
   /** execução em Execuções: só nasce na primeira chamada de modelo (a espera do CI não enche o log) */
   tracer: Tracer | null = null;
+  private voices = new Map<string, string>();
   constructor(public t: any, readonly cfg: DevConfig) {}
+
+  /** Fim do prompt de cada agente: o jeito dele e as lições que aprendeu nos chamados anteriores. */
+  async voice(id: string) {
+    if (!this.voices.has(id)) {
+      const lessons = await lessonsOf(id, LESSONS_IN_PROMPT);
+      this.voices.set(
+        id,
+        `\nSeu jeito: ${AGENTS[id]?.persona ?? ""}${lessons.length ? `\nO que você aprendeu nos chamados anteriores (siga):\n${lessons.map((l) => `- ${l.lesson}`).join("\n")}` : ""}`,
+      );
+    }
+    return this.voices.get(id)!;
+  }
 
   /** Chamada de modelo com custo em Execuções e em dev_ticket_steps (o painel de custos lê daqui). */
   async llm(task: string, name: string, messages: ChatMessage[], summary?: (r: ChatResult) => string, opts: { maxTokens?: number } = {}): Promise<ChatResult> {
@@ -496,6 +568,12 @@ async function inbox(run: StageRun, to: string) {
   return rows.length ? `\n\nRecados do time para você:\n${rows.reverse().map((r) => `- ${AGENTS[r.agent]?.name ?? r.agent}: ${r.summary}`).join("\n")}` : "";
 }
 
+/** Consertos que o Caio já subiu neste PR: quem tenta de novo não repete o que não resolveu. */
+async function triedFixes(run: StageRun) {
+  const rows = await many("SELECT summary FROM dev_ticket_steps WHERE ticket_id = $1 AND kind = 'msg' AND agent = 'caio' AND to_agent = 'tito' AND stage = 'corrigindo' ORDER BY id", [run.t.id]);
+  return rows.length ? `\n\nConsertos já tentados que não deixaram o CI verde (não repita, ataque a causa):\n${rows.map((r) => `- ${r.summary}`).join("\n")}` : "";
+}
+
 // ============================== etapas ==============================
 
 const STAGES = {
@@ -519,7 +597,8 @@ const STAGES = {
             "Você é a Lia, analista de uma esteira de desenvolvimento automática (time: Lia analista, Beto arquiteto, Caio desenvolvedor, Vera revisora, Tito testes). Recebe um chamado do dono do produto e o descreve melhor para um desenvolvedor: problema, comportamento esperado, critérios de aceite verificáveis e os arquivos do repositório que provavelmente precisam mudar (só caminhos que existem na lista). Escreva em português do Brasil. Só faça perguntas se for impossível seguir sem a resposta; detalhe que dá para decidir, decida e diga qual escolheu.\n" +
             "Na lista de arquivos, os .md em .claude/skills/ são as skills do sistema (como cada parte funciona e as regras dela): aponte em \"skills\" até 3 que o time deve ler para este chamado.\n" +
             `${levelRule} Em chamado simples não tem arquiteto: dê você "passos" (o passo a passo curto para o Caio) e "testes".\n` +
-            'Responda só com JSON: {"titulo": "...", "problema": "...", "esperado": "...", "criterios": ["..."], "arquivos": ["caminho"], "skills": [".claude/skills/planejai/arquivo.md"], "riscos": ["..."], "nivel": "medio", "passos": ["..."], "testes": "...", "perguntas": ["..."], "bloqueado": false, "recado": "uma ou duas frases para o próximo do time (o Beto; ou o Caio se for simples): o que importa e onde começar"}',
+            'Responda só com JSON: {"titulo": "...", "problema": "...", "esperado": "...", "criterios": ["..."], "arquivos": ["caminho"], "skills": [".claude/skills/planejai/arquivo.md"], "riscos": ["..."], "nivel": "medio", "passos": ["..."], "testes": "...", "perguntas": ["..."], "bloqueado": false, "recado": "uma ou duas frases para o próximo do time (o Beto; ou o Caio se for simples): o que importa e onde começar"}' +
+            (await run.voice("lia")),
         },
         { role: "user", content: `Guia do repositório:\n${ctx.guide}\n\nArquivos do repositório:\n${ctx.tree.map((f) => f.path).join("\n")}\n\n${ticketBlock(run.t)}` },
       ],
@@ -564,7 +643,8 @@ const STAGES = {
           role: "system",
           content:
             "Você é o Beto, arquiteto da esteira: você planeja a mudança de código para um chamado que a Lia (analista) já descreveu. Leia os arquivos e diga exatamente o que mudar e onde, do jeito mais simples que cumpre os critérios de aceite, seguindo as regras do guia do repositório. Se precisar ler outros arquivos para codar, liste em \"ler\" (só caminhos que existem).\n" +
-            'Responda só com JSON: {"passos": ["..."], "arquivos": [{"path": "...", "o_que": "..."}], "ler": ["caminho"], "testes": "como provar que funciona (teste a criar ou ajustar)", "recado": "uma ou duas frases para o Caio (desenvolvedor)"}',
+            'Responda só com JSON: {"passos": ["..."], "arquivos": [{"path": "...", "o_que": "..."}], "ler": ["caminho"], "testes": "como provar que funciona (teste a criar ou ajustar)", "recado": "uma ou duas frases para o Caio (desenvolvedor)"}' +
+            (await run.voice("beto")),
         },
         {
           role: "user",
@@ -593,7 +673,7 @@ const STAGES = {
     const messages: ChatMessage[] = [
       {
         role: "system",
-        content: `Você é o Caio, desenvolvedor da esteira. Implemente o plano do Beto (arquiteto) com a menor mudança correta, seguindo as regras do guia do repositório (textos para o usuário em português do Brasil, tom de WhatsApp).\n${EDIT_FORMAT}\nSe algo do plano estiver ambíguo a ponto de você não conseguir codar, em vez de arquivos responda só {"pergunta": "sua dúvida para o Beto"} (uma vez).`,
+        content: `Você é o Caio, desenvolvedor da esteira. Implemente o plano do Beto (arquiteto) com a menor mudança correta, seguindo as regras do guia do repositório (textos para o usuário em português do Brasil, tom de WhatsApp).\n${EDIT_FORMAT}\nSe algo do plano estiver ambíguo a ponto de você não conseguir codar, em vez de arquivos responda só {"pergunta": "sua dúvida para o Beto"} (uma vez).${await run.voice("caio")}`,
       },
       {
         role: "user",
@@ -633,9 +713,13 @@ const STAGES = {
           role: "system",
           content:
             "Você é a Vera, revisora da esteira: você revisa o diff do Caio (desenvolvedor) antes de virar PR. Recuse só por problema real: não cumpre um critério de aceite, quebra algo que já funciona, erro de tipo ou de lógica evidente, segredo no código, ou viola uma regra do guia. Estilo e gosto não são motivo.\n" +
-            'Responda só com JSON: {"aprovado": true, "problemas": ["..."], "observacoes": "..."}',
+            'Responda só com JSON: {"aprovado": true, "problemas": ["..."], "observacoes": "..."}' +
+            (await run.voice("vera")),
         },
-        { role: "user", content: `${ticketBlock(run.t)}\n\n${specBlock(run.t.spec)}${await inbox(run, "vera")}\n\nDiff:\n${diff}` },
+        {
+          role: "user",
+          content: `${ticketBlock(run.t)}\n\n${specBlock(run.t.spec)}${run.t.plan?.passos?.length ? `\nPlano do Beto: ${run.t.plan.passos.join(" ")}` : ""}${await inbox(run, "vera")}\n\nDiff:\n${diff}`,
+        },
       ],
       (j) => typeof j?.aprovado === "boolean",
       (j) => (j?.aprovado === false ? "pediu ajustes" : "aprovou"),
@@ -732,9 +816,10 @@ const STAGES = {
         {
           role: "system",
           content:
-            'Você é o Tito, de testes da esteira. Leia o log do CI e explique ao Caio (desenvolvedor), em até 3 frases, o que quebrou, em qual arquivo e a causa provável. Responda só com JSON: {"recado": "..."}',
+            'Você é o Tito, de testes da esteira. Leia o log do CI e explique ao Caio (desenvolvedor), em até 3 frases, o que quebrou, em qual arquivo e a causa provável. Responda só com JSON: {"recado": "..."}' +
+            (await run.voice("tito")),
         },
-        { role: "user", content: `${specBlock(t.spec)}\n\nArquivos mudados: ${(t.changes?.files ?? []).map((f: any) => f.path).join(", ")}\n\nLog do CI:\n${failure}` },
+        { role: "user", content: `${specBlock(t.spec)}\n\nArquivos mudados: ${(t.changes?.files ?? []).map((f: any) => f.path).join(", ")}${await triedFixes(run)}\n\nLog do CI:\n${failure}` },
       ],
       (r) => parseModelJson(r.message.content)?.recado ?? "",
     );
@@ -754,8 +839,8 @@ const STAGES = {
     const changed = (t.changes?.files ?? []).map((f: any) => f.path);
     const files = await readFiles(run, [...changed, ...fromLog], t.head_sha, known);
     const messages: ChatMessage[] = [
-      { role: "system", content: `Você é o Caio, desenvolvedor da esteira, e conserta o CI vermelho do PR que o Tito (testes) apontou. Leia o log e os arquivos e faça a menor correção que deixa os testes verdes, sem desligar, pular ou apagar teste.\n${EDIT_FORMAT}` },
-      { role: "user", content: `${ticketBlock(t)}\n\n${specBlock(t.spec)}${await inbox(run, "caio")}\n\nLog do CI:\n${log}\n\nArquivos do branch:\n${filesBlock(files)}` },
+      { role: "system", content: `Você é o Caio, desenvolvedor da esteira, e conserta o CI vermelho do PR que o Tito (testes) apontou. Leia o log e os arquivos e faça a menor correção que deixa os testes verdes, sem desligar, pular ou apagar teste.\n${EDIT_FORMAT}${await run.voice("caio")}` },
+      { role: "user", content: `${ticketBlock(t)}\n\n${specBlock(t.spec)}${await inbox(run, "caio")}${await triedFixes(run)}\n\nLog do CI:\n${log}\n\nArquivos do branch:\n${filesBlock(files)}` },
     ];
     const result = await writeChanges(run, messages, t.head_sha, known, "consertar o CI");
     const started = Date.now();
@@ -791,7 +876,7 @@ async function writeChanges(
         "dev:plan",
         "responder o Caio",
         [
-          { role: "system", content: 'Você é o Beto, arquiteto da esteira. O Caio (desenvolvedor) ficou com uma dúvida sobre o seu plano. Responda direto, decidindo o que for preciso. Responda só com JSON: {"resposta": "..."}' },
+          { role: "system", content: `Você é o Beto, arquiteto da esteira. O Caio (desenvolvedor) ficou com uma dúvida sobre o seu plano. Responda direto, decidindo o que for preciso. Responda só com JSON: {"resposta": "..."}${await run.voice("beto")}` },
           { role: "user", content: `Guia do repositório:\n${ask.ctx.guide}\n\n${ticketBlock(run.t)}\n\n${specBlock(run.t.spec)}\n\nSeu plano: ${(run.t.plan?.passos ?? []).join(" ")}\n\nPergunta do Caio: ${out.pergunta}\n\nArquivos:\n${filesBlock(ask.files)}` },
         ],
         (r) => parseModelJson(r.message.content)?.resposta ?? "",
@@ -900,6 +985,114 @@ function prBody(t: any) {
   ].join("\n");
 }
 
+// ============================== retrospectiva (o time aprende) ==============================
+
+/** Lições no prompt de cada agente (as mais repetidas primeiro) e no máximo guardadas por agente. */
+const LESSONS_IN_PROMPT = 6;
+const LESSONS_KEPT = 8;
+const LESSON_CHARS = 220;
+
+export async function lessonsOf(agent: string, limit = LESSONS_KEPT) {
+  return many<{ id: number; lesson: string; weight: number; ticket_id: number | null; updated_at: string }>(
+    "SELECT id, lesson, weight, ticket_id, updated_at FROM dev_lessons WHERE agent = $1 ORDER BY weight DESC, updated_at DESC LIMIT $2",
+    [agent, limit],
+  );
+}
+
+/** Guarda uma lição (a mesma frase de novo só reforça) e mantém só as LESSONS_KEPT mais fortes do agente. */
+export async function addLesson(agent: string, text: string, ticketId: number | null = null) {
+  const lesson = String(text ?? "").replace(/\s+/g, " ").trim().slice(0, LESSON_CHARS);
+  if (!AGENTS[agent] || lesson.length < 8) return null;
+  const same = await one<{ id: number }>("SELECT id FROM dev_lessons WHERE agent = $1 AND lower(lesson) = lower($2)", [agent, lesson]);
+  const row = same
+    ? await one<{ id: number }>("UPDATE dev_lessons SET weight = weight + 1, updated_at = now() WHERE id = $1 RETURNING id", [same.id])
+    : await one<{ id: number }>("INSERT INTO dev_lessons (agent, lesson, ticket_id) VALUES ($1, $2, $3) RETURNING id", [agent, lesson, ticketId]);
+  await query(
+    "DELETE FROM dev_lessons WHERE agent = $1 AND id NOT IN (SELECT id FROM dev_lessons WHERE agent = $1 ORDER BY weight DESC, updated_at DESC LIMIT $2)",
+    [agent, LESSONS_KEPT],
+  );
+  return row ? { id: row.id, fresh: !same } : null;
+}
+
+export async function deleteLesson(id: number) {
+  return ((await query("DELETE FROM dev_lessons WHERE id = $1", [id])).rowCount ?? 0) > 0;
+}
+
+/**
+ * Depois que um chamado termina (pronto ou falhou), o time olha o que deu atrito e transforma em lição curta
+ * para o agente certo. Saiu tudo de primeira: não gasta modelo. Uma chamada barata (rota dev:retro) por chamado,
+ * só com os fatos já resumidos (recados, trocas recusadas, CI vermelho), nunca com código ou log inteiro.
+ */
+export async function retrospective(ticketId: number) {
+  const t = await one("UPDATE dev_tickets SET retro_at = now() WHERE id = $1 AND retro_at IS NULL AND stage = ANY($2) RETURNING *", [ticketId, ["pronto", "falhou"]]);
+  if (!t) return null;
+  const cfg = await devConfig();
+  if ("missing" in cfg) return null;
+  const run = new StageRun(t, cfg);
+  const steps = await many("SELECT stage, name, status, kind, agent, to_agent, summary FROM dev_ticket_steps WHERE ticket_id = $1 ORDER BY id", [ticketId]);
+  const facts: string[] = [];
+  const involved = new Set<string>();
+  const add = (agent: string, text: string) => {
+    if (AGENTS[agent]) involved.add(agent);
+    facts.push(text);
+  };
+  if (/\n\nResposta do dono:/.test(t.description)) add("lia", "lia: precisou parar e perguntar ao dono antes de seguir.");
+  for (const st of steps) {
+    const txt = String(st.summary ?? "").slice(0, 300);
+    if (st.kind === "msg") {
+      if (st.agent === "vera" && st.to_agent === "caio") add("caio", `vera devolveu o código ao caio: ${txt}`);
+      else if (st.agent === "caio" && st.to_agent === "beto") add("beto", `caio travou e chamou o beto: ${txt}`);
+      else if (st.agent === "tito" && st.to_agent === "caio") add("caio", `CI vermelho; o tito explicou ao caio: ${txt}`);
+    } else if (st.status === "error" && /trocas recusadas$/.test(st.name)) add("caio", `caio mandou trocas que não aplicaram: ${txt}`);
+    else if (/\(de novo\)$/.test(st.name) && st.agent) add(st.agent, `${st.agent}: resposta cortada ou fora do formato em "${st.name}".`);
+  }
+  if (t.review?.aprovado === false && t.review.problemas?.length) add("vera", `vera deixou passar com ressalvas: ${t.review.problemas.join("; ").slice(0, 300)}`);
+  if (t.stage === "falhou") add(STAGE_AGENT[t.failed_stage] ?? "", `o chamado falhou na etapa ${t.failed_stage ?? "?"}: ${String(t.error ?? "").slice(0, 300)}`);
+  if (involved.has("caio") && facts.some((f) => f.startsWith("vera"))) involved.add("vera");
+  if (!facts.length) {
+    await run.record("retrospectiva", { summary: "Saiu de primeira: nada novo para aprender.", agent: "time" });
+    return [];
+  }
+  const current = (await Promise.all([...involved].map(async (a) => (await lessonsOf(a)).map((l) => `#${l.id} ${a}: ${l.lesson}`)))).flat();
+  const out = await run.llmJson<{ licoes?: { agente?: string; licao?: string; reforca?: number }[] }>(
+    "dev:retro",
+    "retrospectiva",
+    [
+      {
+        role: "system",
+        content:
+          "Você conduz a retrospectiva rápida do time da esteira (lia analista, beto arquiteto, caio desenvolvedor, vera revisora, tito testes) depois de um chamado que terminou. Pelos fatos do que deu atrito, escreva no máximo 3 lições para o agente que deve mudar o jeito de trabalhar. Cada lição: regra geral que vale para os próximos chamados neste repositório (não fala deste chamado em particular), no imperativo, concreta, até 200 caracteres, em português do Brasil. Se uma lição que o agente já tem cobre o caso, mande {\"agente\", \"reforca\": id} em vez de repetir. Se nada merece virar regra, devolva a lista vazia.\n" +
+          'Responda só com JSON: {"licoes": [{"agente": "caio", "licao": "..."}, {"agente": "vera", "reforca": 12}]}',
+      },
+      {
+        role: "user",
+        content: `Chamado #${t.id} (${t.kind}, ${LEVELS[(t.level as Level) in LEVELS ? (t.level as Level) : "medio"].label.toLowerCase()}): ${titleOf(t)}\nTerminou: ${STAGE_LABEL[t.stage]}\n\nO que deu atrito:\n${facts.map((f) => `- ${f}`).join("\n").slice(0, 4000)}${current.length ? `\n\nLições que eles já têm:\n${current.join("\n")}` : ""}`,
+      },
+    ],
+    (j) => Array.isArray(j?.licoes),
+    (j) => `${j?.licoes?.length ?? 0} lição(ões)`,
+  );
+  const learned: { agent: string; lesson: string; fresh: boolean }[] = [];
+  for (const l of (out?.licoes ?? []).slice(0, 3)) {
+    const agent = String(l?.agente ?? "").toLowerCase();
+    if (!AGENTS[agent]) continue;
+    if (l.reforca) {
+      const r = await one<{ lesson: string }>("UPDATE dev_lessons SET weight = weight + 1, updated_at = now() WHERE id = $1 AND agent = $2 RETURNING lesson", [Number(l.reforca), agent]);
+      if (r) learned.push({ agent, lesson: r.lesson, fresh: false });
+      continue;
+    }
+    const saved = await addLesson(agent, String(l.licao ?? ""), t.id);
+    if (saved) learned.push({ agent, lesson: String(l.licao).replace(/\s+/g, " ").trim().slice(0, LESSON_CHARS), fresh: saved.fresh });
+  }
+  for (const l of learned.filter((x) => x.fresh)) await run.say(l.agent, "dono", `Anotei para os próximos chamados: ${l.lesson}`);
+  await run.record("retrospectiva: o que o time aprendeu", {
+    agent: "time",
+    summary: learned.length ? learned.map((l) => `${AGENTS[l.agent]!.name}${l.fresh ? "" : " (reforçou)"}: ${l.lesson}`).join(" | ") : "Nada que valha virar regra.",
+  });
+  await run.tracer?.finish(learned.length ? `${learned.length} lição(ões)` : "sem lição nova");
+  return learned;
+}
+
 // ============================== painel ==============================
 
 export async function listTickets() {
@@ -992,6 +1185,10 @@ export async function teamOverview() {
     ),
     many("SELECT id, title, spec->>'titulo' AS spec_title, stage, stage_started_at FROM dev_tickets WHERE stage = ANY($1) ORDER BY stage_started_at", [Object.keys(STAGE_AGENT)]),
   ]);
+  const delivered = await many<{ agent: string; n: number }>(
+    `SELECT s.agent, COUNT(DISTINCT s.ticket_id)::int AS n FROM dev_ticket_steps s JOIN dev_tickets t ON t.id = s.ticket_id
+      WHERE t.stage = 'pronto' AND s.kind = 'step' AND s.agent IS NOT NULL GROUP BY s.agent`,
+  );
   const out = [];
   for (const [id, a] of Object.entries(AGENTS)) {
     const routes = id === "caio" ? [a.route, "dev:code:simples"] : id === "lia" ? [a.route, "dev:vision"] : [a.route];
@@ -1003,6 +1200,8 @@ export async function teamOverview() {
       working: now.filter((t) => STAGE_AGENT[t.stage] === id).map((t) => ({ id: t.id, title: String(t.spec_title ?? "").trim().length > 3 ? t.spec_title : t.title, stage: t.stage, since: t.stage_started_at })),
       last: last.find((l) => l.agent === id) ?? null,
       week: week.find((w) => w.agent === id) ?? { calls: 0, cost: 0 },
+      delivered: delivered.find((d) => d.agent === id)?.n ?? 0,
+      lessons: (await lessonsOf(id)).map((l) => ({ id: l.id, text: l.lesson, weight: l.weight, ticket_id: l.ticket_id })),
     });
   }
   return out;

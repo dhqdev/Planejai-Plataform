@@ -161,7 +161,7 @@ async function startChannelJobs(log: WorkerLog) {
   }
 
   // esteira de desenvolvimento do dono: uma etapa por vez, na ordem dos chamados (a espera do CI volta para a fila)
-  await boss.work<{ ticketId?: number; stage?: string; attempt?: number; token?: string; sweep?: boolean }>(QUEUES.dev, { batchSize: 1, pollingIntervalSeconds: 5 }, async ([job]) => {
+  await boss.work<{ ticketId?: number; stage?: string; attempt?: number; token?: string; sweep?: boolean; retro?: boolean }>(QUEUES.dev, { batchSize: 1, pollingIntervalSeconds: 5 }, async ([job]) => {
     if (!job) return;
     const { runStage } = await import("../devpipeline/pipeline.js");
     await runStage(job.data ?? {});
