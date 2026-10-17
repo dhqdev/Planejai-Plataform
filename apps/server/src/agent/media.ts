@@ -12,7 +12,8 @@ import { chatCompletion } from "../llm/openrouter.js";
 import { resolveModel } from "../llm/router.js";
 import type { ChatResult } from "../llm/types.js";
 import type { Tracer } from "./trace.js";
-import { htmlToText } from "./tools/research.js";
+import { htmlToText, plainPage, tavilyExtract } from "./tools/research.js";
+import { checkedUrl, safeFetch, BlockedUrlError } from "../net.js";
 
 const run = promisify(execFile);
 
@@ -168,12 +169,118 @@ export function describeMessage(m: any): string {
   }
   if (meta.kind === "sticker") parts.push("[figurinha]");
   if (meta.quoted?.text) parts.push(`(respondendo a: "${String(meta.quoted.text).slice(0, 200)}")`);
+  if (meta.link_title || meta.link_text) {
+    parts.push(`[link: ${meta.link_title ?? "site"}]\n${meta.link_text ?? ""}`);
+  } else if (meta.link_error) {
+    parts.push(`[link] não consegui abrir o link: ${meta.link_error}`);
+  }
   if (m.content) parts.push(m.content);
   return parts.join(" ").trim();
 }
 
 const audioFormat = (mimetype: string) =>
   mimetype.includes("mpeg") || mimetype.includes("mp3") ? "mp3" : mimetype.includes("wav") ? "wav" : mimetype.includes("mp4") || mimetype.includes("m4a") ? "m4a" : "ogg";
+
+const URL_REGEX = /(?:https?:\/\/|www\.)[a-zA-Z0-9-._~:/?#\[\]@!$&'()*+,;=%]+/gi;
+
+function extractYouTubeId(urlStr: string): string | null {
+  try {
+    const u = new URL(urlStr.startsWith("http") ? urlStr : `https://${urlStr}`);
+    if (u.hostname === "youtu.be") return u.pathname.slice(1).split(/[?#]/)[0] || null;
+    if (u.hostname.includes("youtube.com")) {
+      if (u.pathname === "/watch") return u.searchParams.get("v");
+      if (u.pathname.startsWith("/shorts/") || u.pathname.startsWith("/embed/")) {
+        return u.pathname.split("/")[2] || null;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function processLink(rawUrl: string, tracer: Tracer): Promise<{ title: string; text: string; error?: string; usage?: ChatResult }> {
+  const ytId = extractYouTubeId(rawUrl);
+  if (ytId) {
+    const step = await tracer.step({ agent: "cto", type: "tool", name: "assistir_video", input: { url: rawUrl, youtube_id: ytId } });
+    try {
+      let title = "Vídeo do YouTube";
+      let author = "";
+      try {
+        const oembedRes = await safeFetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${ytId}`)}&format=json`);
+        if (oembedRes.ok) {
+          const j = await oembedRes.json() as any;
+          if (j.title) title = j.title;
+          if (j.author_name) author = j.author_name;
+        }
+      } catch {}
+
+      let transcript = "";
+      try {
+        const subRes = await safeFetch(`https://www.youtube.com/api/timedtext?v=${encodeURIComponent(ytId)}&lang=pt`);
+        if (subRes.ok) {
+          const xml = await subRes.text();
+          transcript = htmlToText(xml).slice(0, 10_000);
+        }
+      } catch {}
+
+      const hasSub = transcript.trim().length > 40;
+      const summaryPrompt = hasSub
+        ? `Faça um resumo objetivo deste vídeo em português. Comece na primeira linha com o título exato. Depois pule uma linha e liste de 3 a 5 pontos principais.\nTítulo: ${title}${author ? ` por ${author}` : ""}\nTranscrição/Legenda:\n${transcript}`
+        : `Não encontramos legendas disponíveis para este vídeo. Faça um resumo ou apresentação em português com base no título e autor informados. Não invente conteúdo que não esteja presente. Comece na primeira linha com o título exato. Depois pule uma linha e liste pontos com o que se sabe.\nTítulo: ${title}${author ? ` por ${author}` : ""}\nAviso: Sem legenda/transcrição disponível.`;
+
+      const usage = await chatCompletion(await resolveModel("vision"), {
+        messages: [{ role: "user", content: summaryPrompt }],
+      });
+
+      const content = usage.message.content?.trim() ?? "";
+      const lines = content.split("\n");
+      const finalTitle = lines[0]?.replace(/^#+\s*/, "").trim() || title;
+      const finalText = lines.slice(1).join("\n").trim() || content;
+
+      await step.ok({ title: finalTitle, summary: finalText, has_transcript: hasSub }, usage);
+      return { title: finalTitle, text: finalText, usage };
+    } catch (err) {
+      const msg = err instanceof BlockedUrlError ? "Endereço bloqueado ou privado" : "Não foi possível acessar as informações do vídeo";
+      await step.fail(err);
+      return { title: "Vídeo do YouTube", text: "", error: msg };
+    }
+  }
+
+  const step = await tracer.step({ agent: "cto", type: "tool", name: "ler_link", input: { url: rawUrl } });
+  try {
+    const safe = await checkedUrl(rawUrl);
+    let text = await plainPage(safe);
+    if (!text || text.length < 300) {
+      text = (await tavilyExtract(safe)) ?? text ?? "";
+    }
+    if (!text || text.trim().length === 0) {
+      throw new Error("Página veio vazia ou inacessível");
+    }
+
+    const slice = text.slice(0, 12_000);
+    const usage = await chatCompletion(await resolveModel("vision"), {
+      messages: [
+        {
+          role: "user",
+          content: `Extraia as informações principais desta página em português. Na primeira linha coloque apenas o título principal da página. Depois pule uma linha e apresente um resumo com 3 a 5 pontos mais importantes.\n\nConteúdo extraído:\n${slice}`,
+        },
+      ],
+    });
+
+    const content = usage.message.content?.trim() ?? "";
+    const lines = content.split("\n");
+    const pageTitle = lines[0]?.replace(/^#+\s*/, "").trim() || safe;
+    const pageSummary = lines.slice(1).join("\n").trim() || content;
+
+    await step.ok({ title: pageTitle, summary: pageSummary }, usage);
+    return { title: pageTitle, text: pageSummary, usage };
+  } catch (err) {
+    const msg = err instanceof BlockedUrlError ? "Endereço bloqueado ou inválido (URL privada ou não encontrada)" : "Não consegui abrir esse link (bloqueado ou inacessível)";
+    await step.fail(err);
+    return { title: rawUrl, text: "", error: msg };
+  }
+}
 
 /**
  * Interpreta mídia das mensagens pendentes uma única vez: áudio vira texto, foto vira descrição
@@ -182,6 +289,30 @@ const audioFormat = (mimetype: string) =>
  */
 export async function preprocessMedia(pending: any[], channel: Channel, tracer: Tracer, remoteJid: string, opts: { persist?: boolean } = {}) {
   for (const m of pending) {
+    if (m.meta == null) m.meta = {};
+    const textContent = typeof m.content === "string" ? m.content : "";
+    const urlMatch = textContent.match(URL_REGEX);
+    if (urlMatch && !m.meta.link_title && !m.meta.link_text && !m.meta.link_error) {
+      const foundUrl = urlMatch[0];
+      const urlHash = createHash("sha256").update(foundUrl).digest("hex").slice(0, 32);
+      const memo = await cacheGet<Record<string, unknown>>(`link:${urlHash}`);
+      if (memo) {
+        Object.assign(m.meta, memo);
+      } else {
+        const res = await processLink(foundUrl, tracer);
+        if (res.error) {
+          m.meta.link_error = res.error;
+        } else {
+          m.meta.link_title = res.title;
+          m.meta.link_text = res.text;
+          await cacheSet(`link:${urlHash}`, { link_title: res.title, link_text: res.text }, MEDIA_CACHE_SECONDS);
+        }
+        if (opts.persist !== false) {
+          await query("UPDATE messages SET meta = $2 WHERE id = $1", [m.id, m.meta]);
+        }
+      }
+    }
+
     const kind = m.meta?.kind;
     if (!m.media || !["audio", "image", "document", "video"].includes(kind)) continue;
     if (m.meta.transcript || m.meta.image_description || m.meta.doc_text || m.meta.video_description) continue;
