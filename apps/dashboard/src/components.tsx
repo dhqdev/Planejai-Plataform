@@ -141,6 +141,8 @@ type ModalProps = {
   className?: string;
   /** Pede uma resposta (confirmações): vira role="alertdialog". */
   alert?: boolean;
+  /** Mobile limpo: esconde título e 'X' no topo para aproveitar o espaço. */
+  bare?: boolean;
 };
 
 /**
@@ -149,7 +151,7 @@ type ModalProps = {
  * para baixo (decide pela velocidade, não só pela distância). Dá para pegar a folha no meio da animação.
  * Fecha também tocando fora ou com Esc, prende o foco dentro e devolve para quem abriu.
  */
-export function Modal({ title, icon, onClose, children, footer, wide, className, alert }: ModalProps) {
+export function Modal({ title, icon, onClose, children, footer, wide, className, alert, bare }: ModalProps) {
   const sheet = useRef<HTMLDivElement>(null);
   const scrim = useRef<HTMLDivElement>(null);
   const move = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
@@ -579,7 +581,7 @@ export function Modal({ title, icon, onClose, children, footer, wide, className,
     <div className={`modal-bg${drop ? " drop" : ""}${closing ? " closing" : ""}`}>
       <div className="modal-scrim" ref={scrim} onMouseDown={close} />
       <div
-        className={`card modal ${wide ? "wide" : ""} ${className ?? ""}`}
+        className={`card modal ${wide ? "wide" : ""} ${bare ? "bare" : ""} ${className ?? ""}`}
         role={alert ? "alertdialog" : "dialog"}
         aria-modal="true"
         aria-label={title}

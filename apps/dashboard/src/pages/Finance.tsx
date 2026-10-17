@@ -586,6 +586,7 @@ function TransactionForm({ initial, onClose }: { initial?: any; onClose: () => v
   const firstInvoice = card ? invoiceMonthFor(card, f.date) : null;
   return (
     <Modal
+      bare
       title={initial ? "Editar lançamento" : "Novo lançamento"}
       onClose={onClose}
       footer={
@@ -662,6 +663,7 @@ function BudgetModal({ initial, onClose }: { initial: { category: string | null;
   };
   return (
     <Modal
+      bare
       title={initial.amount ? "Editar limite" : "Novo limite"}
       icon={<Icon name="target" />}
       onClose={onClose}
@@ -802,6 +804,7 @@ function BillForm({ initial, onClose }: { initial: Bill | null; onClose: () => v
   };
   return (
     <Modal
+      bare
       title={initial ? "Ajustar conta fixa" : "Nova conta fixa"}
       icon={<Icon name="repeat" />}
       onClose={onClose}
