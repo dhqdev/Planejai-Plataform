@@ -33,7 +33,6 @@ export function GoogleSync({ isSuper, variant }: { isSuper: boolean; variant: "s
   // cliente sem o app do Google configurado pelo dono: não há o que oferecer
   if (!owner && !personal?.available) return null;
   if (owner && !isSuper) return null;
-  const label = owner ? null : personal?.label;
   // no celular, já sincronizada não ocupa espaço (só o aviso logo depois de conectar)
   if (variant === "phone" && connected && !note) return null;
 
@@ -55,11 +54,9 @@ export function GoogleSync({ isSuper, variant }: { isSuper: boolean; variant: "s
       <span className="gsync-ico" aria-hidden="true"><Icon name={connected ? "check" : "calendar"} size={variant === "phone" ? 18 : 20} /></span>
       <div className="gsync-text">
         <strong>{connected ? "Sincronizada com o Google" : "Google Agenda"}</strong>
-        <small className={note && !note.ok ? "err" : undefined}>{note?.text ?? (connected ? (label ?? "Seus compromissos aparecem nos dois lugares") : "Veja tudo junto e mande seus lembretes para lá")}</small>
+        {(!connected || note) && <small className={note && !note.ok ? "err" : undefined}>{note?.text ?? "Veja tudo junto e mande seus lembretes para lá"}</small>}
       </div>
-      {connected ? (
-        <button className="gsync-link" onClick={() => nav(owner ? "/integrations" : "/profile")}>Gerenciar</button>
-      ) : (
+      {!connected && (
         <button className="btn btn-brand btn-sm gsync-btn" disabled={busy} onClick={connect}>{busy ? "Abrindo..." : "Sincronizar"}</button>
       )}
     </div>
