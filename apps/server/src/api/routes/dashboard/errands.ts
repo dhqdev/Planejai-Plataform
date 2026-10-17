@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { type PrefsPatch, prefsFor, removeChat, savePrefs } from "../../../chatprefs.js";
 import { cancelErrand, discardErrandDraft, listErrands } from "../../../errands.js";
 import { listContactChats } from "../../../direct.js";
+import { listPhonebook } from "../../../phonebook.js";
 import { NOBODY, selfUserId } from "../../../sharing.js";
 
 /**
@@ -13,10 +14,11 @@ export function errandRoutes(base: FastifyInstance) {
   const self = async (a: Parameters<typeof selfUserId>[0]) => (await selfUserId(a)) ?? NOBODY;
   base.get("/api/errands", async (req) => {
     const uid = await self(req.account);
-    const [errands, contacts] = await Promise.all([listErrands(uid), listContactChats(uid)]);
+    const [errands, contacts, phonebook] = await Promise.all([listErrands(uid), listContactChats(uid), listPhonebook(uid, "", 200)]);
+    const agenda = (phonebook.items || []).map((item) => ({ id: item.id, name: item.name, phone: item.phone, label: item.label }));
     // jeito de cada conversa (apelido, cor, fixada...), pela chave do número que a tela usa
-    const prefs = await prefsFor(uid, [...errands.errands.map((e) => e.phone), ...contacts.map((c) => c.phone)]);
-    return { ...errands, contacts, prefs };
+    const prefs = await prefsFor(uid, [...errands.errands.map((e) => e.phone), ...contacts.map((c) => c.phone), ...agenda.map((a) => a.phone)]);
+    return { ...errands, contacts, agenda, prefs };
   });
   // personalizar a conversa ou mudar o acompanhamento (auto, on = sem prazo, off = parar)
   base.put<{ Params: { phone: string }; Body: PrefsPatch }>("/api/errands/chats/:phone", async (req, reply) => {
