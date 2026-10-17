@@ -420,22 +420,6 @@ export function App() {
   return (
     <UnreadProvider>
     <div className={`layout${me?.impersonating ? " impersonating" : ""}`}>
-      {me?.impersonating && (
-        <div className="impersonate-banner" role="status">
-          <span>
-            Você está na conta de <strong>{me.name || me.email}</strong>
-          </span>
-          <button
-            className="impersonate-btn"
-            onClick={async () => {
-              await api("/api/auth/stop-impersonate", { method: "POST" });
-              window.location.reload();
-            }}
-          >
-            Voltar para minha conta
-          </button>
-        </div>
-      )}
       <a className="skip-link" href="#conteudo" onClick={(e) => { e.preventDefault(); mainRef.current?.focus(); }}>Pular para o conteúdo</a>
       <header className="topbar">
         {back ? (
@@ -484,6 +468,22 @@ export function App() {
         <Nav items={rail} team={team} me={me} meTitle={`${me.name ?? me.email} · ${me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · v${__APP_VERSION__}`} />
       </aside>
       <main className="main" id="conteudo" tabIndex={-1} ref={mainRef}>
+        {me?.impersonating && (
+          <div className="impersonate-banner" role="status">
+            <span>
+              Você está na conta de <strong>{me.name || me.email}</strong>
+            </span>
+            <button
+              className="impersonate-btn"
+              onClick={async () => {
+                await api("/api/auth/stop-impersonate", { method: "POST" });
+                window.location.reload();
+              }}
+            >
+              Voltar para minha conta
+            </button>
+          </div>
+        )}
         <PullToRefresh target={mainRef} />
         <Suspense fallback={<Loading />}>
         {isSuper && <SubTabs path={loc.pathname} />}
