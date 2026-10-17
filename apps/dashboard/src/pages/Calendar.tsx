@@ -314,7 +314,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
           {owners.length > 0 && (
             <div className="cal-side-block">
               <h4>De quem</h4>
-              <div className="seg seg-scroll" role="tablist" aria-label="De quem">
+              <div className="cal-owners-wrap" role="tablist" aria-label="De quem">
                 <button type="button" role="tab" aria-selected={!person} className={!person ? "active" : ""} onClick={() => changePerson("")}>
                   Minha agenda
                 </button>
@@ -347,18 +347,26 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
         ) : (
           <div className="cal-bar-top">
             <button className="icon-btn" aria-label="Mostrar ou esconder o painel" onClick={() => setSide((v) => !v)}><Icon name="menu" size={19} /></button>
-            <button className="btn btn-pill" onClick={today}>Hoje</button>
-            <button className="icon-btn" aria-label="Anterior" onClick={() => step(-1)} disabled={view === "list"}><Icon name="chevron-left" size={18} /></button>
-            <button className="icon-btn" aria-label="Próximo" onClick={() => step(1)} disabled={view === "list"}><Icon name="chevron-right" size={18} /></button>
+            <div className="cal-nav-group">
+              <button className="btn btn-pill sm" onClick={today}>Hoje</button>
+              <div className="cal-nav-arrows">
+                <button className="icon-btn sm" aria-label="Anterior" onClick={() => step(-1)} disabled={view === "list"}><Icon name="chevron-left" size={16} /></button>
+                <button className="icon-btn sm" aria-label="Próximo" onClick={() => step(1)} disabled={view === "list"}><Icon name="chevron-right" size={16} /></button>
+              </div>
+            </div>
             <h1 className="cal-h1">{title}</h1>
             <span className="spacer" />
             {search != null ? (
               <input className="input cal-search" type="search" name="q" aria-label="Buscar na agenda" autoComplete="off" enterKeyHint="search" autoFocus placeholder="Buscar na agenda…" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setSearch(null)} />
             ) : null}
             <button className="icon-btn" aria-label={search == null ? "Buscar" : "Fechar a busca"} onClick={() => setSearch(search == null ? "" : null)}><Icon name={search == null ? "search" : "x"} size={19} /></button>
-            <select className="select cal-view" aria-label="Visualização" value={view} onChange={(e) => changeView(e.target.value as View)}>
-              {VIEWS.slice().reverse().map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            <div className="cal-view-btns" role="tablist" aria-label="Visualização">
+              {VIEWS.map(([v, l]) => (
+                <button key={v} type="button" role="tab" aria-selected={view === v} className={`cal-view-btn ${view === v ? "active" : ""}`} onClick={() => changeView(v)}>
+                  {l}
+                </button>
+              ))}
+            </div>
             {!side && (
               <button className="btn btn-brand" onClick={() => create(withTime(selected))}><Icon name="plus" size={16} /> Criar</button>
             )}

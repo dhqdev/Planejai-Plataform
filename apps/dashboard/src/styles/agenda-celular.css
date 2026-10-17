@@ -25,6 +25,10 @@
 .pc-tabs { position: relative; display: flex; gap: 28px; align-self: stretch; }
 .pc-tabs button { border: none; background: none; padding: 0; font: inherit; font-size: 17px; font-weight: 600; color: var(--muted); cursor: pointer; transition: color .2s; -webkit-tap-highlight-color: transparent; }
 .pc-tabs button.on { color: var(--text); }
+.cal-pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.cal-pills button { border: 1px solid var(--border); background: var(--panel); color: var(--muted); padding: 5px 12px; border-radius: 99px; font-size: 13px; cursor: pointer; }
+.cal-pills button.active { background: var(--ink); color: var(--on-ink); border-color: transparent; font-weight: 600; }
+
 /* sublinhado que desliza entre as abas (posição e largura medidas no componente) */
 .pc-tab-line { position: absolute; left: 0; bottom: 4px; width: var(--w, 0); height: 3px; border-radius: 3px; background: var(--act, var(--text)); transform: translateX(var(--x, 0)); transition: transform .38s var(--pc-ease), width .38s var(--pc-ease); }
 .pc-ico { width: 44px; height: 44px; border: none; background: none; border-radius: 50%; display: grid; place-items: center; color: var(--text); cursor: pointer; position: relative; flex: none; -webkit-tap-highlight-color: transparent; transition: background .15s, transform .2s var(--pc-ease); }
