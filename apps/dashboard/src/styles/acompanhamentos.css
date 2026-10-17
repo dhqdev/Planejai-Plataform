@@ -343,6 +343,27 @@
 }
 
 @media (max-width: 767px) {
+  .watches-page { gap: 12px; }
+  .watches-page .page-head p { display: none; }
+  .watches-stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  .watch-stat-card {
+    padding: 8px 6px;
+    border-radius: 10px;
+    align-items: center;
+    text-align: center;
+    gap: 2px;
+  }
+  .watch-stat-num { font-size: 16px; }
+  .watch-stat-label {
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
   .watches-controls-bar {
     flex-direction: column;
     align-items: stretch;
@@ -361,8 +382,14 @@
   }
   .watches-select-wrap { flex-direction: column; align-items: stretch; }
   .watch-list-grid { grid-template-columns: 1fr; }
+  .watch-card { cursor: pointer; }
   .watch-actions-bar { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; }
   .watch-actions-bar .btn { font-size: 12.5px; padding-inline: 4px; justify-content: center; }
   .watch-actions-bar .spacer { display: none; }
+  .watch-empty-card { padding: 24px 14px; }
+  .watch-empty-card .watch-empty-icon { width: 48px; height: 48px; margin-bottom: 8px; }
+  .watch-empty-card h3 { font-size: 15px; }
+  .watch-empty-text { font-size: 13px; max-width: 100%; line-height: 1.45; }
+  .watch-empty-text .watch-phrase-chip { display: none; }
 }
 

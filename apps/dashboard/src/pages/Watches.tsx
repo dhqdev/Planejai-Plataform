@@ -107,7 +107,14 @@ export function WatchesPage() {
     else if (isErr) resultClass = "watch-result-warn";
 
     return (
-      <div key={w.id} className={`watch-card ${!w.active ? "off" : ""} ${hasFound ? "watch-card-highlight" : ""}`}>
+      <div
+        key={w.id}
+        className={`watch-card ${!w.active ? "off" : ""} ${hasFound ? "watch-card-highlight" : ""}`}
+        onClick={() => setViewing(w)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setViewing(w); } }}
+      >
         <div className="watch-header">
           <div className="watch-head-left">
             <span className={`watch-ico ${w.kind === "price" ? "watch-ico-price" : "watch-ico-news"}`}>
@@ -146,7 +153,7 @@ export function WatchesPage() {
               </div>
             )}
             {w.kind === "price" && offerLink(w.best?.link) && (
-              <a className="watch-store-link" href={offerLink(w.best?.link)!} target="_blank" rel="noopener noreferrer">
+              <a className="watch-store-link" href={offerLink(w.best?.link)!} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
                 Ver na loja <Icon name="external" size={12} />
               </a>
             )}
@@ -168,7 +175,7 @@ export function WatchesPage() {
               <>
                 <p className="watch-result-text">{w.last_result.summary}</p>
                 {isErr && (
-                  <a href="/integrations" className="watch-warn-link">
+                  <a href="/integrations" className="watch-warn-link" onClick={(e) => e.stopPropagation()}>
                     <Icon name="plug" size={13} /> Ir para Integrações
                   </a>
                 )}
@@ -185,13 +192,13 @@ export function WatchesPage() {
           </div>
         </div>
 
-        <div className="watch-actions-bar">
+        <div className="watch-actions-bar" onClick={(e) => e.stopPropagation()}>
           {w.active ? (
             <>
               <button
                 className="btn btn-sm"
                 disabled={busy === w.id || w.paused}
-                onClick={() => act(w, `/api/watches/${w.id}/check`, { method: "POST" })}
+                onClick={(e) => { e.stopPropagation(); void act(w, `/api/watches/${w.id}/check`, { method: "POST" }); }}
                 title="Roda uma verificação imediata"
               >
                 <Icon name="refresh" size={14} /> Olhar já
@@ -199,14 +206,14 @@ export function WatchesPage() {
               <button
                 className="btn btn-sm"
                 disabled={busy === w.id}
-                onClick={() => act(w, `/api/watches/${w.id}`, { method: "PATCH", json: { paused: !w.paused } })}
+                onClick={(e) => { e.stopPropagation(); void act(w, `/api/watches/${w.id}`, { method: "PATCH", json: { paused: !w.paused } }); }}
               >
                 <Icon name={w.paused ? "play" : "pause"} size={14} /> {w.paused ? "Retomar" : "Pausar"}
               </button>
-              <button className="btn btn-sm" onClick={() => setEditing(w)}>
+              <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); setEditing(w); }}>
                 <Icon name="edit" size={14} /> Ajustar
               </button>
-              <button className="btn btn-sm btn-ghost" onClick={() => setViewing(w)}>
+              <button className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); setViewing(w); }}>
                 <Icon name="eye" size={14} /> Detalhes
               </button>
               <span className="spacer" />
@@ -214,7 +221,8 @@ export function WatchesPage() {
                 className="icon-btn text-danger"
                 title="Encerrar este acompanhamento"
                 aria-label="Encerrar"
-                onClick={async () => {
+                onClick={async (e) => {
+                  e.stopPropagation();
                   if (await confirmDialog({ title: "Parar de acompanhar?", body: `Deseja parar de acompanhar "${w.query}"?`, confirmLabel: "Parar", danger: true })) {
                     void act(w, `/api/watches/${w.id}`, { method: "DELETE" });
                   }
@@ -228,11 +236,11 @@ export function WatchesPage() {
               <button
                 className="btn btn-sm btn-primary-soft"
                 disabled={busy === w.id}
-                onClick={() => act(w, `/api/watches/${w.id}`, { method: "PATCH", json: { reactivate: true } })}
+                onClick={(e) => { e.stopPropagation(); void act(w, `/api/watches/${w.id}`, { method: "PATCH", json: { reactivate: true } }); }}
               >
                 <Icon name="refresh" size={14} /> Acompanhar mais 7 dias
               </button>
-              <button className="btn btn-sm btn-ghost" onClick={() => setViewing(w)}>
+              <button className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); setViewing(w); }}>
                 <Icon name="eye" size={14} /> Ver detalhes
               </button>
               <span className="spacer" />
@@ -240,7 +248,8 @@ export function WatchesPage() {
                 className="icon-btn text-muted"
                 title="Remover acompanhamento"
                 aria-label="Excluir"
-                onClick={async () => {
+                onClick={async (e) => {
+                  e.stopPropagation();
                   if (await confirmDialog({ title: "Remover do histórico?", body: `Remover o acompanhamento de "${w.query}"?`, confirmLabel: "Remover", danger: true })) {
                     void act(w, `/api/watches/${w.id}`, { method: "DELETE" });
                   }
