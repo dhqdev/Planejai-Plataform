@@ -20,5 +20,39 @@
 .confirm .modal-body { padding-top: 4px; }
 .confirm .modal-foot { border-top: none; }
 .confirm-text { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
-.sheet-handle { display: none; width: 38px; height: 5px; border-radius: 99px; background: var(--border-2); margin: 8px auto 0; }
+.sheet-handle { display: none; width: 36px; height: 5px; border-radius: 99px; background: var(--border-2); margin: 8px auto 4px; }
+
+/* ---------- Celular: bottom sheet estilo Apple HIG ---------- */
+@media (max-width: 767px) {
+  .modal-bg { padding: 0; align-items: flex-end; }
+  .modal-bg > .modal {
+    width: 100%;
+    max-height: calc(var(--vvh, 100dvh) - env(safe-area-inset-top, 0px) - 12px);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+  }
+  .sheet-handle {
+    display: block;
+    touch-action: none;
+    cursor: grab;
+  }
+  .sheet-handle:active {
+    cursor: grabbing;
+  }
+  .modal-head {
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+    padding-bottom: 12px;
+  }
+  .modal-body {
+    padding: 18px 16px;
+    line-height: 1.55;
+    color: var(--text);
+    touch-action: pan-y;
+  }
+  .modal-foot {
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+}
 
