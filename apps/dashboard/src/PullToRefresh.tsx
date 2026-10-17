@@ -4,6 +4,14 @@ import { haptic } from "./touch";
 import { checkForUpdate } from "./update";
 
 const TRIGGER = 64;
+
+/** Alguma lista com rolagem própria entre o dedo e a tela já desceu? Então puxar é rolar essa lista para cima, não atualizar. */
+function innerScrolled(from: Element | null, root: HTMLElement) {
+  for (let n = from; n && n !== root; n = n.parentElement) {
+    if (n.scrollTop > 0 && n.scrollHeight > n.clientHeight + 1) return true;
+  }
+  return false;
+}
 const MAX = 96;
 
 /**
@@ -13,7 +21,7 @@ const MAX = 96;
 export function PullToRefresh({ target }: { target: RefObject<HTMLElement | null> }) {
   const [pull, setPull] = useState(0);
   const [busy, setBusy] = useState(false);
-  const st = useRef({ x: 0, y: 0, active: false, locked: false, armed: false, pull: 0 });
+  const st = useRef({ x: 0, y: 0, active: false, locked: false, armed: false, pull: 0, from: null as Element | null });
 
   useEffect(() => {
     const el = target.current;
@@ -22,7 +30,8 @@ export function PullToRefresh({ target }: { target: RefObject<HTMLElement | null
       if (busy || el.scrollTop > 0 || e.touches.length !== 1) return;
       const t = e.target as Element;
       if (t.closest(".modal, .sheet, .more-sheet, .cal-week-body, input, textarea, select, [data-no-ptr]")) return;
-      st.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY, active: true, locked: false, armed: false, pull: 0 };
+      if (innerScrolled(t, el)) return;
+      st.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY, active: true, locked: false, armed: false, pull: 0, from: t };
     };
     const move = (e: TouchEvent) => {
       const s = st.current;
@@ -35,7 +44,7 @@ export function PullToRefresh({ target }: { target: RefObject<HTMLElement | null
         if (Math.abs(dx) >= Math.abs(dy)) return void (s.active = false);
         s.locked = true;
       }
-      if (dy <= 0 || el.scrollTop > 0) {
+      if (dy <= 0 || el.scrollTop > 0 || innerScrolled(s.from, el)) {
         if (s.pull) setPull((s.pull = 0));
         return;
       }

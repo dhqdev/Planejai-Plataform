@@ -93,6 +93,8 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 a { color: inherit; text-decoration: none; }
+/* toque responde na hora: sem espera de toque duplo para zoom em botão, link e campo */
+a, button, input, select, textarea, label, summary, [role="button"], [role="tab"], [role="menuitem"] { touch-action: manipulation; }
 button, input, select, textarea { font: inherit; color: inherit; }
 h1, h2, h3 { letter-spacing: -0.02em; }
 .ico { flex-shrink: 0; display: block; }

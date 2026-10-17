@@ -377,6 +377,12 @@ export function HomeChat({ me }: { me: Me }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const stick = useRef(true);
+  // quem mexeu por último na lista: a pessoa (dedo, roda, teclado) ou o próprio chat descendo até o fim
+  const userAt = useRef(0);
+  const autoAt = useRef(0);
+  const touchY = useRef(0);
+  const retry = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const older = useRef<{ top: number; h: number } | null>(null);
   const lastId = useRef(0);
   const busy = useRef(false);
   const sentRef = useRef(0);
@@ -389,7 +395,7 @@ export function HomeChat({ me }: { me: Me }) {
     if (!d || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(() => {
       root.current?.style.setProperty("--hc-dock", `${d.offsetHeight + 12}px`);
-      if (stick.current) list.current?.scrollTo({ top: list.current.scrollHeight });
+      if (stick.current) toBottom(false);
     });
     ro.observe(d);
     return () => ro.disconnect();
@@ -446,7 +452,7 @@ export function HomeChat({ me }: { me: Me }) {
       }
       if (!alive) return;
       const fast = busy.current || Date.now() - sentRef.current < 90_000;
-      timer = setTimeout(() => (document.hidden ? (timer = setTimeout(() => tick(), 4000)) : tick()), fast ? 1400 : 7000);
+      timer = setTimeout(() => (document.hidden ? (timer = setTimeout(() => tick(), 4000)) : tick()), fast ? 1000 : 7000);
     };
     void tick(true);
     const wake = () => !document.hidden && (clearTimeout(timer), tick());
@@ -493,7 +499,25 @@ export function HomeChat({ me }: { me: Me }) {
   }, [openers, shown, opening]);
 
   // segue o fim da conversa enquanto a pessoa não rolou para ler o que passou
-  const toBottom = (smooth = true) => list.current?.scrollTo({ top: list.current.scrollHeight, behavior: smooth && !reduced() ? "smooth" : "auto" });
+  // Nunca puxa para baixo com a pessoa mexendo na lista (o dedo subindo ou o embalo depois de soltar): espera
+  // ela parar e só desce se ela ainda estiver no fim. Longe do fim pula direto, sem deslizar a conversa toda.
+  const toBottom = (smooth = true) => {
+    const el = list.current;
+    if (!el) return;
+    clearTimeout(retry.current);
+    if (Date.now() - userAt.current < 700) {
+      retry.current = setTimeout(() => stick.current && toBottom(smooth), 750);
+      return;
+    }
+    const far = el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight;
+    autoAt.current = Date.now();
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth && !far && !reduced() ? "smooth" : "auto" });
+  };
+  useEffect(() => () => clearTimeout(retry.current), []);
+  const touched = () => {
+    userAt.current = Date.now();
+    clearTimeout(retry.current);
+  };
   useLayoutEffect(() => {
     if (stick.current) toBottom(state !== null && msgs.length > 0);
   }, [msgs, shown, state?.working, state?.typing]);
@@ -505,25 +529,40 @@ export function HomeChat({ me }: { me: Me }) {
     }
   }, [state]);
 
+  // mensagens antigas entram em cima sem mexer no que a pessoa está lendo (antes de pintar a tela)
+  const loadingOlder = useRef(false);
   const loadOlder = async () => {
-    if (olderLoading || !state?.more || !msgs.length) return;
+    if (loadingOlder.current || !state?.more || !msgs.length) return;
+    loadingOlder.current = true;
     setOlderLoading(true);
-    const el = list.current!;
-    const h = el.scrollHeight;
     try {
       const r = await api<ChatState>(`/api/chat?before=${msgs[0]!.id}`);
+      const el = list.current;
+      if (el) older.current = { top: el.scrollTop, h: el.scrollHeight };
       setMsgs((cur) => [...r.messages.filter((m) => !cur.some((c) => c.id === m.id)), ...cur]);
       setState((s) => (s ? { ...s, more: r.messages.length === 60 } : s));
-      requestAnimationFrame(() => (el.scrollTop = el.scrollHeight - h));
+    } catch {
+      /* sem rede: tenta de novo na próxima rolagem */
     } finally {
+      loadingOlder.current = false;
       setOlderLoading(false);
     }
   };
+  useLayoutEffect(() => {
+    const el = list.current;
+    const o = older.current;
+    if (!el || !o) return;
+    older.current = null;
+    // o Chrome já segura a posição sozinho (scroll anchoring); o Safari não. Só corrige se precisar.
+    const want = o.top + (el.scrollHeight - o.h);
+    if (Math.abs(el.scrollTop - want) > 2) el.scrollTop = want;
+  }, [msgs]);
 
   const send = async (o: Outgoing) => {
     setError(null);
     const tmp: Msg = { id: Date.now() * 1000, role: "user", text: o.text ?? null, media: o.preview ?? null, at: new Date().toISOString(), local: "sending" };
     stick.current = true;
+    userAt.current = 0;
     setMsgs((cur) => [...cur.filter((m) => m.retry !== o), tmp]);
     setSentAt(Date.now());
     haptic(8);
@@ -689,10 +728,32 @@ export function HomeChat({ me }: { me: Me }) {
       <div
         className="hc-list"
         ref={list}
+        data-no-ptr
+        onWheel={(e) => {
+          touched();
+          if (e.deltaY < 0) stick.current = false;
+        }}
+        onTouchStart={(e) => {
+          touched();
+          touchY.current = e.touches[0]?.clientY ?? 0;
+        }}
+        onTouchMove={(e) => {
+          touched();
+          // dedo descendo = conversa subindo: a pessoa quer ler o que passou, para de seguir o fim na hora
+          if ((e.touches[0]?.clientY ?? 0) > touchY.current + 4) stick.current = false;
+        }}
+        onTouchEnd={touched}
+        onKeyDown={touched}
         onScroll={(e) => {
           const el = e.currentTarget;
-          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-          if (el.scrollTop < 120) void loadOlder();
+          const now = Date.now();
+          const mine = now - autoAt.current > 900 || now - userAt.current < 700;
+          // a descida que o próprio chat faz não decide nada; o embalo depois de soltar o dedo conta como da pessoa
+          if (mine) {
+            stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+            if (now - autoAt.current > 900) userAt.current = Math.max(userAt.current, now - 400);
+          }
+          if (el.scrollTop < 500) void loadOlder();
         }}
       >
         {state && !state.ready ? (
@@ -703,7 +764,7 @@ export function HomeChat({ me }: { me: Me }) {
           </div>
         ) : (
           <>
-            {olderLoading && <div className="hc-day">carregando…</div>}
+            {olderLoading && <div className="hc-older" aria-live="polite"><span>carregando…</span></div>}
             {renderList(earlier)}
             {state && <div className="hc-day">{earlierToday ? hm(new Date(opening.at).toISOString()) : "Hoje"}</div>}
             {visibleOpeners.map((o, i) => {
