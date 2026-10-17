@@ -1,20 +1,15 @@
-/* Tarja de impersonação: fina, fixa no topo e discreta. O espaço é reservado no .layout
-   (padding-top) para não cobrir o menu nem empurrar o rodapé no notebook. */
-.layout.impersonating {
-  padding-top: 30px;
-}
+/* Tarja de impersonação: rola junto com o conteúdo dentro de main */
 .impersonate-banner {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 900;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-wrap: wrap;
+  text-align: center;
   gap: 10px;
-  height: 30px;
-  padding: 0 12px;
+  min-height: 30px;
+  height: auto;
+  padding: 6px 12px;
   background: #f59e0b;
   color: #1e1b18;
   font-size: 12px;
