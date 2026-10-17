@@ -205,13 +205,29 @@ const SCREENS = [
 function Sharing() {
   const { data, reload } = useApi<{ mine: { id: string; name: string; scopes: string[] }[]; withMe: { id: string; name: string; scopes: string[] }[] }>("/api/shares");
   const [error, setError] = useState<string | null>(null);
+  const [mineState, setMineState] = useState<{ id: string; name: string; scopes: string[] }[] | null>(null);
+
+  useEffect(() => {
+    if (data?.mine) setMineState(data.mine);
+  }, [data]);
+
+  const list = mineState ?? data?.mine ?? [];
+
   const toggle = async (contact: string, scope: string, on: boolean) => {
     setError(null);
     haptic(5);
+    const prev = mineState ?? data?.mine ?? [];
+    // Atualização otimista na interface
+    setMineState(prev.map((c) => {
+      if (c.id !== contact) return c;
+      const nextScopes = on ? [...new Set([...c.scopes, scope])] : c.scopes.filter((s) => s !== scope);
+      return { ...c, scopes: nextScopes };
+    }));
     try {
-      await api("/api/shares", { method: "PUT", json: { contact, scope, on } });
+      await api("/api/shares", { method: "PUT", json: { contact, user: contact, scope, on } });
       await reload();
     } catch (e) {
+      setMineState(prev);
       setError((e as Error).message);
     }
   };
@@ -223,11 +239,11 @@ function Sharing() {
         Suas finanças e sua agenda são só suas. Escolha o que cada contato pode ver (só leitura). Contatos são quem aceitou um convite.
       </p>
       <ErrorBox error={error} />
-      {data.mine.length === 0 ? (
+      {list.length === 0 ? (
         <p className="muted" style={{ fontSize: 13 }}>Você ainda não tem contatos. Convide alguém pelo WhatsApp e ele aparece aqui.</p>
       ) : (
         <div className="share-list">
-          {data.mine.map((c) => (
+          {list.map((c) => (
             <div key={c.id} className="share-row">
               <span className="ellipsis">{c.name}</span>
               <div className="share-toggles">
