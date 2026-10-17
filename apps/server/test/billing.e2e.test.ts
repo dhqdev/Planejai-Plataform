@@ -168,9 +168,9 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     // a reunião noturna é da plataforma: o custo conta no uso do dia, mas não sai da carteira
     const nightly = await Tracer.start({ trigger: "improve", userId: user.id, input: "teste", noCharge: true });
     await (await nightly.step({ agent: "cto", type: "llm", name: "reunião" })).ok({}, { model: "x", tokensIn: 10, tokensOut: 10, costUsd: 0.2 });
-    await new Promise((r) => setTimeout(r, 100));
+    // o uso do dia é gravado em segundo plano: espera chegar em vez de um tempo fixo (100 ms falhava no CI)
+    await expect.poll(async () => Number((await db.one("SELECT cost_usd FROM usage_daily WHERE user_id = $1", [user.id]))?.cost_usd ?? 0), { timeout: 5000 }).toBeCloseTo(0.2);
     expect(Number((await wallet()).extra_grains)).toBe(300);
-    expect(Number((await db.one("SELECT cost_usd FROM usage_daily WHERE user_id = $1", [user.id])).cost_usd)).toBeCloseTo(0.2);
     expect(await credits.chargeUsage(user.id, 0.05)).toEqual({ charged: 50, left: 250 });
     // o passo do Tracer com custo também desconta (sem travar a resposta)
     const tracer = await Tracer.start({ trigger: "message", userId: user.id, conversationId: convId, input: "teste" });
