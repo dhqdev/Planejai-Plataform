@@ -17,6 +17,7 @@ export interface Account {
   owner: boolean;
   /** versão da sessão: token com versão diferente não vale mais */
   sessionVersion: string;
+  impersonatedBy?: { id: string; name: string | null };
 }
 
 export const OWNER_ID = "owner";

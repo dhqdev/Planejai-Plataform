@@ -19,6 +19,7 @@ import { PullToRefresh } from "./PullToRefresh";
 import { useInstallAction } from "./Install";
 import { haptic } from "./touch";
 import { applyUpdate, onUpdateAvailable } from "./update";
+import "./styles/impersonacao.css";
 
 // Cada tela é um pedaço à parte: baixa só quando abre (o app inicia leve no celular)
 const load = {
@@ -157,6 +158,7 @@ export interface Me {
   role: "superadmin" | "admin";
   owner: boolean;
   linked: boolean;
+  impersonating?: { name: string | null } | null;
 }
 
 type NavLinkItem = { to: string; label: string; icon: string; badge?: string; short?: string };
@@ -418,6 +420,22 @@ export function App() {
   return (
     <UnreadProvider>
     <div className="layout">
+      {me?.impersonating && (
+        <div className="impersonate-banner" role="status">
+          <span>
+            Você está como <strong>{me.name || me.email}</strong>
+          </span>
+          <button
+            className="impersonate-btn"
+            onClick={async () => {
+              await api("/api/auth/stop-impersonate", { method: "POST" });
+              window.location.reload();
+            }}
+          >
+            Voltar para minha conta
+          </button>
+        </div>
+      )}
       <a className="skip-link" href="#conteudo" onClick={(e) => { e.preventDefault(); mainRef.current?.focus(); }}>Pular para o conteúdo</a>
       <header className="topbar">
         {back ? (
