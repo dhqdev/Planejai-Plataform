@@ -1,6 +1,21 @@
 /* ---------- Agenda (calendário) ---------- */
 .cal-nav { display: flex; align-items: center; gap: 6px; }
 .cal-person { width: 190px; }
+
+/* Controles compactos no padrão minimalista de Finanças */
+.cal-nav-group { display: inline-flex; align-items: center; gap: 4px; }
+.cal-nav-arrows { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 99px; background: var(--panel); padding: 1px; }
+.cal-nav-arrows .icon-btn { border-radius: 99px; width: 28px; height: 28px; }
+
+.cal-view-btns { display: inline-flex; align-items: center; padding: 2px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--border); gap: 2px; }
+.cal-view-btn { border: none; background: none; font-size: 13px; font-weight: 500; color: var(--muted); padding: 4px 10px; border-radius: 99px; cursor: pointer; transition: background .15s, color .15s; line-height: 1.2; -webkit-tap-highlight-color: transparent; }
+.cal-view-btn:hover { color: var(--text); }
+.cal-view-btn.active { background: var(--panel); color: var(--text); font-weight: 600; box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,.06)); }
+
+.cal-owners-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.cal-owners-wrap button { border: 1px solid var(--border); background: var(--panel); color: var(--muted); font-size: 12.5px; padding: 4px 10px; border-radius: 99px; cursor: pointer; transition: all .15s; }
+.cal-owners-wrap button:hover { color: var(--text); border-color: var(--border-2); }
+.cal-owners-wrap button.active { background: var(--ink); color: var(--on-ink); border-color: transparent; font-weight: 600; }
 .cal-wd { padding: 10px 8px 6px; font-size: 12px; color: var(--muted); text-align: center; border-bottom: 1px solid var(--border); }
 .cal-cell { min-height: 118px; padding: 6px 5px; border-left: 1px solid var(--border); border-top: 1px solid var(--border); cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-width: 0; transition: background .12s; }
 @media (hover: hover) and (pointer: fine) { .cal-cell:hover { background: var(--panel-2); } }
