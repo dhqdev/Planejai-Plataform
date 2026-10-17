@@ -3,6 +3,7 @@ import { api, brl } from "../api";
 import { CATEGORY_COLORS, ErrorBox, Modal } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
+import { SelectField } from "../pickers";
 import { haptic } from "../touch";
 
 /** Categoria de gastos da pessoa (`/api/finance/categories`). */
@@ -119,9 +120,7 @@ function CategoryForm({ initial, others, onClose }: { initial: FinCategory | nul
         {initial.count > 0 ? (
           <div className="field">
             <label htmlFor="cat-move">Os {initial.count} lançamentos vão para</label>
-            <select id="cat-move" className="select" value={removing} onChange={(e) => setRemoving(e.target.value)}>
-              {others.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-            </select>
+            <SelectField id="cat-move" title="Mover lançamentos para" value={removing} onChange={setRemoving} options={others.map((c) => ({ value: c.name, label: c.name, dot: c.color }))} />
           </div>
         ) : (
           <p className="muted" style={{ margin: 0 }}>Ela não tem lançamentos. Os limites e contas fixas dela, se tiver, vão para {removing}.</p>

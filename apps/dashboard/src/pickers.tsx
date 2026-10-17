@@ -775,3 +775,83 @@ function Wheel({ label, values, value, onChange, autoFocus }: { label: string; v
     </div>
   );
 }
+
+/* ---------- Lista de opções: folha que sobe no celular, <select> no resto ---------- */
+
+export type SelectOption = { value: string; label: string; /** Bolinha de cor (categorias). */ dot?: string; /** Linha menor embaixo. */ hint?: string };
+
+type SelectFieldProps = {
+  id?: string;
+  value: string;
+  options: SelectOption[];
+  onChange: (v: string) => void;
+  /** Título da folha (o rótulo do campo). */
+  title: string;
+  disabled?: boolean;
+};
+
+/**
+ * Escolha de uma opção (categoria, forma de pagamento, parcelas). No celular o campo abre uma folha com a lista
+ * inteira, um toque escolhe e fecha; no iPad e notebook continua o <select> do navegador, que já funciona bem lá.
+ */
+export function SelectField({ id, value, options, onChange, title, disabled }: SelectFieldProps) {
+  const [phone] = useState(isPhone);
+  const [open, setOpen] = useState(false);
+  if (!phone) {
+    return (
+      <select id={id} className="select" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    );
+  }
+  const cur = options.find((o) => o.value === value);
+  return (
+    <>
+      <button
+        id={id}
+        type="button"
+        className="input pk-field pk-select"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => {
+          haptic(6);
+          setOpen(true);
+        }}
+      >
+        {cur?.dot && <span className="pk-dot" style={{ background: cur.dot }} />}
+        <span>{cur?.label ?? "Escolher"}</span>
+        <Icon name="chevron-right" size={16} className="pk-select-caret" />
+      </button>
+      {open && (
+        <Modal title={title} className="pk-sheet pk-list-sheet" onClose={() => setOpen(false)}>
+          {(close) => (
+            <div className="pk-list" role="listbox" aria-label={title}>
+              {options.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="option"
+                  aria-selected={o.value === value}
+                  className={`pk-opt${o.value === value ? " on" : ""}`}
+                  onClick={() => {
+                    haptic(10);
+                    onChange(o.value);
+                    close();
+                  }}
+                >
+                  {o.dot && <span className="pk-dot" style={{ background: o.dot }} />}
+                  <span className="pk-opt-text">
+                    {o.label}
+                    {o.hint && <small>{o.hint}</small>}
+                  </span>
+                  {o.value === value && <Icon name="check" size={18} />}
+                </button>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
+    </>
+  );
+}

@@ -81,3 +81,17 @@
   .pk-pop, .pk-pop.closing, .pk-months { animation: none; }
   .pk-caret, .pk-day, .pk-chip { transition: none; }
 }
+
+/* lista de opções (SelectField no celular): a folha cresce até caber a lista e só ela rola */
+.modal.pk-sheet.pk-list-sheet .modal-body { overflow: auto; padding: 4px 8px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.pk-select .pk-select-caret { margin-left: auto; transform: rotate(90deg); }
+.pk-select:disabled { opacity: .6; cursor: default; }
+.pk-dot { width: 10px; height: 10px; border-radius: 99px; flex-shrink: 0; }
+.pk-list { display: flex; flex-direction: column; }
+.pk-opt { display: flex; align-items: center; gap: 12px; min-height: 50px; padding: 10px 12px; border: 0; border-radius: 12px; background: none; color: var(--text); font: inherit; font-size: 16px; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pk-opt + .pk-opt { box-shadow: inset 0 1px 0 var(--border); }
+.pk-opt:active { background: var(--panel-2); }
+.pk-opt.on { font-weight: 600; }
+.pk-opt .ico { margin-left: auto; color: var(--accent, var(--text)); flex-shrink: 0; }
+.pk-opt-text { display: flex; flex-direction: column; min-width: 0; }
+.pk-opt-text small { font-size: 13px; font-weight: 400; color: var(--muted); }

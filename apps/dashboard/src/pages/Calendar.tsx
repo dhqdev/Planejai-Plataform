@@ -979,6 +979,7 @@ export function EventDetail({ ev, tags, readonly, onClose, onChanged }: { ev: Ev
   const leads = LEADS.includes(lead0) ? LEADS : [...LEADS, lead0].sort((a, b) => a - b);
   return (
     <Modal
+      bare={editable}
       title={ev.kind === "google" ? "Evento" : ev.kind === "holiday" ? "Feriado" : ev.remindAt ? "Compromisso" : "Lembrete"}
       icon={<Icon name={ev.kind === "reminder" ? "bell" : "calendar"} />}
       onClose={onClose}
@@ -1080,6 +1081,7 @@ export function NewReminder({ at, tags, onClose }: { at: Date; tags: Tag[]; onCl
   };
   return (
     <Modal
+      bare
       title="Novo lembrete"
       icon={<Icon name="bell" />}
       onClose={() => onClose(false)}

@@ -5,7 +5,7 @@ import { Donut, Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmD
 import { useApi, useMedia } from "../hooks";
 import { Vazio } from "../Vazio";
 import { Icon } from "../icons";
-import { DateField, isoDate } from "../pickers";
+import { DateField, isoDate, SelectField } from "../pickers";
 import { useLongPress } from "../ios";
 import { haptic } from "../touch";
 import { ReportModal } from "./FinanceReport";
@@ -609,27 +609,42 @@ function TransactionForm({ initial, onClose }: { initial?: any; onClose: () => v
       </div>
       <div className="field"><label htmlFor="tx-amount">Valor (R$)</label><input id="tx-amount" name="amount" className="input" inputMode="decimal" autoComplete="off" placeholder="89,90" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} autoFocus /></div>
       <div className="field"><label htmlFor="tx-cat">Categoria</label>
-        <select id="tx-cat" className="select" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>
-          {!initial && <option value="">Automática (pela descrição)</option>}
-          {cats.filter((c) => c.kind === "both" || c.kind === f.kind || c.name === f.category).map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-          {f.category && !cats.some((c) => c.name === f.category) && <option value={f.category}>{f.category}</option>}
-        </select>
+        <SelectField
+          id="tx-cat"
+          title="Categoria"
+          value={f.category}
+          onChange={(category) => setF({ ...f, category })}
+          options={[
+            ...(!initial ? [{ value: "", label: "Automática (pela descrição)" }] : []),
+            ...cats.filter((c) => c.kind === "both" || c.kind === f.kind || c.name === f.category).map((c) => ({ value: c.name, label: c.name, dot: c.color })),
+            ...(f.category && !cats.some((c) => c.name === f.category) ? [{ value: f.category, label: f.category }] : []),
+          ]}
+        />
       </div>
       <div className="field"><label htmlFor="tx-desc">Descrição</label><input id="tx-desc" name="description" className="input" autoComplete="off" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
       {cards.length > 0 && !(initial?.installments > 1) && (
         <div className="grid grid-2" style={{ gap: 10 }}>
           <div className="field"><label htmlFor="tx-card">{f.kind === "income" ? "Estorno no cartão" : "Como pagou"}</label>
-            <select id="tx-card" className="select" value={f.card_id} onChange={(e) => setF({ ...f, card_id: e.target.value, installments: e.target.value ? f.installments : 1 })}>
-              <option value="">{f.kind === "income" ? "Não" : "Pix, dinheiro ou débito"}</option>
-              {cards.map((c) => <option key={c.id} value={c.id}>Cartão {c.name}{c.last4 ? ` ·${c.last4}` : ""}</option>)}
-            </select>
+            <SelectField
+              id="tx-card"
+              title={f.kind === "income" ? "Estorno no cartão" : "Como pagou"}
+              value={f.card_id}
+              onChange={(card_id) => setF({ ...f, card_id, installments: card_id ? f.installments : 1 })}
+              options={[
+                { value: "", label: f.kind === "income" ? "Não" : "Pix, dinheiro ou débito" },
+                ...cards.map((c) => ({ value: c.id, label: `Cartão ${c.name}${c.last4 ? ` ·${c.last4}` : ""}` })),
+              ]}
+            />
           </div>
           {card && !initial && f.kind === "expense" && (
             <div className="field"><label htmlFor="tx-inst">Parcelas</label>
-              <select id="tx-inst" className="select" value={f.installments} onChange={(e) => setF({ ...f, installments: Number(e.target.value) })}>
-                <option value={1}>À vista</option>
-                {Array.from({ length: 23 }, (_, i) => i + 2).map((n) => <option key={n} value={n}>{n}x</option>)}
-              </select>
+              <SelectField
+                id="tx-inst"
+                title="Parcelas"
+                value={String(f.installments)}
+                onChange={(v) => setF({ ...f, installments: Number(v) })}
+                options={[{ value: "1", label: "À vista" }, ...Array.from({ length: 23 }, (_, i) => ({ value: String(i + 2), label: `${i + 2}x` }))]}
+              />
             </div>
           )}
         </div>
@@ -675,10 +690,14 @@ function BudgetModal({ initial, onClose }: { initial: { category: string | null;
       }
     >
       <div className="field"><label htmlFor="bd-cat">Para</label>
-        <select id="bd-cat" className="select" value={category} disabled={initial.amount != null} onChange={(e) => setCategory(e.target.value)}>
-          <option value="">Total do mês</option>
-          {cats.filter((c) => c.kind !== "income" || c.name === category).map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-        </select>
+        <SelectField
+          id="bd-cat"
+          title="Limite para"
+          value={category}
+          disabled={initial.amount != null}
+          onChange={setCategory}
+          options={[{ value: "", label: "Total do mês" }, ...cats.filter((c) => c.kind !== "income" || c.name === category).map((c) => ({ value: c.name, label: c.name, dot: c.color }))]}
+        />
       </div>
       <div className="field"><label htmlFor="bd-amount">Limite por mês (R$)</label><input id="bd-amount" name="limit" className="input" inputMode="decimal" autoComplete="off" placeholder="800" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus /></div>
       <p className="muted" style={{ fontSize: 12, margin: 0 }}>O assistente avisa no WhatsApp quando chegar em 80% e quando passar do limite.</p>
