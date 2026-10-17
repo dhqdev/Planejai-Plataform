@@ -394,6 +394,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
               <h4>De quem</h4>
               <select className="select" aria-label="De quem" value={person} onChange={(e) => onPerson(e.target.value)}>
                 <option value="">Minha agenda</option>
+                <option value="all">{owners.length === 1 ? "Os dois" : "Todos"}</option>
                 {owners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </section>
@@ -881,7 +882,7 @@ function EventScreen({ ev, origin, readonly, tags, onClose, onEdit, onChanged }:
       <div ref={sheet} className="pe" style={{ ["--ev" as string]: evColor(ev) }}>
         <div className="pe-top">
           <button className="pc-ico" aria-label="Fechar" onClick={() => close()}><Icon name="x" size={24} /></button>
-          <span className="pe-src"><i />{saved ? <span key={saved} className="pe-saved"><Icon name="check" size={15} /> Salvo</span> : source}</span>
+          <span className="pe-src"><i />{saved ? <span key={saved} className="pe-saved"><Icon name="check" size={15} /> Salvo</span> : ev.ownerName ? `${source} (${ev.ownerName})` : source}</span>
           {inline ? (
             <button className="pc-ico" aria-label="Excluir lembrete" disabled={busy != null} onClick={() => void remove()}><Icon name="trash" size={22} /></button>
           ) : canEdit ? (

@@ -7,7 +7,7 @@ import { asPerson } from "../../../integrations/person.js";
 import { isConnected } from "../../../integrations/registry.js";
 import { isColor, listTags, resolveTag } from "../../../agenda-tags.js";
 import { cancelReminder, createReminder, listReminders, reminderOccurrences, retimeReminder, updateReminderLook } from "../../../reminders.js";
-import { NOBODY, personalUser, selfUserId } from "../../../sharing.js";
+import { NOBODY, personalUsers, selfUserId, sharedWithMe } from "../../../sharing.js";
 import { parseLocalDateTime } from "../../../time.js";
 import { conversationOf } from "../../../social.js";
 import { cancelWatch, checkWatchNow, createWatch, listWatches, updateWatch, type NotifyMode } from "../../../watches.js";
@@ -93,13 +93,31 @@ export function agendaRoutes(base: FastifyInstance) {
     const to = new Date(req.query.to ?? "");
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to <= from || to.getTime() - from.getTime() > 100 * 86400_000)
       return reply.code(400).send({ error: "Período inválido" });
-    const uid = await personalUser(req.account, req.query.user, "agenda");
-    if (!uid) return reply.code(403).send({ error: "Essa pessoa não compartilhou a agenda com você" });
-    const mine = uid === (await self(req.account));
-    const events: any[] = (await reminderOccurrences(from, to, uid)).map((e) => ({ ...e, kind: "reminder" }));
+    const uids = await personalUsers(req.account, req.query.user, "agenda");
+    if (!uids || !uids.length) return reply.code(403).send({ error: "Essa pessoa não compartilhou a agenda com você" });
+    const me = await self(req.account);
+    const mineOnly = uids.length === 1 && uids[0] === me;
+    const readonly = !mineOnly;
+    const sharedList = await sharedWithMe(me, "agenda");
+    const nameMap = new Map<string, string>(sharedList.map((s) => [s.id, s.name]));
+    nameMap.set(me, "Minha agenda");
+
+    const events: any[] = [];
+    for (const uid of uids) {
+      const occs = await reminderOccurrences(from, to, uid);
+      for (const e of occs) {
+        events.push({
+          ...e,
+          kind: "reminder",
+          ownerId: uid,
+          ownerName: uid === me ? undefined : (nameMap.get(uid) ?? undefined),
+        });
+      }
+    }
+
     // Google Agenda só na própria agenda: o dono vê a da plataforma, o cliente a que ele conectou em Minha conta
-    const person = { userId: uid, owner: req.account.owner };
-    if (mine && (await asPerson(person, () => isConnected("google")).catch(() => false))) {
+    const person = { userId: me, owner: req.account.owner };
+    if (uids.includes(me) && (await asPerson(person, () => isConnected("google")).catch(() => false))) {
       try {
         const params = new URLSearchParams({ timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "250" });
         const j = await asPerson(person, () => googleApi(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`));
@@ -124,20 +142,20 @@ export function agendaRoutes(base: FastifyInstance) {
       }
     }
     // mensagens avulsas agendadas (send_whatsapp): aparecem na hora em que saem, só na própria agenda
-    if (mine) {
+    if (uids.includes(me)) {
       const msgs = await many(
         `SELECT id, name, phone, text, send_at, status, media_kind, media_name FROM direct_messages
           WHERE user_id = $1 AND status IN ('scheduled', 'sending', 'sent', 'failed') AND NOT hidden AND send_at >= $2 AND send_at < $3
             AND (status = 'scheduled' OR created_at < send_at - interval '1 minute')
           ORDER BY send_at LIMIT 200`,
-        [uid, from, to],
+        [me, from, to],
       );
       for (const m of msgs) {
         const who = m.name || `+${m.phone}`;
         events.push({ id: `m:${m.id}`, kind: "message", directId: m.id, title: `Mensagem para ${who}`, start: new Date(m.send_at).toISOString(), person: who, intent: m.media_kind ? `${m.text} (📎 ${attachmentLabel({ kind: m.media_kind, name: m.media_name })})` : m.text, status: m.status });
       }
     }
-    return { events, readonly: !mine, tags: await listTags(uid) };
+    return { events, readonly, tags: await listTags(uids[0] ?? me) };
   });
 
   // cancelar uma mensagem avulsa agendada pela agenda (não manda nada)

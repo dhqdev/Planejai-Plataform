@@ -42,6 +42,25 @@ export async function personalUser(a: Account, requested: string | undefined | n
   return (await canView(requested, self, scope)) ? requested : null;
 }
 
+/**
+ * Suporte a múltiplos donos (minhas + compartilhadas ou 'todos').
+ * requested vazio/undefined => [self]
+ * requested uuid válido => [uuid] se permitido, senão null
+ * requested === 'all' => [self, ...compartilhados comigo no scope]
+ */
+export async function personalUsers(a: Account, requested: string | undefined | null, scope: ShareScope): Promise<string[] | null> {
+  const self = (await selfUserId(a)) ?? NOBODY;
+  if (!requested || requested === self) return [self];
+  if (requested === "all") {
+    const shared = await sharedWithMe(self, scope);
+    const others = shared.map((s) => s.id);
+    return [self, ...others];
+  }
+  if (!/^[0-9a-f-]{36}$/i.test(requested)) return null;
+  const ok = await canView(requested, self, scope);
+  return ok ? [requested] : null;
+}
+
 /** Quem compartilhou alguma tela comigo (para o seletor "Minhas / Fulano"). */
 export async function sharedWithMe(viewerId: string, scope?: ShareScope) {
   return many<{ id: string; name: string; scopes: ShareScope[] }>(

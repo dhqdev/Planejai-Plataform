@@ -3,7 +3,7 @@ import { budgetStatus, parseAmount, recordTransaction } from "../../../agent/too
 import { autoCategory, createCategory, DEFAULT_CATEGORIES, deleteCategory, learnCategory, listCategories, resolveCategory, updateCategory, type CategoryInput } from "../../../categories.js";
 import { config } from "../../../config.js";
 import { many, one, query } from "../../../db/pool.js";
-import { NOBODY, personalUser, selfUserId } from "../../../sharing.js";
+import { NOBODY, personalUser, personalUsers, selfUserId } from "../../../sharing.js";
 import { createBill, deleteBill, listBills, payBill, updateBill, type BillInput } from "../../../bills.js";
 import { getReportSchedule, renderFinanceReport, reportFileName, sendFinanceReport, setReportSchedule } from "../../../finance-report.js";
 import { createCard, deleteCard, getCard, invoiceItems, listCards, placeOnCard, payInvoice, unpayInvoice, updateCard, type CardInput } from "../../../cards.js";
@@ -15,42 +15,43 @@ import { createCard, deleteCard, getCard, invoiceItems, listCards, placeOnCard, 
 export function financeRoutes(base: FastifyInstance) {
   // ---------- Finanças ----------
   base.get<{ Querystring: { user?: string; month?: string } }>("/api/finance", async (req, reply) => {
-    const uid = await personalUser(req.account, req.query.user, "finance");
-    if (!uid) return reply.code(403).send({ error: "Essa pessoa não compartilhou as finanças com você" });
-    const readonly = uid !== ((await selfUserId(req.account)) ?? NOBODY);
+    const uids = await personalUsers(req.account, req.query.user, "finance");
+    if (!uids || !uids.length) return reply.code(403).send({ error: "Essa pessoa não compartilhou as finanças com você" });
+    const me = (await selfUserId(req.account)) ?? NOBODY;
+    const readonly = uids.length !== 1 || uids[0] !== me;
     const tz = config.DEFAULT_TIMEZONE;
     const month = /^\d{4}-\d{2}$/.test(req.query.month ?? "") ? req.query.month! : new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit" }).format(new Date());
-    const where = `t.user_id = $1 AND to_char(t.occurred_at AT TIME ZONE $2, 'YYYY-MM') = $3`;
+    const where = `t.user_id = ANY($1) AND to_char(t.occurred_at AT TIME ZONE $2, 'YYYY-MM') = $3`;
     const totals = await one(
       `SELECT COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses, COALESCE(SUM(amount) FILTER (WHERE kind='income'),0) AS income, COUNT(*) AS count FROM transactions t WHERE ${where}`,
-      [uid, tz, month],
+      [uids, tz, month],
     );
     const byCategory = await many(
       `SELECT category, SUM(amount) AS total, COUNT(*) AS count FROM transactions t WHERE ${where} AND kind = 'expense' GROUP BY category ORDER BY total DESC`,
-      [uid, tz, month],
+      [uids, tz, month],
     );
     const daily = await many(
       `SELECT to_char(t.occurred_at AT TIME ZONE $2, 'DD') AS day, SUM(amount) FILTER (WHERE kind='expense') AS expenses FROM transactions t WHERE ${where} GROUP BY 1 ORDER BY 1`,
-      [uid, tz, month],
+      [uids, tz, month],
     );
     const months = await many(
       `SELECT to_char(t.occurred_at AT TIME ZONE $2, 'YYYY-MM') AS month, COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses, COALESCE(SUM(amount) FILTER (WHERE kind='income'),0) AS income
-         FROM transactions t WHERE t.user_id = $1 AND t.occurred_at > now() - interval '6 months' GROUP BY 1 ORDER BY 1`,
-      [uid, tz],
+         FROM transactions t WHERE t.user_id = ANY($1) AND t.occurred_at > now() - interval '6 months' GROUP BY 1 ORDER BY 1`,
+      [uids, tz],
     );
     const transactions = await many(
       `SELECT t.id, t.kind, t.amount, t.category, t.description, t.merchant, t.source, t.occurred_at, u.name AS user_name, u.phone,
               t.card_id, c.name AS card_name, c.color AS card_color, t.invoice_month, t.installment, t.installments
          FROM transactions t JOIN users u ON u.id = t.user_id LEFT JOIN cards c ON c.id = t.card_id WHERE ${where} ORDER BY t.occurred_at DESC LIMIT 300`,
-      [uid, tz, month],
+      [uids, tz, month],
     );
     const [py, pm] = month.split("-").map(Number) as [number, number];
     const prevMonth = new Date(Date.UTC(py, pm - 2, 1)).toISOString().slice(0, 7);
     const prevByCategory = await many(
       `SELECT category, SUM(amount) AS total FROM transactions t WHERE ${where} AND kind = 'expense' GROUP BY category`,
-      [uid, tz, prevMonth],
+      [uids, tz, prevMonth],
     );
-    const budgets = await budgetStatus(uid, tz, month);
+    const budgets = uids.length === 1 ? await budgetStatus(uids[0]!, tz, month) : [];
     return { month, totals, byCategory, prevByCategory, daily, months, transactions, budgets, readonly };
   });
 

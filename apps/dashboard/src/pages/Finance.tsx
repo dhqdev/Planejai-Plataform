@@ -58,7 +58,22 @@ function dayLabel(iso: string) {
 
 export function FinancePage() {
   const [month, setMonth] = useState(thisMonth());
-  const [user, setUser] = useState("");
+  const [user, setUser] = useState(() => {
+    try {
+      return sessionStorage.getItem("pj-origin-finance") ?? "";
+    } catch {
+      return "";
+    }
+  });
+
+  const changeUser = (u: string) => {
+    setUser(u);
+    try {
+      sessionStorage.setItem("pj-origin-finance", u);
+    } catch {
+      /* sem storage */
+    }
+  };
   const [adding, setAdding] = useState(false);
   const [report, setReport] = useState(false);
   const [cat, setCat] = useState<string | null>(null);
@@ -188,6 +203,7 @@ export function FinancePage() {
       <span className="fin-tx-text">
         <span className="ellipsis">{t.description ?? t.merchant ?? t.category}</span>
         <small className="muted ellipsis">
+          {user === "all" && t.user_name && <span className="chip-mini" style={{ marginRight: 4 }}>{t.user_name.trim().split(" ")[0]}</span>}
           {t.card_name && <span className="fin-tx-card"><span className={`cc-mini c-${t.card_color ?? "preto"}`} aria-hidden />{t.card_name}{t.installments ? ` ${t.installment}/${t.installments}` : ""} · </span>}
           {t.category}{t.merchant && t.description ? ` · ${t.merchant}` : ""}
         </small>
@@ -222,9 +238,10 @@ export function FinancePage() {
         )}
         {owners.length > 0 && (
           <div className="fin-people">
-            <button className={!user ? "active" : ""} onClick={() => { haptic(5); setUser(""); }}>Minhas</button>
+            <button className={!user ? "active" : ""} onClick={() => { haptic(5); changeUser(""); }}>Minhas</button>
+            <button className={user === "all" ? "active" : ""} onClick={() => { haptic(5); changeUser("all"); }}>{owners.length === 1 ? "Os dois" : "Todos"}</button>
             {owners.map((p) => (
-              <button key={p.id} className={user === p.id ? "active" : ""} title={p.name} onClick={() => { haptic(5); setUser(p.id); }}>{p.name.trim().split(" ")[0]}</button>
+              <button key={p.id} className={user === p.id ? "active" : ""} title={p.name} onClick={() => { haptic(5); changeUser(p.id); }}>{p.name.trim().split(" ")[0]}</button>
             ))}
           </div>
         )}
@@ -272,9 +289,10 @@ export function FinancePage() {
           )}
           {owners.length > 0 && (
             <div className="fp-people">
-              <button className={!user ? "on" : ""} onClick={() => { haptic(5); setUser(""); }}>Minhas</button>
+              <button className={!user ? "on" : ""} onClick={() => { haptic(5); changeUser(""); }}>Minhas</button>
+              <button className={user === "all" ? "on" : ""} onClick={() => { haptic(5); changeUser("all"); }}>{owners.length === 1 ? "Os dois" : "Todos"}</button>
               {owners.map((p) => (
-                <button key={p.id} className={user === p.id ? "on" : ""} title={p.name} onClick={() => { haptic(5); setUser(p.id); }}>{p.name.trim().split(" ")[0]}</button>
+                <button key={p.id} className={user === p.id ? "on" : ""} title={p.name} onClick={() => { haptic(5); changeUser(p.id); }}>{p.name.trim().split(" ")[0]}</button>
               ))}
             </div>
           )}
