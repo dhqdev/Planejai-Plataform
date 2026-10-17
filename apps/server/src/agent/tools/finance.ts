@@ -11,6 +11,7 @@ import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js"
 import { autoCategory, ensureCategories, FALLBACK, learnCategory, plain, resolveCategory } from "../../categories.js";
 import { CARD_USED } from "../claims.js";
 import { addMonths, cardInText, invoiceDates, invoiceMonthFor, listCards, localDate, monthName, placeOnCard, resolveCard, shiftDate, type Card } from "../../cards.js";
+import { safeFetch } from "../../net.js";
 
 export { CATEGORIES, guessCategory } from "../../categories.js";
 
@@ -111,6 +112,37 @@ export function calc(expression: string): number {
   if (i < src.length) throw new Error(`sobrou "${src.slice(i)}" na expressão`);
   return v;
 }
+
+export const convertCurrency = defineTool<{ amount: number | string; from?: string; to?: string }>({
+  name: "convert_currency",
+  description: "Converte valor em dólar (USD) para reais (BRL) com a cotação atual. Use sempre que a pessoa falar em dólar/US$/USD.",
+  parameters: obj(
+    {
+      amount: { type: "number", description: "Valor em dólar" },
+      from: { type: "string" },
+      to: { type: "string" },
+    },
+    ["amount"],
+  ),
+  async run(args) {
+    const amount = parseAmount(args.amount);
+    const res = await safeFetch("https://economia.awesomeapi.com.br/json/last/USD-BRL").catch(() => null);
+    if (!res || !res.ok) return { ok: false, error: "Não consegui pegar a cotação agora. Quer que eu tente de novo?" };
+    const j: any = await res.json().catch(() => ({}));
+    const rate = Number(j?.USDBRL?.bid);
+    if (!Number.isFinite(rate) || rate <= 0) return { ok: false, error: "Não consegui pegar a cotação agora. Quer que eu tente de novo?" };
+    const converted = Math.round(amount * rate * 100) / 100;
+    return {
+      ok: true,
+      original: `US$ ${amount.toFixed(2)}`,
+      converted: brl(converted),
+      rate,
+      date: j.USDBRL.create_date,
+      source: "AwesomeAPI",
+      note: `Use ${brl(converted)} no add_transaction se for registrar gasto.`,
+    };
+  },
+});
 
 export const calculate = defineTool<{ expression: string }>({
   name: "calculate",
