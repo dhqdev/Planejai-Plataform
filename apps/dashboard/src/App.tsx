@@ -159,7 +159,7 @@ export interface Me {
   linked: boolean;
 }
 
-type NavLinkItem = { to: string; label: string; icon: string; badge?: string; short?: string; emoji?: string };
+type NavLinkItem = { to: string; label: string; icon: string; badge?: string; short?: string };
 type NavItem = { section: string } | NavLinkItem;
 const NO_NAV: NavItem[] = [];
 
@@ -179,14 +179,14 @@ const groupOf = (path: string) => GROUPS.find((g) => g.some((t) => t.to === "/" 
 
 /** Itens de dia a dia: iguais para o dono e para os clientes (cada um vê só os próprios dados). */
 const MY_DAY: NavItem[] = [
-  { to: "/", label: "Início", icon: "home", emoji: "🏠" },
-  { to: "/agenda", label: "Agenda", icon: "calendar", emoji: "📅" },
-  { to: "/finance", label: "Finanças", icon: "wallet", emoji: "💰" },
-  { to: "/watches", label: "Acompanhamentos", icon: "eye", short: "De olho", emoji: "👀" },
-  { to: "/recados", label: "Recados", icon: "send", emoji: "✉️" },
-  { to: "/contatos", label: "Contatos", icon: "users", emoji: "👥" },
-  { to: "/documentos", label: "Documentos", icon: "file", emoji: "📄" },
-  { to: "/especialistas", label: "Especialistas", icon: "sparkle", emoji: "✨" },
+  { to: "/", label: "Início", icon: "home" },
+  { to: "/agenda", label: "Agenda", icon: "calendar" },
+  { to: "/finance", label: "Finanças", icon: "wallet" },
+  { to: "/watches", label: "Acompanhamentos", icon: "eye", short: "De olho" },
+  { to: "/recados", label: "Recados", icon: "send" },
+  { to: "/contatos", label: "Contatos", icon: "users" },
+  { to: "/documentos", label: "Documentos", icon: "file" },
+  { to: "/especialistas", label: "Especialistas", icon: "sparkle" },
 ];
 
 /** Barra de baixo do celular: só as telas do dia a dia; o resto fica em listas na Conta (último item). */
@@ -197,17 +197,17 @@ const SUPER_NAV: NavItem[] = [
   { section: "Meu dia" },
   ...MY_DAY,
   { section: "Plataforma" },
-  { to: "/executions", label: "Execuções", icon: "activity", emoji: "⚡" },
-  { to: "/clients", label: "Pessoas", icon: "users", badge: "clients", emoji: "👤" },
-  { to: "/agents", label: "Agentes", icon: "brain", emoji: "🤖" },
-  { to: "/whatsapp", label: "Conexões", icon: "plug", emoji: "🔌" },
-  { to: "/servidor", label: "Servidor", icon: "cpu", emoji: "🖥️" },
-  { to: "/blog-posts", label: "Blog", icon: "book", emoji: "📰" },
-  { to: "/settings", label: "Configurações", icon: "settings", short: "Ajustes", emoji: "⚙️" },
+  { to: "/executions", label: "Execuções", icon: "activity" },
+  { to: "/clients", label: "Pessoas", icon: "users", badge: "clients" },
+  { to: "/agents", label: "Agentes", icon: "brain" },
+  { to: "/whatsapp", label: "Conexões", icon: "plug" },
+  { to: "/servidor", label: "Servidor", icon: "cpu" },
+  { to: "/blog-posts", label: "Blog", icon: "book" },
+  { to: "/settings", label: "Configurações", icon: "settings", short: "Ajustes" },
   { section: "Conta" },
-  { to: "/convites", label: "Convites", icon: "user-plus", emoji: "🎟️" },
-  { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos", emoji: "🔔" },
-  { to: "/profile", label: "Minha conta", icon: "user", emoji: "👤" },
+  { to: "/convites", label: "Convites", icon: "user-plus" },
+  { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
+  { to: "/profile", label: "Minha conta", icon: "user" },
 ];
 
 interface AppTabs {
@@ -223,7 +223,7 @@ const specialistTabs = (tabs: AppTabs | null): NavItem[] =>
   (tabs?.specialists ?? []).map((a) => ({ to: `/especialistas/${a.slug}`, label: a.persona, icon: a.icon }));
 
 /** Esteira de desenvolvimento: só o dono da stack (outro super admin não vê; a API também recusa). */
-const OWNER_ONLY: NavLinkItem = { to: "/esteira", label: "Esteira", icon: "github", emoji: "🚀" };
+const OWNER_ONLY: NavLinkItem = { to: "/esteira", label: "Esteira", icon: "github" };
 
 /** O dono também liga especialistas para ele: as abas entram antes da Plataforma. */
 function superNav(tabs: AppTabs | null, owner = false): NavItem[] {
@@ -240,24 +240,24 @@ function superNav(tabs: AppTabs | null, owner = false): NavItem[] {
  */
 function adminNav(tabs: AppTabs | null, billing = false, paid = false): NavItem[] {
   const extra: NavItem[] = [
-    ...(tabs?.modules ?? []).map((m) => tabs!.catalog[m]).filter(Boolean).map((m) => ({ to: m!.to, label: m!.label, icon: m!.icon, emoji: "🧩" })),
-    ...(tabs?.custom ?? []).map((t) => ({ to: `/aba/${t.slug}`, label: t.title, icon: t.icon, emoji: "📌" })),
-    ...specialistTabs(tabs).map((s) => ({ ...s, emoji: "✨" })),
+    ...(tabs?.modules ?? []).map((m) => tabs!.catalog[m]).filter(Boolean).map((m) => ({ to: m!.to, label: m!.label, icon: m!.icon })),
+    ...(tabs?.custom ?? []).map((t) => ({ to: `/aba/${t.slug}`, label: t.title, icon: t.icon })),
+    ...specialistTabs(tabs),
   ];
   return [
     { section: "Meu dia" },
     ...MY_DAY,
     // blog público só para ler (a gestão é do dono, em Plataforma > Blog); pedido do David em 2026-10-16
-    { to: "/blog", label: "Blog", icon: "book", emoji: "📰" },
+    { to: "/blog", label: "Blog", icon: "book" },
     ...(extra.length ? [{ section: "Feito para você" }, ...extra] : []),
     { section: "Conta" },
-    { to: "/convites", label: "Convites", icon: "user-plus", emoji: "🎟️" },
-    { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos", emoji: "🔔" },
+    { to: "/convites", label: "Convites", icon: "user-plus" },
+    { to: "/notificacoes", label: "Notificações", icon: "bell", badge: "notif", short: "Avisos" },
     // só aparece quando o dono ligou a cobrança
-    ...(billing ? [{ to: "/plano", label: "Meu plano", icon: "card", short: "Plano", emoji: "💳" }] : []),
+    ...(billing ? [{ to: "/plano", label: "Meu plano", icon: "card", short: "Plano" }] : []),
     // quem já pagou alguma vez: cobranças, cartão e assinatura (não confundir com Finanças, que são os gastos da pessoa)
-    ...(billing && paid ? [{ to: "/pagamentos", label: "Pagamentos", icon: "receipt", short: "Pagamentos", emoji: "🧾" }] : []),
-    { to: "/profile", label: "Minha conta", icon: "user", emoji: "👤" },
+    ...(billing && paid ? [{ to: "/pagamentos", label: "Pagamentos", icon: "receipt", short: "Pagamentos" }] : []),
+    { to: "/profile", label: "Minha conta", icon: "user" },
   ];
 }
 

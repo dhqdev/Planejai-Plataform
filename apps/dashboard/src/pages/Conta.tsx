@@ -17,7 +17,7 @@ declare const __APP_VERSION__: string;
 /** Telas abertas daqui ganham a seta de voltar também no notebook (o App lê `state.from`). */
 const FROM_CONTA = { from: "conta" };
 
-export type MenuLink = { to: string; label: string; icon: string; badge?: string; short?: string; emoji?: string };
+export type MenuLink = { to: string; label: string; icon: string; badge?: string; short?: string };
 
 /**
  * Conta (último item da barra do celular e o mascote no pé do trilho do notebook), no jeito do Toki:
@@ -103,17 +103,17 @@ export function ContaPage({ me, sections, theme, onTheme, onLogout, unread }: {
           {screens.map((sec) => (
             <Group key={sec.title} title={sec.title} className="conta-screens">
               {sec.items.map((it) => (
-                <Row key={it.to} emoji={it.emoji} icon={<Icon name={it.icon} size={20} />} label={it.short ?? it.label} onClick={() => go(it.to)} />
+                <Row key={it.to} icon={<Icon name={it.icon} size={20} />} label={it.short ?? it.label} onClick={() => go(it.to)} />
               ))}
             </Group>
           ))}
 
           <Group title="Conta">
-            {use && <Row emoji="💳" icon={<Icon name="card" size={20} />} label="Meu plano" value={use.plan} onClick={() => go("/plano")} />}
+            {use && <Row icon={<Icon name="card" size={20} />} label="Meu plano" value={use.plan} onClick={() => go("/plano")} />}
             {account.map((it) => (
               <Row
                 key={it.to}
-                emoji={it.emoji}
+               
                 icon={<Icon name={it.icon} size={20} />}
                 label={it.short ?? it.label}
                 value={it.badge === "notif" && unread > 0 ? `${unread} ${unread === 1 ? "nova" : "novas"}` : undefined}
@@ -124,10 +124,10 @@ export function ContaPage({ me, sections, theme, onTheme, onLogout, unread }: {
           </Group>
 
           <Group title="Ajustes">
-            <Row emoji="👕" icon={<span className="conta-mascote"><MascoteIcon size={22} /></span>} label={`Roupinha do ${MASCOTE}`} onClick={() => (haptic(5), openWardrobe())} />
-            <Row emoji={theme === "dark" ? "🌙" : "☀️"} icon={<Icon name={theme === "dark" ? "moon" : "sun"} size={20} />} label="Tema" value={theme === "dark" ? "Escuro" : "Claro"} onClick={(e) => onTheme(e)} />
-            {install.mode && <Row emoji="📲" icon={<Icon name="download" size={20} />} label="Instalar app" value={install.mode === "prompt" ? "1 toque" : undefined} onClick={install.run} />}
-            <Row emoji="🚪" icon={<Icon name="logout" size={20} />} label="Sair" danger onClick={onLogout} />
+            <Row icon={<span className="conta-mascote"><MascoteIcon size={22} /></span>} label={`Roupinha do ${MASCOTE}`} onClick={() => (haptic(5), openWardrobe())} />
+            <Row icon={<Icon name={theme === "dark" ? "moon" : "sun"} size={20} />} label="Tema" value={theme === "dark" ? "Escuro" : "Claro"} onClick={(e) => onTheme(e)} />
+            {install.mode && <Row icon={<Icon name="download" size={20} />} label="Instalar app" value={install.mode === "prompt" ? "1 toque" : undefined} onClick={install.run} />}
+            <Row icon={<Icon name="logout" size={20} />} label="Sair" danger onClick={onLogout} />
           </Group>
           <p className="conta-version">Planejai v{__APP_VERSION__}</p>
         </div>
@@ -146,12 +146,12 @@ function Group({ title, children, className }: { title: string; children: ReactN
   );
 }
 
-function Row({ emoji, icon, label, value, dot, danger, onClick }: { emoji?: string; icon: ReactNode; label: string; value?: string; dot?: boolean; danger?: boolean; onClick: (e: { clientX: number; clientY: number }) => void }) {
+function Row({ icon, label, value, dot, danger, onClick }: { icon: ReactNode; label: string; value?: string; dot?: boolean; danger?: boolean; onClick: (e: { clientX: number; clientY: number }) => void }) {
   return (
     <button type="button" className={`conta-row${danger ? " danger" : ""}`} onClick={onClick}>
       <span className="conta-row-top">
         <span className="conta-row-ico">
-          {emoji ? <span className="conta-row-emoji" role="img" aria-hidden>{emoji}</span> : icon}
+          {icon}
           {dot && <i className="conta-dot" />}
         </span>
         {value && <span className="conta-row-badge">{value}</span>}
