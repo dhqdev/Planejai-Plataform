@@ -314,11 +314,19 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
           {owners.length > 0 && (
             <div className="cal-side-block">
               <h4>De quem</h4>
-              <select className="select" aria-label="De quem" value={person} onChange={(e) => changePerson(e.target.value)}>
-                <option value="">Minha agenda</option>
-                <option value="all">{owners.length === 1 ? "Os dois" : "Todos"}</option>
-                {owners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <div className="seg seg-scroll" role="tablist" aria-label="De quem">
+                <button type="button" role="tab" aria-selected={!person} className={!person ? "active" : ""} onClick={() => changePerson("")}>
+                  Minha agenda
+                </button>
+                <button type="button" role="tab" aria-selected={person === "all"} className={person === "all" ? "active" : ""} onClick={() => changePerson("all")}>
+                  {owners.length === 1 ? "Os dois" : "Todos"}
+                </button>
+                {owners.map((p) => (
+                  <button key={p.id} type="button" role="tab" aria-selected={person === p.id} className={person === p.id ? "active" : ""} onClick={() => changePerson(p.id)}>
+                    {p.name}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </aside>
