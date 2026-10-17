@@ -536,9 +536,11 @@ function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onThe
                   <Icon name="send" size={16} /> Conversar
                 </Link>
               )}
-              <button className={`btn ${fit ? "" : "phone-only"}`} onClick={() => setModal("quick")}>
-                <Icon name="settings" size={16} /> Ajustes
-              </button>
+              {!phone && (
+                <button className={`btn ${fit ? "" : "phone-only"}`} onClick={() => setModal("quick")}>
+                  <Icon name="settings" size={16} /> Ajustes
+                </button>
+              )}
               <button className="btn" onClick={() => setEditing(true)}>
                 <Icon name="layout" size={16} /> Editar<span className="hide-phone"> painel</span>
               </button>
@@ -575,9 +577,11 @@ function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onThe
       )}
 
       <div className="corner br">
-        <button className="fab" aria-label="Configurações rápidas" title="Configurações rápidas" onClick={() => setModal("quick")}>
-          <Icon name="settings" />
-        </button>
+        {!phone && (
+          <button className="fab" aria-label="Configurações rápidas" title="Configurações rápidas" onClick={() => setModal("quick")}>
+            <Icon name="settings" />
+          </button>
+        )}
         <button className="fab" aria-label="Editar painel" title="Editar painel" onClick={() => setEditing((v) => !v)}>
           <Icon name={editing ? "check" : "layout"} />
         </button>
