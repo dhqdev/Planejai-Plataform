@@ -835,6 +835,12 @@ function Composer({ name, onSend }: { name: string; onSend: (text: string) => Pr
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const touch = useMedia("(pointer: coarse)");
+  const [typing, setTyping] = useState(false);
+  // celular: com o teclado aberto a barra de abas some, senão ela sobe junto e sobra pouco espaço para a conversa
+  useEffect(() => {
+    document.body.classList.toggle("errand-typing", typing || sending);
+    return () => document.body.classList.remove("errand-typing");
+  }, [typing, sending]);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -873,6 +879,8 @@ function Composer({ name, onSend }: { name: string; onSend: (text: string) => Pr
         value={text}
         disabled={sending}
         enterKeyHint={touch ? "enter" : "send"}
+        onFocus={() => setTyping(true)}
+        onBlur={() => setTyping(false)}
         onChange={(ev) => setText(ev.target.value)}
         onKeyDown={(ev) => {
           if (ev.key === "Enter" && !ev.shiftKey && !touch && !ev.nativeEvent.isComposing) {
@@ -881,7 +889,7 @@ function Composer({ name, onSend }: { name: string; onSend: (text: string) => Pr
           }
         }}
       />
-      <button className="errand-send" type="submit" disabled={!text.trim() || sending} aria-label="Enviar" title="Enviar">
+      <button className="errand-send" type="submit" onPointerDown={(ev) => ev.preventDefault()} disabled={!text.trim() || sending} aria-label="Enviar" title="Enviar">
         <Icon name="send" size={17} />
       </button>
       <span className="errand-composer-hint">Sai pelo número do Planejai com o seu nome na frente.{touch ? "" : " Enter envia, Shift+Enter pula linha."}</span>
