@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { api, brl } from "../api";
-import { BellButton, type Me } from "../App";
+import type { Me } from "../App";
 import { Modal } from "../components";
 import { AgentFace, CORE_FACES, type Face } from "../faces";
 import { useApi } from "../hooks";
@@ -11,6 +11,7 @@ import { Icon } from "../icons";
 import { haptic } from "../touch";
 import { useKeyboardShell } from "../teclado";
 import { ChatCard, type ChatCardData } from "./ChatCards";
+import { InviteForm } from "./Invites";
 import "../styles/chat-inicio.css";
 
 /**
@@ -324,6 +325,7 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
   const [text, setText] = useState("");
   const [sheet, setSheet] = useState<Agent | "team" | null>(null);
   const [attach, setAttach] = useState(false);
+  const [inviting, setInviting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sentAt, setSentAt] = useState(0);
   const [olderLoading, setOlderLoading] = useState(false);
@@ -464,7 +466,7 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
   // ela parar e só desce se ela ainda estiver no fim. Longe do fim pula direto, sem deslizar a conversa toda.
   const toBottom = (smooth = true) => {
     const el = list.current;
-    if (!el) return;
+    if (!el || holding()) return;
     clearTimeout(retry.current);
     if (Date.now() - userAt.current < 700) {
       retry.current = setTimeout(() => stick.current && toBottom(smooth), 750);
@@ -475,6 +477,26 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
     el.scrollTo({ top: el.scrollHeight, behavior: smooth && !far && !reduced() ? "smooth" : "auto" });
   };
   useEffect(() => () => clearTimeout(retry.current), []);
+
+  // Tocar na caixa com a pessoa lendo mensagens antigas: o teclado abre (ou fecha) e a conversa fica onde estava,
+  // com as mesmas mensagens logo acima da caixa, em vez de pular para o fim (David, 2026-10-19).
+  const hold = useRef<{ until: number; fromEnd: number } | null>(null);
+  const holding = () => Boolean(hold.current && Date.now() < hold.current.until);
+  const keepPlace = () => {
+    const el = list.current;
+    if (!el || stick.current) return void (hold.current = null);
+    hold.current = { until: Date.now() + 1200, fromEnd: el.scrollHeight - el.scrollTop - el.clientHeight };
+  };
+  useEffect(() => {
+    const el = list.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (!holding()) return;
+      el.scrollTop = el.scrollHeight - el.clientHeight - hold.current!.fromEnd;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const touched = () => {
     userAt.current = Date.now();
     clearTimeout(retry.current);
@@ -523,6 +545,7 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
     setError(null);
     const tmp: Msg = { id: Date.now() * 1000, role: "user", text: o.text ?? null, media: o.preview ?? null, at: new Date().toISOString(), local: "sending" };
     stick.current = true;
+    hold.current = null;
     userAt.current = 0;
     setMsgs((cur) => [...cur.filter((m) => m.retry !== o), tmp]);
     setSentAt(Date.now());
@@ -693,7 +716,13 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
             ))}
           </div>
         </div>
-        {wide ? <span /> : <BellButton />}
+        {wide ? (
+          <span />
+        ) : (
+          <button className="hc-icon" aria-label="Convidar alguém" title="Convidar alguém" onClick={() => { haptic(); setInviting(true); }}>
+            <Icon name="user-plus" size={20} />
+          </button>
+        )}
       </header>
 
       <div
@@ -720,7 +749,7 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
           const now = Date.now();
           const mine = now - autoAt.current > 900 || now - userAt.current < 700;
           // a descida que o próprio chat faz não decide nada; o embalo depois de soltar o dedo conta como da pessoa
-          if (mine) {
+          if (mine && !holding()) {
             stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
             if (now - autoAt.current > 900) userAt.current = Math.max(userAt.current, now - 400);
           }
@@ -761,7 +790,7 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
         )}
       </div>
 
-      <div className="hc-dock" ref={dock}>
+      <div className="hc-dock" ref={dock} onFocusCapture={keepPlace} onBlurCapture={keepPlace}>
         {error && (
           <div className="hc-error" role="alert" onClick={() => setError(null)}>
             {error}
@@ -826,6 +855,11 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
         </div>
       </div>
 
+      {inviting && (
+        <Modal title="Convidar alguém" icon={<Icon name="user-plus" />} onClose={() => setInviting(false)}>
+          <InviteForm />
+        </Modal>
+      )}
       {attach && (
         <Modal title="Anexar" onClose={() => setAttach(false)} className="hc-sheet hc-attach-sheet">
           <div className="hc-attach">
