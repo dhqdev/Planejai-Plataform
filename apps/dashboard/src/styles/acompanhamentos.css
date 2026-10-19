@@ -1,89 +1,88 @@
 /* ---------- Acompanhamentos ---------- */
 .watches-page { display: flex; flex-direction: column; gap: 18px; }
 
-/* Resumo / Métricas no topo */
+/* Resumo no topo: números pequenos numa cor só */
 .watches-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .watch-stat-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border-radius: var(--radius, 14px);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 12px;
   background: var(--panel);
   border: 1px solid var(--border);
 }
-.watch-stat-num { font-size: 22px; font-weight: 700; line-height: 1.1; }
-.watch-stat-label { font-size: 12px; color: var(--muted); font-weight: 500; }
+.watch-stat-num { font-family: var(--mono); font-size: 15px; font-weight: 600; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+.watch-stat-label { font-size: 12.5px; color: var(--muted); font-weight: 500; }
 
 .text-brand { color: var(--violet); }
 .text-success { color: var(--ok); }
 .text-warn { color: var(--warn); }
 .text-danger { color: var(--err); }
 
-/* Barra de controle: Abas + Filtros */
+/* Barra de controle: abas com a pastilha que desliza + filtros discretos */
 .watches-controls-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  border-radius: var(--radius, 12px);
-  background: var(--panel-2, rgba(0,0,0,0.03));
-  border: 1px solid var(--border);
+  gap: 14px 24px;
+  margin-top: 4px;
 }
-.watches-nav-tabs {
-  display: flex;
-  gap: 6px;
-}
-.watches-nav-tab {
+.watches-seg { border-radius: 99px; }
+.watches-seg button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
-  border-radius: 8px;
+  padding: 7px 16px;
   font-size: 13.5px;
-  font-weight: 600;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  transition: all .15s ease;
+  font-weight: 550;
 }
-.watches-nav-tab:hover { color: var(--text); background: var(--panel); }
-.watches-nav-tab.active {
-  background: var(--panel);
-  color: var(--text);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
-.watches-nav-tab .tab-badge {
+.watches-seg .tab-badge {
+  font-family: var(--mono);
   font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 10px;
-  background: var(--panel-2);
+  font-weight: 500;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
-.watches-nav-tab.active .tab-badge {
-  background: var(--violet);
-  color: var(--on-brand, #fff);
-}
+.watches-seg button.active .tab-badge { color: var(--text); }
 
 .watches-filter-group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-}
-.watches-select-wrap {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.watches-control-label { font-size: 12.5px; color: var(--muted); }
+.watch-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s, background-color .15s;
+}
+@media (hover: hover) and (pointer: fine) { .watch-pick:hover { border-color: var(--border-2); } }
+.watch-pick:active { transform: scale(.97); }
+.watch-pick[aria-expanded="true"] { border-color: var(--border-2); background: var(--panel-2); }
+.watch-pick-label { color: var(--muted); }
+.watch-pick-value { font-weight: 600; }
+.watch-pick-caret { color: var(--muted); transform: rotate(90deg); }
+@media (min-width: 768px) {
+  .modal-bg.drop > .modal.watch-pick-sheet, .modal-bg .modal.watch-pick-sheet { width: 260px; }
+  .modal-bg .modal.watch-pick-sheet .modal-head strong { font-size: 13px; color: var(--muted); font-weight: 550; }
+  .watch-pick-sheet .pk-opt { min-height: 42px; padding: 8px 12px; font-size: 14px; }
+}
 
 /* Grid de cards */
 .watch-list-grid {
@@ -346,19 +345,19 @@
   .watches-page { gap: 12px; }
   .watches-page .page-head p { display: none; }
   .watches-stats-grid {
+    display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 6px;
   }
   .watch-stat-card {
-    padding: 8px 6px;
-    border-radius: 10px;
+    flex-direction: column;
     align-items: center;
+    gap: 4px;
+    padding: 8px 4px;
     text-align: center;
-    gap: 2px;
   }
-  .watch-stat-num { font-size: 16px; }
   .watch-stat-label {
-    font-size: 10px;
+    font-size: 10.5px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -369,18 +368,11 @@
     align-items: stretch;
     gap: 10px;
   }
-  .watches-nav-tabs {
-    width: 100%;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-  .watches-nav-tab { justify-content: center; }
-  .watches-filter-group {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-  .watches-select-wrap { flex-direction: column; align-items: stretch; }
+  .watches-seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .watches-seg button { justify-content: center; }
+  .watches-filter-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .watch-pick { justify-content: center; min-width: 0; }
+  .watch-pick-value { overflow: hidden; text-overflow: ellipsis; }
   .watch-list-grid { grid-template-columns: 1fr; }
   .watch-card { cursor: pointer; }
   .watch-actions-bar { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; }

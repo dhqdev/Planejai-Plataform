@@ -41,6 +41,54 @@ type TabMode = "active" | "ended";
 type StatusFilter = "all" | "found" | "empty" | "error";
 type SortMode = "newest" | "oldest" | "found_first";
 
+const STATUS_OPTIONS = [
+  { value: "all", label: "Todos" },
+  { value: "found", label: "Com novidade" },
+  { value: "empty", label: "Sem novidade" },
+  { value: "error", label: "Com erro / lojas" },
+];
+const SORT_OPTIONS = [
+  { value: "newest", label: "Mais recente" },
+  { value: "oldest", label: "Mais antigo" },
+  { value: "found_first", label: "Novidades primeiro" },
+];
+
+/** Filtro discreto (rótulo + valor); o clique abre a lista num modal que nasce do próprio botão. */
+function PickButton({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const cur = options.find((o) => o.value === value);
+  return (
+    <>
+      <button type="button" className="watch-pick" aria-haspopup="dialog" aria-expanded={open} onClick={() => { haptic(6); setOpen(true); }}>
+        <span className="watch-pick-label">{label}</span>
+        <span className="watch-pick-value">{cur?.label}</span>
+        <Icon name="chevron-right" size={14} className="watch-pick-caret" />
+      </button>
+      {open && (
+        <Modal title={label} className="pk-sheet pk-list-sheet watch-pick-sheet" onClose={() => setOpen(false)}>
+          {(close) => (
+            <div className="pk-list" role="listbox" aria-label={label}>
+              {options.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="option"
+                  aria-selected={o.value === value}
+                  className={`pk-opt${o.value === value ? " on" : ""}`}
+                  onClick={() => { haptic(10); onChange(o.value); close(); }}
+                >
+                  <span className="pk-opt-text">{o.label}</span>
+                  {o.value === value && <Icon name="check" size={18} />}
+                </button>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
+    </>
+  );
+}
+
 /**
  * Acompanhamentos: o assistente olha sozinho por uma semana (ajustável) e manda no WhatsApp o que achou,
  * ou que não achou nada, a cada olhada. Dá para criar, ajustar, pausar, olhar agora e reativar por aqui.
@@ -268,7 +316,6 @@ export function WatchesPage() {
     <div className="page watches-page">
       <PageHead
         title="Acompanhamentos"
-        subtitle="O assistente olha sozinho por 7 dias e te conta no WhatsApp o que achou. Dá para pedir aqui ou no chat direto."
         actions={<button className="btn btn-brand" onClick={() => setEditing("new")}><Icon name="plus" size={16} /> Novo</button>}
       />
 
@@ -282,69 +329,32 @@ export function WatchesPage() {
         />
       ) : (<>
       <div className="watches-stats-grid">
-        <div className="watch-stat-card">
-          <span className="watch-stat-num text-brand">{totalActive}</span>
-          <span className="watch-stat-label">Ativos agora</span>
-        </div>
-        <div className="watch-stat-card">
-          <span className="watch-stat-num text-success">{totalFound}</span>
-          <span className="watch-stat-label">Com novidade</span>
-        </div>
-        <div className="watch-stat-card">
-          <span className="watch-stat-num text-warn">{totalErrors}</span>
-          <span className="watch-stat-label">Precisam de atenção</span>
-        </div>
-        <div className="watch-stat-card">
-          <span className="watch-stat-num text-muted">{totalEnded}</span>
-          <span className="watch-stat-label">Encerrados</span>
-        </div>
+        {[
+          [totalActive, "Ativos agora"],
+          [totalFound, "Com novidade"],
+          [totalErrors, "Precisam de atenção"],
+          [totalEnded, "Encerrados"],
+        ].map(([n, label]) => (
+          <div key={label} className="watch-stat-card">
+            <span className="watch-stat-num">{n}</span>
+            <span className="watch-stat-label">{label}</span>
+          </div>
+        ))}
       </div>
 
       <div className="watches-controls-bar">
-        <div className="watches-nav-tabs">
-          <button
-            className={`watches-nav-tab ${tab === "active" ? "active" : ""}`}
-            onClick={() => setTab("active")}
-          >
+        <div className="seg watches-seg" role="tablist" aria-label="Acompanhamentos">
+          <button role="tab" aria-selected={tab === "active"} className={tab === "active" ? "active" : ""} onClick={() => { haptic(6); setTab("active"); }}>
             Ativos <span className="tab-badge">{totalActive}</span>
           </button>
-          <button
-            className={`watches-nav-tab ${tab === "ended" ? "active" : ""}`}
-            onClick={() => setTab("ended")}
-          >
+          <button role="tab" aria-selected={tab === "ended"} className={tab === "ended" ? "active" : ""} onClick={() => { haptic(6); setTab("ended"); }}>
             Encerrados <span className="tab-badge">{totalEnded}</span>
           </button>
         </div>
 
         <div className="watches-filter-group">
-          <div className="watches-select-wrap">
-            <label htmlFor="watch-filter-status" className="watches-control-label">Status:</label>
-            <select
-              id="watch-filter-status"
-              className="select select-sm"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            >
-              <option value="all">Todos</option>
-              <option value="found">Com novidade</option>
-              <option value="empty">Sem novidade</option>
-              <option value="error">Com erro / lojas</option>
-            </select>
-          </div>
-
-          <div className="watches-select-wrap">
-            <label htmlFor="watch-sort-order" className="watches-control-label">Ordenar por:</label>
-            <select
-              id="watch-sort-order"
-              className="select select-sm"
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value as SortMode)}
-            >
-              <option value="newest">Mais recente</option>
-              <option value="oldest">Mais antigo</option>
-              <option value="found_first">Novidades primeiro</option>
-            </select>
-          </div>
+          <PickButton label="Status" value={statusFilter} options={STATUS_OPTIONS} onChange={(v) => setStatusFilter(v as StatusFilter)} />
+          <PickButton label="Ordenar" value={sortOrder} options={SORT_OPTIONS} onChange={(v) => setSortOrder(v as SortMode)} />
         </div>
       </div>
 
