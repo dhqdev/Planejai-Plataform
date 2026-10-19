@@ -46,8 +46,6 @@ export function AgentsPage() {
   return (
     <div className="page page-wide fit agents-page">
       <PageHead
-        title="Agentes"
-        subtitle="O CTO conversa com a pessoa e chama os especialistas. Toda noite às 19h o Juvenal (CTO) faz a reunião do time: ajusta o jeito de falar com cada pessoa, passa dicas para cada agente e cria agentes novos, cada um com nome e carinha."
         actions={
           <>
             <Link className="btn" to="/agents/mapa"><Icon name="resize" size={16} /> Prompts e conversas</Link>
@@ -82,7 +80,7 @@ export function AgentsPage() {
 
       <div className="grid grid-2 agents-lists" style={{ alignItems: "start" }}>
         <div className="card">
-          <div className="card-pad"><h3 style={{ margin: 0 }}>Time fixo</h3></div>
+          <div className="card-pad agents-card-head"><h3>Time fixo</h3><span className="muted">{data.length}</span></div>
           {data.map((a) => (
             <div key={a.id} className="line-item clickable" style={{ padding: "12px 16px" }} role="button" tabIndex={0} onClick={() => setSel(a)}>
               <span className="face-tile"><AgentFace face={a.face} size={46} agent={a.id} live /></span>
@@ -97,7 +95,7 @@ export function AgentsPage() {
         </div>
 
         <div className="card">
-          <div className="card-pad"><h3 style={{ margin: 0 }}>Criados para clientes</h3></div>
+          <div className="card-pad agents-card-head"><h3>Criados para clientes</h3><span className="muted">{(clients.data ?? []).length}</span></div>
           {(clients.data ?? []).map((a) => (
             <div key={a.id} className="line-item" style={{ padding: "12px 16px", opacity: a.active ? 1 : 0.5 }}>
               <span className="face-tile"><AgentFace face={a.face} size={46} /></span>
@@ -110,8 +108,11 @@ export function AgentsPage() {
           ))}
           {clients.data && !clients.data.length && <Empty>Ainda nenhum. Quando um assunto aparece em dois dias diferentes, a melhoria das 19h cria um especialista para a pessoa.</Empty>}
 
-          <div className="card-pad" style={{ borderTop: "1px solid var(--border)" }}>
-            <h3 style={{ marginTop: 0 }}>Seus assuntos que mais aparecem</h3>
+        </div>
+
+        <div className="card">
+          <div className="card-pad">
+            <h3 style={{ marginTop: 0 }}>Assuntos que mais aparecem</h3>
             <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>Os assuntos e as instruções dos agentes de cada cliente ficam só com ele.</p>
             {(topics.data ?? []).slice(0, 12).map((t) => (
               <div key={t.topic} className="line-item">

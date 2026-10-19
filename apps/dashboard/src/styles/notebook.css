@@ -88,3 +88,6 @@
   .fin-page.fit .fin-trend .fin-months { flex: none; height: 96px; }
   .fin-page.fit .fin-donut-card, .fin-page.fit .fin-side-card { flex: 0 0 auto; }
 }
+
+.agents-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding-bottom: 8px; }
+.agents-card-head h3 { margin: 0; }

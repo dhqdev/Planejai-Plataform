@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { api } from "../api";
-import { ErrorBox, Loading, PageHead } from "../components";
+import { ErrorBox, Loading } from "../components";
 import { useApi } from "../hooks";
 
 const price = (m: any) => (m ? `US$ ${m.promptPerM.toFixed(3)} / US$ ${m.completionPerM.toFixed(3)}` : "–");
@@ -26,7 +26,6 @@ export function ModelsPage() {
 
   return (
     <div className="page">
-      <PageHead title="Modelos" subtitle="Cada agente e tarefa usa o modelo mais barato que resolve. Preços do OpenRouter ao vivo (US$ por 1M tokens, entrada / saída)." />
       <datalist id="models">
         {(catalog.data ?? []).map((m) => <option key={m.id} value={m.id} />)}
       </datalist>
