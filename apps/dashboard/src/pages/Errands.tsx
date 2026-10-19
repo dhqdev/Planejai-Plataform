@@ -331,7 +331,7 @@ export function ErrandsPage() {
         {(fit || !detailOpen) && listView}
         {detailOpen && (
           <div className="card errand-detail">
-            {!fit && (
+            {!fit && !phone && (
               <button className="btn btn-sm errand-back" onClick={back}>
                 <Icon name="chevron-left" size={15} /> Recados
               </button>
@@ -342,6 +342,7 @@ export function ErrandsPage() {
               <ErrandView
                 e={sel}
                 extra={extraOf(sel)}
+                compact={!fit}
                 p={pref(sel.phone)}
                 busy={busy}
                 onCancel={() => cancel(sel)}
@@ -353,6 +354,7 @@ export function ErrandsPage() {
             ) : selContact ? (
               <ContactView
                 c={selContact}
+                compact={!fit}
                 p={pref(selContact.phone)}
                 busy={busy}
                 onCancel={(id) => cancelScheduled(selContact, id)}
@@ -393,9 +395,9 @@ function DraftView({ d, busy, onDiscard }: { d: Draft; busy: boolean; onDiscard:
   );
 }
 
-type ChatActions = { p?: Prefs; busy: boolean; onSave: (patch: Partial<Prefs>) => void; onFollow: (f: Follow) => void; onRemove: () => void; onSend: (text: string) => Promise<void> };
+type ChatActions = { p?: Prefs; busy: boolean; compact: boolean; onSave: (patch: Partial<Prefs>) => void; onFollow: (f: Follow) => void; onRemove: () => void; onSend: (text: string) => Promise<void> };
 
-function ErrandView({ e, extra, p, busy, onCancel, onSave, onFollow, onRemove, onSend }: { e: Errand; extra: Line[]; onCancel: () => void } & ChatActions) {
+function ErrandView({ e, extra, p, busy, compact, onCancel, onSave, onFollow, onRemove, onSend }: { e: Errand; extra: Line[]; onCancel: () => void } & ChatActions) {
   const open = OPEN.includes(e.state);
   const name = placeName(e, p);
   const follow = p?.follow ?? "auto";
@@ -407,6 +409,68 @@ function ErrandView({ e, extra, p, busy, onCancel, onSave, onFollow, onRemove, o
         : open
           ? `Acompanhando até ${day(e.expires_at)}. Depois disso, ou quando o recado fechar, as respostas param de chegar.`
           : "Recado encerrado. Respostas novas deles não chegam para você.";
+  const goal = p?.nickname ? `${e.place} · ${e.goal}` : e.goal;
+  const bar = (
+    <ChatBar name={name} p={p} busy={busy} onSave={onSave}>
+      {open && <button className="btn btn-sm" disabled={busy} onClick={onCancel}>{e.kind === "conversa" ? "Encerrar conversa" : "Cancelar recado"}</button>}
+    </ChatBar>
+  );
+  const facts = (
+    <div className="errand-facts">
+      <span className={`errand-state ${e.state}`}>{stateLabel(e)}</span>
+      {e.kind !== "conversa" && <span>{e.allowed ? `Liberado: ${e.allowed}` : "Só pergunta, não fecha nada"}</span>}
+      {open && <span>{e.messages_left} mensagem(ns) restante(s)</span>}
+    </div>
+  );
+  const chat = (
+    <Chat watch={`${e.id}:${e.log.length}:${extra.length}:${e.next ? 1 : 0}`}>
+      {[...e.log, ...extra].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0)).map((l, i) => <Bubble key={`${l.at}-${i}`} line={l} />)}
+      {e.next && <Bubble line={{ from: "nos", text: e.next.preview, at: e.next.created_at }} next />}
+    </Chat>
+  );
+  const note = e.state === "you" && (e.next || e.question) && (
+    <p className="errand-note">
+      {e.next ? (
+        <>A próxima mensagem só sai quando você responder <strong>sim</strong> no WhatsApp.</>
+      ) : (
+        <>Eles perguntaram: {e.question} Responda no WhatsApp.</>
+      )}
+    </p>
+  );
+  const outcome = e.outcome && !open && (
+    <div className="errand-outcome">
+      <strong>{e.state === "failed" ? "Não deu certo" : "Resultado"}</strong>
+      <Clamp className="errand-note" lines={2}>
+        {e.outcome.replace(/^\s*resultado\s*:\s*/i, "")}
+        {e.appointment_at ? ` · marcado para ${day(e.appointment_at)}` : ""}
+      </Clamp>
+    </div>
+  );
+  const followBox = <FollowBox status={status} follow={follow} busy={busy} onFollow={onFollow} onRemove={onRemove} />;
+  if (compact)
+    return (
+      <PhoneChat
+        avatar={<Avatar name={name} place={e.kind !== "conversa"} color={p?.color} />}
+        name={name}
+        sub={[stateLabel(e), open ? `${e.messages_left} ${e.messages_left === 1 ? "mensagem restante" : "mensagens restantes"}` : ""].filter(Boolean).join(" · ")}
+        details={
+          <>
+            <section className="errand-info-block">
+              <span className="errand-info-label">{e.kind === "conversa" ? "Sobre a conversa" : "O que o assistente está resolvendo"}</span>
+              <p>{goal}</p>
+              {facts}
+            </section>
+            {outcome}
+            {bar}
+            {followBox}
+          </>
+        }
+      >
+        {note}
+        {chat}
+        <Composer key={e.id} name={name} onSend={onSend} />
+      </PhoneChat>
+    );
   return (
     <>
       <div className="errand-head">
@@ -414,42 +478,48 @@ function ErrandView({ e, extra, p, busy, onCancel, onSave, onFollow, onRemove, o
           <Avatar name={name} place={e.kind !== "conversa"} color={p?.color} />
           <div>
             <h3>{name}</h3>
-            <Clamp className="muted errand-goal" lines={2}>{p?.nickname ? `${e.place} · ${e.goal}` : e.goal}</Clamp>
+            <Clamp className="muted errand-goal" lines={2}>{goal}</Clamp>
           </div>
         </div>
-        <ChatBar name={name} p={p} busy={busy} onSave={onSave}>
-          {open && <button className="btn btn-sm" disabled={busy} onClick={onCancel}>{e.kind === "conversa" ? "Encerrar conversa" : "Cancelar recado"}</button>}
-        </ChatBar>
+        {bar}
       </div>
-      <div className="errand-facts">
-        <span className={`errand-state ${e.state}`}>{stateLabel(e)}</span>
-        {e.kind !== "conversa" && <span>{e.allowed ? `Liberado: ${e.allowed}` : "Só pergunta, não fecha nada"}</span>}
-        {open && <span>{e.messages_left} mensagem(ns) restante(s)</span>}
-      </div>
-      <Chat watch={`${e.id}:${e.log.length}:${extra.length}:${e.next ? 1 : 0}`}>
-        {[...e.log, ...extra].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0)).map((l, i) => <Bubble key={`${l.at}-${i}`} line={l} />)}
-        {e.next && <Bubble line={{ from: "nos", text: e.next.preview, at: e.next.created_at }} next />}
-      </Chat>
+      {facts}
+      {chat}
       <Composer key={e.id} name={name} onSend={onSend} />
-      {e.state === "you" && (e.next || e.question) && (
-        <p className="errand-note">
-          {e.next ? (
-            <>A próxima mensagem só sai quando você responder <strong>sim</strong> no WhatsApp.</>
-          ) : (
-            <>Eles perguntaram: {e.question} Responda no WhatsApp.</>
-          )}
-        </p>
+      {note}
+      {outcome}
+      {followBox}
+    </>
+  );
+}
+
+/**
+ * Conversa no celular, como no WhatsApp: só nome e situação em cima (o "voltar" é o da barra do app), a conversa
+ * no meio e a caixa de escrever presa embaixo, acima das abas. Objetivo, ações e acompanhamento ficam numa folha
+ * que abre pelo nome ou pelo botão de mais.
+ */
+function PhoneChat({ avatar, name, sub, details, children }: { avatar: ReactNode; name: string; sub: string; details: ReactNode; children: ReactNode }) {
+  const [info, setInfo] = useState(false);
+  return (
+    <>
+      <div className="errand-chathead">
+        <button type="button" className="errand-chathead-who" onClick={() => setInfo(true)} aria-label={`Detalhes de ${name}`}>
+          {avatar}
+          <span className="errand-chathead-text">
+            <strong>{name}</strong>
+            {sub && <span>{sub}</span>}
+          </span>
+        </button>
+        <button type="button" className="icon-btn errand-chathead-more" onClick={() => setInfo(true)} aria-label="Detalhes e ações">
+          <Icon name="more" size={20} />
+        </button>
+      </div>
+      {children}
+      {info && (
+        <Modal title={name} onClose={() => setInfo(false)} className="errand-info">
+          <div className="errand-info-body">{details}</div>
+        </Modal>
       )}
-      {e.outcome && !open && (
-        <div className="errand-outcome">
-          <strong>{e.state === "failed" ? "Não deu certo" : "Resultado"}</strong>
-          <Clamp className="errand-note" lines={2}>
-            {e.outcome.replace(/^\s*resultado\s*:\s*/i, "")}
-            {e.appointment_at ? ` · marcado para ${day(e.appointment_at)}` : ""}
-          </Clamp>
-        </div>
-      )}
-      <FollowBox status={status} follow={follow} busy={busy} onFollow={onFollow} onRemove={onRemove} />
     </>
   );
 }
@@ -585,7 +655,7 @@ function Avatar({ name, place, color }: { name: string; place?: boolean; color?:
   );
 }
 
-function ContactView({ c, p, busy, onCancel, onSave, onFollow, onRemove, onSend }: { c: ContactChat; onCancel: (id: string) => void } & ChatActions) {
+function ContactView({ c, p, busy, compact, onCancel, onSave, onFollow, onRemove, onSend }: { c: ContactChat; onCancel: (id: string) => void } & ChatActions) {
   const name = contactName(c, p);
   const first = name.split(" ")[0];
   const follow = p?.follow ?? "auto";
@@ -600,6 +670,38 @@ function ContactView({ c, p, busy, onCancel, onSave, onFollow, onRemove, onSend 
           : c.scheduled.length
             ? "Começa quando a mensagem agendada sair: as respostas chegam por 3 dias."
             : `Sem acompanhamento agora: a última mensagem saiu há mais de 3 dias. Escolha Sem prazo para receber as respostas de ${first}.`;
+  const sub = [p?.nickname && c.name && c.name !== p.nickname ? c.name : "", name !== phoneLabel(c.phone) ? phoneLabel(c.phone) : "", c.member ? "usa o Planejai" : ""].filter(Boolean).join(" · ");
+  const chat = (
+    <Chat watch={`${c.phone}:${c.log.length}:${c.scheduled.length}`}>
+      {c.log.map((l, i) => <Bubble key={`${l.at}-${i}`} line={l} />)}
+      {c.scheduled.map((m) => (
+        <div key={m.id} className="errand-bubble ours next">
+          <span className="errand-bubble-tag">Agendada para {day(m.send_at)}</span>
+          <span className="errand-bubble-text">{m.text}</span>
+          <button className="errand-bubble-cancel" disabled={busy} onClick={() => onCancel(m.id)}>Cancelar</button>
+        </div>
+      ))}
+      {!c.log.length && !c.scheduled.length && <p className="errand-note">Nada por aqui ainda.</p>}
+    </Chat>
+  );
+  const followBox = <FollowBox status={status} follow={follow} busy={busy} onFollow={onFollow} onRemove={onRemove} hideModes={c.member} />;
+  if (compact)
+    return (
+      <PhoneChat
+        avatar={<Avatar name={name} color={p?.color} />}
+        name={name}
+        sub={sub}
+        details={
+          <>
+            <ChatBar name={name} p={p} busy={busy} member={c.member} onSave={onSave} />
+            {followBox}
+          </>
+        }
+      >
+        {chat}
+        <Composer key={c.phone} name={name} onSend={onSend} />
+      </PhoneChat>
+    );
   return (
     <>
       <div className="errand-head">
@@ -607,26 +709,14 @@ function ContactView({ c, p, busy, onCancel, onSave, onFollow, onRemove, onSend 
           <Avatar name={name} color={p?.color} />
           <div>
             <h3>{name}</h3>
-            <p className="muted">
-              {[p?.nickname && c.name && c.name !== p.nickname ? c.name : "", name !== phoneLabel(c.phone) ? phoneLabel(c.phone) : "", c.member ? "usa o Planejai" : ""].filter(Boolean).join(" · ")}
-            </p>
+            <p className="muted">{sub}</p>
           </div>
         </div>
         <ChatBar name={name} p={p} busy={busy} member={c.member} onSave={onSave} />
       </div>
-      <Chat watch={`${c.phone}:${c.log.length}:${c.scheduled.length}`}>
-        {c.log.map((l, i) => <Bubble key={`${l.at}-${i}`} line={l} />)}
-        {c.scheduled.map((m) => (
-          <div key={m.id} className="errand-bubble ours next">
-            <span className="errand-bubble-tag">Agendada para {day(m.send_at)}</span>
-            <span className="errand-bubble-text">{m.text}</span>
-            <button className="errand-bubble-cancel" disabled={busy} onClick={() => onCancel(m.id)}>Cancelar</button>
-          </div>
-        ))}
-        {!c.log.length && !c.scheduled.length && <p className="errand-note">Nada por aqui ainda.</p>}
-      </Chat>
+      {chat}
       <Composer key={c.phone} name={name} onSend={onSend} />
-      <FollowBox status={status} follow={follow} busy={busy} onFollow={onFollow} onRemove={onRemove} hideModes={c.member} />
+      {followBox}
     </>
   );
 }
@@ -714,6 +804,15 @@ function Chat({ watch, children }: { watch: string; children: ReactNode }) {
     const el = ref.current;
     if (el) el.scrollTop = el.scrollHeight;
     stick.current = true;
+    // celular: a conversa não rola por dentro, quem rola é a tela; abre no fim do mesmo jeito
+    if (el && el.scrollHeight <= el.clientHeight + 1) {
+      const page = document.getElementById("conteudo");
+      const end = () => page?.scrollTo({ top: page.scrollHeight });
+      end();
+      // a tela ainda entra com animação e a fonte carrega: confere de novo logo depois
+      const t = window.setTimeout(end, 350);
+      return () => window.clearTimeout(t);
+    }
   }, [watch]);
   // a altura da conversa muda quando o resto da tela abre ou fecha ("Ver tudo"); se estava no fim, continua no fim
   useEffect(() => {

@@ -226,18 +226,54 @@
   .errands-page.fit .errand-chat { padding: 16px 6px; gap: 10px; }
 }
 
-/* celular: a conversa rola por dentro e abre no fim, com a caixa logo embaixo à mão */
 @media (max-width: 1023px), (max-height: 679px) {
-  .errand-chat { max-height: 58vh; max-height: 58dvh; min-height: 160px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
-  .errand-chat::-webkit-scrollbar { display: none; }
-  .errand-chat > * { flex-shrink: 0; }
   .errand-composer-input { font-size: 16px; }
   .errand-composer-hint { padding-left: 14px; }
 }
-@media (max-width: 1023px), (max-height: 679px) {
-  /* celular: ações em ícone ao lado do nome, para a conversa e a caixa aparecerem logo */
-  .errand-head .errand-bar { flex: 0 0 auto; }
-  .errand-head .errand-bar .lbl, .errand-head .errand-bar-info { display: none; }
-  .errand-head .errand-bar .btn:has(.lbl) { width: 36px; height: 36px; padding: 0; justify-content: center; }
-  .errand-chat { max-height: max(220px, calc(100vh - 520px)); max-height: max(220px, calc(100dvh - 520px)); min-height: 0; }
+
+
+/* celular/PWA, conversa aberta (2026-10-19, David: "tudo muito junto e confuso"): como no WhatsApp. Sem cartão em
+   volta, só nome e situação em cima (presos ao rolar), a conversa ocupa a tela e a caixa de escrever fica presa
+   embaixo, acima das abas. Objetivo, ações e acompanhamento foram para a folha que abre pelo nome. */
+.errand-chathead { display: flex; align-items: center; gap: 4px; }
+.errand-chathead-who { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; padding: 4px 6px 4px 2px; border: 0; border-radius: 14px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.errand-chathead-who:active { background: var(--panel-2); }
+.errand-chathead-who .errand-avatar { width: 40px; height: 40px; font-size: 14px; flex-shrink: 0; }
+.errand-chathead-text { display: flex; flex-direction: column; min-width: 0; }
+.errand-chathead-text strong { font-size: 16px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.errand-chathead-text span { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.errand-chathead-more { flex-shrink: 0; }
+.errand-info-body { display: flex; flex-direction: column; gap: 16px; }
+.errand-info-block { display: flex; flex-direction: column; gap: 8px; }
+.errand-info-block p { margin: 0; font-size: 14.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.errand-info-label { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.errand-info .errand-facts > span { padding: 4px 10px; border-radius: 99px; background: var(--panel-2); }
+.errand-info .errand-bar { gap: 8px; }
+.errand-info .errand-bar .btn { min-height: 40px; }
+
+@media (max-width: 767px) {
+  .errands-page.reading { padding-top: 0; padding-bottom: 0; }
+  /* a caixa encosta nas abas: o respiro de baixo da tela fica só do tamanho da barra */
+  .main:has(.errands-page.reading) { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+  body:has(.errands-page.reading) .mascote-stroll { display: none; }
+  .errands-page.reading .errand-detail {
+    background: transparent; border: 0; box-shadow: none; border-radius: 0; padding: 0; gap: 0; overflow: visible;
+    /* conversa curta: a caixa fica lá embaixo mesmo assim, como no WhatsApp */
+    min-height: calc(100vh - 60px - 74px - env(safe-area-inset-bottom)); min-height: calc(100dvh - 60px - 74px - env(safe-area-inset-bottom));
+  }
+  .errands-page.reading .errand-detail > .errand-chat { flex: 1 0 auto; }
+  .errands-page.reading .errand-chathead {
+    position: sticky; top: 0; z-index: 3; margin: 0 -16px; padding: 8px 10px 8px 12px; background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .errands-page.reading .errand-detail > .errand-note { margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--panel-2); }
+  .errands-page.reading .errand-chat { max-height: none; min-height: 0; overflow: visible; border-top: 0; padding: 16px 0 12px; gap: 10px; }
+  .errands-page.reading .errand-bubble { max-width: 84%; font-size: 15px; }
+  .errands-page.reading .errand-composer {
+    position: sticky; bottom: 0; z-index: 3; margin: 0 -16px; padding: 8px 12px 10px;
+    background: color-mix(in srgb, var(--bg) 92%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  }
+  .errands-page.reading .errand-composer-hint { display: none; }
+  .errands-page.reading .errand-composer-input { min-height: 46px; }
+  .errands-page.reading .errand-send { width: 46px; height: 46px; }
 }
