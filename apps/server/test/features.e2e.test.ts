@@ -223,6 +223,10 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     await db.query("UPDATE memories SET created_at = now() - interval '30 days' WHERE id = $1", [old.id]);
     const mem = await loadMemories(rui.id, "qual filme ver hoje");
     expect(mem.some((m: any) => m.content === "Mora em Sorocaba")).toBe(true);
+    // as recentes são as mais novas de verdade (o id é uuid: ordenar por ele trazia qualquer uma)
+    await db.query("UPDATE memories SET created_at = now() - interval '10 days' WHERE user_id = $1 AND content LIKE 'Gosta%'", [rui.id]);
+    await core.saveMemory.run({ content: "Começou a fazer natação às terças" }, ctx);
+    expect((await loadMemories(rui.id, "")).some((m: any) => m.content === "Começou a fazer natação às terças")).toBe(true);
   });
 
   it("lembretes: no máximo 30 ativos por pessoa e nada mais frequente que 15 min", async () => {

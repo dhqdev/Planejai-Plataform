@@ -99,16 +99,17 @@ export async function loadMemories(userId: string, text: string) {
     content: string;
     grp: number;
   }>(
+    // ordem pela data de criação (o id é uuid aleatório: "ORDER BY id" trazia 8 memórias quaisquer, não as 8 mais novas)
     `WITH p AS (
-       SELECT id, content, 1 as grp, 0 as rank FROM memories WHERE user_id = $1 AND 'perfil' = ANY(tags) ORDER BY id DESC LIMIT 6
+       SELECT id, content, 1 as grp, 0::real as rank, created_at FROM memories WHERE user_id = $1 AND 'perfil' = ANY(tags) ORDER BY created_at DESC LIMIT 6
      ), r AS (
-       SELECT id, content, 3 as grp, 0 as rank FROM memories WHERE user_id = $1 ORDER BY id DESC LIMIT 8
+       SELECT id, content, 3 as grp, 0::real as rank, created_at FROM memories WHERE user_id = $1 ORDER BY created_at DESC LIMIT 8
      )${q ? `, rel AS (
-       SELECT id, content, 2 as grp, ts_rank(search, plainto_tsquery('portuguese', $2)) as rank FROM memories WHERE user_id = $1 AND search @@ plainto_tsquery('portuguese', $2) ORDER BY rank DESC LIMIT 5
+       SELECT id, content, 2 as grp, ts_rank(search, plainto_tsquery('portuguese', $2)) as rank, created_at FROM memories WHERE user_id = $1 AND search @@ plainto_tsquery('portuguese', $2) ORDER BY rank DESC LIMIT 5
      )` : ""}
-     SELECT id, content, grp FROM p
-     ${q ? "UNION ALL SELECT id, content, grp FROM rel " : ""}UNION ALL SELECT id, content, grp FROM r
-     ORDER BY grp ASC, id DESC`,
+     SELECT id, content, grp, rank, created_at FROM p
+     ${q ? "UNION ALL SELECT id, content, grp, rank, created_at FROM rel " : ""}UNION ALL SELECT id, content, grp, rank, created_at FROM r
+     ORDER BY grp ASC, rank DESC, created_at DESC`,
     q ? [userId, q] : [userId],
   );
   const seen = new Set<string>();
