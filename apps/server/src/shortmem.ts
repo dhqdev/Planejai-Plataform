@@ -203,18 +203,24 @@ export async function peekCount(key: string): Promise<number | null> {
   }
 }
 
+// contar as chaves varre o Redis inteiro: o Início do dono pede isso a cada 20 s, então a conta vale 1 min
+let keyCount: { at: number; n: number } | null = null;
+
 export async function cacheStats() {
   const r = cacheRedis();
   if (!r) return null;
   try {
     const [hits, writes] = await r.mget("pj:stats:cache_hits", "pj:stats:cache_writes");
-    let keys = 0;
-    let cursor = "0";
-    do {
-      const [next, batch] = await r.scan(cursor, "MATCH", `${CACHE_PREFIX}*`, "COUNT", 500);
-      cursor = next;
-      keys += batch.length;
-    } while (cursor !== "0" && keys < 50_000);
+    let keys = keyCount && Date.now() - keyCount.at < 60_000 ? keyCount.n : 0;
+    if (!keyCount || Date.now() - keyCount.at >= 60_000) {
+      let cursor = "0";
+      do {
+        const [next, batch] = await r.scan(cursor, "MATCH", `${CACHE_PREFIX}*`, "COUNT", 500);
+        cursor = next;
+        keys += batch.length;
+      } while (cursor !== "0" && keys < 50_000);
+      keyCount = { at: Date.now(), n: keys };
+    }
     return { hits: Number(hits ?? 0), writes: Number(writes ?? 0), keys };
   } catch {
     return null;

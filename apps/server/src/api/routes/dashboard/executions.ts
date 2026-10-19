@@ -12,43 +12,54 @@ import { isUuid } from "./shared.js";
 /** Operação (só super admin): visão geral, filas e logs de execução. */
 export function executionRoutes(api: FastifyInstance) {
   api.get("/api/overview", async () => {
-    const stats = await one(`
+    const statsQ = one(`
       SELECT
         COUNT(*) FILTER (WHERE started_at > now() - interval '24 hours') AS executions_24h,
         COUNT(*) FILTER (WHERE started_at > now() - interval '24 hours' AND status = 'error') AS errors_24h,
         COALESCE(SUM(cost_usd) FILTER (WHERE started_at > now() - interval '24 hours'), 0) AS cost_24h,
         COALESCE(AVG(duration_ms) FILTER (WHERE started_at > now() - interval '24 hours' AND status = 'success'), 0) AS avg_ms_24h
-      FROM executions`);
+      FROM executions WHERE started_at > now() - interval '24 hours'`);
     // mês e total vêm de cost_daily: as execuções são apagadas depois de alguns dias
-    const costs = await one(`
+    const costsQ = one(`
       SELECT COALESCE(SUM(cost_usd) FILTER (WHERE day >= date_trunc('month', now())::date), 0)::float AS month,
              COALESCE(SUM(cost_usd) FILTER (WHERE day = current_date), 0)::float AS today,
              COALESCE(SUM(cost_usd), 0)::float AS total, MIN(day)::text AS since
         FROM cost_daily`);
-    const orAccount = await openRouterAccount().catch((e) => ({ error: (e as Error).message }));
-    const counts = await one(`
+    const orAccountQ = openRouterAccount().catch((e) => ({ error: (e as Error).message }));
+    const countsQ = one(`
       SELECT (SELECT COUNT(*) FROM users WHERE status = 'active' AND phone <> 'playground') AS people,
              (SELECT COUNT(*) FROM users WHERE status = 'pending') AS pending_people,
              (SELECT COALESCE(SUM(messages), 0) FROM usage_daily WHERE day = current_date) AS messages_24h,
              (SELECT COUNT(*) FROM invites WHERE status = 'accepted') AS invites_accepted,
              (SELECT COUNT(*) FROM client_agents WHERE active) AS client_agents,
              (SELECT COUNT(*) FROM reminders WHERE status = 'scheduled') AS reminders`);
-    const daily = await many(`
+    const dailyQ = many(`
       SELECT to_char(d, 'YYYY-MM-DD') AS day,
              COUNT(e.id) AS executions,
              COUNT(e.id) FILTER (WHERE e.status = 'error') AS errors,
              COALESCE(SUM(e.cost_usd), 0) AS cost
         FROM generate_series(date_trunc('day', now()) - interval '13 days', date_trunc('day', now()), interval '1 day') d
-        LEFT JOIN executions e ON date_trunc('day', e.started_at) = d
+        LEFT JOIN executions e ON date_trunc('day', e.started_at) = d AND e.started_at >= date_trunc('day', now()) - interval '13 days'
        GROUP BY d ORDER BY d`);
-    const byAgent = await many(`
+    const byAgentQ = many(`
       SELECT agent, COUNT(*) FILTER (WHERE type = 'llm') AS llm_calls, COUNT(*) FILTER (WHERE type IN ('tool','delegate')) AS tool_calls,
              COALESCE(SUM(cost_usd), 0) AS cost
         FROM execution_steps WHERE started_at > now() - interval '7 days' GROUP BY agent ORDER BY cost DESC`);
     const ch = activeChannel();
-    const wa = config.WHATSAPP_PROVIDER === "baileys" ? await one("SELECT status FROM wa_sessions WHERE id = $1", [SESSION_ID]) : null;
+    // tudo junto (antes uma consulta esperava a outra): a tela do dono abre no tempo da mais lenta
+    const [stats, costs, orAccount, counts, daily, byAgent, wa, pendingAccounts, redis, cache] = await Promise.all([
+      statsQ,
+      costsQ,
+      orAccountQ,
+      countsQ,
+      dailyQ,
+      byAgentQ,
+      config.WHATSAPP_PROVIDER === "baileys" ? one("SELECT status FROM wa_sessions WHERE id = $1", [SESSION_ID]) : null,
+      one("SELECT COUNT(*) AS n FROM accounts WHERE status = 'pending'"),
+      redisInfo(),
+      cacheStats(),
+    ]);
     const configured = wa ? wa.status === "connected" : (ch?.configured() ?? false);
-    const pendingAccounts = await one("SELECT COUNT(*) AS n FROM accounts WHERE status = 'pending'");
     return {
       stats: { ...stats, cost_month: costs?.month ?? 0 },
       openrouterAccount: { ...orAccount, local: costs },
@@ -57,8 +68,8 @@ export function executionRoutes(api: FastifyInstance) {
       byAgent,
       channel: { provider: config.WHATSAPP_PROVIDER, configured },
       openrouter: Boolean(config.OPENROUTER_API_KEY),
-      redis: await redisInfo(),
-      cache: await cacheStats(),
+      redis,
+      cache,
       retentionHours: config.MESSAGE_RETENTION_HOURS,
     };
   });
