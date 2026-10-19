@@ -1,0 +1,38 @@
+/* ---------- Cartões do chat do Início (pages/ChatCards.tsx): calendário e mini painel de dinheiro ----------
+   Quadrados, de borda fina, sem degradê nem ícone colorido. Roxo só no dia de hoje e na barra do limite. */
+.cc { width: 300px; max-width: 100%; box-sizing: border-box; padding: 14px 16px 16px; border-radius: 16px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 13.5px; }
+.cc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.cc-head strong { font-size: 15px; font-weight: 650; text-transform: none; }
+.cc-head strong::first-letter { text-transform: uppercase; }
+.cc-head span { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.cc-cal { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px; text-align: center; font-variant-numeric: tabular-nums; }
+.cc-wd { font-style: normal; font-size: 11px; color: var(--muted); padding-bottom: 4px; }
+.cc-day { position: relative; height: 30px; display: grid; place-items: center; font-size: 13px; border-radius: 50%; }
+.cc-day.mark::after { content: ""; position: absolute; bottom: 2px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--text); }
+.cc-day.today { background: var(--violet); color: #fff; font-weight: 650; }
+.cc-day.today.mark::after { background: #fff; }
+
+.cc-items { list-style: none; margin: 12px 0 0; padding: 10px 0 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 7px; }
+.cc-items li { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
+.cc-when { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.cc-what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.cc-items time { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.cc-none { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--border); color: var(--muted); }
+
+.cc-big { font-family: var(--mono); font-size: 28px; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.cc-sub { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+.cc-limit { margin-top: 12px; display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+.cc-track { height: 6px; border-radius: 6px; background: color-mix(in srgb, var(--text) 10%, transparent); overflow: hidden; }
+.cc-track i { display: block; height: 100%; border-radius: 6px; background: var(--violet); }
+.cc-cats { list-style: none; margin: 14px 0 0; padding: 12px 0 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.cc-cats li { display: grid; grid-template-columns: minmax(0, 84px) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.cc-cat { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-bar { height: 6px; border-radius: 6px; background: color-mix(in srgb, var(--text) 8%, transparent); overflow: hidden; }
+.cc-bar i { display: block; height: 100%; border-radius: 6px; background: var(--text); opacity: .75; }
+.cc-cats b { font-family: var(--mono); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.cc-week { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); height: 74px; box-sizing: content-box; display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end; }
+.cc-week div { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+.cc-week i { width: 100%; max-width: 22px; min-height: 3px; border-radius: 4px; background: color-mix(in srgb, var(--text) 22%, transparent); }
+.cc-week .now i { background: var(--text); }
+.cc-week span { font-size: 10.5px; color: var(--muted); }

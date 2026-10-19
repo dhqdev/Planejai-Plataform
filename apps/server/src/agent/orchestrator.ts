@@ -31,6 +31,7 @@ import { fetchGif } from "./tools/images.js";
 import { isAckOnly, pickReaction } from "./reaction.js";
 import { matchQuick, quickAnswer } from "./quick.js";
 import { Tracer } from "./trace.js";
+import { appCards } from "../chat-cards.js";
 import { POLL_NO, POLL_YES, pollQuestion, sendConfirmPoll } from "../whatsapp/polls.js";
 import { allShort, pushShort, recentShort, redisAlive, type ShortEntry } from "../shortmem.js";
 import { billingAccess, blockedMessage } from "../billing.js";
@@ -355,6 +356,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
         const step = await tracer.step({ agent: "cto", type: "tool", name: `atalho sem IA: ${intent.kind}`, input: intent });
         await step.ok({ ...quick.data, economizou: "a chamada do CTO" });
         await channel.sendText(conversation.remote_jid, text).catch(() => {});
+        if (channel.id === "app" && intent.kind !== "apaga_ultimo") await appCards(user.id, user.timezone ?? settings.timezone, [intent.kind === "agenda" ? "agenda" : "dinheiro"], "kinds");
         const m = userMsgs[0]!;
         await pushShort(conversationId, [
           { id: m.id, role: "user" as const, text: m.content ?? "", ts: new Date(m.created_at).getTime(), ext: m.external_id },
@@ -601,6 +603,8 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     progress.stop();
     const keepInDb = !(await redisAlive());
     await deliver(bubbles, { channel, conversation, outbox, tracer, keepInDb });
+    // chat do app: agenda e dinheiro ganham calendário e mini painel, montados do banco (sem token do modelo)
+    if (channel.id === "app" && !silent) await appCards(user.id, timezone, ctx.room.done);
     const askedText = byPoll && what ? await askYes(what, { channel, conversation, tracer, keepInDb }) : null;
     // primeira conversa no WhatsApp (pedido do David): pede para salvar o número, porque status só aparece assim,
     // e salva a pessoa no celular do assistente

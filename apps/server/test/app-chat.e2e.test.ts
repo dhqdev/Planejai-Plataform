@@ -132,6 +132,29 @@ describe.skipIf(!enabled)("chat do app (e2e)", () => {
     expect((await db.one("SELECT COUNT(*)::int AS n FROM app_chat WHERE user_id = $1", [ana.id])).n).toBe(before);
   });
 
+  it("agenda e dinheiro viram cartões no chat, montados do banco e só quando a ferramenta rodou", async () => {
+    const { appCards, cardKinds } = await import("../src/chat-cards.js");
+    expect(cardKinds(["web_search"])).toEqual([]);
+    expect(cardKinds(["calendar_create_event", "add_transaction"])).toEqual(["agenda", "dinheiro"]);
+    const conv = await db.one("SELECT id FROM conversations WHERE user_id = $1 AND channel = 'app'", [ana.id]);
+    await db.query("INSERT INTO reminders (user_id, conversation_id, intent, title, due_at, timezone) VALUES ($1, $2, 'dentista', 'Dentista', now() + interval '2 days', 'America/Sao_Paulo')", [ana.id, conv.id]);
+    await db.query("INSERT INTO transactions (user_id, kind, amount, category) VALUES ($1, 'expense', 120.5, 'Mercado'), ($1, 'expense', 30, 'Transporte')", [ana.id]);
+    const last = (await as("ana@x.com", "GET", "/api/chat")).json().messages.at(-1).id;
+    await appCards(ana.id, "America/Sao_Paulo", new Set(["web_search"]));
+    expect((await as("ana@x.com", "GET", `/api/chat?after=${last}`)).json().messages).toHaveLength(0);
+    await appCards(ana.id, "America/Sao_Paulo", new Set(["calendar_create_event", "add_transaction"]));
+    const cards = (await as("ana@x.com", "GET", `/api/chat?after=${last}`)).json().messages.flatMap((m: any) => m.cards ?? []);
+    const agenda = cards.find((c: any) => c.type === "agenda");
+    const money = cards.find((c: any) => c.type === "dinheiro");
+    expect(agenda.items[0]).toMatchObject({ title: "Dentista" });
+    expect(agenda.marks.length).toBeGreaterThan(0);
+    expect(money).toMatchObject({ spent: 150.5, income: 0 });
+    expect(money.cats[0]).toEqual({ name: "Mercado", total: 120.5 });
+    expect(money.week).toHaveLength(7);
+    // a Bia não ganha cartão nenhum com os dados da Ana
+    expect((await as("bia@x.com", "GET", "/api/chat")).json().messages).toEqual([]);
+  });
+
   it("conta sem WhatsApp ligado recebe o aviso em vez do chat", async () => {
     const { hashPassword } = await import("../src/accounts.js");
     await db.query("INSERT INTO accounts (email, name, password_hash, role, status) VALUES ('solto@x.com', 'Solto', $1, 'admin', 'active')", [hashPassword("senha-forte-1")]);

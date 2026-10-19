@@ -414,6 +414,7 @@ export function DashboardPage(props: { me: Me; theme: string; onTheme: () => voi
   const phone = useMedia(PHONE_QUERY);
   const [params] = useSearchParams();
   if (phone && !params.has("painel")) return <HomeChat me={props.me} />;
+  if (!phone && params.has("chat")) return <HomeChat me={props.me} wide />;
   return <PanelPage {...props} phone={phone} />;
 }
 
@@ -534,11 +535,9 @@ function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onThe
             </>
           ) : (
             <div className="dash-actions">
-              {phone && (
-                <Link className="btn btn-brand" to="/">
-                  <Icon name="send" size={16} /> Conversar
-                </Link>
-              )}
+              <Link className={`btn btn-brand${phone ? "" : " dash-chat"}`} to={phone ? "/" : "/?chat=1"}>
+                <Icon name="send" size={16} /> Conversar
+              </Link>
               <button className="btn" onClick={() => setEditing(true)}>
                 <Icon name="layout" size={16} /> Editar<span className="hide-phone"> painel</span>
               </button>

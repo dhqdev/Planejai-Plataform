@@ -19,6 +19,7 @@ const view = (m: any) => ({
   text: m.text,
   media: m.media ? { ...m.media, url: m.has_data ? `/api/chat/media/${m.id}` : null } : null,
   reaction: m.reaction,
+  cards: m.cards ?? undefined,
   at: m.created_at,
 });
 
@@ -33,7 +34,7 @@ export function chatRoutes(base: FastifyInstance) {
     if (!user) return { ready: false, reason: "Ligue seu WhatsApp ao perfil para conversar com o time por aqui.", messages: [] };
     const after = Number(req.query.after) || 0;
     const before = Number(req.query.before) || 0;
-    const cols = "id, role, text, media, reaction, created_at, data IS NOT NULL AS has_data";
+    const cols = "id, role, text, media, cards, reaction, created_at, data IS NOT NULL AS has_data";
     const rows = after
       ? await many(`SELECT ${cols} FROM app_chat WHERE user_id = $1 AND id > $2 ORDER BY id LIMIT 100`, [uid, after])
       : (await many(`SELECT ${cols} FROM app_chat WHERE user_id = $1 AND ($2 = 0 OR id < $2) ORDER BY id DESC LIMIT 60`, [uid, before])).reverse();
@@ -98,7 +99,7 @@ export function chatRoutes(base: FastifyInstance) {
       timestamp: new Date(),
       raw: null,
     });
-    const row = await one("SELECT id, role, text, media, reaction, created_at, data IS NOT NULL AS has_data FROM app_chat WHERE id = $1", [saved!.id]);
+    const row = await one("SELECT id, role, text, media, cards, reaction, created_at, data IS NOT NULL AS has_data FROM app_chat WHERE id = $1", [saved!.id]);
     return { message: view(row), queued: r.queued, reason: r.reason };
   });
 

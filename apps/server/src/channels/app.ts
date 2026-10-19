@@ -53,11 +53,11 @@ export async function noteTeamTalk(ctx: { conversation?: { channel: string; user
   await saveAppMessage(ctx.conversation.user_id, { role: "team", text: t, media: { from, to, kind } }).catch(() => {});
 }
 
-export async function saveAppMessage(userId: string, m: { role: "user" | "assistant" | "team"; text?: string | null; media?: Record<string, unknown> | null; data?: string | null; externalId?: string | null }) {
+export async function saveAppMessage(userId: string, m: { role: "user" | "assistant" | "team"; text?: string | null; media?: Record<string, unknown> | null; data?: string | null; externalId?: string | null; cards?: unknown[] | null }) {
   const data = m.data && Buffer.byteLength(m.data, "base64") <= MAX_DATA_BYTES ? m.data : null;
   return one<{ id: string }>(
-    "INSERT INTO app_chat (user_id, role, text, media, data, external_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-    [userId, m.role, m.text ?? null, m.media ?? null, data, m.externalId ?? null],
+    "INSERT INTO app_chat (user_id, role, text, media, data, external_id, cards) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+    [userId, m.role, m.text ?? null, m.media ?? null, data, m.externalId ?? null, m.cards?.length ? JSON.stringify(m.cards) : null],
   );
 }
 

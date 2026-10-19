@@ -8,6 +8,7 @@ import { AgentFace, CORE_FACES, type Face } from "../faces";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
+import { ChatCard, type ChatCardData } from "./ChatCards";
 import "../styles/chat-inicio.css";
 
 /**
@@ -32,6 +33,8 @@ interface Msg {
   /** role "team": quem falou com quem ({ from, to, kind }) */
   media: (MsgMedia & { from?: string; to?: string }) | null;
   reaction?: string | null;
+  /** calendário e mini painel que o servidor montou para a rodada (sem texto do modelo) */
+  cards?: ChatCardData[];
   at: string;
   local?: "sending" | "failed";
   /** o que mandar de novo se falhou */
@@ -360,7 +363,8 @@ function useViewport(root: React.RefObject<HTMLDivElement | null>) {
   }, [root]);
 }
 
-export function HomeChat({ me }: { me: Me }) {
+/** `wide`: no notebook a conversa abre dentro da moldura (ao lado do trilho), numa coluna centralizada. */
+export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
   const nav = useNavigate();
   const team = useApi<{ core: Agent[]; mine: any[] }>("/api/me/team");
   const [state, setState] = useState<ChatState | null>(null);
@@ -616,7 +620,7 @@ export function HomeChat({ me }: { me: Me }) {
   const earlier = msgs.filter((m) => !m.local && new Date(m.at).getTime() < opening.at);
   const today = msgs.filter((m) => m.local || new Date(m.at).getTime() >= opening.at);
   const earlierToday = earlier.some((m) => dayKey(new Date(m.at)) === todayKey);
-  const last = [...msgs].reverse().find((m) => !m.local && m.role !== "team");
+  const last = [...msgs].reverse().find((m) => !m.local && m.role !== "team" && !(m.cards && !m.text));
   const working = Boolean(state?.working || state?.typing) && last?.role !== "assistant" ? true : Boolean(state?.typing);
   const askYes = !working && last?.role === "assistant" && isYesQuestion(last.text);
   const userToday = msgs.some((m) => m.role === "user" && dayKey(new Date(m.at)) === todayKey);
@@ -649,6 +653,16 @@ export function HomeChat({ me }: { me: Me }) {
         </div>
       );
     const head = !prev || prev.role !== "assistant";
+    if (m.cards?.length && !m.text)
+      return (
+        <Fragment key={m.id}>
+          {m.cards.map((c, i) => (
+            <BotRow key={i} agent={byId(c.agent) ?? cto} head turn={Boolean(gapTop) || i > 0} bare>
+              <ChatCard card={c} />
+            </BotRow>
+          ))}
+        </Fragment>
+      );
     return (
       <BotRow key={m.id} agent={cto} head={head} turn={Boolean(gapTop)}>
         {m.media && <MediaView m={m.media} />}
@@ -664,11 +678,11 @@ export function HomeChat({ me }: { me: Me }) {
         const to = byId(m.media?.to ?? "");
         return (
           <div key={m.id} className="hc-talk">
-            <AgentFace face={from.face} agent={from.kind === "client" ? undefined : from.id} size={26} title={from.persona} />
-            <div className="hc-talk-b">
+            <div className="hc-talk-top">
+              <AgentFace face={from.face} agent={from.kind === "client" ? undefined : from.id} size={26} title={from.persona} />
               <span className="hc-talk-who">{from.persona}{to ? <> <i>para</i> {to.persona}</> : null}</span>
-              <span className="hc-talk-t">{m.text}</span>
             </div>
+            <span className="hc-talk-t">{m.text}</span>
           </div>
         );
       })}
@@ -694,9 +708,9 @@ export function HomeChat({ me }: { me: Me }) {
     });
 
   const page = (
-    <div className="hc" ref={root}>
+    <div className={`hc${wide ? " hc-wide" : ""}`} ref={root}>
       <header className="hc-top">
-        <button className="hc-icon" aria-label="Ver painel" title="Ver painel" onClick={() => { haptic(); nav("/?painel=1"); }}>
+        <button className="hc-icon" aria-label="Ver painel" title="Ver painel" onClick={() => { haptic(); nav(wide ? "/" : "/?painel=1"); }}>
           <Icon name="layout" size={20} />
         </button>
         <div className="hc-crew">
@@ -722,7 +736,7 @@ export function HomeChat({ me }: { me: Me }) {
             ))}
           </div>
         </div>
-        <BellButton />
+        {wide ? <span /> : <BellButton />}
       </header>
 
       <div
@@ -760,7 +774,7 @@ export function HomeChat({ me }: { me: Me }) {
           <div className="hc-empty">
             <AgentFace face={cto?.face} agent="cto" size={84} live />
             <p>{state.reason ?? "O chat ainda não está disponível para esta conta."}</p>
-            <button className="btn" onClick={() => nav("/?painel=1")}>Ver o painel</button>
+            <button className="btn" onClick={() => nav(wide ? "/" : "/?painel=1")}>Ver o painel</button>
           </div>
         ) : (
           <>
@@ -948,14 +962,16 @@ function AttachIcon({ name }: { name: "camera" | "photo" | "file" }) {
   );
 }
 
-/** Linha de um agente: a fotinha dele ao lado e o nome em cima da primeira fala de cada vez. */
-function BotRow({ agent, head, turn, children }: { agent: Agent; head: boolean; turn: boolean; children: ReactNode }) {
+/** Linha de um agente: a fotinha dele ao lado e, ao lado dela, a fala num cartão com o nome em cima da primeira. */
+function BotRow({ agent, head, turn, bare, children }: { agent: Agent; head: boolean; turn: boolean; bare?: boolean; children: ReactNode }) {
   return (
     <div className={`hc-row hc-bot hc-av${turn ? " hc-turn" : ""}`}>
       <span className="hc-av-face">{head && <AgentFace face={agent.face} agent={agent.kind === "client" ? undefined : agent.id} size={34} title={agent.persona} />}</span>
       <div className="hc-av-body">
-        {head && <span className="hc-av-name">{agent.persona}</span>}
-        {children}
+        <div className={bare ? "hc-bare" : "hc-sq"}>
+          {head && !bare && <span className="hc-av-name">{agent.persona}</span>}
+          {children}
+        </div>
       </div>
     </div>
   );
