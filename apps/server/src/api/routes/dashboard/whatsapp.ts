@@ -22,6 +22,53 @@ export function whatsappRoutes(api: FastifyInstance) {
     await sendWaCommand({ action: "logout" });
     return { ok: true };
   });
+  // ---------- Status do WhatsApp (wa-status.ts): rascunhos, postar agora e o automático ----------
+  api.get("/api/whatsapp/status-posts", async () => {
+    const [settings, posts, audience] = await Promise.all([
+      statusSettings(),
+      many(
+        `SELECT id, kind, scene, caption, status, recipients, error, cost_usd, created_at, posted_at
+           FROM wa_status_posts ORDER BY created_at DESC LIMIT 30`,
+      ),
+      statusAudience(),
+    ]);
+    return { settings, posts, audience: audience.length, monthlyUsd: monthlyCostUsd(settings), scenes: SCENES.map((s) => ({ id: s.id, caption: s.caption })) };
+  });
+  api.get<{ Params: { id: string } }>("/api/whatsapp/status-posts/:id/img", async (req, reply) => {
+    const row = await one<{ mimetype: string; data: Buffer }>("SELECT mimetype, data FROM wa_status_posts WHERE id = $1", [req.params.id]).catch(() => null);
+    if (!row) return reply.code(404).send({ error: "não encontrado" });
+    return reply.type(row.mimetype).header("Cache-Control", "private, max-age=86400").header("X-Content-Type-Options", "nosniff").send(row.data);
+  });
+  api.post<{ Body: { kind?: DraftKind; scene?: string } }>("/api/whatsapp/status-posts", async (req, reply) => {
+    const kind: DraftKind = req.body?.kind === "blog" ? "blog" : "imagem";
+    try {
+      return await makeDraft(kind, typeof req.body?.scene === "string" ? req.body.scene : undefined);
+    } catch (err) {
+      return reply.code(502).send({ error: `Não deu para gerar agora: ${(err as Error).message}` });
+    }
+  });
+  api.patch<{ Params: { id: string }; Body: { caption?: string } }>("/api/whatsapp/status-posts/:id", async (req, reply) => {
+    const caption = String(req.body?.caption ?? "").trim();
+    if (!caption || caption.length > 700) return reply.code(400).send({ error: "A legenda precisa ter de 1 a 700 letras." });
+    await query("UPDATE wa_status_posts SET caption = $2 WHERE id = $1 AND status <> 'postado'", [req.params.id, caption]);
+    return { ok: true };
+  });
+  api.post<{ Params: { id: string } }>("/api/whatsapp/status-posts/:id/post", async (req, reply) => {
+    try {
+      return { ok: true, recipients: await postDraft(req.params.id) };
+    } catch (err) {
+      return reply.code(502).send({ error: `O WhatsApp não aceitou agora: ${(err as Error).message}` });
+    }
+  });
+  api.delete<{ Params: { id: string } }>("/api/whatsapp/status-posts/:id", async (req) => {
+    await query("DELETE FROM wa_status_posts WHERE id = $1 AND status <> 'postado'", [req.params.id]);
+    return { ok: true };
+  });
+  api.put<{ Body: Partial<StatusSettings> }>("/api/whatsapp/status-settings", async (req) => {
+    const b = req.body ?? {};
+    const settings = await saveStatusSettings({ enabled: b.enabled, everyDays: b.everyDays, hour: b.hour, blogEvery: b.blogEvery });
+    return { settings, monthlyUsd: monthlyCostUsd(settings) };
+  });
   api.post("/api/whatsapp/restart", async () => {
     await sendWaCommand({ action: "restart" });
     return { ok: true };
