@@ -94,7 +94,7 @@ function PickButton({ label, value, options, onChange }: { label: string; value:
  * ou que não achou nada, a cada olhada. Dá para criar, ajustar, pausar, olhar agora e reativar por aqui.
  */
 export function WatchesPage() {
-  const { data, error, reload } = useApi<Watch[]>("/api/watches", { poll: 60000 });
+  const { data, error, reload } = useApi<Watch[]>("/api/watches", { poll: 60000, live: ["watches"] });
   const [tab, setTab] = useState<TabMode>("active");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortOrder, setSortOrder] = useState<SortMode>("newest");

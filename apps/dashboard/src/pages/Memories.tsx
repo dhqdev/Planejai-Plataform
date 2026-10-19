@@ -28,7 +28,7 @@ export function MemoriesPage({ embedded = false }: { embedded?: boolean } = {}) 
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string | null>(null);
   const [edit, setEdit] = useState<Partial<Fact> | null>(null);
-  const { data, error, reload } = useApi<Overview>("/api/memories/overview", { poll: 60000 });
+  const { data, error, reload } = useApi<Overview>("/api/memories/overview", { poll: 60000, live: ["memories"] });
   const cats = data?.categories ?? {};
   const facts = (data?.facts ?? []).filter((m) => (!q || m.content.toLowerCase().includes(q.toLowerCase())) && (!cat || (m.category ?? "outros") === cat));
   const groups = Object.keys(cats)

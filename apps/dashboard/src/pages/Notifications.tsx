@@ -22,7 +22,7 @@ const KIND_ICON: Record<string, string> = {
 
 export function NotificationsPage() {
   const nav = useNavigate();
-  const { data, error, reload, setData } = useApi<{ items: Item[]; unread: number }>("/api/notifications", { poll: 30000 });
+  const { data, error, reload, setData } = useApi<{ items: Item[]; unread: number }>("/api/notifications", { poll: 30000, live: ["notifications"] });
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const [perm, setPerm] = useState(() => (typeof Notification === "undefined" ? "denied" : Notification.permission));
   const items = (data?.items ?? []).filter((n) => filter === "all" || !n.read_at);

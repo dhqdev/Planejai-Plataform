@@ -107,7 +107,7 @@ const contactState = (c: ContactChat) => (c.waiting_you ? "Respondeu" : c.schedu
  * conversou a pedido da pessoa (a agenda inteira fica em Contatos), e ela mesma responde pela caixa embaixo da conversa.
  */
 export function ErrandsPage() {
-  const { data, error, reload } = useApi<Data>("/api/errands", { poll: 10000 });
+  const { data, error, reload } = useApi<Data>("/api/errands", { poll: 10000, live: ["errands"] });
   const fit = useMedia(FIT_QUERY);
   const phone = useMedia("(max-width: 767px)");
   const wide = useMedia("(min-width: 1024px)");

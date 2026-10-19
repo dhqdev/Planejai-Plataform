@@ -15,7 +15,7 @@ const LABEL: Record<string, [string, string]> = {
 
 /** Conexão própria do WhatsApp (Baileys): QR code ou código de pareamento, como no WhatsApp Web. */
 export function WhatsAppPage() {
-  const { data, error, reload } = useApi<any>("/api/whatsapp", { poll: 2000 });
+  const { data, error, reload } = useApi<any>("/api/whatsapp", { poll: 2000, live: ["wa_sessions"] });
   const [mode, setMode] = useState<"qr" | "code">("qr");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);

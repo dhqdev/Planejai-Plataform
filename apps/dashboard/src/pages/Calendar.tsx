@@ -172,7 +172,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
 
   // no celular a agenda é a PhoneAgenda (CalendarPhone.tsx), que carrega o que precisa
   const path = phone ? null : `/api/calendar?from=${range.from.toISOString()}&to=${range.to.toISOString()}${person ? `&user=${person}` : ""}`;
-  const { data, error, reload } = useApi<{ events: Ev[]; readonly?: boolean; tags?: Tag[] }>(path, { poll: 30000 });
+  const { data, error, reload } = useApi<{ events: Ev[]; readonly?: boolean; tags?: Tag[] }>(path, { poll: 30000, live: ["reminders", "agenda_tags"] });
   // primeiro acesso: nada na agenda de um mês atrás a três meses à frente mostra a ilustração com os atalhos
   // (no celular e no notebook), até criar algo ou tocar em "Ver o calendário"
   const [vazioOk, setVazioOk] = useState(() => {

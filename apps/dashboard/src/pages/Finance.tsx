@@ -83,7 +83,7 @@ export function FinancePage() {
   // particular: cada um vê as suas; as de um contato só se ele compartilhou (só leitura)
   const shared = useApi<{ withMe: { id: string; name: string; scopes: string[] }[] }>("/api/shares");
   const owners = (shared.data?.withMe ?? []).filter((p) => p.scopes.includes("finance"));
-  const { data, error, reload } = useApi<any>(`/api/finance?month=${month}${user ? `&user=${user}` : ""}`, { poll: 20000 });
+  const { data, error, reload } = useApi<any>(`/api/finance?month=${month}${user ? `&user=${user}` : ""}`, { poll: 20000, live: ["transactions", "budgets", "finance_categories", "finance_goals", "bills", "cards"] });
   const categories = useCategories(user);
   const colorOf = categories.colorOf;
   const [managing, setManaging] = useState(false);

@@ -128,7 +128,7 @@ function useViewChoice() {
 
 export function ExecutionDetailPage() {
   const { id } = useParams();
-  const { data, error, reload } = useApi<any>(`/api/executions/${id}`, { poll: 3000 });
+  const { data, error, reload } = useApi<any>(`/api/executions/${id}`, { poll: 3000, live: ["executions", "execution_steps"] });
   const [view, pick] = useViewChoice();
   const [selected, setSelected] = useState<number | null>(null);
   const nav = useNavigate();

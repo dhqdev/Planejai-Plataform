@@ -51,7 +51,7 @@ export function MeetRecorder() {
   const list = useApi<{ items: Meet[] }>("/api/meet");
   const busy = list.data?.items.some((m) => m.status === "gravando" || m.status === "resumindo");
   const [liveId, setLiveId] = useState<string | null>(null);
-  const detail = useApi<MeetDetail>(liveId ? `/api/meet/${liveId}` : null, { poll: 15_000 });
+  const detail = useApi<MeetDetail>(liveId ? `/api/meet/${liveId}` : null, { poll: 15_000, live: ["meet_sessions"] });
   const [title, setTitle] = useState("");
   const [withMic, setWithMic] = useState(true);
   const [phase, setPhase] = useState<"idle" | "starting" | "live" | "stopping">("idle");

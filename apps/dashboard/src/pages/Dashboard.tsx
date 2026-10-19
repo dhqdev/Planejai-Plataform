@@ -69,7 +69,7 @@ function Box({ title, icon, to, children }: { title: string; icon: string; to?: 
 }
 
 function RecentExecutions() {
-  const { data } = useApi<any[]>("/api/executions?limit=6", { poll: 15000 });
+  const { data } = useApi<any[]>("/api/executions?limit=6", { poll: 15000, live: ["executions"] });
   const nav = useNavigate();
   if (!data) return null;
   if (!data.length) return <Empty>Nenhuma execução ainda.</Empty>;
@@ -87,7 +87,7 @@ function RecentExecutions() {
 }
 
 function WatchesList() {
-  const { data } = useApi<any[]>("/api/watches");
+  const { data } = useApi<any[]>("/api/watches", { live: ["watches"] });
   const active = (data ?? []).filter((w) => w.active);
   if (!data) return null;
   if (!active.length) return <Empty>Diga no WhatsApp "fica de olho no preço do iPhone 16" e ele avisa quando baixar.</Empty>;
@@ -410,6 +410,9 @@ function allowed(def: WidgetDef, isSuper: boolean) {
 }
 
 /** Início: no celular é a conversa com o time (HomeChat); o painel de widgets fica no notebook e em /?painel=1. */
+/** Tabelas que mudam o resumo do Início (me/overview): recarrega na hora quando uma delas muda. */
+const ME_OVERVIEW = ["reminders", "transactions", "watches", "memories"];
+
 export function DashboardPage(props: { me: Me; theme: string; onTheme: () => void }) {
   const phone = useMedia(PHONE_QUERY);
   const [params] = useSearchParams();
@@ -420,8 +423,8 @@ export function DashboardPage(props: { me: Me; theme: string; onTheme: () => voi
 
 function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onTheme: () => void; phone: boolean }) {
   const isSuper = me.role === "superadmin";
-  const sys = useApi<any>(isSuper ? "/api/overview" : null, { poll: 20000 });
-  const mine = useApi<any>("/api/me/overview", { poll: 30000 });
+  const sys = useApi<any>(isSuper ? "/api/overview" : null, { poll: 20000, live: ["executions"] });
+  const mine = useApi<any>("/api/me/overview", { poll: 30000, live: ME_OVERVIEW });
   const saved = useApi<{ widgets: Widget[] } | null>("/api/me/dashboard");
   const [widgets, setWidgets] = useState<Widget[] | null>(null);
   const [editing, setEditing] = useState(false);
@@ -614,7 +617,7 @@ function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onThe
 /** Aba sob medida criada pela reunião noturna: só os widgets que fazem sentido para a pessoa. */
 export function CustomTabPage({ me, tab }: { me: Me; tab: { title: string; widgets: string[] } }) {
   const isSuper = me.role === "superadmin";
-  const mine = useApi<any>("/api/me/overview", { poll: 30000 });
+  const mine = useApi<any>("/api/me/overview", { poll: 30000, live: ME_OVERVIEW });
   const list = tab.widgets.filter((t) => WIDGETS[t] && allowed(WIDGETS[t]!, isSuper));
   return (
     <div className="page page-wide">

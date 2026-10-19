@@ -139,7 +139,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
         : null;
   const single = useApi<{ events: Ev[]; readonly?: boolean; tags?: Tag[] }>(
     range ? `/api/calendar?from=${range.from.toISOString()}&to=${range.to.toISOString()}${person ? `&user=${person}` : ""}&r=${rev}` : null,
-    { poll: 30000 },
+    { poll: 30000, live: ["reminders", "agenda_tags"] },
   );
   const meta = (d: { readonly?: boolean; tags?: Tag[]; events: Ev[] }) => {
     setReadonly(Boolean(d.readonly));
@@ -497,7 +497,7 @@ function MonthBlock(p: {
   const next = new Date(first.getFullYear(), first.getMonth() + 1, 1);
   const { data } = useApi<{ events: Ev[]; readonly?: boolean; tags?: Tag[] }>(
     near ? `/api/calendar?from=${first.toISOString()}&to=${next.toISOString()}${p.person ? `&user=${p.person}` : ""}&r=${p.rev}` : null,
-    { poll: 60000 },
+    { poll: 60000, live: ["reminders", "agenda_tags"] },
   );
   useEffect(() => {
     if (data) p.onMeta(data);
@@ -563,7 +563,7 @@ function MonthBlock(p: {
 /** Tocar num dia: os eventos dele numa folha e "Novo lembrete" naquele dia. */
 function DaySheet(p: { day: Date; person: string; rev: number; keep: (e: Ev) => boolean; readonly: boolean; onOpen: (e: Ev) => void; onCreate: () => void; onClose: () => void }) {
   const from = startOfDay(p.day);
-  const { data } = useApi<{ events: Ev[] }>(`/api/calendar?from=${from.toISOString()}&to=${addDays(from, 1).toISOString()}${p.person ? `&user=${p.person}` : ""}&r=${p.rev}`);
+  const { data } = useApi<{ events: Ev[] }>(`/api/calendar?from=${from.toISOString()}&to=${addDays(from, 1).toISOString()}${p.person ? `&user=${p.person}` : ""}&r=${p.rev}`, { live: ["reminders"] });
   const evs = [...holidays(from.getFullYear()).filter((h) => sameDay(new Date(h.start), from)), ...(data?.events ?? [])]
     .filter(p.keep)
     .sort((a, b) => Number(!a.allDay) - Number(!b.allDay) || a.start.localeCompare(b.start));

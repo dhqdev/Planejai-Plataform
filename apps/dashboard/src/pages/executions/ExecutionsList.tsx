@@ -19,8 +19,8 @@ export function ExecutionsPage() {
   const [cleaning, setCleaning] = useState(false);
   const nav = useNavigate();
 
-  const { data, error, reload } = useApi<any[]>(`/api/executions?${filters.query(limit)}`, { poll: 5000 });
-  const summary = useApi<any>(`/api/executions/summary?since=${since || 24}`, { poll: 15000 });
+  const { data, error, reload } = useApi<any[]>(`/api/executions?${filters.query(limit)}`, { poll: 5000, live: ["executions"] });
+  const summary = useApi<any>(`/api/executions/summary?since=${since || 24}`, { poll: 15000, live: ["executions"] });
   const s = summary.data;
   const periodShort = since === "1" ? "1 h" : since === "168" ? "7 dias" : since === "720" ? "30 dias" : "24 h";
 

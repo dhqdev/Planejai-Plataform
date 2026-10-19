@@ -93,7 +93,7 @@ export function CardArt({ card, selected, onClick, compact }: { card: CreditCard
 }
 
 export function useCards(user: string) {
-  return useApi<{ cards: CreditCard[]; readonly: boolean }>(`/api/cards${user ? `?user=${user}` : ""}`, { poll: 30000 });
+  return useApi<{ cards: CreditCard[]; readonly: boolean }>(`/api/cards${user ? `?user=${user}` : ""}`, { poll: 30000, live: ["cards", "transactions"] });
 }
 
 async function markPaid(card: CreditCard, inv: Invoice, paid: boolean) {

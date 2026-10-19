@@ -6,6 +6,7 @@ import { BellButton, type Me } from "../App";
 import { Modal } from "../components";
 import { AgentFace, CORE_FACES, type Face } from "../faces";
 import { useApi } from "../hooks";
+import { liveOn, onLive } from "../live";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
 import { ChatCard, type ChatCardData } from "./ChatCards";
@@ -456,14 +457,18 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
       }
       if (!alive) return;
       const fast = busy.current || Date.now() - sentRef.current < 90_000;
-      timer = setTimeout(() => (document.hidden ? (timer = setTimeout(() => tick(), 4000)) : tick()), fast ? 1000 : 7000);
+      // tempo real ligado: resposta e "digitando" chegam pelo aviso (app_chat/app_chat_state); a consulta vira segurança
+      const wait = liveOn() ? (fast ? 4000 : 30_000) : fast ? 1000 : 7000;
+      timer = setTimeout(() => (document.hidden ? (timer = setTimeout(() => tick(), 4000)) : tick()), wait);
     };
     void tick(true);
     const wake = () => !document.hidden && (clearTimeout(timer), tick());
     document.addEventListener("visibilitychange", wake);
+    const offLive = onLive(["app_chat", "app_chat_state"], wake);
     return () => {
       alive = false;
       clearTimeout(timer);
+      offLive();
       document.removeEventListener("visibilitychange", wake);
     };
   }, [merge]);

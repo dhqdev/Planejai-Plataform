@@ -11,6 +11,7 @@ import { Icon } from "./icons";
 import { UserMascote } from "./mascote/UserMascote";
 import { MascoteStroll } from "./mascote/Stroll";
 import { MascoteButton, WardrobeHost } from "./mascote/Wardrobe";
+import { startLive } from "./live";
 import { useUnread } from "./notify";
 import type { Onboarding } from "./pages/Onboarding";
 import { PullToRefresh } from "./PullToRefresh";
@@ -333,6 +334,7 @@ export function App() {
   // conta nova: nada do cache da anterior; depois esquenta os dados das telas que mais se abre
   useEffect(() => {
     clearApiCache();
+    startLive(Boolean(me));
     if (!me) return;
     const d = new Date();
     const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;

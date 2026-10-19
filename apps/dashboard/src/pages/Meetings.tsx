@@ -31,7 +31,7 @@ const when = (iso: string) => {
 
 /** Atas das reuniões das 19h: o que o time percebeu, aprendeu e mudou para a pessoa. Cada um vê só as suas. `embedded`: seção de Minha conta. */
 export function MeetingsPage({ embedded = false }: { embedded?: boolean } = {}) {
-  const { data, error, reload } = useApi<Meeting[]>("/api/meetings", { poll: 120000 });
+  const { data, error, reload } = useApi<Meeting[]>("/api/meetings", { poll: 120000, live: ["improve_meetings"] });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);

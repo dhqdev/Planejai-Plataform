@@ -210,7 +210,7 @@ function Flow({ stage, failed }: { stage: string; failed: string | null }) {
 
 export function EsteiraPage() {
   const status = useApi<Status>("/api/dev/status");
-  const list = useApi<Ticket[]>("/api/dev/tickets", { poll: 5000 });
+  const list = useApi<Ticket[]>("/api/dev/tickets", { poll: 5000, live: ["dev_tickets", "dev_ticket_steps"] });
   const [params, setParams] = useSearchParams();
   const open = Number(params.get("t")) || null;
   const [creating, setCreating] = useState(false);
@@ -429,7 +429,7 @@ function Setup({ st, onSaved }: { st: Status; onSaved: (s: Status) => void }) {
 
 /** Painel do lado do quadro (no celular, aba "O time"): quem é cada um, o que faz e o que está fazendo agora. */
 function TeamPanel({ agents, labels, onOpen }: { agents: Record<string, Agent>; labels: Record<string, string>; onOpen: (id: number) => void }) {
-  const team = useApi<TeamMember[]>("/api/dev/team", { poll: 5000 });
+  const team = useApi<TeamMember[]>("/api/dev/team", { poll: 5000, live: ["dev_tickets"] });
   return (
     <aside className="dev-team" aria-label="O time da esteira">
       <h3>O time</h3>
@@ -651,7 +651,7 @@ function NewTicket({ onClose, onCreated }: { onClose: () => void; onCreated: (id
 }
 
 function TicketModal({ id, labels, agents, onClose, onChange }: { id: number; labels: Record<string, string>; agents: Record<string, Agent>; onClose: () => void; onChange: () => void }) {
-  const { data, error, reload } = useApi<Detail>(`/api/dev/tickets/${id}`, { poll: 4000 });
+  const { data, error, reload } = useApi<Detail>(`/api/dev/tickets/${id}`, { poll: 4000, live: ["dev_tickets", "dev_ticket_steps"] });
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);

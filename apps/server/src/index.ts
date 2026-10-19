@@ -9,6 +9,7 @@ import { stopBoss } from "./queue/boss.js";
 import { startWorker } from "./queue/worker.js";
 import { runsApi, runsChannel, runsConversations } from "./roles.js";
 import { stopRpcClient } from "./whatsapp/rpc.js";
+import { stopLive } from "./live.js";
 import { whatsapp } from "./whatsapp/session.js";
 
 async function main() {
@@ -41,6 +42,7 @@ async function main() {
     log.info(`${signal} recebido, encerrando`);
     await whatsapp.stop().catch(() => {});
     await stopRpcClient().catch(() => {});
+    await stopLive().catch(() => {});
     await app.close().catch(() => {});
     await stopBoss().catch(() => {});
     await pool.end().catch(() => {});

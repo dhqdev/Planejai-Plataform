@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
+import { liveOn, onLive } from "./live";
 
 /**
  * Contador de não lidas (bolinha no menu). Um único poll para o app inteiro; avisa o navegador
@@ -9,8 +10,11 @@ type State = { unread: number; last: string | null };
 let state: State = { unread: 0, last: null };
 const subs = new Set<(s: State) => void>();
 let timer: ReturnType<typeof setInterval> | null = null;
+let offLive: (() => void) | null = null;
+let lastPoll = 0;
 
 async function poll() {
+  lastPoll = Date.now();
   try {
     const next = await api<State>("/api/notifications/unread");
     const fresh = next.unread > state.unread && next.last && next.last !== state.last;
@@ -42,7 +46,9 @@ export function useUnread(enabled: boolean) {
     subs.add(setS);
     if (!timer) {
       void poll();
-      timer = setInterval(poll, 30_000);
+      // com o tempo real ligado, a bolinha acende na hora (aviso da tabela notifications); o poll é só segurança
+      timer = setInterval(() => (!liveOn() || Date.now() - lastPoll > 120_000) && void poll(), 30_000);
+      offLive = onLive(["notifications"], () => void poll());
     }
     const onVis = () => document.visibilityState === "visible" && void poll();
     document.addEventListener("visibilitychange", onVis);
@@ -52,6 +58,8 @@ export function useUnread(enabled: boolean) {
       if (!subs.size && timer) {
         clearInterval(timer);
         timer = null;
+        offLive?.();
+        offLive = null;
         state = { unread: 0, last: null };
       }
     };

@@ -37,7 +37,7 @@ const DAYS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sáb
 const SOURCE: Record<string, string> = { seed: "De partida", auto: "Automático", manual: "Pedido aqui" };
 
 export function BlogAdminPage() {
-  const { data, error, reload, setData } = useApi<Data>("/api/blog-admin", { poll: 8000 });
+  const { data, error, reload, setData } = useApi<Data>("/api/blog-admin", { poll: 8000, live: ["blog_posts"] });
   if (error) return <div className="page"><ErrorBox error={error} /></div>;
   if (!data) return <Loading />;
   const s = data.settings;

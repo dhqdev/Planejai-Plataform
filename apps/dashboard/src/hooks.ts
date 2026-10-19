@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import { liveOn, onLive, onLiveStatus } from "./live";
 
 /**
  * Cache em memória das respostas (stale-while-revalidate): ao voltar para uma tela ela aparece na hora
@@ -40,13 +41,19 @@ export function refreshAll(): Promise<void> {
   return Promise.allSettled(waitFor).then(() => undefined);
 }
 
-/** Busca dados de uma rota da API, com recarga manual e polling opcional. */
-export function useApi<T = any>(path: string | null, opts: { poll?: number } = {}) {
+/**
+ * Busca dados de uma rota da API, com recarga manual e polling opcional.
+ * `live`: tabelas do banco que alimentam a tela; quando uma muda, recarrega na hora (live.ts). Com o tempo real
+ * ligado o polling vira só rede de segurança (no mínimo 1 min); sem ele, volta ao intervalo pedido.
+ */
+export function useApi<T = any>(path: string | null, opts: { poll?: number; live?: readonly string[] } = {}) {
   const [data, setDataState] = useState<T | null>(() => (path && cache.has(path) ? (cache.get(path) as T) : null));
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(() => !(path && cache.has(path)));
   const current = useRef(path);
   current.current = path;
+  const lastLoad = useRef(0);
+  const liveKey = opts.live?.join(",") ?? "";
 
   const setData = useCallback(
     (v: T | null | ((prev: T | null) => T | null)) => {
@@ -61,6 +68,7 @@ export function useApi<T = any>(path: string | null, opts: { poll?: number } = {
 
   const reload = useCallback(async () => {
     if (!path) return;
+    lastLoad.current = Date.now();
     try {
       const d = await fetchShared<T>(path);
       if (current.current === path) {
@@ -87,17 +95,25 @@ export function useApi<T = any>(path: string | null, opts: { poll?: number } = {
     };
     document.addEventListener("visibilitychange", onVisible);
     // não gasta bateria/dados com a aba ou o app em segundo plano; atualiza ao voltar
+    const safety = Math.max((opts.poll ?? 0) * 4, 60_000);
     const t = opts.poll
       ? setInterval(() => {
-          if (!document.hidden) void reload();
+          if (document.hidden) return;
+          if (liveKey && liveOn() && Date.now() - lastLoad.current < safety) return;
+          void reload();
         }, opts.poll)
       : undefined;
+    const tables = liveKey ? liveKey.split(",") : [];
+    const offLive = path && tables.length ? onLive(tables, () => void reload()) : undefined;
+    const offStatus = path && tables.length ? onLiveStatus((_on, again) => again && void reload()) : undefined;
     return () => {
       if (t) clearInterval(t);
+      offLive?.();
+      offStatus?.();
       window.removeEventListener("pj:refresh", onRefresh);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [reload, opts.poll, path]);
+  }, [reload, opts.poll, path, liveKey]);
 
   return { data, error, loading, reload, setData };
 }

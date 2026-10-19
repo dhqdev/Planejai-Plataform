@@ -21,7 +21,7 @@ const readB64 = (f: File) =>
   });
 
 export function DocumentsPage() {
-  const { data, error, reload } = useApi<Resp>("/api/documents", { poll: 60000 });
+  const { data, error, reload } = useApi<Resp>("/api/documents", { poll: 60000, live: ["documents"] });
   const [q, setQ] = useState("");
   const [folder, setFolder] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
