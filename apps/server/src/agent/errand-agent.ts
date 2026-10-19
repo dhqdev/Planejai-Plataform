@@ -1,7 +1,7 @@
 import { getSettings } from "../settings.js";
 import { billingAccess } from "../billing.js";
 import { one, query } from "../db/pool.js";
-import { getPrefs, styleHint } from "../chatprefs.js";
+import { addFact, getPrefs, styleHint } from "../chatprefs.js";
 import { type Errand, type ErrandLogEntry, MAX_ERRAND_MESSAGES, alertOwner, finishErrand, followUrl, messageLimit, sendToErrand } from "../errands.js";
 import type { ChatMessage } from "../llm/types.js";
 import { outboundChannel } from "../social.js";
@@ -26,6 +26,20 @@ import { defineTool, obj, Outbox, type ConversationRow, type Tool, type ToolCont
  * O resultado chega à pessoa pela conversa dela (evento para o CTO, que escreve do jeito dela).
  */
 
+/** Guarda na ficha da conversa o que vale lembrar (valor cotado, nome, horário...); aparece na tela Recados e guia as próximas falas. */
+function fichaTool(e: Errand) {
+  return defineTool<{ label: string; value: string }>({
+    name: "errand_ficha",
+    description:
+      "Guarda na ficha desta conversa uma informação que você precisa lembrar e a pessoa vai querer ver: valor cotado, nome de quem atende, horário, endereço, condição. " +
+      "label curto (ex.: Valor, Atendente, Horário); value o dado exato, sem enfeite. Mesmo label atualiza.",
+    parameters: obj({ label: { type: "string" }, value: { type: "string" } }, ["label", "value"]),
+    async run(args) {
+      return addFact(e.user_id, e.phone, args.label, args.value);
+    },
+  });
+}
+
 function errandTools(e: Errand, timezone: string, outcome: { kind?: "done" | "ask"; text?: string; at?: Date | null; reminder?: string | null }): Tool[] {
   // responder e fechar (ou perguntar à pessoa) vêm juntos e rodam em paralelo: fechar espera a mensagem sair primeiro
   const inflight: Promise<unknown>[] = [];
@@ -42,6 +56,7 @@ function errandTools(e: Errand, timezone: string, outcome: { kind?: "done" | "as
     return r;
   };
   return [
+    fichaTool(e),
     defineTool<{ message: string }>({
       name: "errand_reply",
       description: `Manda uma mensagem para ${e.place} no WhatsApp (curta, educada). Só para eles; texto solto seu não é enviado.`,
@@ -155,6 +170,7 @@ function conversaTools(e: Errand, outcome: Outcome): Tool[] {
     makeImage,
     getPicture,
     makePdf,
+    fichaTool(e),
     defineTool<{ reason: string }>({
       name: "conversa_alert",
       description:
@@ -209,6 +225,7 @@ Já liberado por ${person} (pode fechar sem perguntar): ${e.allowed ?? "nada; s�
 Como conversar (soe como gente, nunca como robô):
 - Mensagens curtas de WhatsApp, educadas e calorosas, em português do Brasil, uma pergunta por vez. Você é assistente virtual: nunca finja ser ${person}.
 - Responda o que eles perguntarem com o que está no objetivo (raça, serviço, dia); o que não souber, errand_ask_person. Não repita pergunta já respondida.
+- Valor, nome de quem atende, horário ou condição que eles disserem: guarde com errand_ficha (a pessoa vê a ficha na tela). Use a ficha da conversa, se houver, para saber o que perguntar e o que a pessoa aceita.
 - Para falar com eles use errand_reply; texto fora dela não é enviado. Mensagens que ainda pode mandar: ${Math.max(0, MAX_ERRAND_MESSAGES - e.sent)}.
 - Resolveu dentro do liberado (ex.: tinham o horário): confirme, agradeça e chame errand_done com success=true e appointment_at. Era só saber algo (preço, horário): agradeça e errand_done com o que disseram. Não tem como: agradeça e errand_done com success=false.
 - Pediram algo fora do liberado (outro horário, preço a pagar, sinal, Pix, cartão, CPF, endereço, outro serviço): errand_ask_person com a pergunta e as opções. Nunca aceite pagar nem passe dados de ${person} além do primeiro nome.

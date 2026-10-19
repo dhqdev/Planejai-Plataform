@@ -29,9 +29,33 @@ export interface ChatPrefs {
   archived: boolean;
   follow: Follow;
   removed_at: string | null;
+  /** ficha da conversa: o que o assistente precisa lembrar (nome, o que a pessoa quer, valores...) */
+  facts: Fact[];
 }
 
-const COLS = "phone, nickname, color, tone, signature, note, pinned, archived, follow, removed_at";
+export interface Fact {
+  label: string;
+  value: string;
+}
+
+export const MAX_FACTS = 12;
+
+/** Ficha limpa: até MAX_FACTS itens, rótulo curto e valor de até 200 caracteres, sem linha vazia nem repetida. */
+export function cleanFacts(raw: unknown): Fact[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Fact[] = [];
+  for (const f of raw) {
+    const label = clean((f as Fact)?.label, 30);
+    const value = clean((f as Fact)?.value, 200);
+    if (!label || !value) continue;
+    const i = out.findIndex((x) => x.label.toLowerCase() === label.toLowerCase());
+    if (i >= 0) out[i] = { label, value };
+    else out.push({ label, value });
+  }
+  return out.slice(0, MAX_FACTS);
+}
+
+const COLS = "phone, nickname, color, tone, signature, note, pinned, archived, follow, removed_at, facts";
 
 export async function getPrefs(userId: string, phone: string): Promise<ChatPrefs | undefined> {
   return one<ChatPrefs>(`SELECT ${COLS} FROM chat_prefs WHERE user_id = $1 AND phone = ANY($2) ORDER BY updated_at DESC LIMIT 1`, [userId, phoneVariants(normalizePhone(phone))]);
@@ -50,9 +74,11 @@ export async function prefsFor(userId: string, phones: string[]): Promise<Record
   return out;
 }
 
-const clean = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) || null : null);
+function clean(v: unknown, max: number) {
+  return typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) || null : null;
+}
 
-export type PrefsPatch = Partial<Pick<ChatPrefs, "nickname" | "color" | "tone" | "signature" | "note" | "pinned" | "archived" | "follow">>;
+export type PrefsPatch = Partial<Pick<ChatPrefs, "nickname" | "color" | "tone" | "signature" | "note" | "pinned" | "archived" | "follow" | "facts">>;
 
 /** Grava só o que veio; campo de texto vazio volta ao padrão. Parar de acompanhar também cancela o recado aberto. */
 export async function savePrefs(userId: string, rawPhone: string, patch: PrefsPatch) {
@@ -68,13 +94,14 @@ export async function savePrefs(userId: string, rawPhone: string, patch: PrefsPa
     pinned: "pinned" in patch ? Boolean(patch.pinned) : (cur?.pinned ?? false),
     archived: "archived" in patch ? Boolean(patch.archived) : (cur?.archived ?? false),
     follow: "follow" in patch && ["auto", "on", "off"].includes(String(patch.follow)) ? (patch.follow as Follow) : (cur?.follow ?? "auto"),
+    facts: "facts" in patch ? cleanFacts(patch.facts) : (cur?.facts ?? []),
   };
   const key = cur?.phone ?? phone;
   await query(
-    `INSERT INTO chat_prefs (user_id, phone, nickname, color, tone, signature, note, pinned, archived, follow)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-     ON CONFLICT (user_id, phone) DO UPDATE SET nickname = $3, color = $4, tone = $5, signature = $6, note = $7, pinned = $8, archived = $9, follow = $10, updated_at = now()`,
-    [userId, key, next.nickname, next.color, next.tone, next.signature, next.note, next.pinned, next.archived, next.follow],
+    `INSERT INTO chat_prefs (user_id, phone, nickname, color, tone, signature, note, pinned, archived, follow, facts)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+     ON CONFLICT (user_id, phone) DO UPDATE SET nickname = $3, color = $4, tone = $5, signature = $6, note = $7, pinned = $8, archived = $9, follow = $10, facts = $11::jsonb, updated_at = now()`,
+    [userId, key, next.nickname, next.color, next.tone, next.signature, next.note, next.pinned, next.archived, next.follow, JSON.stringify(next.facts)],
   );
   if (next.follow === "off" && cur?.follow !== "off") await cancelOpenErrands(userId, key);
   // Sem prazo: o recado aberto deixa de vencer (um ano de folga), em vez de parar de acompanhar nos 7 dias
@@ -130,8 +157,17 @@ export function withSignature(text: string, signature: string | null | undefined
 }
 
 /** Uma linha para o agente escrever do jeito combinado com esse número (vazio se não tem nada combinado). */
-export function styleHint(p: Pick<ChatPrefs, "tone" | "note" | "nickname"> | null | undefined) {
+export function styleHint(p: Pick<ChatPrefs, "tone" | "note" | "nickname"> & { facts?: Fact[] } | null | undefined) {
   if (!p) return "";
-  const parts = [p.tone && CHAT_TONES[p.tone] ? `tom ${CHAT_TONES[p.tone]}` : "", p.note ? `anotação da pessoa: ${p.note}` : ""].filter(Boolean);
+  const ficha = p.facts?.length ? `ficha da conversa (use para guiar o que perguntar e o que aceitar): ${p.facts.map((f) => `${f.label}: ${f.value}`).join("; ")}` : "";
+  const parts = [p.tone && CHAT_TONES[p.tone] ? `tom ${CHAT_TONES[p.tone]}` : "", p.note ? `anotação da pessoa: ${p.note}` : "", ficha].filter(Boolean);
   return parts.join("; ");
+}
+
+/** O agente (ou a tela) guarda um item na ficha: o mesmo rótulo é atualizado, não duplicado. */
+export async function addFact(userId: string, phone: string, label: string, value: string) {
+  const cur = await getPrefs(userId, phone);
+  const facts = cleanFacts([...(cur?.facts ?? []), { label, value }]);
+  if (!facts.some((f) => f.label.toLowerCase() === label.trim().toLowerCase())) return { ok: false as const, error: "Ficha cheia ou item vazio." };
+  return savePrefs(userId, phone, { facts });
 }

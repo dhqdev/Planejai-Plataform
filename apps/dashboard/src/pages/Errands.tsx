@@ -54,7 +54,10 @@ type Prefs = {
   pinned: boolean;
   archived: boolean;
   follow: Follow;
+  /** ficha da conversa: o que o assistente precisa lembrar */
+  facts?: Fact[];
 };
+type Fact = { label: string; value: string };
 type Data = { errands: Errand[]; drafts: Draft[]; contacts?: ContactChat[]; follow: string; prefs?: Record<string, Prefs> };
 type Filter = "tudo" | "lugares" | "pessoas" | "arquivadas";
 
@@ -447,6 +450,7 @@ function ErrandView({ e, extra, p, busy, compact, onCancel, onSave, onFollow, on
     </div>
   );
   const followBox = <FollowBox status={status} follow={follow} busy={busy} onFollow={onFollow} onRemove={onRemove} />;
+  const ficha = <Ficha name={name} facts={p?.facts ?? []} busy={busy} onSave={(facts) => onSave({ facts })} />;
   if (compact)
     return (
       <PhoneChat
@@ -466,6 +470,7 @@ function ErrandView({ e, extra, p, busy, compact, onCancel, onSave, onFollow, on
           </>
         }
       >
+        {ficha}
         {note}
         {chat}
         <Composer key={e.id} name={name} onSend={onSend} />
@@ -484,6 +489,7 @@ function ErrandView({ e, extra, p, busy, compact, onCancel, onSave, onFollow, on
         {bar}
       </div>
       {facts}
+      {ficha}
       {chat}
       <Composer key={e.id} name={name} onSend={onSend} />
       {note}
@@ -685,6 +691,7 @@ function ContactView({ c, p, busy, compact, onCancel, onSave, onFollow, onRemove
     </Chat>
   );
   const followBox = <FollowBox status={status} follow={follow} busy={busy} onFollow={onFollow} onRemove={onRemove} hideModes={c.member} />;
+  const ficha = <Ficha name={name} facts={p?.facts ?? []} busy={busy} onSave={(facts) => onSave({ facts })} />;
   if (compact)
     return (
       <PhoneChat
@@ -698,6 +705,7 @@ function ContactView({ c, p, busy, compact, onCancel, onSave, onFollow, onRemove
           </>
         }
       >
+        {ficha}
         {chat}
         <Composer key={c.phone} name={name} onSend={onSend} />
       </PhoneChat>
@@ -714,10 +722,94 @@ function ContactView({ c, p, busy, compact, onCancel, onSave, onFollow, onRemove
         </div>
         <ChatBar name={name} p={p} busy={busy} member={c.member} onSave={onSave} />
       </div>
+      {ficha}
       {chat}
       <Composer key={c.phone} name={name} onSend={onSend} />
       {followBox}
     </>
+  );
+}
+
+const FICHA_SUGGESTIONS = ["Nome", "Quero", "Valor", "Horário", "Endereço"];
+
+/**
+ * Ficha da conversa: o que precisa ficar guardado para guiar o assistente com esse número (nome, o que a pessoa
+ * quer, valores, horário...). O assistente também anota aqui o que o estabelecimento disser (errand_ficha) e lê
+ * tudo antes de cada resposta. Uma faixa de chips em cima da conversa; tocar abre a edição.
+ */
+function Ficha({ name, facts, busy, onSave }: { name: string; facts: Fact[]; busy: boolean; onSave: (facts: Fact[]) => void }) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <>
+      <button type="button" className={`errand-ficha${facts.length ? "" : " empty"}`} onClick={() => setEditing(true)} disabled={busy} aria-label="Ficha da conversa">
+        {facts.length ? (
+          <span className="errand-ficha-chips">
+            {facts.map((f) => (
+              <span key={f.label} className="errand-ficha-chip">
+                <b>{f.label}</b> {f.value}
+              </span>
+            ))}
+          </span>
+        ) : (
+          <span className="errand-ficha-hint">Ficha: nome, o que você quer, valores</span>
+        )}
+        <span className="errand-ficha-edit">
+          <Icon name="edit" size={14} /> <span className="lbl">{facts.length ? "Editar" : "Anotar"}</span>
+        </span>
+      </button>
+      {editing && <FichaModal name={name} facts={facts} onClose={() => setEditing(false)} onSave={onSave} />}
+    </>
+  );
+}
+
+function FichaModal({ name, facts, onClose, onSave }: { name: string; facts: Fact[]; onClose: () => void; onSave: (facts: Fact[]) => void }) {
+  const [rows, setRows] = useState<Fact[]>(facts.length ? facts : [{ label: "", value: "" }]);
+  const set = (i: number, k: keyof Fact, v: string) => setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const used = new Set(rows.map((r) => r.label.trim().toLowerCase()));
+  return (
+    <Modal
+      title={`Ficha de ${name}`}
+      onClose={onClose}
+      footer={(close) => (
+        <>
+          <button className="btn btn-ghost" onClick={close}>Cancelar</button>
+          <button className="btn btn-primary" form="errand-ficha-form">Salvar</button>
+        </>
+      )}
+    >
+      <form
+        id="errand-ficha-form"
+        className="errand-ficha-form"
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          onSave(rows.filter((r) => r.label.trim() && r.value.trim()));
+          onClose();
+        }}
+      >
+        <p className="errand-note">O assistente lê isso antes de cada resposta e anota aqui o que o outro lado disser (valores, horário). Você pode corrigir.</p>
+        {rows.map((r, i) => (
+          <div key={i} className="errand-ficha-row">
+            <input className="input errand-ficha-label" maxLength={30} placeholder="Item" aria-label="Item" value={r.label} onChange={(e) => set(i, "label", e.target.value)} />
+            <input className="input errand-ficha-value" maxLength={200} placeholder="Valor ou detalhe" aria-label="Detalhe" value={r.value} onChange={(e) => set(i, "value", e.target.value)} />
+            <button type="button" className="icon-btn" aria-label="Remover" onClick={() => setRows((x) => (x.length > 1 ? x.filter((_, j) => j !== i) : [{ label: "", value: "" }]))}>
+              <Icon name="x" size={16} />
+            </button>
+          </div>
+        ))}
+        <div className="errand-ficha-add">
+          {FICHA_SUGGESTIONS.filter((l) => !used.has(l.toLowerCase())).map((l) => (
+            <button type="button" key={l} className="btn btn-sm" onClick={() => setRows((x) => [...x.filter((r) => r.label.trim() || r.value.trim()), { label: l, value: "" }])}>
+              <Icon name="plus" size={13} /> {l}
+            </button>
+          ))}
+          {rows.length < 12 && (
+            <button type="button" className="btn btn-sm" onClick={() => setRows((x) => [...x, { label: "", value: "" }])}>
+              <Icon name="plus" size={13} /> Outro
+            </button>
+          )}
+        </div>
+      </form>
+    </Modal>
   );
 }
 
