@@ -1,6 +1,6 @@
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { ErrorBox, Loading, Modal, PageHead, confirmDialog } from "../components";
+import { ErrorBox, Loading, Modal, confirmDialog } from "../components";
 import { FIT_QUERY, useMedia } from "../hooks";
 import { Icon } from "../icons";
 import { Vazio } from "../Vazio";
@@ -226,7 +226,6 @@ export function ContactsPage() {
 
   return (
     <div className={`page ct-page${fit && (data.total || query) ? " fit" : ""}`}>
-      <PageHead title="Contatos" subtitle='Traga os contatos do celular e peça no WhatsApp: "manda pra Ana que eu chego às 8". O assistente acha o número pelo nome.' />
 
       {!data.total && !query ? (
         <>

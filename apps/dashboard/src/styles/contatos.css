@@ -94,3 +94,8 @@
   .ct-clear { padding: 2px 4px; min-height: 0; }
   .ct-actions .btn { flex: 1 1 auto; justify-content: center; }
 }
+
+/* sem título nem descrição: o conteúdo sobe */
+.ct-page { padding-top: 20px; }
+@media (min-width: 1024px) and (min-height: 680px) { .ct-page.fit { padding-top: 18px; } }
+@media (max-width: 700px) { .ct-page { padding-top: 8px; } }
