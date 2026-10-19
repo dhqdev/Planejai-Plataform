@@ -108,7 +108,7 @@ WhatsApp (Baileys / Evolution / Cloud)    Telegram    n8n (API interna)
 ```
 
 - **Backend:** Node 22, TypeScript e Fastify. Filas e agendamentos usam o pg-boss no próprio Postgres, como o modo fila do n8n: `WORKER_CONCURRENCY` controla quantos jobs rodam em paralelo.
-- **Uma imagem só** para app e worker, publicada para amd64 e arm64.
+- **Uma imagem só** para app e worker, publicada para amd64, arm64 e armv7.
 - **Memória curta no Redis.** A conversa fica 24h já interpretada e depois vira resumo. O chat não é guardado no Postgres, porque já está no WhatsApp.
 - **Conexão do WhatsApp** guardada no banco, com um "aluguel" que garante uma única conexão mesmo durante o redeploy.
 
@@ -118,7 +118,9 @@ WhatsApp (Baileys / Evolution / Cloud)    Telegram    n8n (API interna)
 curl -fsSL https://raw.githubusercontent.com/dhqdev/Planejai-Plataform/main/install.sh | sudo bash
 ```
 
-O script instala o Docker se faltar, pergunta o domínio e as chaves, gera os segredos e sobe tudo com HTTPS automático, só com porta, em Swarm + Traefik ou gera as variáveis para o Portainer. Roda em amd64 e arm64 com a imagem pronta e compila sozinho em armv7, armv6 e s390x. Depois vira o comando `planejai` (`status`, `logs`, `update`, `backup`). Todas as formas de instalar estão em [`docs/instalacao.md`](docs/instalacao.md).
+O script instala o Docker se faltar, pergunta o domínio e as chaves, gera os segredos e sobe tudo com HTTPS automático, só com porta, em Swarm + Traefik ou gera as variáveis para o Portainer. Roda em amd64, arm64 e armv7 com a imagem pronta e compila sozinho nas outras (armv6, s390x, ppc64le). Depois vira o comando `planejai` (`status`, `logs`, `update`, `backup`).
+
+Do seu computador, pelo SSH: `./deploy/instalar-ssh.sh root@servidor` (Linux/Mac) ou `.\deploy\instalar-ssh.ps1 root@servidor` (Windows). VM nova já instalada no boot: [`deploy/cloud-init.yml`](deploy/cloud-init.yml). Todas as formas de instalar estão em [`docs/instalacao.md`](docs/instalacao.md).
 
 ## Deploy no Portainer (Swarm + Traefik)
 

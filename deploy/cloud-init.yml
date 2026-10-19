@@ -1,0 +1,28 @@
+#cloud-config
+# Planejai instalado sozinho no primeiro boot de uma VM nova (DigitalOcean, Hetzner, Oracle, AWS, Vultr, Magalu...).
+# Cole em "User data" / "Cloud-init" ao criar a VM, troque os valores e confira o andamento com:
+#   ssh root@IP tail -f /var/log/planejai-instalacao.log
+# Mesmas variáveis de deploy/respostas.exemplo.env. O arquivo de respostas é apagado depois da instalação,
+# mas o provedor guarda o user-data: troque a senha do painel no primeiro acesso.
+
+package_update: true
+packages: [curl, ca-certificates]
+
+write_files:
+  - path: /root/planejai-respostas.env
+    permissions: "0600"
+    content: |
+      PLANEJAI_YES=1
+      PLANEJAI_MODE=https
+      PLANEJAI_DOMAIN=planejai.seudominio.com
+      ADMIN_EMAIL=voce@exemplo.com
+      ADMIN_PASSWORD=
+      OPENROUTER_API_KEY=
+      OWNER_PHONES=5511999998888
+
+runcmd:
+  # umask 077: o log pode ter a senha gerada, só o root lê
+  - >-
+    bash -c 'umask 077; { set -a; . /root/planejai-respostas.env; set +a; rm -f /root/planejai-respostas.env;
+    curl -fsSL https://raw.githubusercontent.com/dhqdev/Planejai-Plataform/main/install.sh | bash; }
+    > /var/log/planejai-instalacao.log 2>&1'

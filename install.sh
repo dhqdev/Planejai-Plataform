@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Instalador do Planejai para qualquer VM Linux com Docker (amd64, arm64, armv7, armv6, s390x...).
+# Instalador do Planejai para qualquer VM Linux com Docker (amd64, arm64, armv7, armv6, s390x, ppc64le...).
 #
 #   curl -fsSL https://raw.githubusercontent.com/dhqdev/Planejai-Plataform/main/install.sh | sudo bash
 #
@@ -10,6 +10,7 @@
 #   3) Docker Swarm + Traefik já existente (rede network_public, como o n8n)
 #   4) Portainer: só gera as variáveis para colar na stack
 # Código local em vez do GitHub: PLANEJAI_LOCAL_SRC=/caminho/do/repo.
+# Do seu computador para um servidor por SSH: deploy/instalar-ssh.sh (Linux/Mac) ou deploy/instalar-ssh.ps1 (Windows).
 # Sem perguntas: PLANEJAI_YES=1 e as variáveis (PLANEJAI_MODE, PLANEJAI_DOMAIN, ADMIN_EMAIL, OPENROUTER_API_KEY...).
 set -euo pipefail
 
@@ -55,6 +56,8 @@ confirm() { # confirm "Pergunta" (padrão sim)
   printf '%s [S/n]: ' "$1" >&2; IFS= read -r ans <&3 || true
   case "${ans,,}" in n|nao|não|no) return 1 ;; *) return 0 ;; esac
 }
+# valor no .env entre aspas simples: o bash (". .env") e o docker compose (--env-file) leem igual, com espaço, $ e #
+q() { printf "'%s'" "$1"; }
 secret() { if command -v openssl >/dev/null; then openssl rand -hex 32; else head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'; fi; }
 
 need_root() {
@@ -76,8 +79,9 @@ arch() {
     *) uname -m ;;
   esac
 }
-# imagem pronta no GitHub e navegador headless só existem nessas duas
-prebuilt_arch() { case "$(arch)" in amd64|arm64) return 0 ;; *) return 1 ;; esac; }
+# imagem pronta no GitHub: amd64, arm64 e arm/v7; navegador headless (browserless) só em amd64 e arm64
+prebuilt_arch() { case "$(arch)" in amd64|arm64|arm/v7) return 0 ;; *) return 1 ;; esac; }
+browser_arch() { case "$(arch)" in amd64|arm64) return 0 ;; *) return 1 ;; esac; }
 
 ensure_docker() {
   if ! command -v docker >/dev/null; then
@@ -93,7 +97,7 @@ ensure_docker() {
 
 # baixa o código do GitHub (sem precisar de git) e copia os arquivos de deploy para $DIR
 fetch_source() {
-  say "Baixando o Planejai ($BRANCH) do GitHub"
+  if [ -n "${PLANEJAI_LOCAL_SRC:-}" ]; then say "Copiando o Planejai de $PLANEJAI_LOCAL_SRC"; else say "Baixando o Planejai ($BRANCH) do GitHub"; fi
   local tmp; tmp="$(mktemp -d)"
   if [ -n "${PLANEJAI_LOCAL_SRC:-}" ]; then
     # código já baixado (sem internet para o GitHub, ou testando uma cópia local)
@@ -107,6 +111,8 @@ fetch_source() {
   cp "$DIR/src/deploy/portainer-stack.yml" "$DIR/portainer-stack.yml"
   cp "$DIR/src/deploy/vm/"* "$DIR/vm/"
   install -m 0755 "$DIR/src/install.sh" /usr/local/bin/planejai
+  # o comando lembra a pasta desta instalação (PLANEJAI_DIR diferente do padrão)
+  sed -i "s|^DIR=\"\${PLANEJAI_DIR:-/opt/planejai}\"|DIR=\"\${PLANEJAI_DIR:-$DIR}\"|" /usr/local/bin/planejai
   ok "código em $DIR/src · comando planejai instalado"
 }
 
@@ -140,9 +146,10 @@ configure() {
       [ "$SRC_N" = "2" ] && PLANEJAI_SOURCE=build || PLANEJAI_SOURCE=ghcr
     else
       PLANEJAI_SOURCE=build
-      warn "arquitetura $(arch): não há imagem pronta, ela vai ser compilada aqui (alguns minutos) e o navegador headless fica de fora."
+      warn "arquitetura $(arch): não há imagem pronta, ela vai ser compilada aqui (alguns minutos)."
     fi
   fi
+  browser_arch || warn "arquitetura $(arch): o navegador headless fica de fora (prints de páginas e gravação de tela dos agentes)."
 
   local ip; ip="$(hostname -I 2>/dev/null | awk '{print $1}')"; ip="${ip:-localhost}"
   case "$PLANEJAI_MODE" in
@@ -170,9 +177,13 @@ configure() {
   local profiles=()
   [ "$PLANEJAI_MODE" = "https" ] && profiles+=(https)
   # navegador headless (prints de páginas): só amd64/arm64; PLANEJAI_BROWSER=0 deixa de fora (VM com pouca RAM)
-  if prebuilt_arch && [ "${PLANEJAI_BROWSER:-1}" != "0" ]; then profiles+=(browser); fi
+  if browser_arch && [ "${PLANEJAI_BROWSER:-1}" != "0" ]; then profiles+=(browser); fi
   COMPOSE_PROFILES="$(IFS=,; echo "${profiles[*]:-}")"
 
+  local v
+  for v in PUBLIC_URL ADMIN_EMAIL ADMIN_PASSWORD OPENROUTER_API_KEY OWNER_PHONES PLANEJAI_DOMAIN ACME_EMAIL; do
+    case "${!v:-}" in *"'"*) die "$v não pode ter aspas simples (')." ;; esac
+  done
   umask 077
   cat >"$DIR/.env" <<EOF
 # Planejai: gerado pelo install.sh em $(date -u +%Y-%m-%dT%H:%MZ). NÃO perca a ENCRYPTION_KEY (abre as credenciais salvas).
@@ -180,16 +191,16 @@ PLANEJAI_MODE=$PLANEJAI_MODE
 PLANEJAI_SOURCE=$PLANEJAI_SOURCE
 PLANEJAI_TAG=${PLANEJAI_TAG:-latest}
 PLANEJAI_PORT=$PLANEJAI_PORT
-PLANEJAI_DOMAIN=${PLANEJAI_DOMAIN:-}
-ACME_EMAIL=$ACME_EMAIL
+PLANEJAI_DOMAIN=$(q "${PLANEJAI_DOMAIN:-}")
+ACME_EMAIL=$(q "$ACME_EMAIL")
 TRAEFIK_CERTRESOLVER=${TRAEFIK_CERTRESOLVER:-letsencryptresolver}
 COMPOSE_PROFILES=$COMPOSE_PROFILES
 
-PUBLIC_URL=$PUBLIC_URL
-ADMIN_EMAIL=$ADMIN_EMAIL
-ADMIN_PASSWORD=$ADMIN_PASSWORD
-OPENROUTER_API_KEY=$OPENROUTER_API_KEY
-OWNER_PHONES=$OWNER_PHONES
+PUBLIC_URL=$(q "$PUBLIC_URL")
+ADMIN_EMAIL=$(q "$ADMIN_EMAIL")
+ADMIN_PASSWORD=$(q "$ADMIN_PASSWORD")
+OPENROUTER_API_KEY=$(q "$OPENROUTER_API_KEY")
+OWNER_PHONES=$(q "$OWNER_PHONES")
 WHATSAPP_PROVIDER=baileys
 DEFAULT_TIMEZONE=America/Sao_Paulo
 
@@ -260,7 +271,8 @@ print_portainer() {
   printf '%s\n' "  URL do repositório: https://github.com/$REPO" \
                 "  Compose path:       deploy/portainer-stack.yml" \
                 "  Em Environment variables > Advanced mode, cole:" ""
-  grep -vE '^(#|PLANEJAI_MODE|PLANEJAI_SOURCE|COMPOSE_PROFILES|ACME_EMAIL|TRAEFIK_CERTRESOLVER|PLANEJAI_DOMAIN)' "$DIR/.env" | sed '/^$/d'
+  # o Portainer guarda as aspas como parte do valor: cola sem elas
+  grep -vE '^(#|PLANEJAI_MODE|PLANEJAI_SOURCE|COMPOSE_PROFILES|ACME_EMAIL|TRAEFIK_CERTRESOLVER|PLANEJAI_DOMAIN)' "$DIR/.env" | sed -e '/^$/d' -e "s/^\([A-Za-z_0-9]*\)='\(.*\)'$/\1=\2/"
   printf '\n%s\n' "  (as mesmas linhas ficam guardadas em $DIR/.env)"
 }
 
