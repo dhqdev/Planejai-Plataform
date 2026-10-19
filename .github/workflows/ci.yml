@@ -161,8 +161,9 @@ jobs:
           build-args: |
             APP_VERSION=${{ steps.ver.outputs.version }}
             GIT_SHA=${{ github.sha }}
-          # arm/v7 saiu: o browserless da stack não roda nele e era o build mais lento (QEMU)
-          platforms: linux/amd64,linux/arm64
+          # o build roda na arquitetura do runner ($BUILDPLATFORM); no QEMU só o "apk add ffmpeg", que fica no cache.
+          # arm/v7 = Raspberry Pi 32 bits (sem o browserless, que só existe em amd64/arm64). Outras: install.sh compila.
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
