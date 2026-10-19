@@ -253,6 +253,34 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     expect((await listErrands(david.id)).errands.find((e: any) => e.id === r.errand_id)?.state).toBe("cancelled");
     expect(sentTexts().length).toBe(before + 1); // só a primeira mensagem do startErrand
   });
+  it("pedido claro sai sem pedir o sim de novo; dinheiro e lugar desconhecido pedem", async () => {
+    const { errandStart, errandContinue } = await import("../src/agent/tools/errands.js");
+    const { Tracer } = await import("../src/agent/trace.js");
+    const tracer = await Tracer.start({ trigger: "message", userId: david.id, conversationId: conv });
+    const ctxFor = (name: string, args: any, typedText?: string) => ({ user: david, conversation: { id: conv }, tracer, timezone: TZ, agent: "recados", typedText, toolCall: { name, args } }) as any;
+    await db.query("DELETE FROM pending_actions");
+    await db.query("UPDATE errands SET status = 'cancelled' WHERE user_id = $1 AND status IN ('waiting', 'asking')", [david.id]);
+    const run = (args: any, typed?: string) => errandStart.run(args, ctxFor("errand_start", args, typed)) as Promise<any>;
+    const base = { place: "PetCamp", phone: PET, message: "Vocês têm horário para tosa amanhã?", goal: "tosa amanhã" };
+    // valor/pagamento: sempre pede o sim, mesmo com o lugar citado
+    const risky = await run({ ...base, message: "Posso pagar o sinal por pix?" }, "pergunta pro PetCamp da tosa, pode pagar o sinal"); expect(risky.needs_confirmation).toBe(true);
+    // a pessoa citou o lugar: sai direto
+    await db.query("DELETE FROM pending_actions");
+    const sent = await run(base, "pergunta pro PetCamp se tem tosa amanhã");
+    expect(sent.ok).toBe(true);
+    expect(await db.one("SELECT COUNT(*)::int AS n FROM pending_actions WHERE status = 'pending'")).toEqual({ n: 0 });
+    // a decisão que ela acabou de dar não pede o sim duplo
+    await db.query("UPDATE errands SET status = 'asking', question = 'Pode ser 19h?' WHERE id = $1", [sent.errand_id]);
+    const args = { errand_id: sent.errand_id, message: "Pode ser às 19h, por favor" };
+    const before = sentTexts().length;
+    expect((await errandContinue.run(args, ctxFor("errand_continue", args, "pode sim"))) as any).toMatchObject({ ok: true });
+    expect(sentTexts().length).toBe(before + 1);
+    // rodada sem a pessoa (evento do sistema) nunca dispensa o sim
+    await db.query("UPDATE errands SET status = 'asking' WHERE id = $1", [sent.errand_id]);
+    const again = { errand_id: sent.errand_id, message: "Então fica confirmado para as 19h, combinado" };
+    expect(((await errandContinue.run(again, { ...ctxFor("errand_continue", again, "pode sim"), proactive: true })) as any).needs_confirmation).toBe(true);
+  });
+
   it("a pessoa responde pelo painel: sai com o nome dela, entra no recado e só em conversa que já existe", async () => {
     const { startErrand, cancelErrand, listErrands } = await import("../src/errands.js");
     const { replyFromPanel } = await import("../src/panelreply.js");

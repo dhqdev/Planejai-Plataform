@@ -2,13 +2,38 @@ import { one, query } from "../../db/pool.js";
 import { finishErrand, messageLimit, openErrands, sendToErrand, startErrand } from "../../errands.js";
 import { CONVERSA_AGENTS, conversaAgent } from "../conversa.js";
 import { blockedResult, checkErrandText, quickCheck } from "../errand-check.js";
-import { CONFIRM_PARAM, defineTool, obj, requireConfirmation } from "./types.js";
+import { normalizePhone } from "../../accounts.js";
+import { phoneVariants } from "../../ingest.js";
+import { CONFIRM_PARAM, defineTool, obj, requireConfirmation, type ToolContext } from "./types.js";
+
+
+const norm = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const GENERIC_PLACE = /^(pet|petshop|shop|clinica|salao|restaurante|barbearia|studio|academia|loja|mercado|padaria|farmacia|consultorio|dra?|do|da|de|dos|das)$/;
+/** Dinheiro, pagamento ou dado pessoal na mensagem: nunca sai sem o sim da pessoa. */
+const RISKY_TEXT = /r\$|\breais?\b|\bpix\b|\bpag(ar|o|a|amento)\b|\bsinal\b|cart[aã]o|\bcpf\b|\bsenha\b|\bcobr/i;
+
+/**
+ * Pedido claro, sem pedir o "sim" de novo: a pessoa digitou o nome ou o número do lugar nesta mensagem, ou já fechou um recado
+ * com esse número antes (costuma confirmar). Conferido no servidor, nunca por campo do modelo; dinheiro e dado pessoal sempre pedem sim.
+ */
+async function clearRequest(args: { place: string; phone: string; message: string; allowed?: string }, ctx: ToolContext) {
+  if (ctx.proactive || !ctx.typedText?.trim()) return false;
+  if (RISKY_TEXT.test(norm(`${args.message} ${args.allowed ?? ""}`))) return false;
+  const typed = norm(ctx.typedText);
+  const words = norm(args.place).split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !GENERIC_PLACE.test(w));
+  const named = words.length > 0 && words.every((w) => typed.includes(w));
+  const digits = normalizePhone(args.phone).slice(-8);
+  const gave = digits.length === 8 && ctx.typedText.replace(/\D/g, "").includes(digits);
+  if (named || gave) return true;
+  const before = await one("SELECT 1 FROM errands WHERE user_id = $1 AND phone = ANY($2) AND status = 'done' AND kind = 'recado' LIMIT 1", [ctx.user.id, phoneVariants(normalizePhone(args.phone))]);
+  return !!before;
+}
 
 export const errandStart = defineTool<{ place: string; phone: string; message: string; goal: string; allowed?: string; hours?: number; confirmed_by_user?: boolean }>({
   name: "errand_start",
   description:
     "Fala com um estabelecimento (petshop, salão, clínica, restaurante) pelo WhatsApp em nome da pessoa: manda a primeira mensagem e o sistema acompanha as respostas sozinho, " +
-    "fecha o que ela liberou e pergunta a ela o resto. É mensagem para terceiro: só sai depois do sim da pessoa. " +
+    "fecha o que ela liberou e pergunta a ela o resto. É mensagem para terceiro: só sai depois do sim da pessoa, EXCETO quando ela mesma citou o lugar ou o número na mensagem, ou já fechou recado com ele antes (aí o sistema envia direto, sem perguntar de novo). Valor, pagamento e dado pessoal sempre pedem sim. " +
     "allowed: o que pode ser fechado sem perguntar de novo, bem concreto (ex.: 'se tiver banho às 18h de hoje, confirmar'); sem isso, só pergunta e traz a resposta.",
   parameters: obj(
     {
@@ -31,7 +56,7 @@ export const errandStart = defineTool<{ place: string; phone: string; message: s
       const check = await checkErrandText({ place: args.place, goal: args.goal, message: args.message }, ctx.tracer, ctx.agent);
       if (!check.ok) return blockedResult(check);
     }
-    const gate = await requireConfirmation(
+    const gate = (await clearRequest(args, ctx)) ? null : await requireConfirmation(
       args,
       `mandar no WhatsApp de ${args.place} (${args.phone}): "${args.message}"` + (args.allowed ? `, e se ${args.allowed.replace(/^se\s+/i, "")}, eu fecho por você` : ", e te trago a resposta"),
       ctx,
@@ -97,14 +122,16 @@ export const errandContinue = defineTool<{ errand_id: string; message: string; a
     "allowed: o que a pessoa acabou de liberar para fechar sem perguntar de novo.",
   parameters: obj({ errand_id: { type: "string" }, message: { type: "string" }, allowed: { type: "string" }, ...CONFIRM_PARAM }, ["errand_id", "message"]),
   async run(args, ctx) {
-    const e = await one("SELECT place, goal, log FROM errands WHERE id::text = $1 AND user_id = $2", [args.errand_id, ctx.user.id]);
+    const e = await one("SELECT place, goal, log, status FROM errands WHERE id::text = $1 AND user_id = $2", [args.errand_id, ctx.user.id]);
     if (!e) return { ok: false, error: "Recado não encontrado" };
     if (!ctx.approvedAction) {
       const previous = [...(e.log as { from: string; text: string }[])].reverse().find((l) => l.from === "nos")?.text;
       const check = await checkErrandText({ place: e.place, goal: e.goal, message: args.message, previous }, ctx.tracer, ctx.agent);
       if (!check.ok) return blockedResult(check);
     }
-    const gate = await requireConfirmation(args, `responder para ${e.place}: "${args.message}"`, ctx);
+    // a pessoa acabou de decidir o que foi perguntado a ela (status 'asking'): a resposta dela já é o sim, não pede de novo (dinheiro e dado pessoal pedem)
+    const decided = e.status === "asking" && !ctx.proactive && !!ctx.typedText?.trim() && !RISKY_TEXT.test(norm(`${args.message} ${args.allowed ?? ""}`));
+    const gate = decided ? null : await requireConfirmation(args, `responder para ${e.place}: "${args.message}"`, ctx);
     if (gate) return gate;
     await query(
       `UPDATE errands SET allowed = COALESCE($2, allowed), log = log || $3::jsonb, updated_at = now() WHERE id::text = $1`,

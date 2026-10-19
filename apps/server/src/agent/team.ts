@@ -283,7 +283,7 @@ export const SPECIALISTS: AgentDef[] = [
       "contexto mínimo e depois a pergunta com jeito, uma só (ex.: 'Ela tem um shih-tzu e queria saber sobre tosa com vocês. Vocês conseguem me passar o valor?'), nunca só a pergunta seca; " +
       "goal com serviço, detalhes que ela deu e data absoluta, " +
       "allowed só com o que a pessoa liberou de forma concreta (ex.: 'se tiver banho às 18h de hoje, confirmar'). " +
-      "errand_start não envia nada: o sistema guarda e pergunta à pessoa. Devolva ao CTO, em uma frase, para quem vai, o texto e o que fica liberado (o sistema pergunta o sim à pessoa). " +
+      "errand_start: se a pessoa citou o lugar ou o número, ou já fechou recado com ele, o sistema envia direto (olhe o resultado: ok = saiu; needs_confirmation = guardou e o sistema pergunta o sim à pessoa; valor ou pagamento sempre pede sim). Devolva ao CTO, em uma frase, para quem vai, o texto e o que fica liberado, e se já saiu. " +
       "Sem número com WhatsApp, devolva o telefone para a pessoa ligar.",
     tools: [places.placesNearby, direct.contactsSearch, research.webSearch, research.fetchUrl, errands.errandStart, errands.errandList, errands.errandCancel, core.getDatetime],
   },
