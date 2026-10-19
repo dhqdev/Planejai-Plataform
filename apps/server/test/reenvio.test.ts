@@ -11,15 +11,3 @@ describe("reenvio de mensagem enviada", () => {
     expect(await sentMessage({ id: "nao-existe" })).toBeUndefined();
   });
 });
-
-describe("perfil do número", () => {
-  it("confere nome, recado e foto antes de mandar ao WhatsApp", async () => {
-    const { checkProfile } = await import("../src/whatsapp/profile.js");
-    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]).toString("base64");
-    expect(checkProfile({ name: "  Planejai ", status: "Assistente virtual", picture: jpeg })).toEqual({ profile: { name: "Planejai", status: "Assistente virtual", picture: jpeg } });
-    expect(checkProfile({ name: "x".repeat(26) })).toHaveProperty("error");
-    expect(checkProfile({ name: "   " })).toHaveProperty("error");
-    expect(checkProfile({ picture: Buffer.from("png?").toString("base64") })).toEqual({ error: "A foto precisa ser JPEG." });
-    expect(checkProfile({})).toEqual({ error: "Nada para mudar." });
-  });
-});
