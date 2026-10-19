@@ -25,7 +25,7 @@ import { describeMessage, preprocessMedia } from "./media.js";
 import { CARD_CLAIM, unbackedClaim, unmetRequest } from "./claims.js";
 import { openPending, resolvePending } from "./confirm.js";
 import { Progress } from "./progress.js";
-import { humanize } from "./humanize.js";
+import { arrange, humanize, subItems } from "./humanize.js";
 import { placeGifs, placeStickers } from "./stickers.js";
 import { fetchGif } from "./tools/images.js";
 import { isAckOnly, pickReaction } from "./reaction.js";
@@ -64,7 +64,7 @@ export function toWhatsApp(text: string) {
     .replace(/[ \t]*\[\[(?:figurinha|gif):[^\]]*\]\]/gi, "")
     .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, (_m, label, url) => (label === url ? url : `${label}: ${url}`))
     .trim();
-  return humanize(out, { bullets: true });
+  return arrange(humanize(subItems(out), { bullets: true }));
 }
 
 export type Bubble = { type: "text"; text: string; pin?: boolean } | { type: "media"; id: string };

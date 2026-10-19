@@ -12,8 +12,21 @@ import { phoneVariants } from "../src/ingest.js";
 describe("formatação para WhatsApp", () => {
   it("converte markdown para o estilo do WhatsApp", () => {
     expect(toWhatsApp("**Kinoplex** e [ingresso](https://ingresso.com)\n- 14h30\n### Sessões")).toBe(
-      "*Kinoplex* e ingresso: https://ingresso.com\n• 14h30\n*Sessões*",
+      "*Kinoplex* e ingresso: https://ingresso.com\n• 14h30\n\n*Sessões*",
     );
+  });
+
+  it("organiza em blocos: título com espaço antes, lista junta, sub-item recuado e textão quebrado", () => {
+    expect(
+      toWhatsApp("Opa, achei 🍿\n🎬 *Hoje*\n\n- Kinoplex 19h\n\n- Cinemark 20h\n  - legendado\nQualquer coisa me chama\n\n\n\n🗓️ *Amanhã*\n• Nada"),
+    ).toBe("Opa, achei 🍿\n\n🎬 *Hoje*\n• Kinoplex 19h\n• Cinemark 20h\n   ◦ legendado\n\nQualquer coisa me chama\n\n🗓️ *Amanhã*\n• Nada");
+    const wall =
+      "O Dr. Paulo atende na R. Augusta, 120, e a consulta custa R$ 1.250,00. Ele tem horário na terça às 14h e na quinta às 9h. Precisa levar o pedido médico e a carteirinha do convênio. Se quiser, já deixo um lembrete para o dia anterior!";
+    expect(toWhatsApp(wall)).toBe(
+      "O Dr. Paulo atende na R. Augusta, 120, e a consulta custa R$ 1.250,00. Ele tem horário na terça às 14h e na quinta às 9h.\n\nPrecisa levar o pedido médico e a carteirinha do convênio. Se quiser, já deixo um lembrete para o dia anterior!",
+    );
+    // resposta curta não muda
+    expect(toWhatsApp("Anotado! Gastei 30 no mercado.")).toBe("Anotado! Gastei 30 no mercado.");
   });
 
   it("reconhece mensagem que só agradece ou confirma (sem chamar a IA)", () => {
