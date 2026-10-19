@@ -47,7 +47,7 @@ export async function clientBilling(userId: string) {
     enabled: Boolean(s.billingEnabled),
     state,
     trialUntil: trial?.toISOString() ?? null,
-    grainsPerUsd: Number(s.billingGrainsPerUsd || 1000),
+    grainsPerUsd: Number(s.billingGrainsPerUsd || 1500),
     wallet: { plan: planGrains, extra: extraGrains, total, created: Boolean(wallet) },
     burnPerDay: Math.round(burn),
     // no ritmo dos últimos 14 dias: quantos dias o saldo ainda dura
@@ -78,7 +78,7 @@ export async function clientBilling(userId: string) {
 /** Uso por dia no período (usage_daily fica mesmo depois que as execuções somem): mensagens, respostas, custo e grãos. */
 export async function clientDaily(userId: string, days: number) {
   const s = await getSettings();
-  const rate = Number(s.billingGrainsPerUsd || 1000);
+  const rate = Number(s.billingGrainsPerUsd || 1500);
   const rows = await many(
     `SELECT to_char(d, 'YYYY-MM-DD') AS day, COALESCE(u.messages, 0)::int AS messages, COALESCE(u.executions, 0)::int AS executions,
             COALESCE(u.cost_usd, 0)::float AS cost, COALESCE(u.tokens_in + u.tokens_out, 0)::float AS tokens,

@@ -134,7 +134,7 @@ export function clientRoutes(api: FastifyInstance) {
     );
     const total = daily.reduce((a, d) => a + d.cost, 0);
     // grão = custo real em US$ x billingGrainsPerUsd; quantos tokens isso dá depende do modelo, então vai a média real do período
-    const rate = Number((await getSettings()).billingGrainsPerUsd || 1000);
+    const rate = Number((await getSettings()).billingGrainsPerUsd || 1500);
     const tokens = clients.reduce((a, c) => a + Number(c.tokens ?? 0), 0);
     const grains = total * rate;
     for (const c of clients) c.grains = Math.ceil(c.cost * rate - 1e-9);

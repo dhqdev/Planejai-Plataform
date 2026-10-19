@@ -192,7 +192,7 @@ const defaults = (): AgentSettings => ({
   billingPacks: DEFAULT_PACKS,
   billingWelcomeGrains: 300,
   billingTrialDays: 3,
-  billingGrainsPerUsd: 1000,
+  billingGrainsPerUsd: 1500,
   billingReferralStep: 5,
   billingReferralMax: 30,
   billingReminderDays: 3,

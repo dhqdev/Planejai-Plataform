@@ -7,7 +7,8 @@ import { type AgentSettings, type BillingPlan, getSettings } from "./settings.js
 
 /**
  * Grãos: o crédito do Planejai. O assistente gasta grãos conforme o custo real de IA de cada resposta
- * (custo do OpenRouter × billingGrainsPerUsd, arredondado para cima). A carteira tem dois bolsos:
+ * (custo do OpenRouter × billingGrainsPerUsd, com fração: o pedaço de grão que sobra fica em wallets.grain_remainder
+ * e entra no próximo passo, então nada é arredondado a mais nem sai de graça). A carteira tem dois bolsos:
  * - plano: recarrega para a quantidade do plano a cada mês pago (o que sobrou não acumula);
  * - extras: boas-vindas e pacotes avulsos; não vencem.
  * O uso tira primeiro do plano. Com a carteira zerada (e a cobrança ligada) o assistente para e manda o link
@@ -146,10 +147,10 @@ export async function creditGrains(
   }
 }
 
-/** Quantos grãos custa um gasto de IA em dólares (sempre para cima: nenhuma resposta sai de graça sem querer). */
+/** Quantos grãos (com fração) custa um gasto de IA em dólares. O desconto inteiro sai quando as frações somam 1. */
 export function grainsForCost(costUsd: number, s: AgentSettings) {
   if (!(costUsd > 0)) return 0;
-  return Math.ceil(costUsd * Number(s.billingGrainsPerUsd || 1000) - 1e-9);
+  return costUsd * Number(s.billingGrainsPerUsd || 1500);
 }
 
 /** Abaixo disto a pessoa recebe um aviso: 20% do plano dela, ou 100 grãos sem plano. */
@@ -184,14 +185,15 @@ export async function tellPerson(userId: string, text: string, kind = "assinatur
 
 /**
  * Desconta o uso de IA. Chamado a cada passo com custo (trace.ts); soma no extrato do dia.
+ * O custo vira grão com fração: soma com o resto guardado, desconta a parte inteira e guarda o novo resto (menor que 1).
  * Nunca deixa negativo: a resposta que já começou termina mesmo que o saldo zere no meio.
  * Avisa quando cruza a linha de "acabando" e quando zera (uma vez até a próxima recarga).
  */
 export async function chargeUsage(userId: string, costUsd: number) {
   const s = await getSettings();
   if (!s.billingEnabled) return null;
-  const amount = grainsForCost(costUsd, s);
-  if (amount <= 0) return null;
+  const exact = grainsForCost(costUsd, s);
+  if (exact <= 0) return null;
   const user = await one("SELECT phone, billing_exempt, created_at, profile->>'trial_notice_at' AS trial_notice_at FROM users WHERE id = $1", [userId]);
   if (!user || grainsExempt(user, s)) return null;
   // período livre: não desconta nada
@@ -206,12 +208,18 @@ export async function chargeUsage(userId: string, costUsd: number) {
     );
     if (marked && before.total > 0) await tellPerson(userId, GRAIN_TEXT.trialOver(days, before.total, grainsLink())).catch(() => {});
   }
+  // numa instrução só: o FOR UPDATE faz dois passos ao mesmo tempo esperarem um ao outro, então nenhuma fração se perde
   const r = await one(
-    `UPDATE wallets SET plan_grains = GREATEST(plan_grains - $2, 0),
-            extra_grains = GREATEST(extra_grains - GREATEST($2 - plan_grains, 0), 0), updated_at = now()
-      WHERE user_id = $1 RETURNING plan_grains, extra_grains, low_notice_at, empty_notice_at`,
-    [userId, amount],
+    `WITH w AS (SELECT user_id, grain_remainder + $2::float8 AS acc, floor(grain_remainder + $2::float8 + 1e-9)::int AS amt
+                  FROM wallets WHERE user_id = $1 FOR UPDATE)
+     UPDATE wallets t SET grain_remainder = GREATEST(w.acc - w.amt, 0), plan_grains = GREATEST(t.plan_grains - w.amt, 0),
+            extra_grains = GREATEST(t.extra_grains - GREATEST(w.amt - t.plan_grains, 0), 0), updated_at = now()
+       FROM w WHERE t.user_id = w.user_id
+     RETURNING w.amt, t.plan_grains, t.extra_grains, t.low_notice_at, t.empty_notice_at`,
+    [userId, exact],
   );
+  const amount = Number(r.amt);
+  if (amount <= 0) return { charged: 0, left: Number(r.plan_grains) + Number(r.extra_grains) };
   const day = new Intl.DateTimeFormat("en-CA", { timeZone: s.timezone || config.DEFAULT_TIMEZONE }).format(new Date());
   await query(
     `INSERT INTO grain_ledger (user_id, delta, reason, ref) VALUES ($1, $2, 'uso', $3)
@@ -237,16 +245,26 @@ export async function chargeUsage(userId: string, costUsd: number) {
 let perMessageCache: { at: number; value: number | null } | null = null;
 
 /**
- * Quantos grãos uma mensagem gasta em média (custo real de IA dos últimos 30 dias ÷ mensagens recebidas), para a
- * página de preços dizer "dá para umas N mensagens". Com pouca conversa ainda (menos de 50 mensagens) não chuta: null.
- * Guardado por uma hora.
+ * Quantos grãos uma mensagem gasta em média, para a página de preços dizer "dá para umas N mensagens". Primeiro o que
+ * saiu de verdade das carteiras nos últimos 30 dias ÷ mensagens dessas pessoas nesses dias; sem cobrança ligada ainda,
+ * o custo real de IA × a taxa. Com pouca conversa (menos de 50 mensagens) não chuta: null. Guardado por uma hora.
  */
 export async function grainsPerMessage(s: AgentSettings): Promise<number | null> {
   if (perMessageCache && Date.now() - perMessageCache.at < 3_600_000) return perMessageCache.value;
+  const charged = await one<{ grains: number; msgs: number }>(
+    `SELECT COALESCE(SUM(-g.delta), 0)::float AS grains, COALESCE(SUM(u.messages), 0)::float AS msgs
+       FROM grain_ledger g JOIN usage_daily u ON u.user_id = g.user_id AND u.day::text = g.ref
+      WHERE g.reason = 'uso' AND g.created_at > now() - interval '30 days'`,
+  ).catch(() => null);
   const r = await one<{ cost: number; msgs: number }>(
     "SELECT COALESCE(SUM(cost_usd), 0)::float AS cost, COALESCE(SUM(messages), 0)::float AS msgs FROM usage_daily WHERE day > current_date - 30",
   ).catch(() => null);
-  const value = r && r.msgs >= 50 && r.cost > 0 ? Math.max(0.1, (r.cost / r.msgs) * Number(s.billingGrainsPerUsd || 1000)) : null;
+  const value =
+    charged && charged.msgs >= 50 && charged.grains > 0
+      ? Math.max(0.1, charged.grains / charged.msgs)
+      : r && r.msgs >= 50 && r.cost > 0
+        ? Math.max(0.1, (r.cost / r.msgs) * Number(s.billingGrainsPerUsd || 1500))
+        : null;
   perMessageCache = { at: Date.now(), value };
   return value;
 }

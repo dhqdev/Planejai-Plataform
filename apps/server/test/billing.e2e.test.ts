@@ -36,14 +36,13 @@ describe("assinatura: regras sem banco", () => {
     expect(worstPlan).toBeLessThan(bestPack);
   });
 
-  it("grãos: custo real em dólar vira grão arredondado para cima; desconto de indicação em centavos certos", async () => {
+  it("grãos: custo real em dólar vira grão com fração; desconto de indicação em centavos certos", async () => {
     const { grainsForCost, grains } = await import("../src/credits.js");
     const { withDiscount } = await import("../src/billing.js");
-    const s = { billingGrainsPerUsd: 1000 } as any;
+    const s = { billingGrainsPerUsd: 1500 } as any;
     expect(grainsForCost(0, s)).toBe(0);
-    expect(grainsForCost(0.0001, s)).toBe(1);
-    expect(grainsForCost(0.05, s)).toBe(50);
-    expect(grainsForCost(0.0501, s)).toBe(51);
+    expect(grainsForCost(0.0002, s)).toBeCloseTo(0.3);
+    expect(grainsForCost(0.05, s)).toBeCloseTo(75);
     expect(grains(1)).toBe("1 grão");
     expect(grains(4000)).toBe("4.000 grãos");
     expect(withDiscount(19.9, 5)).toBe(18.9);
@@ -143,7 +142,8 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
   it("desligada ninguém gasta grão; ligada, cada pessoa ganha as boas-vindas uma vez só", async () => {
     expect(await billing.billingAccess(user)).toEqual({ allowed: true, state: "off" });
     expect(await credits.chargeUsage(user.id, 0.5)).toBeNull();
-    const s = await settings.saveSettings({ billingEnabled: true });
+    // 1.000 por US$ deixa as contas do teste redondas (o padrão é 1.500)
+    const s = await settings.saveSettings({ billingEnabled: true, billingGrainsPerUsd: 1000 });
     expect(s.billingStartedAt).toBeTruthy();
     expect(await billing.billingAccess(user)).toEqual({ allowed: true, state: "grains", balance: 300 });
     expect(await credits.ensureWallet(user.id)).toEqual({ plan: 0, extra: 300, total: 300 });
@@ -213,6 +213,23 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     const sent = (await outbox()).slice(before);
     expect(sent.filter((m: any) => /uso livre acabaram/.test(m.text))).toHaveLength(1);
     expect(sent.find((m: any) => /uso livre acabaram/.test(m.text))!.text).toMatch(/3 dias de uso livre[\s\S]*300 grãos de presente/);
+  });
+
+  it("passo barato não cobra um grão inteiro: a fração fica guardada e soma certo mesmo com passos ao mesmo tempo", async () => {
+    const { upsertUser } = await import("../src/ingest.js");
+    const leo = await upsertUser("5519955556666", "Leo");
+    await db.query("UPDATE users SET status = 'active', created_at = now() - interval '10 days' WHERE id = $1", [leo.id]);
+    expect((await credits.ensureWallet(leo.id)).total).toBe(300);
+    // 1.000 por US$: cada passo de US$ 0,0003 vale 0,3 grão
+    for (let i = 0; i < 3; i++) expect(await credits.chargeUsage(leo.id, 0.0003)).toEqual({ charged: 0, left: 300 });
+    expect(await credits.chargeUsage(leo.id, 0.0003)).toEqual({ charged: 1, left: 299 });
+    const rest = async () => Number((await db.one("SELECT grain_remainder FROM wallets WHERE user_id = $1", [leo.id]))!.grain_remainder);
+    expect(await rest()).toBeCloseTo(0.2);
+    // 10 passos de 0,1 grão ao mesmo tempo: nenhuma fração se perde
+    await Promise.all(Array.from({ length: 10 }, () => credits.chargeUsage(leo.id, 0.0001)));
+    expect((await credits.walletOf(leo.id)).total).toBe(298);
+    expect(await rest()).toBeCloseTo(0.2);
+    expect(await db.many("SELECT delta FROM grain_ledger WHERE user_id = $1 AND reason = 'uso'", [leo.id])).toEqual([{ delta: -2 }]);
   });
 
   it("carteira zerada: o assistente não chama a IA e avisa no máximo uma vez por dia", async () => {

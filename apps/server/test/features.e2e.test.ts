@@ -384,10 +384,11 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
       [biaUid],
     );
     const costs = (await app.inject({ method: "GET", url: "/api/costs", headers: { cookie: sup } })).json();
-    expect(costs.grains).toMatchObject({ perUsd: 1000, usdPerGrain: 0.001 });
+    expect(costs.grains).toMatchObject({ perUsd: 1500 });
+    expect(costs.grains.usdPerGrain).toBeCloseTo(1 / 1500);
     expect(costs.grains.tokensPerGrain).toBeGreaterThan(0);
     const biaCost = costs.clients.find((c: any) => c.id === biaUid);
-    expect(biaCost.grains).toBe(Math.ceil(biaCost.cost * 1000 - 1e-9));
+    expect(biaCost.grains).toBe(Math.ceil(biaCost.cost * 1500 - 1e-9));
     expect(biaCost.tokens).toBeGreaterThanOrEqual(4000);
     const usage = (await app.inject({ method: "GET", url: `/api/clients/${biaUid}/usage`, headers: { cookie: sup } })).json();
     expect(usage.totals.tokens_7d).toBeGreaterThanOrEqual(4000);

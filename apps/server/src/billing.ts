@@ -711,7 +711,7 @@ export function pricingOf(s: AgentSettings) {
     packs: s.billingPacks ?? [],
     welcome: Number(s.billingWelcomeGrains ?? 0),
     trialDays: Number(s.billingTrialDays ?? 0),
-    grainsPerUsd: Number(s.billingGrainsPerUsd ?? 1000),
+    grainsPerUsd: Number(s.billingGrainsPerUsd ?? 1500),
     referral: { step: Number(s.billingReferralStep ?? 0), max: Number(s.billingReferralMax ?? 0) },
   };
 }
