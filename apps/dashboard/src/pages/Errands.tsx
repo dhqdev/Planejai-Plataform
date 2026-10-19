@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { ago, api, day } from "../api";
 import { Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
@@ -221,6 +221,8 @@ export function ErrandsPage() {
   const contacts = filter === "lugares" ? [] : byPin(people.filter((c) => shelf(c.phone) && match(c.name, pref(c.phone)?.nickname, c.phone, c.last?.text)), (c) => Boolean(pref(c.phone)?.pinned));
   const showDraftRow = draft && filter !== "pessoas" && filter !== "arquivadas" && match(draft.place, draft.goal);
   const total = list.length + people.length + (draft ? 1 : 0);
+  const reading = total > 0 && !fit && phone && detailOpen;
+  useChatShell(reading);
   const errandRow = (e: Errand) => (
     <button key={e.id} className={`errand-row${e.id === selId ? " active" : ""}`} onClick={() => setPicked(e.id)}>
       <Avatar name={placeName(e, pref(e.phone))} place={e.kind !== "conversa"} color={pref(e.phone)?.color} />
@@ -315,6 +317,7 @@ export function ErrandsPage() {
   );
 
   return (
+    <BackCtx.Provider value={reading ? back : null}>
     <div className={`page errands-page${!total ? "" : fit ? " fit" : detailOpen ? " reading" : ""}`}>
       {/* notebook: sem título, a conversa sobe e ganha a tela (David, 2026-10-19) */}
       {!wide && <PageHead title="Recados" />}
@@ -374,6 +377,7 @@ export function ErrandsPage() {
       </div>
       )}
     </div>
+    </BackCtx.Provider>
   );
 }
 
@@ -504,11 +508,75 @@ function ErrandView({ e, extra, p, busy, compact, onCancel, onSave, onFollow, on
  * no meio e a caixa de escrever presa embaixo, acima das abas. Objetivo, ações e acompanhamento ficam numa folha
  * que abre pelo nome ou pelo botão de mais.
  */
+const BackCtx = createContext<(() => void) | null>(null);
+
+/**
+ * Celular, conversa aberta: a tela vira uma caixa presa na área visível de verdade (visualViewport). Com o teclado
+ * aberta ela encolhe em vez de ser empurrada, o topo fica no lugar e só a conversa rola; a barra de abas some.
+ */
+function useChatShell(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const root = document.documentElement;
+    const vv = window.visualViewport;
+    root.classList.add("pj-errchat");
+    let raf = 0;
+    let blur = 0;
+    const typing = () => {
+      const a = document.activeElement as HTMLElement | null;
+      return Boolean(a && a.closest(".errands-page") && a.tagName === "TEXTAREA");
+    };
+    const fit = () => {
+      raf = 0;
+      if (vv) {
+        root.style.setProperty("--vvh", `${vv.height}px`);
+        root.style.setProperty("--vvtop", `${vv.offsetTop}px`);
+      }
+      const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+      root.classList.toggle("pj-kb", kb > 120 || typing());
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(fit);
+    };
+    // ao sair da caixa espera um pouco: tocar em Enviar tira o foco por um instante
+    const onFocus = () => {
+      clearTimeout(blur);
+      fit();
+    };
+    const onBlur = () => {
+      clearTimeout(blur);
+      blur = window.setTimeout(fit, 120);
+    };
+    fit();
+    vv?.addEventListener("resize", schedule);
+    vv?.addEventListener("scroll", schedule);
+    document.addEventListener("focusin", onFocus);
+    document.addEventListener("focusout", onBlur);
+    return () => {
+      vv?.removeEventListener("resize", schedule);
+      vv?.removeEventListener("scroll", schedule);
+      document.removeEventListener("focusin", onFocus);
+      document.removeEventListener("focusout", onBlur);
+      clearTimeout(blur);
+      cancelAnimationFrame(raf);
+      root.classList.remove("pj-errchat", "pj-kb");
+      root.style.removeProperty("--vvh");
+      root.style.removeProperty("--vvtop");
+    };
+  }, [active]);
+}
+
 function PhoneChat({ avatar, name, sub, details, children }: { avatar: ReactNode; name: string; sub: string; details: ReactNode; children: ReactNode }) {
   const [info, setInfo] = useState(false);
+  const goBack = useContext(BackCtx);
   return (
     <>
       <div className="errand-chathead">
+        {goBack && (
+          <button type="button" className="icon-btn errand-chathead-back" onClick={goBack} aria-label="Voltar">
+            <Icon name="chevron-left" size={22} />
+          </button>
+        )}
         <button type="button" className="errand-chathead-who" onClick={() => setInfo(true)} aria-label={`Detalhes de ${name}`}>
           {avatar}
           <span className="errand-chathead-text">
@@ -835,12 +903,6 @@ function Composer({ name, onSend }: { name: string; onSend: (text: string) => Pr
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const touch = useMedia("(pointer: coarse)");
-  const [typing, setTyping] = useState(false);
-  // celular: com o teclado aberto a barra de abas some, senão ela sobe junto e sobra pouco espaço para a conversa
-  useEffect(() => {
-    document.body.classList.toggle("errand-typing", typing || sending);
-    return () => document.body.classList.remove("errand-typing");
-  }, [typing, sending]);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -879,8 +941,6 @@ function Composer({ name, onSend }: { name: string; onSend: (text: string) => Pr
         value={text}
         disabled={sending}
         enterKeyHint={touch ? "enter" : "send"}
-        onFocus={() => setTyping(true)}
-        onBlur={() => setTyping(false)}
         onChange={(ev) => setText(ev.target.value)}
         onKeyDown={(ev) => {
           if (ev.key === "Enter" && !ev.shiftKey && !touch && !ev.nativeEvent.isComposing) {

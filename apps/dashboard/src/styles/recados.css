@@ -252,34 +252,40 @@
 .errand-info .errand-bar .btn { min-height: 40px; }
 
 @media (max-width: 767px) {
-  .errands-page.reading { padding-top: 0; padding-bottom: 0; }
-  /* a caixa encosta nas abas: o respiro de baixo da tela fica só do tamanho da barra */
-  .main:has(.errands-page.reading) { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
-  body:has(.errands-page.reading) .mascote-stroll { display: none; }
-  .errands-page.reading .errand-detail {
-    background: transparent; border: 0; box-shadow: none; border-radius: 0; padding: 0; gap: 0; overflow: visible;
-    /* conversa curta: a caixa fica lá embaixo mesmo assim, como no WhatsApp */
-    min-height: calc(100vh - 60px - 74px - env(safe-area-inset-bottom)); min-height: calc(100dvh - 60px - 74px - env(safe-area-inset-bottom));
+  /* conversa aberta: caixa presa na área visível (--vvh/--vvtop vêm do visualViewport, ver useChatShell em Errands.tsx).
+     Com o teclado ela encolhe em vez de ser empurrada: o topo fica no lugar e só a conversa rola. */
+  html.pj-errchat .topbar { display: none; }
+  html.pj-errchat .main { overflow: hidden; padding: 0; }
+  html.pj-errchat .mascote-stroll { display: none; }
+  html.pj-kb.pj-errchat .tabbar { display: none; }
+  .errands-page.reading {
+    position: fixed; left: 0; right: 0; top: var(--vvtop, 0); height: var(--vvh, 100dvh); z-index: 25;
+    display: flex; flex-direction: column; padding: 0 16px calc(84px + env(safe-area-inset-bottom)); background: var(--bg);
+    overscroll-behavior: none;
   }
-  .errands-page.reading .errand-detail > .errand-chat { flex: 1 0 auto; }
+  html.pj-kb .errands-page.reading { padding-bottom: 0; }
+  .errands-page.reading > .errand-grid { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .errands-page.reading .errand-detail {
+    flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+    background: transparent; border: 0; box-shadow: none; border-radius: 0; padding: 0; gap: 0; overflow: visible;
+  }
+  .errands-page.reading .errand-detail > * { flex-shrink: 0; }
+  .errands-page.reading .errand-detail > .errand-chat { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+  .errands-page.reading .errand-detail > .errand-chat::-webkit-scrollbar { display: none; }
   .errands-page.reading .errand-chathead {
-    position: sticky; top: 0; z-index: 3; margin: 0 -16px; padding: 8px 10px 8px 12px; background: var(--bg);
+    margin: 0 -16px; padding: calc(6px + env(safe-area-inset-top)) 10px 6px 6px; background: var(--bg);
     border-bottom: 1px solid var(--border);
   }
-  .errands-page.reading .errand-detail > .errand-note { margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--panel-2); }
-  .errands-page.reading .errand-chat { max-height: none; min-height: 0; overflow: visible; border-top: 0; padding: 16px 0 12px; gap: 10px; }
+  html.pj-kb .errands-page.reading .errand-chathead { padding-top: 6px; }
+  .errand-chathead-back { flex-shrink: 0; }
+  .errands-page.reading .errand-detail > .errand-note { margin: 10px 0 0; padding: 8px 12px; border-radius: 12px; background: var(--panel-2); font-size: 13px; }
+  .errands-page.reading .errand-chat { max-height: none; border-top: 0; padding: 12px 0; gap: 8px; }
   .errands-page.reading .errand-bubble { max-width: 84%; font-size: 15px; }
-  .errands-page.reading .errand-composer {
-    position: sticky; bottom: 0; z-index: 3; margin: 0 -16px; padding: 8px 12px 10px;
-    background: color-mix(in srgb, var(--bg) 92%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
-  }
+  .errands-page.reading .errand-composer { margin: 0 -16px; padding: 6px 12px 8px; background: var(--bg); }
+  html.pj-kb .errands-page.reading .errand-composer { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
   .errands-page.reading .errand-composer-hint { display: none; }
-  /* teclado aberto: sem a barra de abas, a conversa usa a área toda que sobrou */
-  body.errand-typing .tabbar { display: none; }
-  body.errand-typing .main:has(.errands-page.reading) { padding-bottom: env(safe-area-inset-bottom); }
-  body.errand-typing .errands-page.reading .errand-detail { min-height: calc(100dvh - 60px); }
-  .errands-page.reading .errand-composer-input { min-height: 46px; }
-  .errands-page.reading .errand-send { width: 46px; height: 46px; }
+  .errands-page.reading .errand-composer-input { min-height: 42px; }
+  .errands-page.reading .errand-send { width: 42px; height: 42px; }
 }
 
 /* ficha da conversa (2026-10-19, David: "informações que precisam ser guardadas... para direcionar a conversa"):
@@ -300,7 +306,7 @@
   .errands-page.fit .errand-detail > .errand-ficha { flex-shrink: 0; }
 }
 @media (max-width: 767px) {
-  .errands-page.reading .errand-detail > .errand-ficha { margin-top: 10px; }
+  .errands-page.reading .errand-detail > .errand-ficha { margin: 10px 0 4px; }
   .errand-ficha-row { grid-template-columns: minmax(0, 1fr) auto; }
   .errand-ficha-row .errand-ficha-label { grid-column: 1 / -1; }
   .errand-ficha-row .errand-ficha-value { grid-column: 1; }
