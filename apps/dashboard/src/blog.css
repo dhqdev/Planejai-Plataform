@@ -157,3 +157,20 @@
 .bl-embed { height: auto; overflow: visible; scroll-behavior: auto; border-radius: 20px; padding-bottom: 24px; min-height: 100%; }
 .bl-embed .bl-hero { margin-top: 20px; }
 @media (max-width: 760px) { .bl-embed { border-radius: 16px; } .bl-embed .lp-wrap { width: calc(100% - 24px); } }
+
+/* tema escuro do app: o blog dentro do painel segue o tema, sem fundo próprio */
+:root[data-theme="dark"] .bl-embed {
+  --lp-bg: transparent; --lp-ink: #f2f0f7; --lp-muted: #a39db3; --lp-line: #2f2a3d; --lp-marsh: #241d38; --bl-title: #f2f0f7;
+  color-scheme: dark; background: transparent;
+}
+:root[data-theme="dark"] .bl-embed .bl-select select,
+:root[data-theme="dark"] .bl-embed .bl-card,
+:root[data-theme="dark"] .bl-embed .bl-feature { background-color: #1b1727; }
+:root[data-theme="dark"] .bl-embed .bl-select select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23f2f0f7' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
+:root[data-theme="dark"] .bl-embed .bl-select select:hover { border-color: #463f5c; }
+:root[data-theme="dark"] .bl-embed .bl-card:hover, :root[data-theme="dark"] .bl-embed .bl-feature:hover { border-color: #463f5c; box-shadow: 0 18px 40px -26px rgba(0, 0, 0, .7); }
+:root[data-theme="dark"] .bl-embed .bl-avatar, :root[data-theme="dark"] .bl-embed .bl-prose blockquote { border-color: #3a3150; }
+:root[data-theme="dark"] .bl-embed .bl-feature p, :root[data-theme="dark"] .bl-embed .bl-sub, :root[data-theme="dark"] .bl-embed .bl-toc ol { color: #c9c4d6; }
+:root[data-theme="dark"] .bl-embed .bl-prose, :root[data-theme="dark"] .bl-embed .bl-prose blockquote { color: #e4e0ee; }
+:root[data-theme="dark"] .bl-embed .bl-toc a { text-decoration-color: #4a4360; }
+:root[data-theme="dark"] .bl-embed .bl-skeleton { background: linear-gradient(90deg, #1b1727, #241d38 40%, #1b1727) 0 0 / 200% 100%; }
