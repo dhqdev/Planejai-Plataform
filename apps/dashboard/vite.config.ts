@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import zlib from "node:zlib";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
@@ -22,8 +23,36 @@ function buildVersion(): Plugin {
   };
 }
 
+/**
+ * Comprime o build uma vez (brotli no máximo e gzip): o servidor entrega o .br/.gz pronto (preCompressed), sem gastar CPU
+ * por pedido. Corre depois do buildVersion porque ele reescreve o sw.js.
+ */
+function precompress(): Plugin {
+  const TEXT = /\.(js|css|html|svg|json|webmanifest|txt|xml)$/;
+  let outDir = "";
+  return {
+    name: "planejai-precompress",
+    apply: "build",
+    enforce: "post",
+    configResolved(c) {
+      outDir = path.resolve(c.root, c.build.outDir);
+    },
+    closeBundle() {
+      const walk = (dir: string): string[] =>
+        fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]));
+      for (const file of walk(outDir)) {
+        if (!TEXT.test(file)) continue;
+        const raw = fs.readFileSync(file);
+        if (raw.length < 1024) continue;
+        fs.writeFileSync(`${file}.br`, zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 } }));
+        fs.writeFileSync(`${file}.gz`, zlib.gzipSync(raw, { level: 9 }));
+      }
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), buildVersion()],
+  plugins: [react(), buildVersion(), precompress()],
   define: { __BUILD__: JSON.stringify(BUILD), __APP_VERSION__: JSON.stringify(APP_VERSION) },
   build: { outDir: "../server/public", emptyOutDir: true },
   server: {

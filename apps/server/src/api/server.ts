@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
+import compress from "@fastify/compress";
 import cookie from "@fastify/cookie";
 import { COMMIT, VERSION } from "../version.js";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { existsSync } from "node:fs";
+import { constants as zlib } from "node:zlib";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
@@ -101,6 +103,13 @@ export async function buildServer() {
     trustProxy: trustProxySetting(),
   });
   await app.register(cookie);
+  // respostas da API comprimidas (JSON de lista chega 5-10x menor no celular); brotli leve para não pesar na CPU.
+  // Os arquivos do painel já saem comprimidos do build (.br/.gz, preCompressed abaixo) e não passam por aqui de novo.
+  await app.register(compress, {
+    threshold: 1024,
+    encodings: ["br", "gzip"],
+    brotliOptions: { params: { [zlib.BROTLI_PARAM_QUALITY]: 4 } },
+  });
   const publicDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "public");
   registerSecurity(app, publicDir);
 
@@ -371,6 +380,7 @@ export async function buildServer() {
     await app.register(fastifyStatic, {
       root: publicDir,
       wildcard: false,
+      preCompressed: true,
       cacheControl: false,
       setHeaders(reply, path) {
         // arquivos com hash nunca mudam; o resto (index, sw.js, manifest) sempre revalida para o PWA atualizar

@@ -157,7 +157,8 @@ O CTO ganha automaticamente `ask_<id>` e o novo entra na lista da `consult_coleg
   mensagens e de custo em 24h por pessoa no orchestrator (dono isento), corte de texto longo. Toda trava que age vira passo
   "trava: …" em Execuções. Ferramenta nova que demora deve aceitar ser abandonada (o runner usa `guard.race`).
 - PWA: ao mudar o `sw.js`, suba `VERSION` para limpar o cache antigo. O servidor manda `no-cache` em index/sw/manifest e
-  `immutable` em /assets. Todo modal novo usa `<Modal>` (vira bottom sheet sozinho); botão de ação chama `haptic()`.
+  `immutable` em /assets. O build grava `.br`/`.gz` de cada arquivo de texto (`precompress` no `vite.config.ts`) e o
+  `@fastify/static` entrega o pronto (`preCompressed`); a API sai comprimida pelo `@fastify/compress`. Todo modal novo usa `<Modal>` (vira bottom sheet sozinho); botão de ação chama `haptic()`.
 - Integração nova: campos com `help` dizendo onde pegar o valor, `test()` que bate na API de verdade e, se for OAuth,
   rota `/api/integrations/<id>/oauth/start|callback` com `state` assinado (`oauth:` no sub).
 - Segredos só por variável de ambiente ou pela tela de Integrações (criptografados). Nada de chave no código. `SESSION_SECRET` assina sessões, `ENCRYPTION_KEY` (+ `ENCRYPTION_KEY_OLD` na troca) cifra credenciais, `INTERNAL_API_KEY` é sempre explícita (vazia = API interna e eventos desligados). `APP_SECRET` é só legado/fallback; no boot `reencryptStale` regrava o que estava na chave antiga.
