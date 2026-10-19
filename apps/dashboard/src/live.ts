@@ -78,13 +78,21 @@ export function onLiveStatus(f: (on: boolean, again: boolean) => void) {
   return () => void status.delete(f);
 }
 
-/** Chama `f` quando alguma das tabelas mudar (vários avisos seguidos viram uma chamada só). */
-export function onLive(tables: readonly string[], f: () => void) {
+/**
+ * Chama `f` quando alguma das tabelas mudar. Vários avisos seguidos viram uma chamada só, e no máximo uma a cada
+ * `gap` ms (o time grava várias vezes numa resposta: a tela não recarrega a cada passo).
+ */
+export function onLive(tables: readonly string[], f: () => void, gap = 1500) {
   let t: ReturnType<typeof setTimeout> | undefined;
+  let last = 0;
+  const fire = () => {
+    t = undefined;
+    last = Date.now();
+    f();
+  };
   const l: Listener = (changed) => {
-    if (!changed.some((x) => tables.includes(x))) return;
-    clearTimeout(t);
-    t = setTimeout(f, 150);
+    if (t || !changed.some((x) => tables.includes(x))) return;
+    t = setTimeout(fire, Math.max(150, last + gap - Date.now()));
   };
   listeners.add(l);
   return () => {

@@ -423,7 +423,7 @@ export function DashboardPage(props: { me: Me; theme: string; onTheme: () => voi
 
 function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onTheme: () => void; phone: boolean }) {
   const isSuper = me.role === "superadmin";
-  const sys = useApi<any>(isSuper ? "/api/overview" : null, { poll: 20000, live: ["executions"] });
+  const sys = useApi<any>(isSuper ? "/api/overview" : null, { poll: 20000 });
   const mine = useApi<any>("/api/me/overview", { poll: 30000, live: ME_OVERVIEW });
   const saved = useApi<{ widgets: Widget[] } | null>("/api/me/dashboard");
   const [widgets, setWidgets] = useState<Widget[] | null>(null);
