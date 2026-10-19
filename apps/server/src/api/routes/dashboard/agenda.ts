@@ -10,7 +10,7 @@ import { cancelReminder, createReminder, listReminders, reminderOccurrences, ret
 import { NOBODY, personalUsers, selfUserId, sharedWithMe } from "../../../sharing.js";
 import { parseLocalDateTime } from "../../../time.js";
 import { conversationOf } from "../../../social.js";
-import { cancelWatch, checkWatchNow, createWatch, listWatches, updateWatch, type NotifyMode } from "../../../watches.js";
+import { checkWatchNow, createWatch, listWatches, removeWatch, updateWatch, type NotifyMode } from "../../../watches.js";
 
 /**
  * Agenda: lembretes, calendário (com o Google Agenda do dono) e acompanhamentos. Particular como Finanças:
@@ -226,7 +226,7 @@ export function agendaRoutes(base: FastifyInstance) {
 
   // ---------- Acompanhamentos (o agente fica de olho e avisa sozinho) ----------
   base.get("/api/watches", async (req) => listWatches(await self(req.account)));
-  base.delete<{ Params: { id: string } }>("/api/watches/:id", async (req) => ({ ok: await cancelWatch(req.params.id, await self(req.account)) }));
+  base.delete<{ Params: { id: string } }>("/api/watches/:id", async (req) => ({ ok: await removeWatch(req.params.id, await self(req.account)) }));
   // criar pela tela: os avisos vão para a conversa da pessoa no WhatsApp
   base.post<{ Body: { kind?: "price" | "news"; query?: string; target?: number | null; every_hours?: number; days?: number; notify_mode?: NotifyMode } }>(
     "/api/watches",

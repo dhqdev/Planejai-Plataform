@@ -378,6 +378,9 @@
   .watch-actions-bar { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; }
   .watch-actions-bar .btn { font-size: 12.5px; padding-inline: 4px; justify-content: center; }
   .watch-actions-bar .spacer { display: none; }
+  /* encerrado: "Acompanhar mais 7 dias" ocupa a linha inteira; Detalhes e a lixeira embaixo */
+  .watch-actions-bar.ended { grid-template-columns: 1fr auto; }
+  .watch-actions-bar.ended .btn-primary-soft { grid-column: 1 / -1; }
   .watch-empty-card { padding: 24px 14px; }
   .watch-empty-card .watch-empty-icon { width: 48px; height: 48px; margin-bottom: 8px; }
   .watch-empty-card h3 { font-size: 15px; }

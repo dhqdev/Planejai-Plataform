@@ -75,6 +75,12 @@ export async function cancelWatch(id: string, userId: string | null) {
   return (r.rowCount ?? 0) > 0;
 }
 
+/** Lixeira da tela: o ativo para de ser acompanhado; o que já tinha terminado sai do histórico de vez. */
+export async function removeWatch(id: string, userId: string | null) {
+  const r = await query("DELETE FROM watches WHERE id = $1 AND ($2::uuid IS NULL OR user_id = $2) AND NOT active", [id, userId]);
+  return (r.rowCount ?? 0) > 0 || cancelWatch(id, userId);
+}
+
 /** Ajustes pela tela (ou pelo assistente): o que buscar, meta, frequência, dias, como avisar, pausar e reativar. */
 export async function updateWatch(
   id: string,

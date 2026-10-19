@@ -114,13 +114,18 @@ export function WatchesPage() {
     try {
       await api(path, init);
       haptic(8);
+      return true;
     } catch (e) {
       void alertDialog("Não deu certo", (e as Error).message);
+      return false;
     } finally {
       setBusy(null);
       reload();
     }
   };
+
+  // reativado vai para Ativos: a pessoa vê na hora que voltou a olhar
+  const reactivate = (w: Watch) => void act(w, `/api/watches/${w.id}`, { method: "PATCH", json: { reactivate: true } }).then((ok) => ok && setTab("active"));
 
   const listInTab = data.filter((w) => (tab === "active" ? w.active : !w.active));
 
@@ -240,7 +245,7 @@ export function WatchesPage() {
           </div>
         </div>
 
-        <div className="watch-actions-bar" onClick={(e) => e.stopPropagation()}>
+        <div className={`watch-actions-bar${w.active ? "" : " ended"}`} onClick={(e) => e.stopPropagation()}>
           {w.active ? (
             <>
               <button
@@ -284,12 +289,12 @@ export function WatchesPage() {
               <button
                 className="btn btn-sm btn-primary-soft"
                 disabled={busy === w.id}
-                onClick={(e) => { e.stopPropagation(); void act(w, `/api/watches/${w.id}`, { method: "PATCH", json: { reactivate: true } }); }}
+                onClick={(e) => { e.stopPropagation(); reactivate(w); }}
               >
                 <Icon name="refresh" size={14} /> Acompanhar mais 7 dias
               </button>
               <button className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); setViewing(w); }}>
-                <Icon name="eye" size={14} /> Ver detalhes
+                <Icon name="eye" size={14} /> Detalhes
               </button>
               <span className="spacer" />
               <button
@@ -388,7 +393,7 @@ export function WatchesPage() {
           onReactivate={() => {
             const target = viewing;
             setViewing(null);
-            void act(target, `/api/watches/${target.id}`, { method: "PATCH", json: { reactivate: true } });
+            reactivate(target);
           }}
         />
       )}

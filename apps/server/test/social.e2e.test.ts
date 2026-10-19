@@ -474,6 +474,14 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     expect(lastTexts(1)[0]).toContain("Terminei de acompanhar");
     const row = await db.one("SELECT active, checks FROM watches WHERE id = $1", [w.id]);
     expect(row).toEqual({ active: false, checks: 2 });
+    // "Acompanhar mais 7 dias" pela tela volta a olhar; a lixeira para o ativo e apaga o encerrado
+    const { removeWatch } = await import("../src/watches.js");
+    await updateWatch(w.id, david.id, { reactivate: true });
+    expect(await db.one("SELECT active, expires_at > now() + interval '6 days' AS week FROM watches WHERE id = $1", [w.id])).toEqual({ active: true, week: true });
+    expect(await removeWatch(w.id, david.id)).toBe(true);
+    expect((await db.one("SELECT active FROM watches WHERE id = $1", [w.id])).active).toBe(false);
+    expect(await removeWatch(w.id, david.id)).toBe(true);
+    expect(await db.many("SELECT id FROM watches WHERE id = $1", [w.id])).toEqual([]);
   });
 
   it("melhoria diária cria um agente sob medida só quando o assunto se repete", async () => {
