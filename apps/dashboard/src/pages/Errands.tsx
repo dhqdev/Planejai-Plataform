@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { ago, api, day } from "../api";
 import { Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
 import { FIT_QUERY, useApi, useMedia } from "../hooks";
@@ -8,7 +8,8 @@ import { haptic } from "../touch";
 import { Vazio } from "../Vazio";
 
 type State = "them" | "you" | "done" | "failed" | "cancelled" | "expired";
-type Line = { from: "nos" | "eles" | "pessoa"; text: string; at: string };
+/** voce = a própria pessoa escreveu pelo painel */
+type Line = { from: "nos" | "eles" | "pessoa" | "voce"; text: string; at: string };
 type Errand = {
   id: string;
   place: string;
@@ -54,8 +55,7 @@ type Prefs = {
   archived: boolean;
   follow: Follow;
 };
-type AgendaContact = { id: string; name: string; phone: string; label: string | null };
-type Data = { errands: Errand[]; drafts: Draft[]; contacts?: ContactChat[]; agenda?: AgendaContact[]; follow: string; prefs?: Record<string, Prefs> };
+type Data = { errands: Errand[]; drafts: Draft[]; contacts?: ContactChat[]; follow: string; prefs?: Record<string, Prefs> };
 type Filter = "tudo" | "lugares" | "pessoas" | "arquivadas";
 
 const COLORS: { id: string; label: string }[] = [
@@ -100,13 +100,14 @@ const contactState = (c: ContactChat) => (c.waiting_you ? "Respondeu" : c.schedu
 /**
  * Recados: todas as conversas que o assistente tem em nome da pessoa, como no WhatsApp: com estabelecimentos
  * (recados) e com pessoas (mensagens avulsas e contatos do Planejai). Particular (só os próprios).
- * Mostra a próxima mensagem antes do "sim" e deixa cancelar sem mandar nada.
+ * Mostra a próxima mensagem antes do "sim" e deixa cancelar sem mandar nada. Em Pessoas só aparece quem o assistente
+ * conversou a pedido da pessoa (a agenda inteira fica em Contatos), e ela mesma responde pela caixa embaixo da conversa.
  */
 export function ErrandsPage() {
-  const navigate = useNavigate();
   const { data, error, reload } = useApi<Data>("/api/errands", { poll: 10000 });
   const fit = useMedia(FIT_QUERY);
   const phone = useMedia("(max-width: 767px)");
+  const wide = useMedia("(min-width: 1024px)");
   // a conversa aberta fica na URL: no celular o "voltar" do aparelho (ou o gesto) volta para a lista
   const [params, setParams] = useSearchParams();
   const fromList = Boolean((useLocation().state as { fromList?: boolean } | null)?.fromList);
@@ -125,11 +126,13 @@ export function ErrandsPage() {
   const pref = (phone: string): Prefs | undefined => prefs[phone];
   const archivedOf = (phone: string) => Boolean(pref(phone)?.archived);
   const list = data.errands;
-  const people = data.contacts ?? [];
-  const agenda = data.agenda ?? [];
-  const knownPhones = new Set([...list.map((e) => e.phone), ...people.map((c) => c.phone)]);
-  const agendaOnly = agenda.filter((a) => !knownPhones.has(a.phone));
-  const archivedCount = list.filter((e) => archivedOf(e.phone)).length + people.filter((c) => archivedOf(c.phone)).length + agendaOnly.filter((a) => archivedOf(a.phone)).length;
+  // o que a pessoa (ou o assistente, por mensagem avulsa) mandou para um lugar depois do recado aparece no próprio recado,
+  // não numa conversa a mais; só fica separada se ainda tem mensagem agendada para sair
+  const errandPhones = new Set(list.map((e) => e.phone));
+  const all = data.contacts ?? [];
+  const people = all.filter((c) => !errandPhones.has(c.phone) || c.scheduled.length);
+  const extraOf = (e: Errand) => (list.find((x) => x.phone === e.phone) === e ? all.find((c) => c.phone === e.phone && !c.scheduled.length)?.log ?? [] : []);
+  const archivedCount = list.filter((e) => archivedOf(e.phone)).length + people.filter((c) => archivedOf(c.phone)).length;
   // no notebook sempre há um aberto à direita; no celular a conversa abre no lugar da lista
   const first = draft ? `draft:${draft.id}` : [...list.map((e) => ({ id: e.id, at: e.updated_at })), ...people.map((c) => ({ id: `c:${c.phone}`, at: c.updated_at }))].sort((a, b) => (a.at < b.at ? 1 : -1))[0]?.id;
   const selId = picked ?? (fit ? first : null) ?? null;
@@ -171,6 +174,13 @@ export function ErrandsPage() {
       void run(`/api/errands/drafts/${d.id}`, { method: "DELETE" });
   };
 
+  // a pessoa responde pela tela: sai pelo número do Planejai com o nome dela na frente
+  const sendText = async (phone: string, text: string) => {
+    const r = await api<{ ok: boolean; tip?: string | null }>(`/api/errands/chats/${encodeURIComponent(phone)}/mensagem`, { method: "POST", json: { text } });
+    haptic(8);
+    reload();
+    if (r.tip) void alertDialog("Vai sair daqui a pouco", r.tip);
+  };
   const save = (phone: string, patch: Partial<Prefs>) => run(`/api/errands/chats/${encodeURIComponent(phone)}`, { method: "PUT", json: patch });
   const setFollow = async (phone: string, name: string, follow: Follow, openErrand: boolean) => {
     if (follow === "off" && openErrand && !(await confirmDialog({ title: `Parar de acompanhar ${name}?`, body: "O recado em andamento é cancelado. Nada é enviado para eles, e as respostas deixam de chegar para você.", confirmLabel: "Parar", cancelLabel: "Voltar", danger: true })))
@@ -206,9 +216,8 @@ export function ErrandsPage() {
   const places = filter === "pessoas" ? [] : errandsIn(placeList);
   const talks = filter === "lugares" ? [] : errandsIn(talkList);
   const contacts = filter === "lugares" ? [] : byPin(people.filter((c) => shelf(c.phone) && match(c.name, pref(c.phone)?.nickname, c.phone, c.last?.text)), (c) => Boolean(pref(c.phone)?.pinned));
-  const agendaFiltered = filter === "lugares" ? [] : byPin(agendaOnly.filter((a) => shelf(a.phone) && match(a.name, pref(a.phone)?.nickname, a.phone, a.label)), (a) => Boolean(pref(a.phone)?.pinned));
   const showDraftRow = draft && filter !== "pessoas" && filter !== "arquivadas" && match(draft.place, draft.goal);
-  const total = list.length + people.length + agendaOnly.length + (draft ? 1 : 0);
+  const total = list.length + people.length + (draft ? 1 : 0);
   const errandRow = (e: Errand) => (
     <button key={e.id} className={`errand-row${e.id === selId ? " active" : ""}`} onClick={() => setPicked(e.id)}>
       <Avatar name={placeName(e, pref(e.phone))} place={e.kind !== "conversa"} color={pref(e.phone)?.color} />
@@ -242,7 +251,7 @@ export function ErrandsPage() {
                   : f === "lugares"
                     ? `Lugares${placeList.length + (draft ? 1 : 0) ? ` ${placeList.length + (draft ? 1 : 0)}` : ""}`
                     : f === "pessoas"
-                      ? `Pessoas${people.length + talkList.length + agendaOnly.length ? ` ${people.length + talkList.length + agendaOnly.length}` : ""}`
+                      ? `Pessoas${people.length + talkList.length ? ` ${people.length + talkList.length}` : ""}`
                       : `Arquivadas ${archivedCount}`}
               </button>
             ))}
@@ -281,7 +290,7 @@ export function ErrandsPage() {
             <span className="errand-row-last muted">
               {c.last ? (
                 <>
-                  {c.last.from === "nos" ? "Você: " : ""}
+                  {c.last.from === "voce" ? "Você: " : c.last.from === "nos" ? "Assistente: " : ""}
                   {c.last.text} · {ago(c.last.at)}
                 </>
               ) : c.scheduled[0] ? (
@@ -291,27 +300,7 @@ export function ErrandsPage() {
           </span>
         </button>
       ))}
-      {agendaFiltered.map((a) => {
-        const aName = pref(a.phone)?.nickname || a.name || phoneLabel(a.phone);
-        return (
-          <button key={a.phone} className="errand-row" onClick={() => navigate("/")}>
-            <Avatar name={aName} color={pref(a.phone)?.color} />
-            <span className="errand-row-body">
-              <span className="errand-row-top">
-                <strong>
-                  {pref(a.phone)?.pinned && <Icon name="bookmark" size={12} className="errand-pin" />}
-                  {aName}
-                </strong>
-                <span className="errand-state them">Disponível</span>
-              </span>
-              <span className="errand-row-last muted">
-                {a.label ? `${a.label} · ` : ""}Toque para pedir no chat
-              </span>
-            </span>
-          </button>
-        );
-      })}
-      {total > 0 && !showDraftRow && !places.length && !contacts.length && !agendaFiltered.length && (
+      {total > 0 && !showDraftRow && !places.length && !talks.length && !contacts.length && (
         <Empty>{term ? "Nada com esse nome." : filter === "arquivadas" ? "Nenhuma conversa arquivada." : filter === "pessoas" ? "Nenhuma conversa com pessoas ainda." : "Nenhum recado com lugares ainda."}</Empty>
       )}
       {!total && (
@@ -324,7 +313,8 @@ export function ErrandsPage() {
 
   return (
     <div className={`page errands-page${!total ? "" : fit ? " fit" : detailOpen ? " reading" : ""}`}>
-      <PageHead title="Recados" subtitle="Todas as conversas que o assistente tem por você, com lugares e com pessoas. Atualiza sozinho enquanto a tela está aberta." />
+      {/* notebook: sem título, a conversa sobe e ganha a tela (David, 2026-10-19) */}
+      {!wide && <PageHead title="Recados" />}
       {!total ? (
         <Vazio
           img="recados"
@@ -351,12 +341,14 @@ export function ErrandsPage() {
             ) : sel ? (
               <ErrandView
                 e={sel}
+                extra={extraOf(sel)}
                 p={pref(sel.phone)}
                 busy={busy}
                 onCancel={() => cancel(sel)}
                 onSave={(patch) => save(sel.phone, patch)}
                 onFollow={(f) => setFollow(sel.phone, placeName(sel, pref(sel.phone)), f, OPEN.includes(sel.state))}
                 onRemove={() => removeFollow(sel.phone, placeName(sel, pref(sel.phone)))}
+                onSend={(text) => sendText(sel.phone, text)}
               />
             ) : selContact ? (
               <ContactView
@@ -367,6 +359,7 @@ export function ErrandsPage() {
                 onSave={(patch) => save(selContact.phone, patch)}
                 onFollow={(f) => setFollow(selContact.phone, contactName(selContact, pref(selContact.phone)), f, false)}
                 onRemove={() => removeFollow(selContact.phone, contactName(selContact, pref(selContact.phone)))}
+                onSend={(text) => sendText(selContact.phone, text)}
               />
             ) : (
               <Empty>Escolha uma conversa para ver.</Empty>
@@ -400,9 +393,9 @@ function DraftView({ d, busy, onDiscard }: { d: Draft; busy: boolean; onDiscard:
   );
 }
 
-type ChatActions = { p?: Prefs; busy: boolean; onSave: (patch: Partial<Prefs>) => void; onFollow: (f: Follow) => void; onRemove: () => void };
+type ChatActions = { p?: Prefs; busy: boolean; onSave: (patch: Partial<Prefs>) => void; onFollow: (f: Follow) => void; onRemove: () => void; onSend: (text: string) => Promise<void> };
 
-function ErrandView({ e, p, busy, onCancel, onSave, onFollow, onRemove }: { e: Errand; onCancel: () => void } & ChatActions) {
+function ErrandView({ e, extra, p, busy, onCancel, onSave, onFollow, onRemove, onSend }: { e: Errand; extra: Line[]; onCancel: () => void } & ChatActions) {
   const open = OPEN.includes(e.state);
   const name = placeName(e, p);
   const follow = p?.follow ?? "auto";
@@ -433,10 +426,11 @@ function ErrandView({ e, p, busy, onCancel, onSave, onFollow, onRemove }: { e: E
         {e.kind !== "conversa" && <span>{e.allowed ? `Liberado: ${e.allowed}` : "Só pergunta, não fecha nada"}</span>}
         {open && <span>{e.messages_left} mensagem(ns) restante(s)</span>}
       </div>
-      <Chat watch={`${e.id}:${e.log.length}:${e.next ? 1 : 0}`}>
-        {e.log.map((l, i) => <Bubble key={`${l.at}-${i}`} line={l} />)}
+      <Chat watch={`${e.id}:${e.log.length}:${extra.length}:${e.next ? 1 : 0}`}>
+        {[...e.log, ...extra].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0)).map((l, i) => <Bubble key={`${l.at}-${i}`} line={l} />)}
         {e.next && <Bubble line={{ from: "nos", text: e.next.preview, at: e.next.created_at }} next />}
       </Chat>
+      <Composer key={e.id} name={name} onSend={onSend} />
       {e.state === "you" && (e.next || e.question) && (
         <p className="errand-note">
           {e.next ? (
@@ -591,7 +585,7 @@ function Avatar({ name, place, color }: { name: string; place?: boolean; color?:
   );
 }
 
-function ContactView({ c, p, busy, onCancel, onSave, onFollow, onRemove }: { c: ContactChat; onCancel: (id: string) => void } & ChatActions) {
+function ContactView({ c, p, busy, onCancel, onSave, onFollow, onRemove, onSend }: { c: ContactChat; onCancel: (id: string) => void } & ChatActions) {
   const name = contactName(c, p);
   const first = name.split(" ")[0];
   const follow = p?.follow ?? "auto";
@@ -631,10 +625,7 @@ function ContactView({ c, p, busy, onCancel, onSave, onFollow, onRemove }: { c: 
         ))}
         {!c.log.length && !c.scheduled.length && <p className="errand-note">Nada por aqui ainda.</p>}
       </Chat>
-      <p className="errand-note">
-        {c.waiting_you ? <><strong>{first} respondeu.</strong> </> : null}
-        Para mandar algo, é só pedir no WhatsApp, por exemplo: "manda pro {name.split(" ")[0]} que eu já tô chegando". Nada sai sem o seu <strong>sim</strong>.
-      </p>
+      <Composer key={c.phone} name={name} onSend={onSend} />
       <FollowBox status={status} follow={follow} busy={busy} onFollow={onFollow} onRemove={onRemove} hideModes={c.member} />
     </>
   );
@@ -642,12 +633,76 @@ function ContactView({ c, p, busy, onCancel, onSave, onFollow, onRemove }: { c: 
 
 function Bubble({ line, next }: { line: Line; next?: boolean }) {
   if (line.from === "pessoa") return <div className="errand-decided">Você decidiu: {line.text}</div>;
+  const mine = line.from === "voce";
   return (
-    <div className={`errand-bubble ${line.from === "nos" ? "ours" : "theirs"}${next ? " next" : ""}`}>
+    <div className={`errand-bubble ${line.from === "eles" ? "theirs" : "ours"}${mine ? " mine" : ""}${next ? " next" : ""}`}>
       {next && <span className="errand-bubble-tag">Próxima mensagem</span>}
       <span className="errand-bubble-text">{line.text}</span>
-      <span className="errand-bubble-time">{next ? "não enviada" : hour(line.at)}</span>
+      <span className="errand-bubble-time">{next ? "não enviada" : mine ? `Você · ${hour(line.at)}` : hour(line.at)}</span>
     </div>
+  );
+}
+
+/**
+ * Caixa para a pessoa escrever na conversa, como no WhatsApp. No notebook Enter envia e Shift+Enter quebra a
+ * linha; no celular (toque) Enter quebra a linha e o botão envia. Cresce até umas 6 linhas e depois rola por dentro.
+ */
+function Composer({ name, onSend }: { name: string; onSend: (text: string) => Promise<void> }) {
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const touch = useMedia("(pointer: coarse)");
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 148)}px`;
+  }, [text]);
+  const send = async () => {
+    const t = text.trim();
+    if (!t || sending) return;
+    setSending(true);
+    try {
+      await onSend(t);
+      setText("");
+    } catch (err) {
+      void alertDialog("Não deu para mandar", (err as Error).message);
+    } finally {
+      setSending(false);
+      if (!touch) ref.current?.focus();
+    }
+  };
+  return (
+    <form
+      className="errand-composer"
+      onSubmit={(ev) => {
+        ev.preventDefault();
+        void send();
+      }}
+    >
+      <textarea
+        ref={ref}
+        className="errand-composer-input"
+        rows={1}
+        maxLength={2000}
+        placeholder="Escreva uma mensagem"
+        aria-label={`Mensagem para ${name}`}
+        value={text}
+        disabled={sending}
+        enterKeyHint={touch ? "enter" : "send"}
+        onChange={(ev) => setText(ev.target.value)}
+        onKeyDown={(ev) => {
+          if (ev.key === "Enter" && !ev.shiftKey && !touch && !ev.nativeEvent.isComposing) {
+            ev.preventDefault();
+            void send();
+          }
+        }}
+      />
+      <button className="errand-send" type="submit" disabled={!text.trim() || sending} aria-label="Enviar" title="Enviar">
+        <Icon name="send" size={17} />
+      </button>
+      <span className="errand-composer-hint">Sai pelo número do Planejai com o seu nome na frente.{touch ? "" : " Enter envia, Shift+Enter pula linha."}</span>
+    </form>
   );
 }
 

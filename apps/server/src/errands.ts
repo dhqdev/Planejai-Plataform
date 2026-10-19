@@ -40,8 +40,8 @@ export const MAX_ERRANDS_PER_DAY = 10;
 const OPEN = ["waiting", "asking"];
 
 export interface ErrandLogEntry {
-  /** nos = o assistente para eles; eles = o estabelecimento; pessoa = o que a pessoa decidiu no meio */
-  from: "nos" | "eles" | "pessoa";
+  /** nos = o assistente para eles; eles = o estabelecimento; pessoa = o que a pessoa decidiu no meio; voce = a pessoa escreveu direto pelo painel */
+  from: "nos" | "eles" | "pessoa" | "voce";
   text: string;
   at: string;
   kind?: string;

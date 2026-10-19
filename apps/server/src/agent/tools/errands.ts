@@ -128,7 +128,7 @@ export const errandList = defineTool<Record<string, never>>({
         goal: e.goal,
         allowed: e.allowed,
         status: e.status === "asking" ? `esperando a pessoa: ${e.question}` : "esperando eles",
-        last: e.log.slice(-3).map((l) => `${l.from === "nos" ? "nós" : l.from}: ${l.text}`),
+        last: e.log.slice(-3).map((l) => `${l.from === "nos" ? "nós" : l.from === "voce" ? "a pessoa, pelo painel" : l.from}: ${l.text}`),
         messages_left: messageLimit(e) - e.sent,
       })),
     };

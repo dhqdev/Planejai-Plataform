@@ -220,7 +220,7 @@ Agora: ${formatLocal(now, timezone)} (${isoLocal(now, timezone)}, fuso ${timezon
 /** Conversa até aqui, como transcrição numa mensagem só (funciona em qualquer modelo, sem depender da ordem dos papéis). */
 export function errandMessages(log: ErrandLogEntry[], place: string, person: string, keep = 0): ChatMessage[] {
   // conversa longa: só as últimas falas (o objetivo e o resumo do começo já estão no prompt)
-  const lines = (keep && log.length > keep ? log.slice(-keep) : log).map((l) => (l.from === "nos" ? `Você: ${l.text}` : l.from === "pessoa" ? `(${person} decidiu: ${l.text})` : `${place}: ${l.text || "(mensagem sem texto)"}`));
+  const lines = (keep && log.length > keep ? log.slice(-keep) : log).map((l) => (l.from === "nos" ? `Você: ${l.text}` : l.from === "pessoa" ? `(${person} decidiu: ${l.text})` : l.from === "voce" ? `${person} (escreveu direto, não foi você): ${l.text}` : `${place}: ${l.text || "(mensagem sem texto)"}`));
   return [{ role: "user", content: `Conversa até agora:\n${lines.join("\n")}\n\nO que fazer agora?` }];
 }
 

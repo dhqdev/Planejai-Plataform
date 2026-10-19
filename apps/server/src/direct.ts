@@ -70,6 +70,15 @@ export function directText(message: string, sender: { full_name?: string | null;
   return redactSecrets(humanize(says ? t : introduce(t, first))).slice(0, 3000);
 }
 
+/** "*David:* chego às 8": a mensagem que a pessoa digitou no painel, com o nome dela para quem recebe saber quem fala. */
+export function personText(message: string, sender: { full_name?: string | null; name?: string | null }) {
+  const first = firstName(sender);
+  const t = redactSecrets(message.trim()).slice(0, 3000);
+  return first ? `*${first}:* ${t}` : t;
+}
+/** Na tela o nome sai: o balão já é da pessoa. */
+export const withoutName = (text: string) => text.replace(/^\*[^*\n]{1,40}:\* /, "");
+
 export async function createDirect(opts: {
   user: { id: string; phone: string; name?: string | null; full_name?: string | null };
   phone: string;
@@ -78,6 +87,8 @@ export async function createDirect(opts: {
   sendAt?: Date | null;
   timezone: string;
   attachment?: DirectAttachment | null;
+  /** a própria pessoa escreveu no painel (Recados): sai com o nome dela na frente, sem a apresentação do assistente */
+  fromPanel?: boolean;
 }) {
   const phone = normalizePhone(opts.phone);
   if (phone.length < 12 || phone.length > 13) return { ok: false, error: `Telefone inválido: ${opts.phone}. Precisa do DDD.` };
@@ -86,7 +97,7 @@ export async function createDirect(opts: {
   if (isOwner(phone) && !isOwner(opts.user.phone)) return { ok: false, error: "Para falar com o dono do Planejai, use contact_owner." };
   if (await isOptedOut(phone)) return { ok: false, error: OPTED_OUT_ERROR };
   // assinatura combinada para esse número na tela Recados (mesmo texto que a pessoa vê depois)
-  const text = withSignature(directText(opts.message, opts.user), (await getPrefs(opts.user.id, phone))?.signature);
+  const text = opts.fromPanel ? personText(opts.message, opts.user) : withSignature(directText(opts.message, opts.user), (await getPrefs(opts.user.id, phone))?.signature);
   if (!opts.message.trim()) return { ok: false, error: "Mensagem vazia" };
   const sendAt = opts.sendAt && opts.sendAt.getTime() > Date.now() + 30_000 ? opts.sendAt : null;
   if (sendAt && sendAt.getTime() > Date.now() + 90 * 86400_000) return { ok: false, error: "Dá para agendar até 90 dias à frente." };
@@ -101,8 +112,8 @@ export async function createDirect(opts: {
 
   const att = opts.attachment;
   const row = await one<{ id: string }>(
-    `INSERT INTO direct_messages (user_id, name, phone, text, send_at, media, media_kind, media_mimetype, media_name)
-     VALUES ($1, $2, $3, $4, COALESCE($5, now()), $6, $7, $8, $9) RETURNING id`,
+    `INSERT INTO direct_messages (user_id, name, phone, text, send_at, media, media_kind, media_mimetype, media_name, by_person)
+     VALUES ($1, $2, $3, $4, COALESCE($5, now()), $6, $7, $8, $9, $10) RETURNING id`,
     [
       opts.user.id,
       opts.name?.trim().slice(0, 80) || null,
@@ -113,6 +124,7 @@ export async function createDirect(opts: {
       att?.kind ?? null,
       att?.mimetype ?? null,
       att ? (att.fileName ?? null)?.slice(0, 120) ?? null : null,
+      Boolean(opts.fromPanel),
     ],
   );
   const id = row!.id;
@@ -131,7 +143,7 @@ export async function createDirect(opts: {
 
 /** Envia (na hora ou quando o agendamento vence). Agendada avisa quem pediu que saiu. */
 export async function sendDirect(id: string, opts: { notify?: boolean } = {}) {
-  const d = await one<DirectMessage & { media: Buffer | null; media_mimetype: string | null }>(
+  const d = await one<DirectMessage & { media: Buffer | null; media_mimetype: string | null; by_person: boolean }>(
     "UPDATE direct_messages SET status = 'sending' WHERE id = $1 AND status = 'scheduled' RETURNING *",
     [id],
   );
@@ -172,7 +184,7 @@ export async function sendDirect(id: string, opts: { notify?: boolean } = {}) {
     } else await channel.sendText(jid, d.text);
     // o arquivo só ficava aqui até sair
     await query("UPDATE direct_messages SET status = 'sent', sent_at = now(), jid = $2, error = NULL, media = NULL WHERE id = $1", [id, jid]);
-    await logContactMessage(d.user_id, d.phone, d.name, "out", d.media_kind ? `${d.text}\n[${attachmentLabel({ kind: d.media_kind, name: d.media_name })}]` : d.text);
+    await logContactMessage(d.user_id, d.phone, d.name, "out", d.media_kind ? `${d.text}\n[${attachmentLabel({ kind: d.media_kind, name: d.media_name })}]` : d.text, d.by_person);
     if (opts.notify) await notifyUser(d.user_id, `Mandei para ${d.name ?? `+${d.phone}`} a mensagem que você agendou.`).catch(() => {});
     return { ok: true };
   } catch (err) {
@@ -298,13 +310,14 @@ export function describeDirect(d: DirectMessage, tz: string) {
 export const CONTACT_LOG_DAYS = 30;
 
 /** Guarda uma mensagem da conversa da pessoa com um contato. Nunca derruba o envio. */
-export async function logContactMessage(userId: string, phone: string, name: string | null | undefined, dir: "out" | "in", text: string) {
+export async function logContactMessage(userId: string, phone: string, name: string | null | undefined, dir: "out" | "in", text: string, byPerson = false) {
   const t = redactSecrets(text).trim().slice(0, 3000);
   if (!t) return;
-  await query("INSERT INTO contact_messages (user_id, phone, name, dir, text) VALUES ($1, $2, $3, $4, $5)", [userId, phone, name?.trim().slice(0, 80) || null, dir, t]).catch(() => {});
+  await query("INSERT INTO contact_messages (user_id, phone, name, dir, text, by_person) VALUES ($1, $2, $3, $4, $5, $6)", [userId, phone, name?.trim().slice(0, 80) || null, dir, t, byPerson]).catch(() => {});
 }
 
-type ContactLine = { from: "nos" | "eles"; text: string; at: string };
+/** voce = a própria pessoa escreveu pelo painel; nos = o assistente; eles = o contato */
+type ContactLine = { from: "nos" | "eles" | "voce"; text: string; at: string };
 
 /**
  * Todo mundo com quem o assistente está conversando em nome da pessoa (fora os recados com estabelecimentos):
@@ -312,8 +325,8 @@ type ContactLine = { from: "nos" | "eles"; text: string; at: string };
  */
 export async function listContactChats(userId: string) {
   const [rows, scheduled] = await Promise.all([
-    many<{ phone: string; name: string | null; dir: "out" | "in"; text: string; created_at: string }>(
-      `SELECT phone, name, dir, text, created_at FROM contact_messages
+    many<{ phone: string; name: string | null; dir: "out" | "in"; text: string; created_at: string; by_person: boolean }>(
+      `SELECT phone, name, dir, text, created_at, by_person FROM contact_messages
         WHERE user_id = $1 AND created_at > now() - make_interval(days => $2) ORDER BY created_at LIMIT 1000`,
       [userId, CONTACT_LOG_DAYS],
     ),
@@ -329,7 +342,7 @@ export async function listContactChats(userId: string) {
   };
   for (const r of rows) {
     const at = new Date(r.created_at).toISOString();
-    chat(r.phone, r.name, at).log.push({ from: r.dir === "out" ? "nos" : "eles", text: r.text, at });
+    chat(r.phone, r.name, at).log.push({ from: r.dir === "in" ? "eles" : r.by_person ? "voce" : "nos", text: r.by_person ? withoutName(r.text) : r.text, at });
   }
   // a ordem da lista é pela última coisa que aconteceu (o pedido da agendada), nunca por um horário no futuro
   for (const d of scheduled) chat(d.phone, d.name, new Date((d as DirectMessage & { created_at: string }).created_at).toISOString()).scheduled.push({ id: d.id, text: d.text, send_at: new Date(d.send_at).toISOString() });

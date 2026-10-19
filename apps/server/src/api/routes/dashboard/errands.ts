@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { type PrefsPatch, prefsFor, removeChat, savePrefs } from "../../../chatprefs.js";
 import { cancelErrand, discardErrandDraft, listErrands } from "../../../errands.js";
 import { listContactChats } from "../../../direct.js";
-import { listPhonebook } from "../../../phonebook.js";
+import { replyFromPanel } from "../../../panelreply.js";
 import { NOBODY, selfUserId } from "../../../sharing.js";
 
 /**
@@ -14,11 +14,16 @@ export function errandRoutes(base: FastifyInstance) {
   const self = async (a: Parameters<typeof selfUserId>[0]) => (await selfUserId(a)) ?? NOBODY;
   base.get("/api/errands", async (req) => {
     const uid = await self(req.account);
-    const [errands, contacts, phonebook] = await Promise.all([listErrands(uid), listContactChats(uid), listPhonebook(uid, "", 200)]);
-    const agenda = (phonebook.items || []).map((item) => ({ id: item.id, name: item.name, phone: item.phone, label: item.label }));
+    // só quem o assistente conversou a pedido da pessoa; a agenda de contatos inteira fica na tela Contatos
+    const [errands, contacts] = await Promise.all([listErrands(uid), listContactChats(uid)]);
     // jeito de cada conversa (apelido, cor, fixada...), pela chave do número que a tela usa
-    const prefs = await prefsFor(uid, [...errands.errands.map((e) => e.phone), ...contacts.map((c) => c.phone), ...agenda.map((a) => a.phone)]);
-    return { ...errands, contacts, agenda, prefs };
+    const prefs = await prefsFor(uid, [...errands.errands.map((e) => e.phone), ...contacts.map((c) => c.phone)]);
+    return { ...errands, contacts, prefs };
+  });
+  // a própria pessoa responde pela tela, numa conversa que o assistente já tem por ela
+  base.post<{ Params: { phone: string }; Body: { text?: string } }>("/api/errands/chats/:phone/mensagem", async (req, reply) => {
+    const r = await replyFromPanel(await self(req.account), req.params.phone, String(req.body?.text ?? ""));
+    return r.ok ? r : reply.code(400).send({ error: r.error });
   });
   // personalizar a conversa ou mudar o acompanhamento (auto, on = sem prazo, off = parar)
   base.put<{ Params: { phone: string }; Body: PrefsPatch }>("/api/errands/chats/:phone", async (req, reply) => {

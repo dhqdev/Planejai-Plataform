@@ -253,4 +253,35 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     expect((await listErrands(david.id)).errands.find((e: any) => e.id === r.errand_id)?.state).toBe("cancelled");
     expect(sentTexts().length).toBe(before + 1); // só a primeira mensagem do startErrand
   });
+  it("a pessoa responde pelo painel: sai com o nome dela, entra no recado e só em conversa que já existe", async () => {
+    const { startErrand, cancelErrand, listErrands } = await import("../src/errands.js");
+    const { replyFromPanel } = await import("../src/panelreply.js");
+    const { listContactChats } = await import("../src/direct.js");
+    const { errandMessages } = await import("../src/agent/errand-agent.js");
+    const OFICINA = "5519955556666";
+    const u = { id: david.id, phone: david.phone, name: "David" };
+    const r: any = await startErrand({ user: u, conversationId: conv, place: "Oficina", phone: OFICINA, message: "Vocês consertam câmbio?", goal: "câmbio", timezone: TZ });
+    expect(r.ok).toBe(true);
+
+    // número que o assistente nunca falou: o painel não vira WhatsApp para qualquer um
+    expect(await replyFromPanel(david.id, "5519900001111", "oi")).toMatchObject({ ok: false });
+    expect(await replyFromPanel(david.id, OFICINA, "   ")).toMatchObject({ ok: false });
+
+    // recado aberto: sai pelo nosso número com o nome dela e entra no histórico do recado, sem gastar o limite do agente
+    expect(await replyFromPanel(david.id, OFICINA, "Pode ser amanhã às 15h?")).toEqual({ ok: true });
+    expect(sentTexts().at(-1)).toBe("*David:* Pode ser amanhã às 15h?");
+    const e = await db.one("SELECT sent, log FROM errands WHERE id = $1", [r.errand_id]);
+    expect(e.sent).toBe(1);
+    expect(e.log.at(-1)).toMatchObject({ from: "voce", text: "Pode ser amanhã às 15h?" });
+    expect(errandMessages(e.log, "Oficina", "David")[0]!.content).toMatch(/David \(escreveu direto, não foi você\): Pode ser amanhã às 15h\?/);
+
+    // recado fechado: continua como mensagem avulsa dela (a resposta volta) e aparece como dela na tela
+    await cancelErrand(r.errand_id, david.id);
+    expect((await replyFromPanel(david.id, OFICINA, "Obrigado!")).ok).toBe(true);
+    expect(sentTexts().at(-1)).toBe("*David:* Obrigado!");
+    const chat = (await listContactChats(david.id)).find((c) => c.phone === OFICINA)!;
+    expect(chat.log.at(-1)).toMatchObject({ from: "voce", text: "Obrigado!" });
+    expect(chat.name).toBe("Oficina");
+    expect((await listErrands(david.id)).errands.find((x: any) => x.id === r.errand_id)?.log.at(-1)).toMatchObject({ from: "voce" });
+  });
 });
