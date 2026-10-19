@@ -1,5 +1,6 @@
-import { createContext, lazy, useCallback, Suspense, useContext, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { createContext, lazy, useCallback, Suspense, useContext, useEffect, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate, useNavigationType } from "react-router-dom";
+import { inViewTransition, screenDrawn } from "./transicao";
 import { createPortal, flushSync } from "react-dom";
 import { api } from "./api";
 import { BlockLoader } from "./BlockLoader";
@@ -399,14 +400,16 @@ export function App() {
       /* sem storage */
     }
     // tema novo abre num círculo a partir do botão (navegador sem View Transitions troca na hora)
-    const doc = document as Document & { startViewTransition?: (cb: () => void) => { ready: Promise<void> } };
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => { ready: Promise<void>; finished: Promise<void> } };
     if (!doc.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) return apply();
     const x = e?.clientX || innerWidth / 2;
     const y = e?.clientY || innerHeight / 2;
     const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
-    doc
-      .startViewTransition(apply)
-      .ready.then(() =>
+    // pj-theme-vt: a tela inteira vira uma foto só (as trocas de tela usam fotos separadas, transicao.css)
+    document.documentElement.classList.add("pj-theme-vt");
+    const t = doc.startViewTransition(apply);
+    t.finished.finally(() => document.documentElement.classList.remove("pj-theme-vt")).catch(() => {});
+    t.ready.then(() =>
         document.documentElement.animate(
           { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
           { duration: 520, easing: "cubic-bezier(.4,0,.2,1)", pseudoElement: "::view-transition-new(root)" },
@@ -631,15 +634,20 @@ export function App() {
  */
 function useRouteMotion(path: string) {
   const type = useNavigationType();
-  const ref = useRef({ path, kind: "tab" as "tab" | "push" | "pop" });
+  const ref = useRef({ path, kind: "tab" as "tab" | "push" | "pop" | "vt" });
   if (ref.current.path !== path) {
     const top = (p: string) => "/" + (p.split("/")[1] ?? "");
     const flat = (p: string) => [...PHONE_TABS, "/conta"].includes(top(p));
     const from = ref.current.path;
     const siblings = groupOf(from) && groupOf(from) === groupOf(path);
     const kind = type === "POP" ? "pop" : flat(path) || siblings ? "tab" : "push";
-    ref.current = { path, kind };
+    // troca feita com View Transition (transicao.ts): o movimento é das fotos e a tela em si não anima.
+    // Fica guardado no ref junto com o jeito para não mudar no meio (a classe nova reiniciaria a animação)
+    ref.current = { path, kind: inViewTransition() ? "vt" : kind };
+    document.documentElement.dataset.nav = kind;
   }
+  // tela nova desenhada: a View Transition já pode tirar a foto dela
+  useLayoutEffect(screenDrawn, [path]);
   return ref.current.kind;
 }
 

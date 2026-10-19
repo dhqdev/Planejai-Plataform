@@ -20,3 +20,47 @@
 
 /* a tela que entra não deixa a barra de rolagem lateral aparecer no meio do deslize */
 @media (max-width: 767px) { .main:has(> .route-push, > .route-pop) { overflow-x: hidden; } }
+
+/* ---------- Com View Transitions (Chrome, Edge, Safari 18+; David, 2026-10-19: "fluidez" no PWA) ----------
+   transicao.ts liga a transição em toda troca de tela. O navegador tira uma foto da tela antiga e outra da nova e
+   anima as duas ao mesmo tempo: a antiga sai enquanto a nova entra, sem piscar vazio no meio (o código da tela
+   nova carrega com a antiga ainda na tela). O jeito (push/pop/tab) chega em <html data-nav> pelo App.
+   - .main tem foto própria, recortada no próprio painel (nada vaza por cima da moldura nem da barra)
+   - a barra de baixo tem foto própria, por cima e parada (a pílula dela anima ao vivo)
+   - o resto (moldura, título, item ativo do menu) esmaece rápido
+   Os nomes só existem enquanto a transição roda (html.pj-vt, transicao.ts): nome fixo deixaria o painel como
+   contexto de empilhamento e as janelas de dentro dele cairiam atrás da barra. Na troca de tema (pj-theme-vt)
+   a tela inteira é uma foto só, para o círculo cobrir tudo.
+   Navegador sem a API, ou "reduzir movimento", fica com as animações de cima. */
+html.pj-vt:not(.pj-theme-vt) .main { view-transition-name: pj-main; }
+html.pj-vt:not(.pj-theme-vt) .tabbar { view-transition-name: pj-tabbar; }
+.route-fade.route-vt { animation: none; }
+
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .16s; }
+::view-transition-group(pj-tabbar), ::view-transition-new(pj-tabbar) { animation: none; }
+::view-transition-old(pj-tabbar) { display: none; }
+
+::view-transition-group(pj-main) { overflow: clip; animation: none; }
+::view-transition-old(pj-main), ::view-transition-new(pj-main) { mix-blend-mode: normal; }
+/* celular: abrir entra da direita com a antiga recuando um pouco (jeito do iOS); voltar é o contrário */
+::view-transition-old(pj-main) { animation: vt-fade-out .14s ease-out both; }
+::view-transition-new(pj-main) { animation: vt-tab-in .2s cubic-bezier(.2, .8, .2, 1) both; }
+html[data-nav="push"]::view-transition-old(pj-main) { animation: vt-out-left .3s cubic-bezier(.32, .72, 0, 1) both; }
+html[data-nav="push"]::view-transition-new(pj-main) { animation: vt-in-right .3s cubic-bezier(.32, .72, 0, 1) both; }
+html[data-nav="pop"]::view-transition-old(pj-main) { animation: vt-out-right .26s cubic-bezier(.32, .72, 0, 1) both; }
+html[data-nav="pop"]::view-transition-new(pj-main) { animation: vt-in-left .26s cubic-bezier(.32, .72, 0, 1) both; }
+
+/* notebook e iPad: sem deslizar de lado; a antiga esmaece e a nova sobe 8px, no canto arredondado do painel */
+@media (min-width: 768px) {
+  ::view-transition-group(pj-main) { border-top-left-radius: var(--panel-r); }
+  html[data-nav]::view-transition-old(pj-main) { animation: vt-fade-out .14s ease-out both; }
+  html[data-nav]::view-transition-new(pj-main) { animation: vt-rise .22s cubic-bezier(.2, .8, .2, 1) both; }
+}
+
+@keyframes vt-fade-out { to { opacity: 0; } }
+@keyframes vt-tab-in { from { opacity: 0; transform: scale(.985); } }
+@keyframes vt-rise { from { opacity: 0; transform: translate3d(0, 8px, 0); } }
+@keyframes vt-in-right { from { opacity: 0; transform: translate3d(44px, 0, 0); } }
+@keyframes vt-out-left { to { opacity: 0; transform: translate3d(-24px, 0, 0); } }
+@keyframes vt-in-left { from { opacity: 0; transform: translate3d(-36px, 0, 0); } }
+@keyframes vt-out-right { to { opacity: 0; transform: translate3d(28px, 0, 0); } }

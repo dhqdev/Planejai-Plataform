@@ -145,4 +145,4 @@
 
 
 /* troca de tema: o tema novo abre num círculo a partir do botão (App.tsx toggleTheme) */
-::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html.pj-theme-vt::view-transition-old(root), html.pj-theme-vt::view-transition-new(root) { animation: none; mix-blend-mode: normal; }

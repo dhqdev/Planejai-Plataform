@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import { unstable_HistoryRouter as HistoryRouter } from "react-router-dom";
 import { App } from "./App";
 import { Guard } from "./Guard";
 import "./styles.css";
@@ -11,6 +11,7 @@ import { installRipple } from "./motion";
 import { installTouchFeedback, registerServiceWorker } from "./touch";
 import { watchForUpdates } from "./update";
 import { installKeyboardWatch } from "./teclado";
+import { appHistory } from "./transicao";
 
 // volta de um "Atualizar": tira o ?v= da barra de endereço
 if (new URLSearchParams(location.search).has("v")) {
@@ -47,10 +48,10 @@ try {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter>
+    <HistoryRouter history={appHistory}>
       <Guard full>
         <App />
       </Guard>
-    </BrowserRouter>
+    </HistoryRouter>
   </StrictMode>,
 );
