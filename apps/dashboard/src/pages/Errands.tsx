@@ -5,6 +5,7 @@ import { Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog }
 import { FIT_QUERY, useApi, useMedia } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
+import { useKeyboardShell } from "../teclado";
 import { Vazio } from "../Vazio";
 
 type State = "them" | "you" | "done" | "failed" | "cancelled" | "expired";
@@ -122,6 +123,8 @@ export function ErrandsPage() {
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<Filter>("tudo");
   const [q, setQ] = useState("");
+  // conversa aberta no celular; o hook fica antes do "carregando" (hook depois de um return derrubava a tela)
+  useChatShell(Boolean(data) && !fit && phone && picked != null);
   if (!data) return error ? <div className="page"><ErrorBox error={error} /></div> : <Loading />;
 
   const draft = data.drafts[0] ?? null;
@@ -222,7 +225,6 @@ export function ErrandsPage() {
   const showDraftRow = draft && filter !== "pessoas" && filter !== "arquivadas" && match(draft.place, draft.goal);
   const total = list.length + people.length + (draft ? 1 : 0);
   const reading = total > 0 && !fit && phone && detailOpen;
-  useChatShell(reading);
   const errandRow = (e: Errand) => (
     <button key={e.id} className={`errand-row${e.id === selId ? " active" : ""}`} onClick={() => setPicked(e.id)}>
       <Avatar name={placeName(e, pref(e.phone))} place={e.kind !== "conversa"} color={pref(e.phone)?.color} />
@@ -511,58 +513,16 @@ function ErrandView({ e, extra, p, busy, compact, onCancel, onSave, onFollow, on
 const BackCtx = createContext<(() => void) | null>(null);
 
 /**
- * Celular, conversa aberta: a tela vira uma caixa presa na área visível de verdade (visualViewport). Com o teclado
- * aberta ela encolhe em vez de ser empurrada, o topo fica no lugar e só a conversa rola; a barra de abas some.
+ * Celular, conversa aberta: a tela vira uma caixa presa na área visível de verdade (teclado.ts). Com o teclado
+ * aberto ela encolhe em vez de ser empurrada, o topo fica no lugar e só a conversa rola; a barra de abas some.
  */
 function useChatShell(active: boolean) {
+  useKeyboardShell(active);
   useEffect(() => {
     if (!active) return;
     const root = document.documentElement;
-    const vv = window.visualViewport;
     root.classList.add("pj-errchat");
-    let raf = 0;
-    let blur = 0;
-    const typing = () => {
-      const a = document.activeElement as HTMLElement | null;
-      return Boolean(a && a.closest(".errands-page") && a.tagName === "TEXTAREA");
-    };
-    const fit = () => {
-      raf = 0;
-      if (vv) {
-        root.style.setProperty("--vvh", `${vv.height}px`);
-        root.style.setProperty("--vvtop", `${vv.offsetTop}px`);
-      }
-      const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
-      root.classList.toggle("pj-kb", kb > 120 || typing());
-    };
-    const schedule = () => {
-      if (!raf) raf = requestAnimationFrame(fit);
-    };
-    // ao sair da caixa espera um pouco: tocar em Enviar tira o foco por um instante
-    const onFocus = () => {
-      clearTimeout(blur);
-      fit();
-    };
-    const onBlur = () => {
-      clearTimeout(blur);
-      blur = window.setTimeout(fit, 120);
-    };
-    fit();
-    vv?.addEventListener("resize", schedule);
-    vv?.addEventListener("scroll", schedule);
-    document.addEventListener("focusin", onFocus);
-    document.addEventListener("focusout", onBlur);
-    return () => {
-      vv?.removeEventListener("resize", schedule);
-      vv?.removeEventListener("scroll", schedule);
-      document.removeEventListener("focusin", onFocus);
-      document.removeEventListener("focusout", onBlur);
-      clearTimeout(blur);
-      cancelAnimationFrame(raf);
-      root.classList.remove("pj-errchat", "pj-kb");
-      root.style.removeProperty("--vvh");
-      root.style.removeProperty("--vvtop");
-    };
+    return () => root.classList.remove("pj-errchat");
   }, [active]);
 }
 

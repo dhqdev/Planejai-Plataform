@@ -110,7 +110,7 @@
   .modal-bg:has(.more-sheet) { padding: 0; }
   .modal.more-sheet {
     min-height: 0; max-height: min(88dvh, calc(var(--vvh, 100dvh) - 24px)); border-radius: 26px 26px 0 0; border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-bottom: none;
-    padding-bottom: calc(8px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--panel) 90%, transparent);
+    padding-bottom: calc(8px + var(--sab)); background: color-mix(in srgb, var(--panel) 90%, transparent);
     -webkit-backdrop-filter: saturate(1.6) blur(22px); backdrop-filter: saturate(1.6) blur(22px);
     box-shadow: 0 24px 60px -20px rgba(20, 8, 48, .55);
   }

@@ -9,6 +9,7 @@ import { useApi } from "../hooks";
 import { liveOn, onLive } from "../live";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
+import { useKeyboardShell } from "../teclado";
 import { ChatCard, type ChatCardData } from "./ChatCards";
 import "../styles/chat-inicio.css";
 
@@ -314,56 +315,6 @@ function useRecorder(onDone: (o: Outgoing) => void) {
   return { secs, error, start, stop, clearError: () => setError(null) };
 }
 
-/** Altura visível de verdade (teclado aberto no iPhone/Android): o chat encolhe e a barra de baixo some. */
-function useViewport(root: React.RefObject<HTMLDivElement | null>) {
-  useEffect(() => {
-    const vv = window.visualViewport;
-    const el = root.current;
-    if (!vv || !el) return;
-    let raf = 0;
-    // no iPhone instalado o innerHeight encolhe junto com o teclado, então a conta sozinha não basta:
-    // campo de texto com foco também conta como teclado aberto
-    const typing = () => {
-      const a = document.activeElement as HTMLElement | null;
-      return Boolean(a && el.contains(a) && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && (a as HTMLInputElement).type !== "file")));
-    };
-    const fit = () => {
-      raf = 0;
-      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      el.style.setProperty("--vvh", `${vv.height}px`);
-      el.style.setProperty("--vvtop", `${vv.offsetTop}px`);
-      document.documentElement.classList.toggle("pj-kb", kb > 120 || typing());
-    };
-    const schedule = () => {
-      if (!raf) raf = requestAnimationFrame(fit);
-    };
-    // ao sair do campo espera um pouco: tocar em Enviar tira o foco por um instante
-    let blur = 0;
-    const onFocus = () => {
-      clearTimeout(blur);
-      fit();
-    };
-    const onBlur = () => {
-      clearTimeout(blur);
-      blur = window.setTimeout(fit, 120);
-    };
-    fit();
-    vv.addEventListener("resize", schedule);
-    vv.addEventListener("scroll", schedule);
-    document.addEventListener("focusin", onFocus);
-    document.addEventListener("focusout", onBlur);
-    return () => {
-      vv.removeEventListener("resize", schedule);
-      vv.removeEventListener("scroll", schedule);
-      document.removeEventListener("focusin", onFocus);
-      document.removeEventListener("focusout", onBlur);
-      clearTimeout(blur);
-      cancelAnimationFrame(raf);
-      document.documentElement.classList.remove("pj-kb");
-    };
-  }, [root]);
-}
-
 /** `wide`: no notebook a conversa abre dentro da moldura (ao lado do trilho), numa coluna centralizada. */
 export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
   const nav = useNavigate();
@@ -393,7 +344,8 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
   const sentRef = useRef(0);
   sentRef.current = sentAt;
   const dock = useRef<HTMLDivElement>(null);
-  useViewport(root);
+  // teclado do celular: a tela acompanha a área visível e a caixa fica colada no teclado (teclado.ts)
+  useKeyboardShell(!wide);
   // a lista termina acima da caixa de mensagem (que cresce com atalhos, Sim/Não e texto longo)
   useEffect(() => {
     const d = dock.current;

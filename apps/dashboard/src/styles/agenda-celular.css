@@ -116,7 +116,8 @@
 .pc-day-list { margin: -4px -6px; }
 
 /* ---------- compromisso em tela cheia ---------- */
-.pe-wrap { position: fixed; inset: 0; z-index: 48; }
+/* presa na área visível (teclado.ts): com o teclado aberto encolhe até ele, o topo não some */
+.pe-wrap { position: fixed; left: 0; right: 0; top: var(--vvtop, 0px); height: var(--vvh, 100dvh); z-index: 48; }
 .pe-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .28); }
 .pe {
   position: absolute; inset: 0; display: flex; flex-direction: column; color: var(--text);
@@ -167,7 +168,10 @@ textarea.pe-title { font-size: 27px !important; font-weight: 700; line-height: 1
 .pe-saved { display: inline-flex; align-items: center; gap: 5px; color: var(--ok, #1a7f37); animation: pc-title .3s var(--pc-ease); }
 .pe-from { margin: 24px 0 0; font-size: 16px; color: var(--muted); }
 .pe-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; color: var(--text); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
-.pe-foot { flex: none; padding: 10px 0 calc(14px + env(safe-area-inset-bottom)); }
+.pe-foot { flex: none; padding: 10px 0 calc(14px + var(--sab)); }
+html.pj-kb .pe-foot { padding: 6px 0 8px; }
+html.pj-kb .pe-chips { padding-bottom: 8px; }
+html.pj-kb .pe-top { padding-top: 8px; }
 .pe-chips { display: flex; gap: 10px; overflow-x: auto; padding: 4px 16px 12px; scrollbar-width: none; }
 .pe-chips::-webkit-scrollbar { display: none; }
 .pe-chips button {

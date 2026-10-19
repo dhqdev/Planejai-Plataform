@@ -32,6 +32,7 @@ import {
 import "../styles/agenda-celular.css";
 import "../styles/agenda-celular-chips.css";
 import { GoogleSync } from "./GoogleSync";
+import { useKeyboardShell } from "../teclado";
 
 /**
  * Agenda no celular, no jeito do Toki (pedido do David em 2026-10-16): abas Calendário e Lembretes, o mês numa
@@ -627,6 +628,8 @@ const leadChip = (m: number) => (m === 0 ? "Na hora" : m % 1440 === 0 ? `${m / 1
 function EventScreen({ ev, origin, readonly, tags, onClose, onEdit, onChanged }: { ev: Ev; origin: DOMRect | null; readonly: boolean; tags: Tag[]; onClose: () => void; onEdit: () => void; onChanged: (next?: Ev) => void }) {
   const sheet = useRef<HTMLDivElement>(null);
   const [leaving, setLeaving] = useState(false);
+  // com o teclado aberto a tela encolhe até ele: topo no lugar, caixa de pedido colada no teclado (teclado.ts)
+  useKeyboardShell();
   const [busy, setBusy] = useState<string | null>(null);
   const [ask, setAsk] = useState("");
   const [sent, setSent] = useState<string | null>(null);

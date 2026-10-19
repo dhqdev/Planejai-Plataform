@@ -16,6 +16,11 @@
   overscroll-behavior: none;
 }
 html.pj-kb .hc { --hc-tab: 8px; }
+/* teclado aberto no iPhone instalado: a área visível já começa abaixo do relógio (igual a Recados), sem folga extra */
+@media (max-width: 767px) {
+  html.pj-kb .hc-top { padding-top: 8px; }
+  html.pj-kb .hc-list { padding-top: 118px; }
+}
 
 /* ---------- Topo: o líder no meio, o time em arco dos dois lados ---------- */
 .hc-top {

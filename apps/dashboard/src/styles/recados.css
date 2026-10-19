@@ -282,7 +282,7 @@
   .errands-page.reading .errand-chat { max-height: none; border-top: 0; padding: 12px 0; gap: 8px; }
   .errands-page.reading .errand-bubble { max-width: 84%; font-size: 15px; }
   .errands-page.reading .errand-composer { margin: 0 -16px; padding: 6px 12px 8px; background: var(--bg); }
-  html.pj-kb .errands-page.reading .errand-composer { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+  html.pj-kb .errands-page.reading .errand-composer { padding-bottom: 6px; }
   .errands-page.reading .errand-composer-hint { display: none; }
   .errands-page.reading .errand-composer-input { min-height: 42px; }
   .errands-page.reading .errand-send { width: 42px; height: 42px; }

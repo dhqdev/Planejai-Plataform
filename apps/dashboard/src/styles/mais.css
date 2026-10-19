@@ -48,10 +48,10 @@
   .modal, .modal.wide { max-height: min(92dvh, calc(var(--vvh, 100dvh) - 12px)); }
   .modal.more-sheet { min-height: min(70dvh, calc(var(--vvh, 100dvh) - 12px)); }
   /* teclado aberto: sobra pouca altura, então a moldura encolhe e o espaço vai para os campos */
-  .kb-open .sheet-handle { display: none; }
-  .kb-open .modal { border-radius: 16px 16px 0 0; padding-bottom: 0; }
-  .kb-open .modal-head { padding-top: 10px; padding-bottom: 6px; }
-  .kb-open .modal-foot { padding-top: 8px; padding-bottom: 8px; }
+  .kb-open .sheet-handle, html.pj-kb .modal-bg .sheet-handle { display: none; }
+  .kb-open .modal, html.pj-kb .modal-bg .modal { border-radius: 16px 16px 0 0; padding-bottom: 0; }
+  .kb-open .modal-head, html.pj-kb .modal-bg .modal-head { padding-top: 10px; padding-bottom: 6px; }
+  .kb-open .modal-foot, html.pj-kb .modal-bg .modal-foot { padding-top: 8px; padding-bottom: 8px; }
   .modal-body .select { text-overflow: ellipsis; }
 }
 

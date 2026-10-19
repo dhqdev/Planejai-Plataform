@@ -12,6 +12,11 @@
 - Dados: `GET /api/clients/:id/usage?days=7|14|30|90` junta `client-overview.ts` (`clientBilling` sem criar carteira, `clientDaily` de `usage_daily` + grãos do extrato, `clientActivity`, `clientFeatures` só com contagens) ao detalhe de agentes/ferramentas (execuções, só 7 dias). Cobranças do Asaas em `GET /api/clients/:id/payments`.
 - Aba Plano tem "Dar grãos" e "Liberar sem cobrança" (mesmas rotas de Configurações > Grãos).
 
+## Teclado do celular (teclado.ts)
+- `installKeyboardWatch()` (main.tsx) publica no `<html>` `--vvh`/`--vvtop` (área visível de verdade), a classe `pj-kb` com o teclado aberto (some a barra de abas) e zera `--sab` (folga do risco do iPhone; use `var(--sab)` em vez de `env(safe-area-inset-bottom)` em caixa presa embaixo). O campo com foco rola para dentro da sua lista.
+- Tela com caixa de escrever presa embaixo chama `useKeyboardShell()` e usa `top: var(--vvtop); height: var(--vvh)`: encolhe até o teclado, topo fica no lugar. Hoje: Recados (conversa), chat do Início, compromisso da Agenda (`EventScreen`). Folhas (`Modal`) já medem sozinhas.
+- Hook nunca depois de `return` de carregamento (derrubava Recados com erro 310).
+
 ## Chat do Início (celular e notebook)
 - `pages/HomeChat.tsx` (rota `/api/chat`, tabela `app_chat`): no celular é o Início; no notebook abre por `/?chat=1` (botão "Conversar" do painel, prop `wide`, coluna centralizada dentro da moldura).
 - Cada fala de agente vem num cartão com o nome dele; o time conversando entre si vira cartões quadrados, dois por linha.

@@ -10,6 +10,7 @@ import { installEdgeBack, installLiquidGlass, installSegmented } from "./ios";
 import { installRipple } from "./motion";
 import { installTouchFeedback, registerServiceWorker } from "./touch";
 import { watchForUpdates } from "./update";
+import { installKeyboardWatch } from "./teclado";
 
 // volta de um "Atualizar": tira o ?v= da barra de endereço
 if (new URLSearchParams(location.search).has("v")) {
@@ -23,6 +24,7 @@ installRipple();
 registerServiceWorker();
 installFieldLabels();
 installKeyboard();
+installKeyboardWatch();
 installSegmented();
 installEdgeBack();
 installLiquidGlass();
