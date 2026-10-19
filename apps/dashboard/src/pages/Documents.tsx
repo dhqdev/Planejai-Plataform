@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { api, day } from "../api";
-import { Empty, ErrorBox, Modal, PageHead } from "../components";
+import { Empty, ErrorBox, Modal } from "../components";
 import { useApi } from "../hooks";
 import { Vazio } from "../Vazio";
 import { Icon } from "../icons";
@@ -56,19 +56,13 @@ export function DocumentsPage() {
   const used = data?.usage;
   return (
     <div className={`page ${data && !all.length ? "" : "fit "}docs-page`}>
-      <PageHead
-        title="Documentos"
-        subtitle="PDFs, fotos e arquivos guardados. Mande no WhatsApp com “guarda esse documento” e peça de volta quando precisar."
-        actions={
-          <div className="row docs-actions">
-            <input className="input docs-search" placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} />
-            <input ref={input} type="file" multiple hidden onChange={(e) => upload(e.target.files)} />
-            <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => input.current?.click()}>
-              <Icon name="plus" size={15} /> {busy ? "Enviando…" : "Enviar arquivo"}
-            </button>
-          </div>
-        }
-      />
+      <div className="docs-top">
+        <input className="input docs-search" placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input ref={input} type="file" multiple hidden onChange={(e) => upload(e.target.files)} />
+        <button className="btn btn-primary btn-sm docs-send" disabled={busy} onClick={() => input.current?.click()}>
+          <Icon name="plus" size={15} /> {busy ? "Enviando…" : "Enviar arquivo"}
+        </button>
+      </div>
       <ErrorBox error={error ?? err} />
       {data && !all.length ? (
         <Vazio

@@ -39,6 +39,12 @@
 .scroll-y { overflow-y: auto; overscroll-behavior: contain; }
 
 /* ---------- Documentos ---------- */
+/* sem título nem descrição: busca à esquerda, enviar à direita, tudo sobe */
+.docs-page { padding-top: 20px; }
+.docs-top .docs-search, .docs-top .docs-send { height: 40px; min-height: 0; }
+.docs-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+@media (min-width: 1024px) and (min-height: 680px) { .docs-page.fit { padding-top: 18px; } }
+@media (max-width: 700px) { .docs-page { padding-top: 8px; } }
 .docs-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .docs-folders { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; }
 button.chip { cursor: pointer; color: var(--text); }

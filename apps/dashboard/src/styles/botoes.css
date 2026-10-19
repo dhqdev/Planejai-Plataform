@@ -35,7 +35,7 @@
 @media (max-width: 767px) {
   .modal-foot .btn { min-height: var(--btn-h-lg); border-radius: var(--btn-r); }
 }
-.signup-actions .btn, .docs-actions .btn { height: auto; min-height: var(--btn-h-lg); border-radius: var(--btn-r); }
+.signup-actions .btn, .docs-send { height: auto; min-height: var(--btn-h-lg); border-radius: var(--btn-r); }
 .dash-actions .btn { border-radius: var(--btn-r); }
 
 /* abrir: menu de toque longo e seletor de data crescem de quem chamou, na mesma curva das janelas */
