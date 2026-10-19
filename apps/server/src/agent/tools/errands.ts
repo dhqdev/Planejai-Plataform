@@ -20,7 +20,7 @@ export const errandStart = defineTool<{ place: string; phone: string; message: s
       },
       goal: { type: "string", description: "O que a pessoa quer resolver, com data e serviço" },
       allowed: { type: "string", description: "Condição já liberada para fechar sozinho (opcional)" },
-      hours: { type: "number", description: "Quanto esperar resposta, padrão 24h" },
+      hours: { type: "number", description: "Quanto acompanhar a resposta, padrão e máximo 168h (7 dias)" },
       ...CONFIRM_PARAM,
     },
     ["place", "phone", "message", "goal"],

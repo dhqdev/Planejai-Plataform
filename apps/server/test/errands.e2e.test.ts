@@ -156,7 +156,7 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     expect(new Date(rem.event_at).getTime()).toBe(new Date(after.appointment_at).getTime());
     expect(rem).toMatchObject({ title: "PetCamp", tag: "Pet", color: "#e8710a" });
     expect(rem.intent).toMatch(/PetCamp/);
-    expect(sentTexts().at(-1)).toMatch(/Marcado! Banho amanhã às 18h/);
+    expect(sentTexts().at(-1)).toMatch(/Resultado da conversa com PetCamp[\s\S]*Banho marcado[\s\S]*lembrete/);
     // recado fechado: nova mensagem do número volta a ser um contato desconhecido comum
     expect((await petshopSays("Obrigado!")).reason).not.toBe("recado");
     const exec = await db.one("SELECT status FROM executions WHERE trigger = 'errand' ORDER BY started_at DESC LIMIT 1");

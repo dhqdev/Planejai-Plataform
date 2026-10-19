@@ -82,6 +82,9 @@ export const messageLimit = (e: Pick<Errand, "kind">) => (e.kind === "conversa" 
 const EMERGENCY =
   /\b(dor no peito|aperto no peito|falta de ar|nao consigo respirar|sem ar|desmai\w*|convuls\w*|sangr\w* muito|muito sangue|hemorragia|infarto|avc|derrame|boca torta|rosto torto|fala enrolada|nao sinto (o |a |meu |minha )?(braco|perna|lado)|overdose|envenen\w*|tomei (todos|varios|muitos) (os )?(remedios|comprimidos)|me matar|quero morrer|suicid\w*|acabar com (a minha|minha) vida|nao aguento mais viver|samu|192|emergencia|socorro)\b/;
 
+/** Quanto tempo um recado com estabelecimento fica sendo acompanhado (7 dias); depois disso, sem resposta, deixa de acompanhar. */
+export const ERRAND_FOLLOW_HOURS = 168;
+
 export function emergencySign(text: string) {
   const t = text
     .toLowerCase()
@@ -191,7 +194,8 @@ export async function startErrand(opts: {
   );
   await channel.sendText(jid, text);
   await resumeFollow(opts.user.id, phone);
-  const hours = Math.min(Math.max(opts.hours ?? 24, 1), 72);
+  // recado: acompanha por 7 dias; conversa delegada: 24h por padrão (até 72h)
+  const hours = kind === "conversa" ? Math.min(Math.max(opts.hours ?? 24, 1), 72) : Math.min(Math.max(opts.hours ?? ERRAND_FOLLOW_HOURS, 1), ERRAND_FOLLOW_HOURS);
   const log: ErrandLogEntry[] = [{ from: "nos", text, at: new Date().toISOString() }];
   const row = await one<{ id: string }>(
     `INSERT INTO errands (user_id, conversation_id, place, phone, jid, goal, allowed, log, sent, expires_at, kind, agent)
@@ -321,10 +325,17 @@ export async function finishErrand(errandId: string, opts: { status: "done" | "f
   return { ok: true, place: e.place, reminder };
 }
 
+/** Última coisa que o estabelecimento disse, para o aviso de encerramento. */
+function lastSaid(e: Errand) {
+  const l = [...e.log].reverse().find((x) => x.from === "eles");
+  return l ? ` Última resposta deles: "${l.text.slice(0, 200)}".` : "";
+}
+
 /** Recados sem resposta no prazo: avisa a pessoa uma vez, sem IA. */
 export async function expireErrands() {
   const rows = await many<Errand>(
-    `UPDATE errands SET status = 'expired', updated_at = now() WHERE status = ANY($1) AND expires_at < now() RETURNING *`,
+    `UPDATE errands SET status = 'expired', updated_at = now() WHERE status = ANY($1) AND expires_at < now()
+     RETURNING *`,
     [OPEN],
   );
   for (const e of rows) {
@@ -341,8 +352,8 @@ export async function expireErrands() {
     await notifyUser(
       e.user_id,
       answered
-        ? `A conversa com ${e.place} parou no meio e eu deixei de acompanhar. Se quiser, te passo o número para você falar direto: +${e.phone}`
-        : `${e.place} não respondeu minha mensagem, então parei de esperar. Se quiser, dá para ligar: +${e.phone}`,
+        ? `Passaram os 7 dias e a conversa com ${e.place} parou no meio, então deixei de acompanhar.${lastSaid(e)} Se quiser, fale direto: +${e.phone}`
+        : `${e.place} não respondeu em 7 dias, então parei de acompanhar. Se quiser, dá para ligar: +${e.phone}. Para seguir sem prazo, escolha "Sem prazo" em ${followUrl()}`,
     ).catch(() => {});
   }
   return rows.length;

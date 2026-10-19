@@ -77,6 +77,9 @@ export async function savePrefs(userId: string, rawPhone: string, patch: PrefsPa
     [userId, key, next.nickname, next.color, next.tone, next.signature, next.note, next.pinned, next.archived, next.follow],
   );
   if (next.follow === "off" && cur?.follow !== "off") await cancelOpenErrands(userId, key);
+  // Sem prazo: o recado aberto deixa de vencer (um ano de folga), em vez de parar de acompanhar nos 7 dias
+  if (next.follow === "on" && cur?.follow !== "on")
+    await query("UPDATE errands SET expires_at = now() + interval '365 days' WHERE user_id = $1 AND phone = ANY($2) AND status IN ('waiting', 'asking')", [userId, phoneVariants(key)]);
   return { ok: true as const, prefs: await getPrefs(userId, key) };
 }
 
