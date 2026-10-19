@@ -76,6 +76,7 @@ apps/server/src/
                            gráficos e imagens simples (HTML -> PNG, sem LLM); PDF A4 de várias páginas (HTML -> PDF)
   resources.ts             tela Servidor/Armazenamento
   wa-status.ts             status do WhatsApp do número (Bolinho ou post do blog a cada X dias; ver blog.md)
+  usage-report.ts          resumo diário do gasto de IA no WhatsApp do dono (fila `usage.report`, 00:02 no DEFAULT_TIMEZONE): total, tokens, por pessoa (usage_daily), sistema (cost_daily menos pessoas) e saldo do OpenRouter; sem IA
   alive.ts  healthcheck.ts  version.ts
                            vida do worker, healthcheck da imagem, versão
   channels/                baileys.ts (padrão), evolution.ts, cloud.ts (Meta), telegram.ts, app.ts (chat do Início no celular), PlaygroundChannel; wa-message.ts parseia WAMessage

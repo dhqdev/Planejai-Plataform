@@ -23,6 +23,8 @@ export const QUEUES = {
   meet: "meet.run",
   /** status do WhatsApp do número (wa-status.ts): post com o Bolinho ou do blog a cada X dias, se o dono ligou */
   waStatus: "wa-status.run",
+  /** resumo diário do gasto de IA no WhatsApp do dono (usage-report.ts) */
+  usageReport: "usage.report",
 } as const;
 
 let boss: PgBoss | null = null;
@@ -48,6 +50,7 @@ export async function getBoss(): Promise<PgBoss> {
   await b.createQueue(QUEUES.blog, { name: QUEUES.blog, policy: "standard" });
   await b.createQueue(QUEUES.meet, { name: QUEUES.meet, policy: "standard" });
   await b.createQueue(QUEUES.waStatus, { name: QUEUES.waStatus, policy: "singleton" });
+  await b.createQueue(QUEUES.usageReport, { name: QUEUES.usageReport, policy: "singleton" });
   boss = b;
   return b;
 }
@@ -75,6 +78,7 @@ export const QUEUE_LABELS: Record<string, string> = {
   [QUEUES.blog]: "Blog",
   [QUEUES.meet]: "Reuniões do Meet",
   [QUEUES.waStatus]: "Status do WhatsApp",
+  [QUEUES.usageReport]: "Resumo de gasto de IA",
 };
 
 /**

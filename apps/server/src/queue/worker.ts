@@ -129,6 +129,13 @@ async function startChannelJobs(log: WorkerLog) {
   });
   await boss.schedule(QUEUES.financeDaily, "0 9 * * *", undefined, { tz: config.DEFAULT_TIMEZONE });
 
+  // resumo do gasto de IA do dia que acabou, no WhatsApp do dono, logo depois da meia-noite (sem IA)
+  await boss.work(QUEUES.usageReport, { batchSize: 1, pollingIntervalSeconds: 60 }, async () => {
+    const { sendDailyUsageReport } = await import("../usage-report.js");
+    await sendDailyUsageReport(log).catch((err) => log.error({ err }, "resumo diário de gasto falhou"));
+  });
+  await boss.schedule(QUEUES.usageReport, "2 0 * * *", undefined, { tz: config.DEFAULT_TIMEZONE });
+
   // blog público: de hora em hora confere posts de partida, ilustrações que faltam e o post da semana (dia e hora no painel)
   await boss.work<import("../blog.js").BlogJob>(QUEUES.blog, { batchSize: 1, pollingIntervalSeconds: 10 }, async ([job]) => {
     const { runBlogJob } = await import("../blog.js");
