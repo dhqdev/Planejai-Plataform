@@ -17,7 +17,7 @@ import { PrivacyPage } from "./pages/Privacy";
 import { OnboardingFlow, type Onboarding } from "./pages/Onboarding";
 import { PullToRefresh } from "./PullToRefresh";
 import { useInstallAction } from "./Install";
-import { haptic } from "./touch";
+import { haptic, isStandalone } from "./touch";
 import { applyUpdate, onUpdateAvailable } from "./update";
 import "./styles/impersonacao.css";
 
@@ -401,7 +401,7 @@ export function App() {
   // sem login o blog abre sozinho; logado, ele abre dentro da moldura do app (rota /blog/* mais abaixo)
   if (!me && (loc.pathname === "/blog" || loc.pathname.startsWith("/blog/"))) return <Suspense fallback={<BlockLoader />}><Blog loggedIn={Boolean(me)} /></Suspense>;
   if (me === undefined) return <BlockLoader />;
-  if (!me && loc.pathname === "/") return <Suspense fallback={<BlockLoader />}><Landing /></Suspense>;
+  if (!me && loc.pathname === "/" && !isStandalone()) return <Suspense fallback={<BlockLoader />}><Landing /></Suspense>;
   if (!me) return <AuthPage onLogin={setMe} />;
 
   // Plataforma (só o super admin) vai para a barra de cima; Avisos e Minha conta descem para o pé do trilho
