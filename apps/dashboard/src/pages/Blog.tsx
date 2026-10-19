@@ -424,22 +424,25 @@ function BlogPost({ slug, open, loggedIn }: { slug: string; open: (e: MouseEvent
   );
 }
 
-export function BlogPage({ loggedIn = false }: { loggedIn?: boolean }) {
+/** `embedded`: logado, o blog abre dentro da moldura do app (trilho, barra de cima e abas do celular ficam onde estão). */
+export function BlogPage({ loggedIn = false, embedded = false }: { loggedIn?: boolean; embedded?: boolean }) {
   const loc = useLocation();
   const nav = useNavigate();
   const scroller = useRef<HTMLDivElement | null>(null);
   const slug = decodeURIComponent(loc.pathname.replace(/^\/blog\/?/, "").replace(/\/+$/, ""));
   useEffect(() => {
-    if (!loc.hash) scroller.current?.scrollTo({ top: 0 });
-  }, [loc.pathname, loc.hash]);
+    if (loc.hash) return;
+    if (embedded) document.getElementById("conteudo")?.scrollTo({ top: 0 });
+    else scroller.current?.scrollTo({ top: 0 });
+  }, [loc.pathname, loc.hash, embedded]);
   const open = (e: MouseEvent<HTMLAnchorElement>) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     e.preventDefault();
     nav(e.currentTarget.getAttribute("href") ?? "/blog");
   };
+  const content = slug ? <BlogPost slug={slug} open={open} loggedIn={loggedIn} /> : <BlogIndex open={open} />;
+  if (embedded) return <div className="lp bl bl-embed" ref={scroller}>{content}</div>;
   return (
-    <Frame loggedIn={loggedIn} scroller={scroller}>
-      {slug ? <BlogPost slug={slug} open={open} loggedIn={loggedIn} /> : <BlogIndex open={open} />}
-    </Frame>
+    <Frame loggedIn={loggedIn} scroller={scroller}>{content}</Frame>
   );
 }

@@ -152,3 +152,8 @@
 @media (prefers-reduced-motion: reduce) {
   .bl-skeleton { animation: none; }
 }
+
+/* ---------- dentro do app (logado): sem topo e rodapé próprios, rola junto com o painel ---------- */
+.bl-embed { height: auto; overflow: visible; scroll-behavior: auto; border-radius: 20px; padding-bottom: 24px; min-height: 100%; }
+.bl-embed .bl-hero { margin-top: 20px; }
+@media (max-width: 760px) { .bl-embed { border-radius: 16px; } .bl-embed .lp-wrap { width: calc(100% - 24px); } }

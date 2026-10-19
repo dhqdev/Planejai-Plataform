@@ -398,7 +398,8 @@ export function App() {
   if (loc.pathname === "/privacidade") return <PrivacyPage />;
   // página de preços: aberta pelo "Planos" da landing, com ou sem login
   if (loc.pathname === "/precos") return <Suspense fallback={<BlockLoader />}><Pricing /></Suspense>;
-  if (loc.pathname === "/blog" || loc.pathname.startsWith("/blog/")) return <Suspense fallback={<BlockLoader />}><Blog loggedIn={Boolean(me)} /></Suspense>;
+  // sem login o blog abre sozinho; logado, ele abre dentro da moldura do app (rota /blog/* mais abaixo)
+  if (!me && (loc.pathname === "/blog" || loc.pathname.startsWith("/blog/"))) return <Suspense fallback={<BlockLoader />}><Blog loggedIn={Boolean(me)} /></Suspense>;
   if (me === undefined) return <BlockLoader />;
   if (!me && loc.pathname === "/") return <Suspense fallback={<BlockLoader />}><Landing /></Suspense>;
   if (!me) return <AuthPage onLogin={setMe} />;
@@ -519,6 +520,7 @@ export function App() {
               <Route path="/assinatura" element={<Navigate to="/plano" replace />} />
             </>
           )}
+          <Route path="/blog/*" element={<Blog loggedIn embedded />} />
           <Route path="/profile" element={<ProfilePage me={me} />} />
           <Route path="/conta" element={<ContaRoute me={me} sections={sectionsOf(NAV).map((sec) => ({ ...sec, items: sec.items.filter((it) => !PHONE_TABS.includes(it.to)) }))} theme={theme} onTheme={toggleTheme} onLogout={logout} />} />
           <Route path="/notificacoes" element={<NotificationsPage />} />
