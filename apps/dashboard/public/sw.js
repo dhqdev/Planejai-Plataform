@@ -2,7 +2,7 @@
    - arquivos do app (/assets, ícones): cache primeiro (têm hash no nome, nunca mudam)
    - páginas: rede primeiro, cai para o app em cache se estiver offline
    - /api, /webhooks e /version.json: nunca passam pelo cache (dados sempre frescos e privados)
-   - push: alarme toca como ligação (fica na tela até a pessoa agir, vibra longo, Parar / Soneca 5 min)
+   - push: notificação do alarme (Parar / Soneca 5 min); o Planejai não faz ligação
    O VERSION abaixo é trocado a cada build (vite.config.ts), então cada deploy instala um SW novo. */
 const VERSION = "planejai-v3";
 const SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png"];
@@ -73,7 +73,7 @@ self.addEventListener("push", (e) => {
   const url = d.id ? `/alarme?id=${d.id}` : "/alarme?teste=1";
   e.waitUntil(
     Promise.all([
-      self.registration.showNotification("Planejai está te ligando", {
+      self.registration.showNotification("Planejai", {
         body: d.label ? `Alarme: ${d.label}` : "Alarme",
         tag: `alarm-${d.id || "teste"}`,
         renotify: true,

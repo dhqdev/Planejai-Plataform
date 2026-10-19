@@ -56,7 +56,7 @@ export const alarmTime = (iso: string) => {
 };
 
 /**
- * Alarmes (Minha conta e tela /alarme): ligar o alarme neste aparelho, testar e ver/cancelar os próximos. Os alarmes são criados pelo WhatsApp ("cria um alarme daqui a 15 minutos").
+ * Alarmes (Minha conta e tela /alarme): ligar o alarme neste aparelho, testar e ver/cancelar os próximos. O agente não cria alarme novo (só lembretes); aqui ficam os que já existiam.
  */
 export function AlarmSettings() {
   const { data, reload, error: loadError } = useApi<AlarmsData>("/api/alarms");
@@ -96,7 +96,7 @@ export function AlarmSettings() {
       await api("/api/push/subscribe", { method: "POST", json: { subscription: sub.toJSON() } });
       await refreshSub();
       await reload();
-      return "Pronto: os alarmes tocam neste aparelho.";
+      return "Pronto: as notificações chegam neste aparelho.";
     });
 
   const disable = () =>
@@ -113,7 +113,7 @@ export function AlarmSettings() {
   const test = () =>
     run(async () => {
       const r = await api<{ push: { sent: number } }>("/api/alarms/test", { method: "POST", json: {} });
-      return r.push.sent ? "Teste enviado. Deve tocar em alguns segundos." : "Nenhum aparelho com o alarme ligado.";
+      return r.push.sent ? "Teste enviado. Deve chegar em alguns segundos." : "Nenhum aparelho com notificação ligada.";
     });
 
   const cancel = (id: string) =>
@@ -131,11 +131,11 @@ export function AlarmSettings() {
     <div className="card card-pad">
       <h3>Alarmes</h3>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-        Peça no WhatsApp, como "cria um alarme daqui a 15 minutos". Na hora ele toca neste aparelho como uma ligação, com o alarme na tela.
+        Os alarmes que já estavam marcados chegam no WhatsApp e como notificação neste aparelho. Para coisas novas, peça um lembrete no WhatsApp.
       </p>
       {iosHint ? (
         <p className="muted" style={{ fontSize: 13 }}>
-          No iPhone o alarme só toca com o Planejai na tela de início: toque em Compartilhar, depois em Adicionar à Tela de Início, e abra por lá (iOS 16.4 ou mais novo).
+          No iPhone a notificação só chega com o Planejai na tela de início: toque em Compartilhar, depois em Adicionar à Tela de Início, e abra por lá (iOS 16.4 ou mais novo).
         </p>
       ) : !pushSupported() ? (
         <p className="muted" style={{ fontSize: 13 }}>Este navegador não recebe notificações. Os alarmes chegam só no WhatsApp.</p>
@@ -148,7 +148,7 @@ export function AlarmSettings() {
               <button className="btn btn-sm btn-ghost" disabled={busy} onClick={disable}>Desligar aqui</button>
             </>
           ) : (
-            <button className="btn btn-primary" disabled={busy || !data} onClick={enable}>Ligar alarme neste aparelho</button>
+            <button className="btn btn-primary" disabled={busy || !data} onClick={enable}>Receber notificação neste aparelho</button>
           )}
         </div>
       )}

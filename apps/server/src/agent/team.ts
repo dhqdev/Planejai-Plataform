@@ -114,7 +114,7 @@ export const SPECIALISTS: AgentDef[] = [
     face: { color: 2, eyes: "happy", mouth: "smile", extra: "bow" },
     name: "Agenda",
     icon: "calendar",
-    role: "Lembretes (únicos ou recorrentes), alarmes, compromissos e Google Agenda: criar, listar, mudar o horário, cancelar, ver o que tem no dia.",
+    role: "Lembretes (únicos ou recorrentes), compromissos e Google Agenda: criar, listar, mudar o horário, cancelar, ver o que tem no dia.",
     instructions:
       "Converta pedidos de tempo relativo com cuidado usando a data/hora atual informada. Para 'daqui X minutos' use in_minutes. " +
       "O intent do lembrete deve ter contexto suficiente para o CTO escrever uma mensagem natural na hora (quem pediu, o porquê, detalhes). " +
@@ -126,9 +126,6 @@ export const SPECIALISTS: AgentDef[] = [
       agenda.cancelReminderTool,
       agenda.calendarListEvents,
       agenda.calendarCreateEvent,
-      agenda.setAlarm,
-      agenda.alarmList,
-      agenda.alarmCancel,
       core.getDatetime,
     ],
   },
@@ -342,7 +339,6 @@ export const CTO_TOOLS: Tool[] = [
   documents.documentList,
   documents.documentSend,
   agenda.scheduleReminder,
-  agenda.setAlarm,
   agenda.calendarCreateEvent,
   social.watchCreate,
   errands.errandContinue,
@@ -376,7 +372,6 @@ export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
     tools: [social.listContactsTool, social.shareScreen],
   },
   { id: "acompanhamentos", when: /(?<!\p{L})(de olho|acompanh|monitor|avis\w* quando)/iu, tools: [social.watchList, social.watchCancel, social.watchUpdate] },
-  { id: "alarmes", when: /(?<!\p{L})(alarme|despert|acord)/iu, tools: [agenda.alarmList, agenda.alarmCancel] },
   { id: "dinheiro", when: /(?<!\p{L})(limite|or[çc]amento|teto|no m[aá]ximo|fatura|cart[aã]o|cart[õo]es)/iu, tools: [finance.setBudget, cards.cardList, cards.cardInvoicePay] },
   { id: "dolar", when: /(?<!\p{L})(d[oó]lar(es)?|dollars?|USD|US\$)/iu, tools: [finance.convertCurrency] },
   {

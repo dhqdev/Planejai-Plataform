@@ -8,7 +8,8 @@ import { QUEUES, getBoss } from "./queue/boss.js";
 import { Tracer } from "./agent/trace.js";
 
 /**
- * Alarme: na hora toca no celular como uma ligação (Web Push do PWA, para todo mundo) e manda "Alarme: ..." no WhatsApp.
+ * Alarme: na hora manda uma notificação (Web Push do PWA) e "Alarme: ..." no WhatsApp. O agente não cria alarme novo desde
+ * 2026-10-19 (David: o Planejai não liga, só lembretes); aqui ficam os que já estavam marcados.
  * Sem IA: o disparo é texto pronto. Cada disparo vira uma execução "alarm" em Execuções.
  */
 

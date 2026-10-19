@@ -21,7 +21,6 @@ describe("ferramentas do CTO por assunto", () => {
     expect(ids("libera minhas finanças pro Giovani")).toContain("contatos");
     expect(ids("tira o Giovani da minha agenda")).toContain("contatos");
     expect(ids("para de ficar de olho no iphone")).toContain("acompanhamentos");
-    expect(ids("cancela o alarme de amanhã")).toContain("alarmes");
     expect(ids("no máximo 600 com restaurante")).toContain("dinheiro");
     expect(ids("paguei a fatura do nubank")).toContain("dinheiro");
     expect(ids("apaga o documento do contrato")).toContain("documentos");

@@ -2,7 +2,7 @@
  * Trava de honestidade: a resposta só pode dizer que fez algo (anotei, apaguei, agendei…) se a ferramenta
  * correspondente rodou com sucesso nesta execução, pelo CTO ou por um especialista.
  */
-const SCHEDULE_TOOLS = ["schedule_reminder", "set_alarm", "calendar_create_event", "reschedule_reminder", "watch_create", "watch_update", "bill_save", "card_save", "card_invoice_pay", "errand_start", "errand_done", "send_whatsapp"];
+const SCHEDULE_TOOLS = ["schedule_reminder", "calendar_create_event", "reschedule_reminder", "watch_create", "watch_update", "bill_save", "card_save", "card_invoice_pay", "errand_start", "errand_done", "send_whatsapp"];
 // "amanhã às 8h", "hoje", "segunda", "daqui a 20 min": a frase fala de um momento futuro
 const WHEN = /\b(amanh[ãa]|hoje|depois de amanh[ãa]|daqui a?|segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo|semana que vem|m[êe]s que vem|de manh[ãa]|[àa] tarde|[àa] noite|meio-dia|meia-noite|dia \d{1,2}|[àa]s? \d{1,2})\b|\b\d{1,2}\s?h(\d{2})?\b|\b\d{1,2}:\d{2}\b/i;
 
@@ -10,7 +10,7 @@ const WHEN = /\b(amanh[ãa]|hoje|depois de amanh[ãa]|daqui a?|segunda|ter[çc]a
 const READ_ONLY = /^(ask_|consult_|share_with_team$|react_to_message$|web_search|fetch_url|places_nearby|calculate|read_|list_|get_|search_)|(_list|_status|_search|_read|_events|_channels|_workflows|_executions|_catalog|_info)$/;
 /** tools: ["*"] = qualquer ferramenta que fez algo (lançar, salvar, agendar, gerar...). */
 const ANY = "*";
-const DELETE_TOOLS = ["delete_transaction", "card_delete", "card_save", "cancel_reminder", "alarm_cancel", "document_delete", "forget_memory", "watch_cancel", "watch_update", "direct_cancel", "automation_manage", "bill_delete", "categories", "shop_update", "errand_cancel", "unsend_message"];
+const DELETE_TOOLS = ["delete_transaction", "card_delete", "card_save", "cancel_reminder", "document_delete", "forget_memory", "watch_cancel", "watch_update", "direct_cancel", "automation_manage", "bill_delete", "categories", "shop_update", "errand_cancel", "unsend_message"];
 const FINANCE_TOOLS = ["add_transaction", "update_transaction", "bill_pay", "bill_save", "card_invoice_pay", "card_save", "goal_add", "goal_update", "goal_create"];
 
 /** Marca em `room.done` (posta por add_transaction/update_transaction) de que um lançamento desta rodada foi para um cartão. */
@@ -57,7 +57,7 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; sameSentence?: boole
   {
     what: "apagar ou cancelar",
     says: /\b(apaguei|removi|exclu[ií]|deletei|cancelei)\b/i,
-    tools: ["delete_transaction", "card_delete", "card_save", "cancel_reminder", "alarm_cancel", "document_delete", "forget_memory", "watch_cancel", "watch_update", "direct_cancel", "automation_manage", "set_budget", "bill_delete", "bill_save", "unsend_message"],
+    tools: ["delete_transaction", "card_delete", "card_save", "cancel_reminder", "document_delete", "forget_memory", "watch_cancel", "watch_update", "direct_cancel", "automation_manage", "set_budget", "bill_delete", "bill_save", "unsend_message"],
   },
   {
     what: "agendar lembrete ou evento",
@@ -167,7 +167,7 @@ const REQUESTS: { what: string; asks: RegExp; unless: RegExp; tools: string[] }[
     what: "agendar lembrete ou evento",
     asks: /\b(me (lembr[ae]\w*|avis[ae]\w*|acord[ae]\w*|cutuc[ae]\w*)|cri[ae]\w* (um |o |esse |este )?(lembrete|alarme)|(p[õo]e|coloca|bota|marca|agenda) (um |o )?(lembrete|alarme)|lembrete (pra|para|de|às|amanh[ãa])|alarme (pra|para|às))\b/i,
     unless: /\b(cancel\w*|apag\w*|remov\w*|exclu\w*|desmarc\w*|tir[ae] (o|esse|aquele)|quais|lista\w*|mostr\w*|mud[ae]\w*|troc[ae]\w*|adi[ae]\w*|remarc\w*|n[ãa]o precisa|esquece)\b/i,
-    tools: [...SCHEDULE_TOOLS, "list_reminders", "alarm_list", "watch_list", "shop_save", "shop_update"],
+    tools: [...SCHEDULE_TOOLS, "list_reminders", "watch_list", "shop_save", "shop_update"],
   },
   {
     // "gastei 50 no mercado", "paguei a luz 180", "recebi 2 mil", "anota 30 de uber", "guardei 200 na viagem"

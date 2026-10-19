@@ -48,7 +48,7 @@ function useRingtone(on: boolean) {
   }, [on]);
 }
 
-/** Tela aberta pela notificação do alarme: o alarme na tela, como uma ligação, com Parar e Soneca. */
+/** Tela aberta pela notificação de um alarme antigo: o alarme na tela, com Parar e Soneca. */
 export function AlarmPage() {
   const [params] = useSearchParams();
   const nav = useNavigate();
@@ -81,7 +81,7 @@ export function AlarmPage() {
     <div className="page" style={{ maxWidth: 640 }}>
       {ringing ? (
         <div className="alarm-call" role="alertdialog" aria-labelledby="alarm-label">
-          <p className="alarm-caller">Planejai está te ligando</p>
+          <p className="alarm-caller">Alarme do Planejai</p>
           <h1 id="alarm-label" className="alarm-label">{test ? "Teste de alarme" : alarm?.label}</h1>
           {alarm && <p className="muted">{alarmTime(alarm.ring_at)}</p>}
           <ErrorBox error={error} />

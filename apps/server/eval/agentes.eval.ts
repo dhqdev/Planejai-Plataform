@@ -37,7 +37,7 @@ const CASES: Case[] = [
   { name: "lembrete em minutos", turns: [{ say: "daqui 20 minutos me avisa pra tirar o bolo do forno", any: SCHEDULE }] },
   { name: "compromisso anotado", turns: [{ say: "amanhã 15h reunião com o Carlos", any: SCHEDULE, orAsk: true }] },
   { name: "lembrar sem hora", turns: [{ say: "lembrar de pagar o boleto sexta", any: SCHEDULE, orAsk: true }] },
-  { name: "alarme", turns: [{ say: "me acorda amanhã às 6h", any: ["set_alarm", "ask_agenda"] }] },
+  { name: "alarme vira lembrete", turns: [{ say: "me acorda amanhã às 6h", any: SCHEDULE }] },
   {
     name: "lembrete e depois cancelar",
     turns: [

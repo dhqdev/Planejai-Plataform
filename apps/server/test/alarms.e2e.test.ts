@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 /**
  * Alarme ponta a ponta (Postgres real): rotas do painel (inscrição de push, teste, cancelar),
- * ferramenta set_alarm, disparo (push + WhatsApp), soneca/parar pelo token da notificação
+ * alarme antigo já agendado (o agente não cria mais: só lembretes), disparo (push + WhatsApp), soneca/parar pelo token da notificação
  * e limpeza de inscrição que sumiu (410). web-push é simulado.
  */
 const enabled = Boolean(process.env.TEST_DATABASE_URL);
@@ -87,14 +87,9 @@ describe.skipIf(!enabled)("alarme (e2e)", () => {
     expect(pushes[0]!.opts).toMatchObject({ urgency: "high" });
   });
 
-  it("set_alarm agenda, o disparo toca no celular e manda no WhatsApp; soneca e parar pela notificação", async () => {
-    const { setAlarm, alarmList } = await import("../src/agent/tools/agenda.js");
-    const ctx: any = { user, conversation: { id: convId }, timezone: "America/Sao_Paulo" };
-    const created: any = await setAlarm.run({ label: "Tirar o bolo do forno", in_minutes: 15 }, ctx);
-    expect(created).toMatchObject({ ok: true });
-    expect(created.note).toBeUndefined();
-    const listed: any = await alarmList.run({}, ctx);
-    expect(listed.map((a: any) => a.label)).toEqual(["Tirar o bolo do forno"]);
+  it("alarme agendado: o disparo avisa no celular e manda no WhatsApp; soneca e parar pela notificação", async () => {
+    const created: any = await alarms.createAlarm({ userId: user.id, conversationId: convId, label: "Tirar o bolo do forno", at: new Date(Date.now() + 15 * 60_000) });
+    expect((await alarms.listAlarms(user.id)).map((a) => a.label)).toEqual(["Tirar o bolo do forno"]);
     const job = await db.one("SELECT j.start_after FROM pgboss.job j JOIN alarms a ON a.job_id = j.id::text WHERE a.id = $1", [created.id]);
     expect(new Date(job.start_after).getTime()).toBeGreaterThan(Date.now() + 14 * 60_000);
     expect((await get("/api/alarms")).json().alarms).toHaveLength(1);
@@ -140,16 +135,14 @@ describe.skipIf(!enabled)("alarme (e2e)", () => {
     const stop = await app.inject({ method: "POST", url: "/api/alarm-action", payload: { token: payload.token, action: "stop" } });
     expect(stop.json()).toEqual({ ok: true });
     expect((await db.one("SELECT status FROM alarms WHERE id = $1", [created.id])).status).toBe("stopped");
-    await expect(setAlarm.run({ label: "Reunião", at: "2099-01-01T08:00" }, ctx)).rejects.toThrow(/um ano/);
+    await expect(alarms.createAlarm({ userId: user.id, label: "Reunião", at: new Date("2099-01-01T08:00:00Z") })).rejects.toThrow(/um ano/);
   });
 
   it("cancelar e horário que passou", async () => {
-    const { setAlarm, alarmCancel } = await import("../src/agent/tools/agenda.js");
-    const ctx: any = { user, conversation: { id: convId }, timezone: "America/Sao_Paulo" };
-    await expect(setAlarm.run({ label: "Ontem", at: "2020-01-01T08:00" }, ctx)).rejects.toThrow(/passou/);
-    const a: any = await setAlarm.run({ label: "Remédio", in_minutes: 60 }, ctx);
+    await expect(alarms.createAlarm({ userId: user.id, label: "Ontem", at: new Date("2020-01-01T08:00:00Z") })).rejects.toThrow(/passou/);
+    const a = await alarms.createAlarm({ userId: user.id, label: "Remédio", at: new Date(Date.now() + 60 * 60_000) });
     const del = await app.inject({ method: "DELETE", url: `/api/alarms/${a.id}`, headers: { cookie } });
     expect(del.json()).toEqual({ ok: true });
-    expect(await alarmCancel.run({ id: a.id }, ctx)).toEqual({ ok: false });
+    expect(await alarms.cancelAlarm(a.id, user.id)).toBe(false);
   });
 });
