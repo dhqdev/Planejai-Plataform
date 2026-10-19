@@ -69,7 +69,9 @@
 :root[data-theme="dark"] .conta-card, :root[data-theme="dark"] .conta-rows { box-shadow: none; }
 
 @media (max-width: 767px) {
-  .conta-page { padding-top: 10px; }
+  /* PWA/celular: a Conta começa direto no cartão, sem a barra fixa (mascote, título, avisos e tema; Avisos e Tema já são cartões aqui) */
+  .layout:has(.conta-page) > .topbar { display: none; }
+  .conta-page { padding-top: calc(14px + env(safe-area-inset-top)); }
   .conta-card { border-color: transparent; box-shadow: 0 1px 3px rgba(0, 0, 0, .04); }
   .conta-rows { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .conta-row { padding: 11px 10px 10px; min-height: 84px; border-radius: 16px; }
