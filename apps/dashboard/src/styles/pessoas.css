@@ -2,8 +2,11 @@
    Topo fixo (contato, situação e abas) e só o conteúdo da aba rola. Números em mono, rótulos discretos, uma cor só
    (o roxo marca só as barras e o dia escolhido). No celular a folha ocupa a tela e as abas dividem a largura. */
 
-.modal-bg > .modal.cs-modal,
-.modal-bg.drop > .modal.wide.cs-modal { width: min(900px, calc(100vw - 24px)); height: min(86dvh, 800px); }
+/* só notebook e iPad: no celular a folha segue a regra de bottom sheet (largura toda) */
+@media (min-width: 768px) {
+  .modal-bg > .modal.cs-modal,
+  .modal-bg.drop > .modal.wide.cs-modal { width: min(900px, calc(100vw - 24px)); height: min(86dvh, 800px); }
+}
 .cs-modal .modal-body { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 
 .cs-top { flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; padding: 14px 18px 12px; border-bottom: 1px solid var(--lg-line, var(--border)); }
