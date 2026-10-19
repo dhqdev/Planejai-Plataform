@@ -38,8 +38,8 @@
 .ct-tag { font-size: 11.5px; color: var(--muted); }
 /* ações sempre à vista no rodapé do cartão: mensagem pelo assistente em destaque e o resto em ícones */
 .ct-acts { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
-.ct-msg { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 13px 0 11px; border: 0; border-radius: 99px; background: var(--violet-soft); color: var(--violet); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .15s; }
-.ct-msg:focus-visible, .ct-act:focus-visible { outline: 2px solid var(--violet); outline-offset: 1px; }
+.ct-msg { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 13px 0 11px; border: 0; border-radius: 99px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .15s; }
+.ct-msg:focus-visible, .ct-act:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 .ct-acts-more { display: flex; align-items: center; gap: 2px; }
 .ct-act { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; transition: background .15s, color .15s; }
 .ct-msg-hint { margin: 0 0 8px; font-size: 13px; }
@@ -56,7 +56,7 @@
   .ct-card:hover { border-color: color-mix(in srgb, var(--ink) 22%, var(--border)); box-shadow: 0 6px 18px -10px rgba(20, 10, 40, .18); }
   .ct-act:hover { color: var(--text); background: var(--panel-2); }
   .ct-del:hover { color: var(--err); }
-  .ct-msg:hover { background: color-mix(in srgb, var(--violet) 18%, transparent); }
+  .ct-msg:hover { background: color-mix(in srgb, var(--ink) 14%, var(--panel-2)); }
   .ct-info:hover strong { text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; }
 }
 
