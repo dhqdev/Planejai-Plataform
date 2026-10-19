@@ -94,7 +94,7 @@ Para voltar, troque `:latest` por `:sha-XXXXXXX` nos serviços `app` e `worker` 
 ## Privacidade
 
 - Mensagens: 24 h na memória curta, depois viram resumo.
-- Logs de execução: o texto some depois de `LOG_CONTENT_HOURS` (24 h); custo, tempo e modelo ficam por `EXECUTION_RETENTION_DAYS` (7 dias). O custo por pessoa e por dia fica em `usage_daily` (gráfico em Clientes).
+- Logs de execução: o texto (inclusive a conversa dos clientes, que o super admin vê inteira) some depois de `LOG_CONTENT_HOURS` (168 h); custo, tempo e modelo ficam por `EXECUTION_RETENTION_DAYS` (7 dias). O custo por pessoa e por dia fica em `usage_daily` (gráfico em Clientes).
 - Termos e política: `/privacidade`. Cadastro exige aceite; o SIM do convite também vale como aceite.
 - Exclusão: a pessoa manda "apague todos os meus dados" e confirma com APAGAR TUDO, ou usa Minha conta > Apagar minha conta. O dono pode apagar em Clientes > Apagar dados.
 

@@ -131,7 +131,7 @@ describe.skipIf(!enabled)("segurança e privacidade (e2e)", () => {
     expect(h["x-frame-options"]).toBe("DENY");
   });
 
-  it("Execuções e gravações de cliente mostram só métrica para o dono", async () => {
+  it("Execuções de cliente mostram a conversa inteira para o super admin; gravações continuam dele", async () => {
     const { config } = await import("../src/config.js");
     const before = config.OWNER_PHONES;
     config.OWNER_PHONES = ["5519990009999"];
@@ -147,14 +147,12 @@ describe.skipIf(!enabled)("segurança e privacidade (e2e)", () => {
       const a = list.find((e: any) => e.id === mine.id);
       const b = list.find((e: any) => e.id === theirs.id);
       expect(a.input).toBe("meu segredo");
-      expect(b).toMatchObject({ input: null, output: null, content_purged: true, private: true, cost_usd: 0.01 });
-      // busca no texto não serve de atalho para ler a conversa do cliente
-      expect((await app.inject({ method: "GET", url: "/api/executions?q=médico", headers: { cookie: owner } })).json()).toHaveLength(0);
+      expect(b).toMatchObject({ input: "diagnóstico do médico", output: "certo", content_purged: false, cost_usd: 0.01 });
+      expect(b.private).toBeUndefined();
+      expect((await app.inject({ method: "GET", url: "/api/executions?q=médico", headers: { cookie: owner } })).json().map((e: any) => e.id)).toContain(theirs.id);
       const detail = (await app.inject({ method: "GET", url: `/api/executions/${theirs.id}`, headers: { cookie: owner } })).json();
-      expect(detail.input).toBeNull();
-      expect(detail.steps[0]).toMatchObject({ agent: "cto", model: "m" });
-      expect(detail.steps[0].input).toBeUndefined();
-      expect(JSON.stringify(detail)).not.toMatch(/diagnóstico/);
+      expect(detail).toMatchObject({ input: "diagnóstico do médico", output: "certo" });
+      expect(detail.steps[0]).toMatchObject({ agent: "cto", model: "m", input: { q: "diagnóstico" }, output: { a: 1 } });
       expect((await app.inject({ method: "GET", url: `/api/media/${media.id}`, headers: { cookie: owner } })).statusCode).toBe(404);
       expect((await app.inject({ method: "GET", url: "/api/recordings", headers: { cookie: owner } })).json()).toHaveLength(0);
     } finally {
@@ -305,7 +303,14 @@ describe.skipIf(!enabled)("segurança e privacidade (e2e)", () => {
 
     // depois de LOG_CONTENT_HOURS o texto sai do log, o custo fica
     await db.query("UPDATE executions SET started_at = now() - interval '2 days' WHERE id = $1", [t.executionId]);
-    await (await import("../src/maintenance.js")).purgeOld();
+    const { config } = await import("../src/config.js");
+    const keep = config.LOG_CONTENT_HOURS;
+    config.LOG_CONTENT_HOURS = 24;
+    try {
+      await (await import("../src/maintenance.js")).purgeOld();
+    } finally {
+      config.LOG_CONTENT_HOURS = keep;
+    }
     const row = await db.one("SELECT input, content_purged, cost_usd FROM executions WHERE id = $1", [t.executionId]);
     expect(row).toMatchObject({ input: null, content_purged: true });
     expect(Number(row.cost_usd)).toBeCloseTo(0.0123, 6);

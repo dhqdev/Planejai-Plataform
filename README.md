@@ -172,7 +172,7 @@ A lista completa, com comentários, está em [`.env.example`](.env.example). As 
 | `REDIS_URL` / `REDIS_CACHE_URL` | recomendado | Memória curta e cache |
 | `BROWSERLESS_URL` / `BROWSERLESS_TOKEN` | recomendado | Navegador dos agentes |
 | `MESSAGE_RETENTION_HOURS` | não | Quanto tempo a conversa fica na memória curta (24) |
-| `LOG_CONTENT_HOURS` | não | Depois disso o texto some dos logs de execução (24) |
+| `LOG_CONTENT_HOURS` | não | Depois disso o texto some dos logs de execução (168 = 7 dias, junto com a execução) |
 | `EXECUTION_RETENTION_DAYS` | não | Tempo de guarda de logs, custos e gravações (7) |
 | `WORKER_CONCURRENCY` | não | Jobs em paralelo por worker (4, máximo 16) |
 | `DEFAULT_TIMEZONE` / `TZ` | não | `America/Sao_Paulo` |

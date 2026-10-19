@@ -186,7 +186,7 @@ function ExecRow({ e, onOpen }: { e: any; onOpen: () => void }) {
   const agents: string[] = (e.agents ?? []).filter(Boolean).sort((a: string, b: string) => (a === "cto" ? -1 : b === "cto" ? 1 : 0));
   const channel = channelOf(e);
   const saidText = e.content_purged
-    ? "Conversa de cliente · só métricas"
+    ? "Texto apagado · só métricas"
     : e.input
     ? firstWords(e.input, 18)
     : "Sem texto de entrada";

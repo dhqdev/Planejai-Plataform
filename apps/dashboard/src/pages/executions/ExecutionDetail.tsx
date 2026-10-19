@@ -33,7 +33,7 @@ export function executionText(data: any, steps: Step[]) {
     `Duração ${dur(data.duration_ms)} · custo ${usdBR(data.cost_usd)} · tokens ${tok(data.tokens_in)} entrada, ${tok(data.tokens_out)} saída`,
   ];
   if (data.error) head.push(`Erro: ${data.error}`);
-  if (data.content_purged) head.push("Conversa de cliente: o texto não fica guardado, só as métricas.");
+  if (data.content_purged) head.push("O texto desta execução já foi apagado pela limpeza, só ficaram as métricas.");
   const body = steps.map((s, i) => {
     const meta = [s.agent, s.type, s.model && shortModel(s.model), STATUS_TXT[s.status] ?? s.status, s.duration_ms != null && dur(s.duration_ms), Number(s.cost_usd) > 0 && usdBR(s.cost_usd)].filter(Boolean).join(" · ");
     return [`## ${i + 1}. ${s.name} (${meta})`, s.error && `Erro: ${s.error}`, `Entrada:\n${pretty(s.input)}`, `Saída:\n${pretty(s.output)}`].filter(Boolean).join("\n");

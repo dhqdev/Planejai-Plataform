@@ -118,7 +118,7 @@ const schema = z.object({
   EXECUTION_RETENTION_DAYS: z.coerce.number().default(7),
   // Texto das conversas nos logs de execução (entrada, mensagens mandadas ao modelo, respostas) só fica esse tempo;
   // depois o log guarda só custo, tempo, modelo e ferramentas usadas
-  LOG_CONTENT_HOURS: z.coerce.number().min(1).default(24),
+  LOG_CONTENT_HOURS: z.coerce.number().min(1).default(168),
 });
 
 const checked = schema.superRefine((c, ctx) => {
