@@ -5,14 +5,16 @@ import { AgentFace, CORE_FACES } from "./faces";
 import { Icon } from "./icons";
 import { haptic } from "./touch";
 
-export function PageHead({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
+export function PageHead({ title, subtitle, actions }: { title?: string; subtitle?: string; actions?: ReactNode }) {
   return (
     <div className="page-head">
-      <div>
-        <h1>{title}</h1>
-        {subtitle && <p>{subtitle}</p>}
-      </div>
-      {actions && <div className="row">{actions}</div>}
+      {(title || subtitle) && (
+        <div>
+          {title && <h1>{title}</h1>}
+          {subtitle && <p>{subtitle}</p>}
+        </div>
+      )}
+      {actions && <div className="row" style={title || subtitle ? undefined : { marginLeft: "auto" }}>{actions}</div>}
     </div>
   );
 }

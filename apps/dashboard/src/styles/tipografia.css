@@ -22,3 +22,4 @@
   .fin-overview { display: flex; flex-direction: column; gap: 18px; }
 }
 
+.dash-fit .stat .value { font-size: 20px; }

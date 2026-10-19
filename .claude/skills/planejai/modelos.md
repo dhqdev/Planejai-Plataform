@@ -26,6 +26,7 @@ Subagentes começam sem contexto: o pedido leva o objetivo, os arquivos, as regr
 - Token: o prompt do CTO não repete o que a descrição da ferramenta já diz (e vice-versa); `ask_*` leva só nome + papel. `reasoning: { effort: "low" }` vai em toda chamada.
 - Teto apertado: passo cortado pelo `maxTokens` grava `finish_reason: "length"` na saída do passo. `SELECT count(*) FROM execution_steps WHERE output->>'finish_reason' = 'length'` mostra se precisa subir.
 - Custo real de cada execução vem do `usage.cost` do OpenRouter e soma em `usage_daily` (tela Clientes). Troca de modelo boa = mesmo resultado nas Execuções com custo menor.
+- Custo da plataforma por dia (inclui blog, status, esteira, sem pessoa) soma em `cost_daily` (Tracer); o "no mês" do Painel sai dela porque as execuções são apagadas após `EXECUTION_RETENTION_DAYS`. Gasto e saldo reais vêm de `llm/balance.ts` (`/credits` e `/key` do OpenRouter, cache 60 s) em `/api/overview.openrouterAccount`, só super admin. Voz (TTS) tem custo estimado pelo catálogo, não real.
 - Especialista novo ganha rota própria `agent:<id>`; agentes criados para um cliente usam `agent:cliente`.
 
 ## Conversas de referência (IA de verdade)

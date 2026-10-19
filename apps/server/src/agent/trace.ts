@@ -99,6 +99,12 @@ export class Tracer {
             "UPDATE executions SET tokens_in = tokens_in + $2, tokens_out = tokens_out + $3, cost_usd = cost_usd + $4 WHERE id = $1",
             [execId, usage.tokensIn ?? 0, usage.tokensOut ?? 0, usage.costUsd ?? 0],
           );
+          // custo da plataforma por dia (sobrevive à limpeza das execuções; é o que se confere com o OpenRouter)
+          await query(
+            `INSERT INTO cost_daily (day, cost_usd, tokens_in, tokens_out, calls) VALUES (current_date, $1, $2, $3, 1)
+             ON CONFLICT (day) DO UPDATE SET cost_usd = cost_daily.cost_usd + $1, tokens_in = cost_daily.tokens_in + $2, tokens_out = cost_daily.tokens_out + $3, calls = cost_daily.calls + 1`,
+            [usage.costUsd ?? 0, usage.tokensIn ?? 0, usage.tokensOut ?? 0],
+          ).catch(() => {});
           // custo por pessoa por dia: fica depois que o log some (gráfico de custo por cliente)
           if (userId) {
             await query(

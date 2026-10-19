@@ -150,7 +150,10 @@ const WIDGETS: Record<string, WidgetDef> = {
     icon: "card",
     sizes: ["s", "m"],
     only: "super",
-    render: ({ sys }) => <Num icon="card" label="Custo (24h)" value={usd(sys?.stats.cost_24h)} sub={`${usd(sys?.stats.cost_month)} no mês`} />,
+    render: ({ sys }) => {
+      const bal = sys?.openrouterAccount?.remainingUsd;
+      return <Num icon="card" label="Custo (24h)" value={usd(sys?.stats.cost_24h)} sub={`${usd(sys?.stats.cost_month)} no mês${bal != null ? ` · saldo ${usd(bal)}` : ""}`} />;
+    },
   },
   messages: {
     title: "Mensagens hoje",
@@ -421,7 +424,7 @@ function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onThe
   const saved = useApi<{ widgets: Widget[] } | null>("/api/me/dashboard");
   const [widgets, setWidgets] = useState<Widget[] | null>(null);
   const [editing, setEditing] = useState(false);
-  const [modal, setModal] = useState<"add" | "invite" | "quick" | null>(null);
+  const [modal, setModal] = useState<"add" | "invite" | null>(null);
   const board = useRef<HTMLDivElement>(null);
   const dragging = useRef<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -517,8 +520,8 @@ function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onThe
   return (
     <div className={`page page-wide ${fit ? "fit dash-fit" : ""}`}>
       <PageHead
-        title={isSuper ? "Painel" : first ? `Olá, ${first}` : "Início"}
-        subtitle={editing ? "Arraste pela alça para mudar de lugar. Toque no tamanho para alternar." : isSuper ? "Como o Planejai está trabalhando agora" : "Seu Planejai em um lugar"}
+        title={isSuper ? undefined : first ? `Olá, ${first}` : "Início"}
+        subtitle={editing ? "Arraste pela alça para mudar de lugar. Toque no tamanho para alternar." : isSuper ? undefined : "Seu Planejai em um lugar"}
         actions={
           editing ? (
             <>
@@ -535,11 +538,6 @@ function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onThe
                 <Link className="btn btn-brand" to="/">
                   <Icon name="send" size={16} /> Conversar
                 </Link>
-              )}
-              {!phone && (
-                <button className={`btn ${fit ? "" : "phone-only"}`} onClick={() => setModal("quick")}>
-                  <Icon name="settings" size={16} /> Ajustes
-                </button>
               )}
               <button className="btn" onClick={() => setEditing(true)}>
                 <Icon name="layout" size={16} /> Editar<span className="hide-phone"> painel</span>
@@ -577,11 +575,6 @@ function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onThe
       )}
 
       <div className="corner br">
-        {!phone && (
-          <button className="fab" aria-label="Configurações rápidas" title="Configurações rápidas" onClick={() => setModal("quick")}>
-            <Icon name="settings" />
-          </button>
-        )}
         <button className="fab" aria-label="Editar painel" title="Editar painel" onClick={() => setEditing((v) => !v)}>
           <Icon name={editing ? "check" : "layout"} />
         </button>
@@ -613,39 +606,6 @@ function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onThe
       {modal === "invite" && (
         <Modal title="Convidar alguém" icon={<Icon name="user-plus" />} onClose={() => setModal(null)}>
           <InviteForm />
-        </Modal>
-      )}
-      {modal === "quick" && (
-        <Modal title="Configurações rápidas" icon={<Icon name="settings" />} onClose={() => setModal(null)}>
-          <div className="line-item">
-            <Icon name={theme === "dark" ? "moon" : "sun"} />
-            <span style={{ flex: 1 }}>Tema</span>
-            <div className="seg">
-              <button className={theme !== "dark" ? "active" : ""} onClick={() => theme === "dark" && onTheme()}>Claro</button>
-              <button className={theme === "dark" ? "active" : ""} onClick={() => theme !== "dark" && onTheme()}>Escuro</button>
-            </div>
-          </div>
-          <div className="more-grid" style={{ marginTop: 14 }}>
-          {(isSuper
-            ? [
-                ["/whatsapp", "plug", "Conexões", sys.data?.channel?.configured ? "WhatsApp conectado" : "WhatsApp desconectado"],
-                ["/agents", "brain", "Agentes", ""],
-                ["/settings", "settings", "Configurações", ""],
-                ["/profile", "user", "Minha conta", ""],
-              ]
-            : [
-                ["/profile", "user", "Minha conta", ""],
-                ["/invites", "user-plus", "Convites", ""],
-                ["/watches", "eye", "De olho", ""],
-              ]
-          ).map(([to, icon, label, sub]) => (
-            <Link key={to} to={to!} className="more-tile" onClick={() => setModal(null)}>
-              <Icon name={icon!} size={26} />
-              <span>{label}</span>
-              {sub && <small className="muted">{sub}</small>}
-            </Link>
-          ))}
-          </div>
         </Modal>
       )}
     </div>

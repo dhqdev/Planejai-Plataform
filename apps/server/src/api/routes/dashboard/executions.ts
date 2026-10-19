@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { activeChannel } from "../../../channels/index.js";
 import { config } from "../../../config.js";
 import { many, one, query } from "../../../db/pool.js";
+import { openRouterAccount } from "../../../llm/balance.js";
 import { outfitsOf } from "../../../mascot.js";
 import { queueOverview, retryJob } from "../../../queue/boss.js";
 import { cacheStats, redisInfo } from "../../../shortmem.js";
@@ -20,9 +21,15 @@ export function executionRoutes(api: FastifyInstance) {
         COUNT(*) FILTER (WHERE started_at > now() - interval '24 hours') AS executions_24h,
         COUNT(*) FILTER (WHERE started_at > now() - interval '24 hours' AND status = 'error') AS errors_24h,
         COALESCE(SUM(cost_usd) FILTER (WHERE started_at > now() - interval '24 hours'), 0) AS cost_24h,
-        COALESCE(SUM(cost_usd) FILTER (WHERE started_at > date_trunc('month', now())), 0) AS cost_month,
         COALESCE(AVG(duration_ms) FILTER (WHERE started_at > now() - interval '24 hours' AND status = 'success'), 0) AS avg_ms_24h
       FROM executions`);
+    // mês e total vêm de cost_daily: as execuções são apagadas depois de alguns dias
+    const costs = await one(`
+      SELECT COALESCE(SUM(cost_usd) FILTER (WHERE day >= date_trunc('month', now())::date), 0)::float AS month,
+             COALESCE(SUM(cost_usd) FILTER (WHERE day = current_date), 0)::float AS today,
+             COALESCE(SUM(cost_usd), 0)::float AS total, MIN(day)::text AS since
+        FROM cost_daily`);
+    const orAccount = await openRouterAccount().catch((e) => ({ error: (e as Error).message }));
     const counts = await one(`
       SELECT (SELECT COUNT(*) FROM users WHERE status = 'active' AND phone <> 'playground') AS people,
              (SELECT COUNT(*) FROM users WHERE status = 'pending') AS pending_people,
@@ -47,7 +54,8 @@ export function executionRoutes(api: FastifyInstance) {
     const configured = wa ? wa.status === "connected" : (ch?.configured() ?? false);
     const pendingAccounts = await one("SELECT COUNT(*) AS n FROM accounts WHERE status = 'pending'");
     return {
-      stats,
+      stats: { ...stats, cost_month: costs?.month ?? 0 },
+      openrouterAccount: { ...orAccount, local: costs },
       counts: { ...counts, pending_accounts: pendingAccounts?.n ?? 0 },
       daily,
       byAgent,
