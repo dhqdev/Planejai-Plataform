@@ -150,13 +150,21 @@ async function describeImages(images: { base64: string; mimetype: string }[], pr
     },
   ];
   const choice = await resolveModel("vision");
+  // sem raciocínio: o modelo de visão gastava o limite de saída pensando e devolvia texto vazio (finish_reason=length)
+  const attempt = async (c: typeof choice) => {
+    const r = await chatCompletion(c, { messages, reasoning: "off", maxTokens: Math.max(c.maxTokens ?? 0, 1500) });
+    if (!r.message.content?.trim()) throw new Error(`modelo de visão não devolveu descrição (${r.model}, ${r.finishReason ?? "?"})`);
+    return r;
+  };
   try {
-    return await chatCompletion(choice, { messages });
+    return await attempt(choice);
   } catch (err) {
     // o modelo barato falhou (fora do ar, recusou, resposta vazia): uma segunda tentativa no modelo mais forte da cadeia
     const backup = choice.fallbacks?.at(-1);
     if (!backup) throw err;
-    return chatCompletion({ ...choice, model: backup, fallbacks: [] }, { messages });
+    return attempt({ ...choice, model: backup, fallbacks: [] }).catch((e2) => {
+      throw new Error(`${(err as Error).message}; reserva: ${(e2 as Error).message}`);
+    });
   }
 }
 
