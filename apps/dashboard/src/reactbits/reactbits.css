@@ -12,15 +12,6 @@
 @keyframes rb-rot-in { from { transform: translateY(105%); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes rb-rot-out { from { transform: none; opacity: 1; } to { transform: translateY(-120%); opacity: 0; } }
 
-/* ---------- LogoLoop ---------- */
-.rb-loop { position: relative; overflow: hidden; --rb-loop-gap: 32px; }
-.rb-loop-track { display: flex; width: max-content; will-change: transform; user-select: none; }
-.rb-loop-list { display: flex; align-items: center; margin: 0; padding: 0; list-style: none; }
-.rb-loop-item { flex: 0 0 auto; margin-right: var(--rb-loop-gap); line-height: 1; }
-.rb-loop--fade::before, .rb-loop--fade::after { content: ""; position: absolute; top: 0; bottom: 0; z-index: 1; width: clamp(24px, 8%, 120px); pointer-events: none; }
-.rb-loop--fade::before { left: 0; background: linear-gradient(to right, var(--rb-loop-fade, #fff), transparent); }
-.rb-loop--fade::after { right: 0; background: linear-gradient(to left, var(--rb-loop-fade, #fff), transparent); }
-
 /* ---------- ClickSpark ---------- */
 .rb-spark { position: relative; display: inline-flex; }
 .rb-spark-canvas { position: absolute; inset: -32px; width: calc(100% + 64px); height: calc(100% + 64px); pointer-events: none; z-index: 2; }
