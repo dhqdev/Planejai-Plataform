@@ -182,7 +182,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
       return false;
     }
   });
-  const [firstPath] = useState(() => `/api/calendar?from=${addDays(startOfDay(new Date()), -30).toISOString()}&to=${addDays(startOfDay(new Date()), 90).toISOString()}`);
+  const [firstPath] = useState(() => `/api/calendar?from=${addDays(startOfDay(new Date()), -30).toISOString()}&to=${addDays(startOfDay(new Date()), 69).toISOString()}`); // o servidor aceita até 100 dias
   const first = useApi<{ events: Ev[]; readonly?: boolean }>(vazioOk || person ? null : firstPath);
   const vazia = Boolean(!vazioOk && !person && first.data && !first.data.readonly && !first.data.events.length);
   const verCalendario = () => {
