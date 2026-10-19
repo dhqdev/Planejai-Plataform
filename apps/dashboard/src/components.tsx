@@ -101,10 +101,14 @@ function placeDrop(el: HTMLElement, from: DOMRect | null) {
   const vtop = vv?.offsetTop ?? 0;
   const w = el.offsetWidth;
   const gap = 12;
-  const h = Math.min(naturalHeight(el), vh - gap * 2);
-  const below = from ? from.bottom + 8 : vtop + Math.min(72, vh * 0.09);
-  const top = below + h <= vtop + vh - gap ? below : Math.max(vtop + gap, vtop + vh - gap - h);
-  const cx = from ? from.left + from.width / 2 : innerWidth / 2;
+  // janela de altura fixa (ficha do cliente): fica sempre no meio da tela, sem depender de onde o botão estava
+  const center = el.classList.contains("drop-center");
+  const h = Math.min(center ? el.offsetHeight : naturalHeight(el), vh - gap * 2);
+  const below = from && !center ? from.bottom + 8 : vtop + Math.min(72, vh * 0.09);
+  const top = center
+    ? Math.max(vtop + gap, vtop + (vh - h) / 2)
+    : below + h <= vtop + vh - gap ? below : Math.max(vtop + gap, vtop + vh - gap - h);
+  const cx = from && !center ? from.left + from.width / 2 : innerWidth / 2;
   const left = Math.max(gap, Math.min(innerWidth - gap - w, cx - w / 2));
   bg.style.setProperty("--drop-top", `${Math.round(top)}px`);
   bg.style.setProperty("--drop-left", `${Math.round(left)}px`);

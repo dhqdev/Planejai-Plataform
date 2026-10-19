@@ -53,7 +53,7 @@ export function ClientSheet({ client, onClose, isSuper }: { client: any; onClose
   const state = billing ? STATE[billing.state] : null;
 
   return (
-    <Modal title={name} icon={<UserMascote name={client.full_name || client.name} outfit={client.outfit} seed={client.id} size={26} />} onClose={onClose} wide className="cs-modal">
+    <Modal title={name} icon={<UserMascote name={client.full_name || client.name} outfit={client.outfit} seed={client.id} size={26} />} onClose={onClose} wide className="cs-modal drop-center">
       <div className="cs-top">
         <div className="cs-id">
           <span className="cs-sub">{[client.phone && phoneFmt(client.phone), client.email].filter(Boolean).join(" · ") || "sem contato"}</span>
