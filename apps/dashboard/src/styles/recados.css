@@ -259,7 +259,7 @@
   html.pj-errchat .mascote-stroll { display: none; }
   html.pj-kb.pj-errchat .tabbar { display: none; }
   .errands-page.reading {
-    position: fixed; left: 0; right: 0; top: var(--vvtop, 0); height: var(--vvh, 100dvh); z-index: 25;
+    position: fixed; left: 0; right: 0; top: calc(var(--vvtop, 0px) + var(--imp-h)); height: calc(var(--vvh, 100dvh) - var(--imp-h)); z-index: 25;
     display: flex; flex-direction: column; padding: 0 16px calc(84px + env(safe-area-inset-bottom)); background: var(--bg);
     overscroll-behavior: none;
   }
@@ -273,7 +273,7 @@
   .errands-page.reading .errand-detail > .errand-chat { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
   .errands-page.reading .errand-detail > .errand-chat::-webkit-scrollbar { display: none; }
   .errands-page.reading .errand-chathead {
-    margin: 0 -16px; padding: calc(6px + env(safe-area-inset-top)) 10px 6px 6px; background: var(--bg);
+    margin: 0 -16px; padding: calc(6px + var(--safe-top)) 10px 6px 6px; background: var(--bg);
     border-bottom: 1px solid var(--border);
   }
   html.pj-kb .errands-page.reading .errand-chathead { padding-top: 6px; }

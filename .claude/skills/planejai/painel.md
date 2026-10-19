@@ -16,6 +16,8 @@
 - `installKeyboardWatch()` (main.tsx) publica no `<html>` `--vvh`/`--vvtop` (área visível de verdade), a classe `pj-kb` com o teclado aberto (some a barra de abas) e zera `--sab` (folga do risco do iPhone; use `var(--sab)` em vez de `env(safe-area-inset-bottom)` em caixa presa embaixo). O campo com foco rola para dentro da sua lista.
 - Tela com caixa de escrever presa embaixo chama `useKeyboardShell()` e usa `top: var(--vvtop); height: var(--vvh)`: encolhe até o teclado, topo fica no lugar. Hoje: Recados (conversa), chat do Início, compromisso da Agenda (`EventScreen`). Folhas (`Modal`) já medem sozinhas.
 - Hook nunca depois de `return` de carregamento (derrubava Recados com erro 310).
+- Faixa amarela de impersonação (`ImpersonateBanner` em App.tsx, `styles/impersonacao.css`): no celular gruda no topo em toda tela; nas de tela cheia (`html.pj-shell`) fica presa e a tela desce `--imp-h`, com `--safe-top` zerado. Topo de tela cheia usa `var(--safe-top)`, não `env(safe-area-inset-top)`.
+- Chat do Início: tocar na caixa lendo mensagens antigas não desce para o fim (`keepPlace` segura a distância do fim enquanto o teclado abre ou fecha). No celular o canto direito do topo é o botão de convite (`InviteForm`), não o sino.
 
 ## Chat do Início (celular e notebook)
 - `pages/HomeChat.tsx` (rota `/api/chat`, tabela `app_chat`): no celular é o Início; no notebook abre por `/?chat=1` (botão "Conversar" do painel, prop `wide`, coluna centralizada dentro da moldura).

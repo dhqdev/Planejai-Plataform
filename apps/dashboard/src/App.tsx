@@ -293,6 +293,46 @@ function UnreadDot({ className, count }: { className: string; count?: boolean })
   const unread = useContext(UnreadContext);
   return unread > 0 ? <span className={className} aria-label={count ? `${unread} não lidas` : undefined} /> : null;
 }
+/**
+ * Faixa amarela de quem está na conta de outra pessoa. No celular ela fica presa em cima em todas as telas:
+ * as telas de tela cheia (chat do Início, conversa de Recados, compromisso da Agenda) descem `--imp-h` para
+ * ela caber (impersonacao.css).
+ */
+function ImpersonateBanner({ name }: { name: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const root = document.documentElement;
+    if (!el) return;
+    root.classList.add("pj-imp");
+    const set = () => root.style.setProperty("--imp-banner", `${el.offsetHeight}px`);
+    set();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(set);
+    ro?.observe(el);
+    return () => {
+      ro?.disconnect();
+      root.classList.remove("pj-imp");
+      root.style.removeProperty("--imp-banner");
+    };
+  }, []);
+  return (
+    <div className="impersonate-banner" role="status" ref={ref}>
+      <span>
+        Você está na conta de <strong>{name}</strong>
+      </span>
+      <button
+        className="impersonate-btn"
+        onClick={async () => {
+          await api("/api/auth/stop-impersonate", { method: "POST" });
+          window.location.reload();
+        }}
+      >
+        Voltar para minha conta
+      </button>
+    </div>
+  );
+}
+
 export function BellButton() {
   const unread = useContext(UnreadContext);
   const nav = useNavigate();
@@ -493,22 +533,7 @@ export function App() {
         <Nav items={rail} team={team} me={me} meTitle={`${me.name ?? me.email} · ${me.owner ? "Dono da stack" : isSuper ? "Super admin" : "Admin"} · v${__APP_VERSION__}`} />
       </aside>
       <main className="main" id="conteudo" tabIndex={-1} ref={mainRef}>
-        {me?.impersonating && (
-          <div className="impersonate-banner" role="status">
-            <span>
-              Você está na conta de <strong>{me.name || me.email}</strong>
-            </span>
-            <button
-              className="impersonate-btn"
-              onClick={async () => {
-                await api("/api/auth/stop-impersonate", { method: "POST" });
-                window.location.reload();
-              }}
-            >
-              Voltar para minha conta
-            </button>
-          </div>
-        )}
+        {me?.impersonating && <ImpersonateBanner name={me.name || me.email} />}
         <PullToRefresh target={mainRef} />
         <Suspense fallback={<Loading />}>
         {isSuper && <SubTabs path={loc.pathname} />}

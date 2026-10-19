@@ -81,7 +81,7 @@
 html, body, #root { height: 100%; }
 /* teclado do celular (teclado.ts): --vvh/--vvtop são a área visível de verdade e html.pj-kb marca o teclado aberto.
    --sab é a folga do risco de baixo do iPhone; com o teclado em cima ela não existe (somar deixava a caixa longe dele) */
-:root { --sab: env(safe-area-inset-bottom, 0px); }
+:root { --sab: env(safe-area-inset-bottom, 0px); --safe-top: env(safe-area-inset-top, 0px); --imp-h: 0px; }
 html.pj-kb { --sab: 0px; }
 @media (max-width: 767px) {
   html.pj-kb .tabbar { display: none; }

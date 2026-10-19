@@ -11,7 +11,7 @@
 
 .hc {
   --hc-tab: calc(84px + env(safe-area-inset-bottom));
-  position: fixed; left: 0; right: 0; top: var(--vvtop, 0); height: var(--vvh, 100dvh); z-index: 25;
+  position: fixed; left: 0; right: 0; top: calc(var(--vvtop, 0px) + var(--imp-h)); height: calc(var(--vvh, 100dvh) - var(--imp-h)); z-index: 25;
   display: flex; flex-direction: column; background: var(--bg); color: var(--text);
   overscroll-behavior: none;
 }
@@ -26,7 +26,7 @@ html.pj-kb .hc { --hc-tab: 8px; }
 .hc-top {
   position: absolute; z-index: 3; left: 0; right: 0; top: 0;
   display: grid; grid-template-columns: 44px 1fr 44px; align-items: start; gap: 6px;
-  padding: calc(8px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 30px max(14px, env(safe-area-inset-left));
+  padding: calc(8px + var(--safe-top)) max(14px, env(safe-area-inset-right)) 30px max(14px, env(safe-area-inset-left));
   background: linear-gradient(to bottom, var(--bg) 72%, color-mix(in srgb, var(--bg) 0%, transparent));
   pointer-events: none;
 }
@@ -71,7 +71,7 @@ html.pj-kb .hc { --hc-tab: 8px; }
 .hc-list {
   flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;
   display: flex; flex-direction: column;
-  padding: calc(118px + env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) calc(var(--hc-tab) + var(--hc-dock, 132px)) max(18px, env(safe-area-inset-left));
+  padding: calc(118px + var(--safe-top)) max(18px, env(safe-area-inset-right)) calc(var(--hc-tab) + var(--hc-dock, 132px)) max(18px, env(safe-area-inset-left));
   scrollbar-width: none;
 }
 .hc-list::-webkit-scrollbar { display: none; }

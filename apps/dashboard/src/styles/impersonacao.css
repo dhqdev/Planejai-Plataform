@@ -1,4 +1,4 @@
-/* Tarja de impersonação: rola junto com o conteúdo dentro de main */
+/* Tarja de impersonação (ImpersonateBanner em App.tsx). No notebook rola junto com o conteúdo dentro de main. */
 .impersonate-banner {
   position: relative;
   display: flex;
@@ -32,4 +32,17 @@
 }
 .impersonate-btn:hover {
   opacity: 0.9;
+}
+
+/* Celular: aparece em todas as telas (David, 2026-10-19). Nas telas comuns gruda no topo enquanto rola; nas de tela
+   cheia (html.pj-shell: chat do Início, conversa de Recados, compromisso da Agenda) fica presa em cima e a tela desce
+   --imp-h para caber, sem a folga do relógio (a faixa já ocupa esse lugar). Fica abaixo das janelas (z-index 50). */
+@media (max-width: 767px) {
+  .impersonate-banner { position: sticky; top: 0; z-index: 30; }
+  html.pj-imp.pj-shell { --imp-h: var(--imp-banner, 0px); --safe-top: 0px; }
+  html.pj-shell .impersonate-banner {
+    position: fixed; left: 0; right: 0; top: var(--vvtop, 0px); z-index: 49;
+    padding-top: calc(6px + env(safe-area-inset-top, 0px));
+  }
+  html.pj-shell.pj-kb .impersonate-banner { padding-top: 6px; }
 }
