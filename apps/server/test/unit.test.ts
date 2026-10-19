@@ -268,6 +268,31 @@ describe("chamada escrita como texto", () => {
     expect(textToolCalls('<tool_call>{"name":"apagar_tudo","arguments":{}}</tool_call>', known)).toMatchObject({ calls: [], broken: true });
     expect(textToolCalls("oi, tudo bem?", known)).toEqual({ calls: [], rest: "oi, tudo bem?", broken: false });
   });
+
+  it("DSML do DeepSeek vira chamada de verdade e nunca chega à pessoa", async () => {
+    const { textToolCalls } = await import("../src/agent/runner.js");
+    const known = new Set(["schedule_reminder"]);
+    const dsml =
+      'Já marco!\n<｜DSML｜function_calls>\n<｜DSML｜invoke name="schedule_reminder">\n' +
+      '<｜DSML｜parameter name="in_minutes" string="false">1</｜DSML｜parameter>\n' +
+      '<｜DSML｜parameter name="intent" string="true">Teste de lembrete 🔔</｜DSML｜parameter>\n' +
+      "</｜DSML｜invoke>\n</｜DSML｜function_calls>";
+    const ok = textToolCalls(dsml, known);
+    expect(ok.calls).toHaveLength(1);
+    expect(ok.calls[0]!.function.name).toBe("schedule_reminder");
+    expect(JSON.parse(ok.calls[0]!.function.arguments)).toEqual({ in_minutes: 1, intent: "Teste de lembrete 🔔" });
+    expect(ok.rest).toBe("Já marco!");
+    expect(ok.broken).toBe(false);
+    // como chegou no WhatsApp: barras dobradas e com espaço, "calls" em vez de "function_calls", ferramenta que não existe
+    const print =
+      '< | | DSML | | calls>\n< | | DSML | | invoke name="set_alarm">\n< | | DSML | | parameter name="in_minutes" string="false">1</ | | DSML | | parameter>\n' +
+      '< | | DSML | | parameter name="label" string="true">Teste de alarme 🔔</ | | DSML | | parameter>\n</ | | DSML | | invoke>\n</ | | DSML | | calls>';
+    const bad = textToolCalls(print, known);
+    expect(bad).toMatchObject({ calls: [], rest: "", broken: true });
+    const cut = textToolCalls('Vou ver<｜DSML｜function_calls><｜DSML｜invoke name="schedule_reminder"><｜DSML｜parameter name="intent" string="true">ab', known);
+    expect(cut).toMatchObject({ calls: [], rest: "Vou ver", broken: true });
+    expect(textToolCalls("Pronto<｜tool▁calls▁end｜>", known)).toMatchObject({ rest: "Pronto", broken: true });
+  });
 });
 
 describe("PDF de várias páginas (make_pdf)", () => {

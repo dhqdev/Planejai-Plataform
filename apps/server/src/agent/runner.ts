@@ -52,27 +52,61 @@ export const LONG_OUTPUT_TOKENS = 8000;
 const TEXT_CALL = /<tool_call>\s*([\s\S]*?)\s*(?:<\/tool_call>|$)/g;
 
 /**
+ * Formato DSML do DeepSeek (`<｜DSML｜function_calls>`, `<｜DSML｜invoke name="x">`, `<｜DSML｜parameter name="y" string="true">`).
+ * As barras às vezes vêm duplicadas ou com espaço; tudo vira `<dsml:...>` antes de ler.
+ */
+const DSML_TAG = /<\s*(\/?)\s*(?:[|｜]\s*)+DSML\s*(?:[|｜]\s*)+/gi;
+const DSML_BLOCK = /<dsml:(?:function_)?calls\s*>[\s\S]*?(?:<\/dsml:(?:function_)?calls\s*>|$)|<dsml:invoke[\s\S]*?(?:<\/dsml:invoke\s*>|$)/g;
+const DSML_INVOKE = /<dsml:invoke\s+name="([^"]*)"\s*>([\s\S]*?)(<\/dsml:invoke\s*>|$)/g;
+const DSML_PARAM = /<dsml:parameter\s+name="([^"]*)"(?:\s+string="(true|false)")?\s*>([\s\S]*?)<\/dsml:parameter\s*>/g;
+/** Tokens especiais que sobram de outros formatos (`<｜tool▁calls▁begin｜>` etc.): nunca vão para a pessoa. */
+const SPECIAL_TOKEN = /<[|｜][^<>\n]{0,60}[|｜]>/g;
+const HAS_SPECIAL = new RegExp(SPECIAL_TOKEN.source);
+const HAS_DSML = new RegExp(DSML_TAG.source, "i");
+
+/**
  * Alguns modelos (DeepSeek, Qwen) às vezes escrevem a chamada como texto em vez de usar tool_calls:
- * `<tool_call>{"name":"make_pdf","arguments":{...}}</tool_call>`. Vira chamada de verdade se o JSON estiver
- * inteiro e a ferramenta existir. `broken` = havia uma chamada em texto que não deu para ler (cortada).
+ * `<tool_call>{"name":"make_pdf","arguments":{...}}</tool_call>` ou o DSML do DeepSeek. Vira chamada de verdade se
+ * estiver inteira e a ferramenta existir. `broken` = havia uma chamada em texto que não deu para ler (cortada ou desconhecida).
  */
 export function textToolCalls(content: string | null, known: Set<string>): { calls: ToolCall[]; rest: string; broken: boolean } {
-  const text = content ?? "";
-  if (!text.includes("<tool_call>")) return { calls: [], rest: text, broken: false };
+  let text = content ?? "";
+  const dsml = HAS_DSML.test(text);
+  if (!text.includes("<tool_call>") && !dsml && !HAS_SPECIAL.test(text)) return { calls: [], rest: text, broken: false };
   const calls: ToolCall[] = [];
   let broken = false;
+  const push = (name: unknown, args: unknown) => {
+    if (typeof name !== "string" || !known.has(name)) throw new Error("ferramenta desconhecida");
+    calls.push({ id: `txt${calls.length}_${Date.now().toString(36)}`, type: "function", function: { name, arguments: typeof args === "string" ? args : JSON.stringify(args) } });
+  };
   for (const m of text.matchAll(TEXT_CALL)) {
     try {
       const j = JSON.parse(m[1]!);
-      const name = j?.name ?? j?.function?.name;
-      const args = j?.arguments ?? j?.parameters ?? j?.function?.arguments ?? {};
-      if (typeof name !== "string" || !known.has(name)) throw new Error("ferramenta desconhecida");
-      calls.push({ id: `txt${calls.length}_${Date.now().toString(36)}`, type: "function", function: { name, arguments: typeof args === "string" ? args : JSON.stringify(args) } });
+      push(j?.name ?? j?.function?.name, j?.arguments ?? j?.parameters ?? j?.function?.arguments ?? {});
     } catch {
       broken = true;
     }
   }
-  return { calls, rest: text.replace(TEXT_CALL, "").trim(), broken };
+  text = text.replace(TEXT_CALL, "");
+  if (dsml) {
+    text = text.replace(DSML_TAG, "<$1dsml:");
+    for (const m of text.matchAll(DSML_INVOKE)) {
+      try {
+        if (!m[3]) throw new Error("cortada");
+        const args: Record<string, unknown> = {};
+        for (const p of m[2]!.matchAll(DSML_PARAM)) {
+          const raw = p[3]!.trim();
+          args[p[1]!] = p[2] === "false" ? JSON.parse(raw) : p[3];
+        }
+        push(m[1], args);
+      } catch {
+        broken = true;
+      }
+    }
+    text = text.replace(DSML_BLOCK, "").replace(/<\/?dsml:[^>]*>/g, "");
+  }
+  if (HAS_SPECIAL.test(text)) broken = true;
+  return { calls, rest: text.replace(SPECIAL_TOKEN, "").trim(), broken };
 }
 
 /**
