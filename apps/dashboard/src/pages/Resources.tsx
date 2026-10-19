@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ago, api, phoneFmt } from "../api";
-import { Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
+import { Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import "../resources.css";
@@ -566,10 +566,68 @@ export function StoragePage() {
             </p>
             <Meter value={data.platform} total={data.dbBytes} label="Parte da plataforma" share />
           </div>
+          <FilesWhere />
         </div>
       </div>
 
       {open && <ClientSheet client={open} onClose={() => setOpen(null)} />}
+    </div>
+  );
+}
+
+interface FilesInfo {
+  bucket: { host: string; name: string } | null;
+  keepLocalCopy: boolean;
+  local: { files: number; bytes: number };
+  bucketOnly: { files: number; bytes: number };
+  pending: number;
+}
+
+/** Interruptor do super admin: cópia dos arquivos e do backup na VM, ou só no bucket (Backblaze). */
+function FilesWhere() {
+  const { data, setData } = useApi<FilesInfo>("/api/resources/files");
+  const [busy, setBusy] = useState(false);
+  if (!data) return null;
+  const toggle = async (keep: boolean) => {
+    if (!keep) {
+      const ok = await confirmDialog({
+        title: "Guardar só no bucket?",
+        body: "Arquivos novos e o backup diário vão direto para o bucket. Os que já estão nos dois lugares saem da VM aos poucos, de hora em hora. Se o bucket cair, esses arquivos não abrem até ele voltar.",
+        confirmLabel: "Guardar só no bucket",
+      });
+      if (!ok) return;
+    }
+    setBusy(true);
+    try {
+      setData(await api<FilesInfo>("/api/resources/files", { method: "PUT", json: { keepLocalCopy: keep } }));
+    } catch (err) {
+      void alertDialog("Não deu para mudar", (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="card srv-card srv-small">
+      <div className="srv-head"><h3>Onde ficam os arquivos</h3></div>
+      <label className={`srv-switch${data.bucket ? "" : " off"}`}>
+        <input type="checkbox" checked={data.keepLocalCopy} disabled={busy || !data.bucket} onChange={(e) => { haptic(5); void toggle(e.target.checked); }} />
+        <span>
+          <strong>Guardar cópia na VM</strong>
+          <small>
+            {!data.bucket
+              ? "Sem bucket configurado, documentos e mídias ficam só no banco da VM."
+              : data.keepLocalCopy
+              ? `Documentos, mídias e o backup diário ficam aqui e em ${data.bucket.name}.`
+              : `Documentos, mídias e o backup diário vão só para ${data.bucket.name}. O banco guarda nome, tamanho e a chave.`}
+          </small>
+        </span>
+      </label>
+      <p className="muted srv-note">
+        Na VM: <strong className="mono-num">{bytes(data.local.bytes)}</strong> em {nf(data.local.files)} {data.local.files === 1 ? "arquivo" : "arquivos"}
+        {data.bucket && <> · só no bucket: <strong className="mono-num">{bytes(data.bucketOnly.bytes)}</strong> em {nf(data.bucketOnly.files)}</>}
+        {data.bucket && data.pending > 0 && <> · {nf(data.pending)} ainda subindo</>}.
+        O banco em si, o Redis e a sessão do WhatsApp sempre ficam na VM.
+      </p>
     </div>
   );
 }

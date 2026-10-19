@@ -1,6 +1,7 @@
 import { createHash, createHmac } from "node:crypto";
 import { config } from "./config.js";
 import { many, one, query } from "./db/pool.js";
+import { getSettings } from "./settings.js";
 
 /**
  * Arquivos fora do Postgres: storage S3 compatível (Cloudflare R2, S3, B2) configurado pelo dono.
@@ -81,6 +82,44 @@ export async function deleteObject(key: string) {
   await res.arrayBuffer().catch(() => null);
 }
 
+/** Com bucket e o interruptor ligado, o arquivo fica também no banco (VM). Sem bucket fica sempre no banco. */
+export async function keepLocalCopy() {
+  if (!storageEnabled()) return true;
+  return (await getSettings()).keepLocalCopy;
+}
+
+/**
+ * Grava um arquivo novo e devolve o que vai na linha (data e storage_key).
+ * Com cópia na VM, se o bucket falhar o arquivo fica só no banco e a limpeza de hora em hora sobe depois.
+ */
+export async function storeBlob(key: string, data: Buffer, mimetype: string): Promise<{ data: Buffer | null; storage_key: string | null }> {
+  if (!storageEnabled()) return { data, storage_key: null };
+  const local = await keepLocalCopy();
+  try {
+    await putObject(key, data, mimetype);
+  } catch (err) {
+    if (local) return { data, storage_key: null };
+    throw err;
+  }
+  return { data: local ? data : null, storage_key: key };
+}
+
+/** Quantos arquivos têm cópia na VM e quantos estão só no bucket (para a tela Armazenamento). */
+export async function fileLocations() {
+  const r = await one<{ local_n: string; local_bytes: string; bucket_n: string; bucket_bytes: string; pending_n: string }>(`
+    SELECT COUNT(*) FILTER (WHERE has_data) AS local_n, COALESCE(SUM(size) FILTER (WHERE has_data), 0) AS local_bytes,
+           COUNT(*) FILTER (WHERE NOT has_data AND has_key) AS bucket_n, COALESCE(SUM(size) FILTER (WHERE NOT has_data AND has_key), 0) AS bucket_bytes,
+           COUNT(*) FILTER (WHERE has_data AND NOT has_key) AS pending_n
+      FROM (SELECT size, data IS NOT NULL AS has_data, storage_key IS NOT NULL AS has_key FROM documents
+            UNION ALL SELECT size, data IS NOT NULL, storage_key IS NOT NULL FROM media_files) f`);
+  return {
+    local: { files: Number(r?.local_n ?? 0), bytes: Number(r?.local_bytes ?? 0) },
+    bucketOnly: { files: Number(r?.bucket_n ?? 0), bytes: Number(r?.bucket_bytes ?? 0) },
+    /** ainda sem cópia no bucket */
+    pending: Number(r?.pending_n ?? 0),
+  };
+}
+
 /** Conteúdo de uma linha de documents/media_files: no banco (data) ou no bucket (storage_key). */
 export async function readBlob(row: { data?: Buffer | null; storage_key?: string | null }) {
   if (row.data) return row.data;
@@ -110,9 +149,21 @@ export async function purgeStorageTrash(limit = 200) {
   return n;
 }
 
-/** Migração gradual: leva até `limit` arquivos do bytea para o bucket por rodada (um por vez, sem carregar tudo na memória). */
+/**
+ * Migração gradual: leva até `limit` arquivos do bytea para o bucket por rodada (um por vez, sem carregar tudo na memória).
+ * Com cópia na VM o bytea fica; sem, sai do banco (inclusive dos que já estavam nos dois lugares).
+ */
 export async function moveBlobsToStorage(limit = 50) {
   if (!storageEnabled()) return 0;
+  const local = await keepLocalCopy();
+  if (!local) {
+    for (const t of ["documents", "media_files"]) {
+      await query(
+        `UPDATE ${t} SET data = NULL WHERE id IN (SELECT id FROM ${t} WHERE storage_key IS NOT NULL AND data IS NOT NULL LIMIT $1)`,
+        [limit * 10],
+      );
+    }
+  }
   const pending = await many<{ t: "documents" | "media_files"; id: string; user_id: string | null }>(
     `(SELECT 'documents' AS t, id, user_id FROM documents WHERE storage_key IS NULL AND data IS NOT NULL ORDER BY created_at LIMIT $1)
      UNION ALL
@@ -125,7 +176,7 @@ export async function moveBlobsToStorage(limit = 50) {
     if (!row?.data) continue;
     const key = p.t === "documents" ? docKey(p.user_id!, p.id) : mediaKey(p.id);
     await putObject(key, row.data, row.mimetype);
-    const r = await query(`UPDATE ${p.t} SET storage_key = $2, data = NULL WHERE id = $1 AND storage_key IS NULL`, [p.id, key]);
+    const r = await query(`UPDATE ${p.t} SET storage_key = $2${local ? "" : ", data = NULL"} WHERE id = $1 AND storage_key IS NULL`, [p.id, key]);
     // a linha sumiu no meio do caminho: o objeto não tem dono
     if (!r.rowCount) await deleteObject(key).catch(() => {});
     else moved++;

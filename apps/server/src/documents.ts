@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { many, one, query } from "./db/pool.js";
-import { deleteObject, docKey, purgeStorageTrash, putObject, readBlob, storageEnabled } from "./storage.js";
+import { deleteObject, docKey, purgeStorageTrash, readBlob, storeBlob } from "./storage.js";
 
 /** Documentos guardados pela pessoa (PDF, imagem, planilha), só dela: no bucket se STORAGE_S3_* estiver ligado, senão no banco. */
 export const DOC_MAX_BYTES = 15 * 1024 * 1024;
@@ -34,13 +34,13 @@ export async function saveDocument(input: { userId: string; name: string; mimety
   const folder = input.folder?.trim().slice(0, 60) || null;
   const mimetype = input.mimetype || "application/octet-stream";
   const id = randomUUID();
-  // com storage: arquivo no bucket primeiro, a linha só guarda a chave
-  const key = storageEnabled() ? docKey(input.userId, id) : null;
-  if (key) await putObject(key, input.data, mimetype);
+  // com storage: arquivo no bucket primeiro; no banco só se a cópia na VM estiver ligada
+  const blob = await storeBlob(docKey(input.userId, id), input.data, mimetype);
+  const key = blob.storage_key;
   try {
     return (await one<DocumentRow>(
       `INSERT INTO documents (id, user_id, name, mimetype, size, data, storage_key, folder, notes, source) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING ${COLS}`,
-      [id, input.userId, cleanName(input.name, mimetype), mimetype, input.data.length, key ? null : input.data, key, folder, input.notes?.slice(0, 500) ?? null, input.source ?? "painel"],
+      [id, input.userId, cleanName(input.name, mimetype), mimetype, input.data.length, blob.data, key, folder, input.notes?.slice(0, 500) ?? null, input.source ?? "painel"],
     ))!;
   } catch (err) {
     if (key) await deleteObject(key).catch(() => {});

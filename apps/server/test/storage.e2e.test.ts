@@ -108,6 +108,8 @@ describe.skipIf(!enabled)("documentos e mídias no bucket (e2e)", () => {
     const { upsertUser } = await import("../src/ingest.js");
     ana = await upsertUser("5519933330001", "Ana");
     objects.clear();
+    // estes casos são do bucket sozinho; a cópia na VM tem o bloco dela no fim
+    await (await import("../src/settings.js")).saveSettings({ keepLocalCopy: false });
   });
 
   it("documento novo vai pro bucket, a linha guarda só a chave, e apagar tira o objeto", async () => {
@@ -148,6 +150,46 @@ describe.skipIf(!enabled)("documentos e mídias no bucket (e2e)", () => {
     expect(objects.get(`/planejai/media/${media.id}`)?.body.equals(Buffer.from([1, 2, 3]))).toBe(true);
     const { getDocument } = await import("../src/documents.js");
     expect((await getDocument(doc.id, ana.id))?.data.equals(old)).toBe(true);
+  });
+
+  it("cópia na VM ligada: arquivo fica no banco e no bucket; bucket fora do ar não perde o arquivo; desligar tira do banco", async () => {
+    const { saveSettings } = await import("../src/settings.js");
+    const s = await import("../src/storage.js");
+    const docs = await import("../src/documents.js");
+    await saveSettings({ keepLocalCopy: true });
+    const a = Buffer.from("nos dois lugares");
+    const saved = await docs.saveDocument({ userId: ana.id, name: "dois.txt", mimetype: "text/plain", data: a });
+    let row = await db.one("SELECT data, storage_key FROM documents WHERE id = $1", [saved.id]);
+    expect(row.data.equals(a)).toBe(true);
+    expect(row.storage_key).toBe(`documents/${ana.id}/${saved.id}`);
+    expect(objects.get(`/planejai/${row.storage_key}`)?.body.equals(a)).toBe(true);
+
+    // bucket recusando: com a cópia na VM o documento ainda é salvo e sobe depois
+    const real = config.STORAGE_S3_SECRET_ACCESS_KEY;
+    config.STORAGE_S3_SECRET_ACCESS_KEY = "errado";
+    const b = Buffer.from("bucket fora");
+    const offline = await docs.saveDocument({ userId: ana.id, name: "fora.txt", mimetype: "text/plain", data: b }).finally(() => {
+      config.STORAGE_S3_SECRET_ACCESS_KEY = real;
+    });
+    expect((await db.one("SELECT storage_key FROM documents WHERE id = $1", [offline.id])).storage_key).toBeNull();
+    expect((await s.fileLocations()).pending).toBe(1);
+    expect(await s.moveBlobsToStorage(50)).toBe(1);
+    row = await db.one("SELECT data, storage_key FROM documents WHERE id = $1", [offline.id]);
+    expect(row.data.equals(b)).toBe(true);
+    expect(row.storage_key).not.toBeNull();
+
+    // desligou: a limpeza tira do banco o que já está no bucket e a leitura vem do bucket
+    await saveSettings({ keepLocalCopy: false });
+    await s.moveBlobsToStorage(50);
+    const where = await s.fileLocations();
+    expect(where.local.files).toBe(0);
+    expect(where.bucketOnly.files).toBeGreaterThanOrEqual(2);
+    expect((await docs.getDocument(saved.id, ana.id))?.data.equals(a)).toBe(true);
+
+    // sem cópia na VM, bucket fora do ar é erro (não grava pela metade)
+    config.STORAGE_S3_SECRET_ACCESS_KEY = "errado";
+    await expect(docs.saveDocument({ userId: ana.id, name: "x.txt", mimetype: "text/plain", data: Buffer.from("x") })).rejects.toThrow(/403/);
+    config.STORAGE_S3_SECRET_ACCESS_KEY = real;
   });
 
   it("apagar a pessoa (LGPD) tira os arquivos dela do bucket, inclusive os que saem em cascata", async () => {

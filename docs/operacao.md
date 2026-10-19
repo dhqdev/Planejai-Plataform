@@ -76,6 +76,7 @@ No B2 o endpoint é `https://s3.<região>.backblazeb2.com` e `STORAGE_S3_REGION`
 - Apagar documento, a pessoa (LGPD) ou mídia vencida apaga o objeto também; o que falhar fica em `storage_trash` e sai na rodada seguinte.
 - O `pg_dump` do backup **não** tem os arquivos que estão no bucket: ative a cópia/versão do próprio bucket se quiser backup deles.
 - Não desligue o storage depois de ligado: arquivo que já está no bucket só é lido de lá.
+- **Cópia na VM** (painel > Servidor > Armazenamento, "Guardar cópia na VM", só super admin; padrão ligado): ligado, documento e mídia novos ficam no bucket e também no banco, e o dump diário fica no volume além do `BACKUP_REMOTE`. Desligado, vão só para o bucket: a limpeza de hora em hora tira do banco o que já está no bucket e o serviço `backup` apaga o dump local depois de copiar (precisa da versão nova do serviço `backup`, então atualize a stack). O Postgres, o Redis e a sessão do WhatsApp continuam sempre na VM.
 - O tamanho por cliente na tela Servidor continua vindo da coluna `size` de cada linha.
 
 ## Voltar uma versão

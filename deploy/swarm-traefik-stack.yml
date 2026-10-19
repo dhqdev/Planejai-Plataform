@@ -190,7 +190,11 @@ services:
           if pg_dump -Fc -f "$$f.tmp"; then
             mv "$$f.tmp" "$$f"; echo "backup ok: $$f ($$(du -h "$$f" | cut -f1))"
             if [ -n "$$BACKUP_REMOTE" ] && command -v rclone >/dev/null; then
-              rclone copy "$$f" "$$BACKUP_REMOTE" && echo "copiado para $$BACKUP_REMOTE"
+              if rclone copy "$$f" "$$BACKUP_REMOTE"; then
+                echo "copiado para $$BACKUP_REMOTE"
+                # Armazenamento > "Guardar cópia na VM" desligado: o dump fica só no bucket
+                if [ "$$(psql -tAc "SELECT value::text FROM settings WHERE key = 'keepLocalCopy'" 2>/dev/null)" = "false" ]; then rm -f "$$f"; echo "cópia na VM desligada no painel: dump só em $$BACKUP_REMOTE"; fi
+              fi
               rclone delete --min-age "$${BACKUP_KEEP_DAYS}d" "$$BACKUP_REMOTE" >/dev/null 2>&1
             fi
           else

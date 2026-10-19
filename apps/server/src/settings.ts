@@ -52,6 +52,11 @@ export interface AgentSettings {
   privacyEmail: string;
   /** cidade do foro (termos de uso) */
   legalCity: string;
+  /**
+   * Com bucket (STORAGE_S3_*): documentos, mídias e o dump diário também ficam na VM (Postgres e volume de backup).
+   * Desligado, vão só para o bucket. Interruptor do super admin na tela Armazenamento.
+   */
+  keepLocalCopy: boolean;
 }
 
 export interface BillingPlan {
@@ -200,6 +205,7 @@ const defaults = (): AgentSettings => ({
   legalDocument: "",
   privacyEmail: "",
   legalCity: "",
+  keepLocalCopy: true,
 });
 
 let cache: { at: number; value: AgentSettings } | null = null;
@@ -221,6 +227,7 @@ export async function saveSettings(patch: Partial<AgentSettings>, opts: { unchec
     rest.billingEnabled = rest.billingEnabled === true || (rest.billingEnabled as unknown) === "true";
     if (rest.billingEnabled && !(await getSettings()).billingStartedAt) (rest as Partial<AgentSettings>).billingStartedAt = new Date().toISOString();
   }
+  if (rest.keepLocalCopy !== undefined) rest.keepLocalCopy = rest.keepLocalCopy === true || (rest.keepLocalCopy as unknown) === "true";
   if (rest.billingPlans !== undefined) rest.billingPlans = cleanPlans(rest.billingPlans);
   if (rest.billingPacks !== undefined) rest.billingPacks = cleanPacks(rest.billingPacks);
   if (rest.strangerMessage !== undefined) rest.strangerMessage = String(rest.strangerMessage ?? "").trim().slice(0, 1000);

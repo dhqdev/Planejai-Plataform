@@ -112,6 +112,7 @@ services:
     networks: [planejai]
 
   # Backup diário do banco (pg_dump) no volume planejai_backups, 14 dias. Cópia para fora: veja docs/operacao.md.
+  # Com cópia para fora e "Guardar cópia na VM" desligado no painel (Armazenamento), o dump fica só no bucket.
   backup:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -131,7 +132,11 @@ services:
           f="/backups/planejai-$$(date +%Y%m%d-%H%M).dump"
           if pg_dump -Fc -f "$$f.tmp"; then
             mv "$$f.tmp" "$$f"; echo "backup ok: $$f"
-            if [ -n "$$BACKUP_REMOTE" ] && command -v rclone >/dev/null; then rclone copy "$$f" "$$BACKUP_REMOTE" && echo "copiado para $$BACKUP_REMOTE"; fi
+            if [ -n "$$BACKUP_REMOTE" ] && command -v rclone >/dev/null && rclone copy "$$f" "$$BACKUP_REMOTE"; then
+              echo "copiado para $$BACKUP_REMOTE"
+              # Armazenamento > "Guardar cópia na VM" desligado: o dump fica só no bucket
+              if [ "$$(psql -tAc "SELECT value::text FROM settings WHERE key = 'keepLocalCopy'" 2>/dev/null)" = "false" ]; then rm -f "$$f"; echo "cópia na VM desligada no painel: dump só em $$BACKUP_REMOTE"; fi
+            fi
           else
             rm -f "$$f.tmp"; echo "BACKUP FALHOU"
           fi

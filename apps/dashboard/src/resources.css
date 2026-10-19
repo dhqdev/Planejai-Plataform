@@ -195,3 +195,10 @@
   .srv-live { animation: none; }
   .srv-meter i, .srv-rank .bar i, .srv-client-track, .srv-ring circle { transition: none; }
 }
+
+/* Onde ficam os arquivos (Armazenamento) */
+.srv-switch { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; margin-bottom: 8px; }
+.srv-switch.off { cursor: default; opacity: .7; }
+.srv-switch input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--brand, #6510E0); flex-shrink: 0; }
+.srv-switch strong { display: block; font-size: 14px; }
+.srv-switch small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.45; margin-top: 2px; }
