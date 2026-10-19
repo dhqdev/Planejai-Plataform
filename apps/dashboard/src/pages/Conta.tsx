@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { Me } from "../App";
 import { PageHead } from "../components";
-import { useApi } from "../hooks";
+import { FIT_QUERY, useApi, useMedia } from "../hooks";
 import { Icon } from "../icons";
 import { useInstallAction } from "../Install";
 import { openWardrobe } from "../mascote/state";
@@ -16,6 +16,15 @@ declare const __APP_VERSION__: string;
 
 /** Telas abertas daqui ganham a seta de voltar também no notebook (o App lê `state.from`). */
 const FROM_CONTA = { from: "conta" };
+
+/** Linha de apoio de cada item, só no notebook (no celular o cartão fica só com o nome). */
+const HINTS: Record<string, string> = {
+  "/convites": "Chame alguém para usar com você",
+  "/notificacoes": "Tudo o que o assistente te avisou",
+  "/plano": "Grãos, plano e assinatura",
+  "/pagamentos": "Cobranças e cartão",
+  "/profile": "Nome, WhatsApp e privacidade",
+};
 
 export type MenuLink = { to: string; label: string; icon: string; badge?: string; short?: string };
 
@@ -38,6 +47,7 @@ export function ContaPage({ me, sections, theme, onTheme, onLogout, unread }: {
   const billing = useApi<BillingLite>(isSuper ? null : "/api/billing");
   const use = grainUse(billing.data);
   const install = useInstallAction();
+  const fit = useMedia(FIT_QUERY);
   const role = me.owner ? "Dono da stack" : isSuper ? "Super admin" : null;
   const account = sections.find((s) => s.title === "Conta")?.items.filter((i) => i.to !== "/plano") ?? [];
   const screens = sections.filter((s) => s.title !== "Conta" && s.items.length);
@@ -47,27 +57,29 @@ export function ContaPage({ me, sections, theme, onTheme, onLogout, unread }: {
   };
 
   return (
-    <div className="page conta-page">
+    <div className={`page conta-page${fit ? " fit" : ""}`}>
       <h1 className="sr-only conta-sr">Conta</h1>
       {/* notebook: mesmo cabeçalho das outras telas; no celular a tela começa direto no cartão, como no Toki */}
       <div className="conta-head">
-        <PageHead title="Conta" subtitle="Seu perfil, seu plano e os ajustes do app." />
+        <PageHead title="Conta" />
       </div>
       <div className="conta-grid">
         <section className="conta-card" aria-label="Você">
           <div className="conta-card-who">
           <div className="conta-who">
-            <UserMascote me name={me.name ?? me.email} size={58} />
+            <UserMascote me name={me.name ?? me.email} size={fit ? 112 : 58} />
             <div className="conta-who-text">
               <strong>{me.name ?? me.email}</strong>
               <span>{me.email}</span>
             </div>
             <Link className="conta-edit" state={FROM_CONTA} to="/profile" aria-label="Editar perfil" title="Editar perfil" onClick={() => haptic(5)}>
               <Icon name="edit" size={18} />
+              <span className="conta-edit-text">Editar perfil</span>
             </Link>
           </div>
           </div>
           <div className="conta-card-plan">
+          <span className="conta-plan-label">{use ? "Plano" : "Acesso"}</span>
           {use ? (
             <>
               <div className="conta-plan">
@@ -97,6 +109,7 @@ export function ContaPage({ me, sections, theme, onTheme, onLogout, unread }: {
           )}
           {!use && <p className="conta-plan-note">{isSuper ? "Acesso completo à plataforma, sem gastar grãos." : "Por enquanto o Planejai é grátis para você."}</p>}
           </div>
+          <p className="conta-version conta-version-side">Planejai v{__APP_VERSION__}</p>
         </section>
 
         <div className="conta-lists">
@@ -109,13 +122,14 @@ export function ContaPage({ me, sections, theme, onTheme, onLogout, unread }: {
           ))}
 
           <Group title="Conta">
-            {use && <Row icon={<Icon name="card" size={20} />} label="Meu plano" value={use.plan} onClick={() => go("/plano")} />}
+            {use && <Row icon={<Icon name="card" size={20} />} label="Meu plano" hint={HINTS["/plano"]} value={use.plan} onClick={() => go("/plano")} />}
             {account.map((it) => (
               <Row
                 key={it.to}
                
                 icon={<Icon name={it.icon} size={20} />}
                 label={it.short ?? it.label}
+                hint={HINTS[it.to]}
                 value={it.badge === "notif" && unread > 0 ? `${unread} ${unread === 1 ? "nova" : "novas"}` : undefined}
                 dot={it.badge === "notif" && unread > 0}
                 onClick={() => go(it.to)}
@@ -124,10 +138,10 @@ export function ContaPage({ me, sections, theme, onTheme, onLogout, unread }: {
           </Group>
 
           <Group title="Ajustes">
-            <Row icon={<span className="conta-mascote"><MascoteIcon size={22} /></span>} label={`Roupinha do ${MASCOTE}`} onClick={() => (haptic(5), openWardrobe())} />
-            <Row icon={<Icon name={theme === "dark" ? "moon" : "sun"} size={20} />} label="Tema" value={theme === "dark" ? "Escuro" : "Claro"} onClick={(e) => onTheme(e)} />
-            {install.mode && <Row icon={<Icon name="download" size={20} />} label="Instalar app" value={install.mode === "prompt" ? "1 toque" : undefined} onClick={install.run} />}
-            <Row icon={<Icon name="logout" size={20} />} label="Sair" danger onClick={onLogout} />
+            <Row icon={<span className="conta-mascote"><MascoteIcon size={22} /></span>} label={`Roupinha do ${MASCOTE}`} hint={`Escolha o visual do ${MASCOTE}`} onClick={() => (haptic(5), openWardrobe())} />
+            <Row icon={<Icon name={theme === "dark" ? "moon" : "sun"} size={20} />} label="Tema" hint="Claro ou escuro, como preferir" value={theme === "dark" ? "Escuro" : "Claro"} onClick={(e) => onTheme(e)} />
+            {install.mode && <Row icon={<Icon name="download" size={20} />} label="Instalar app" hint="Abra direto da tela inicial" value={install.mode === "prompt" ? "1 toque" : undefined} onClick={install.run} />}
+            <Row icon={<Icon name="logout" size={20} />} label="Sair" hint="Encerrar a sessão neste aparelho" danger onClick={onLogout} />
           </Group>
           <p className="conta-version">Planejai v{__APP_VERSION__}</p>
         </div>
@@ -146,7 +160,7 @@ function Group({ title, children, className }: { title: string; children: ReactN
   );
 }
 
-function Row({ icon, label, value, dot, danger, onClick }: { icon: ReactNode; label: string; value?: string; dot?: boolean; danger?: boolean; onClick: (e: { clientX: number; clientY: number }) => void }) {
+function Row({ icon, label, hint, value, dot, danger, onClick }: { icon: ReactNode; label: string; hint?: string; value?: string; dot?: boolean; danger?: boolean; onClick: (e: { clientX: number; clientY: number }) => void }) {
   return (
     <button type="button" className={`conta-row${danger ? " danger" : ""}`} onClick={onClick}>
       <span className="conta-row-top">
@@ -156,7 +170,11 @@ function Row({ icon, label, value, dot, danger, onClick }: { icon: ReactNode; la
         </span>
         {value && <span className="conta-row-badge">{value}</span>}
       </span>
-      <span className="conta-row-label">{label}</span>
+      <span className="conta-row-text">
+        <span className="conta-row-label">{label}</span>
+        {hint && <span className="conta-row-hint">{hint}</span>}
+      </span>
+      <Icon name="chevron-right" size={16} className="conta-row-go" />
     </button>
   );
 }
