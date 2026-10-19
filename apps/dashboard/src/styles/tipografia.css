@@ -15,9 +15,7 @@
 @media (max-width: 1023px) {
   .fin-overview .fin-col:first-child, .fin-overview .fin-col-donut { display: contents; }
   .fin-overview > .fin-col:last-child { display: flex; }
-  .fin-overview .fin-insight { order: 1; }
   .fin-overview .fin-col-donut .card { order: 2; }
-  .fin-overview .fin-trend { order: 3; }
   .fin-overview .fin-col:last-child { order: 4; }
   .fin-overview { display: flex; flex-direction: column; gap: 18px; }
 }

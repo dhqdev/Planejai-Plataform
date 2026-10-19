@@ -111,5 +111,5 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 /* itens dentro de áreas que rolam ou cortam: anel por dentro */
 .nav a:focus-visible, .tab:focus-visible, .sheet-item:focus-visible, .list-item:focus-visible, .line-item:focus-visible, .fin-tx:focus-visible, .cal-row:focus-visible, .cal-chip:focus-visible, .cal-block:focus-visible, .notif-item:focus-visible, .costs-row:focus-visible, .budget-row:focus-visible, .tabs button:focus-visible, .fin-legend button:focus-visible { outline-offset: -2px; }
 .cal-check:has(input:focus-visible) .box { outline: 2px solid var(--text); outline-offset: 2px; }
-.page-head h1, .empty, .fin-insight-text { text-wrap: balance; }
+.page-head h1, .empty { text-wrap: balance; }
 

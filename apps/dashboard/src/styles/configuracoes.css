@@ -68,7 +68,6 @@
   .page-head { margin-bottom: 28px; }
   .board, .board-fit, .fit-body, .fit-side { gap: 20px; }
   .fin-page.fit .fin-overview, .fin-page.fit .fin-col { gap: 20px; }
-  .fin-page.fit .fin-kpis { margin-bottom: 20px; }
   .grid { gap: 20px; }
 }
 @media (min-width: 1280px) {

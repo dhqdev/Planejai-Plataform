@@ -35,7 +35,7 @@ select, .select { accent-color: var(--text); color: var(--text); }
 :focus-visible { outline-color: var(--violet); }
 
 /* números que contam a história: mês escolhido e gasto nas barras de Finanças, limite e parcelas do cartão */
-.fin-page .bars .bar.spent, .fin-months button.active .fin-month-bar i, .cc-month.active .cc-month-bar i, .cc-limit-bar i, .cc-plan-bar i, .progress > div, .fin-insight-bar i, .goal-row:not(.done) .goal-bar i, .costs-track i { background: var(--violet); }
+.fin-page .bars .bar.spent, .fin-months button.active .fin-month-bar i, .cc-month.active .cc-month-bar i, .cc-limit-bar i, .cc-plan-bar i, .progress > div, .goal-row:not(.done) .goal-bar i, .costs-track i { background: var(--violet); }
 
 /* carregando: os bloquinhos na cor do mascote */
 .pj-loader .block { background: var(--violet); }

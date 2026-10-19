@@ -31,7 +31,7 @@ export function financeRoutes(base: FastifyInstance) {
       [uids, tz, month],
     );
     const daily = await many(
-      `SELECT to_char(t.occurred_at AT TIME ZONE $2, 'DD') AS day, SUM(amount) FILTER (WHERE kind='expense') AS expenses FROM transactions t WHERE ${where} GROUP BY 1 ORDER BY 1`,
+      `SELECT to_char(t.occurred_at AT TIME ZONE $2, 'DD') AS day, COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses, COALESCE(SUM(amount) FILTER (WHERE kind='income'),0) AS income FROM transactions t WHERE ${where} GROUP BY 1 ORDER BY 1`,
       [uids, tz, month],
     );
     const months = await many(

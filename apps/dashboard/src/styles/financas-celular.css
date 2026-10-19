@@ -23,24 +23,8 @@
   .fp-people button.on { background: var(--ink); color: var(--on-ink); border-color: transparent; }
   .fp-people button:active { transform: scale(.95); }
 
-  /* saldo grande em cima; entradas e saídas lado a lado; sem moldura, como o título da Agenda */
-  html.pj-fin .fin-kpis, html.pj-fin .fin-kpis.three {
-    border: none; border-radius: 0; box-shadow: none; background: none; overflow: visible;
-    grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 2px 0 14px;
-  }
-  html.pj-fin .fin-kpis > div { padding: 12px 0; border: none; border-top: 1px solid var(--border); }
-  html.pj-fin .fin-kpis > div:nth-child(2) { padding-left: 16px; border-left: 1px solid var(--border); }
-  html.pj-fin .fin-kpis > div:nth-child(3) { order: -1; grid-column: 1 / -1; border: none; padding: 2px 0 14px; }
-  html.pj-fin .fin-kpis > div:nth-child(4) { grid-column: 1 / -1; }
-  html.pj-fin .fin-kpis > div:nth-child(3) small { font-size: 14px; }
-  html.pj-fin .fin-kpis > div:nth-child(3) strong { font-size: 40px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; }
-  html.pj-fin .fin-kpis > div:nth-child(3) strong.long { font-size: 30px; }
-  html.pj-fin .fin-kpis strong { font-size: 20px; }
-  html.pj-fin .fin-kpis strong.long { font-size: 15px; }
-  html.pj-fin .fin-kpis span { font-size: 13px; color: var(--muted); }
-
   /* cartões como os da Agenda: borda fina, canto grande, sem sombra */
-  html.pj-fin .fin-page .card:not(.fin-kpis) { border-radius: 20px; box-shadow: none; border: 1px solid var(--border); }
+  html.pj-fin .fin-page .card { border-radius: 20px; box-shadow: none; border: 1px solid var(--border); }
   html.pj-fin .fin-page .card h3 { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
   html.pj-fin .fin-page .fin-cats-bar { border-radius: 20px; box-shadow: none; }
 
@@ -63,7 +47,7 @@
   /* troca de aba entra do lado dela; os blocos entram em cascata leve */
   .fp-body.right { animation: pc-from-right .42s var(--pc-ease); }
   .fp-body.left { animation: pc-from-left .42s var(--pc-ease); }
-  .fp-body > .fin-kpis, .fp-body > .fin-cats-bar, .fp-body .fin-overview > .fin-col > *, .fp-body .fin-list-page > * { animation: pe-item .42s var(--pc-ease) backwards; }
+  .fp-body > .fin-cats-bar, .fp-body .fin-overview > .fin-col > *, .fp-body .fin-list-page > * { animation: pe-item .42s var(--pc-ease) backwards; }
   .fp-body > .fin-cats-bar { animation-delay: 40ms; }
   .fp-body .fin-overview > .fin-col:nth-child(1) > * { animation-delay: 80ms; }
   .fp-body .fin-overview > .fin-col:nth-child(2) > * { animation-delay: 120ms; }

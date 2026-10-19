@@ -1,0 +1,98 @@
+/* ---------- Finanças: calendário de gastos da Visão geral (pages/FinanceCalendar.tsx) ----------
+   Cada dia com o que saiu e uma cor pelo tamanho do gasto (verde pouco, amarelo normal, laranja acima, vermelho muito).
+   Entradas, saídas e saldo pequenos em cima. Hoje com o anel roxo; o dia tocado mostra os lançamentos embaixo. */
+
+.fcal {
+  --heat-1: #2f9e6b; --heat-2: #d4a017; --heat-3: #e2733a; --heat-4: #d64545;
+  --heat-mix: 24%;
+  padding: 16px 18px 14px; display: flex; flex-direction: column; min-width: 0;
+}
+:root[data-theme="dark"] .fcal { --heat-1: #45c08a; --heat-2: #e2b54a; --heat-3: #f08a52; --heat-4: #f06666; --heat-mix: 30%; }
+
+.fcal-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding-bottom: 14px; }
+.fcal-sum > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fcal-sum small { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.fcal-sum small i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.fcal-sum small i.in { background: var(--ok); }
+.fcal-sum small i.out { background: var(--heat-4); }
+.fcal-sum small i.bal { background: var(--violet); }
+.fcal-sum strong { font-size: 16px; font-weight: 650; letter-spacing: -.01em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fcal-sum strong.neg { color: var(--err); }
+
+.fcal-limit { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); margin: -4px 0 14px; }
+.fcal-limit strong { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.fcal-limit strong.neg { color: var(--err); }
+.fcal-limit-bar { height: 4px; border-radius: 99px; background: var(--panel-2); overflow: hidden; }
+.fcal-limit-bar i { display: block; height: 100%; border-radius: 99px; background: var(--violet); }
+.fcal-limit-bar.over i { background: var(--err); }
+
+.fcal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.fcal-wd { text-align: center; font-size: 11.5px; font-weight: 600; color: var(--muted); padding-bottom: 2px; }
+.fcal-day {
+  --h: transparent;
+  position: relative; aspect-ratio: 1; min-width: 0; border: none; border-radius: 12px; padding: 0; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  background: var(--panel-2); color: var(--text); font: inherit; font-variant-numeric: tabular-nums;
+  transition: transform .16s cubic-bezier(.2, .8, .2, 1), box-shadow .16s;
+}
+.fcal-day .n { font-size: 14px; font-weight: 600; line-height: 1; }
+.fcal-day .v { font-size: 10.5px; font-weight: 600; line-height: 1.1; color: color-mix(in srgb, var(--h) 75%, var(--text)); max-width: 100%; overflow: hidden; white-space: nowrap; }
+.fcal-day.l1 { --h: var(--heat-1); }
+.fcal-day.l2 { --h: var(--heat-2); }
+.fcal-day.l3 { --h: var(--heat-3); }
+.fcal-day.l4 { --h: var(--heat-4); }
+.fcal-day:not(.l0) { background: color-mix(in srgb, var(--h) var(--heat-mix), var(--panel)); }
+.fcal-day.future { background: none; box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); }
+.fcal-day.today { box-shadow: inset 0 0 0 2px var(--violet); }
+.fcal-day.sel { box-shadow: inset 0 0 0 2px var(--ink); }
+.fcal-day.today.sel { box-shadow: inset 0 0 0 2px var(--violet), 0 0 0 3px color-mix(in srgb, var(--violet) 18%, transparent); }
+.fcal-day:active { transform: scale(.92); }
+@media (hover: hover) and (pointer: fine) { .fcal-day:hover:not(.sel) { box-shadow: inset 0 0 0 1px var(--muted); } .fcal-day.today:hover:not(.sel) { box-shadow: inset 0 0 0 2px var(--violet); } }
+.fcal-day .inc { position: absolute; top: 6px; right: 6px; width: 5px; height: 5px; border-radius: 50%; background: var(--ok); }
+
+.fcal-legend { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); margin-top: 12px; }
+.fcal-legend > i { width: 12px; height: 12px; border-radius: 4px; }
+.fcal-legend > i.l1 { background: color-mix(in srgb, var(--heat-1) var(--heat-mix), var(--panel)); }
+.fcal-legend > i.l2 { background: color-mix(in srgb, var(--heat-2) var(--heat-mix), var(--panel)); }
+.fcal-legend > i.l3 { background: color-mix(in srgb, var(--heat-3) var(--heat-mix), var(--panel)); }
+.fcal-legend > i.l4 { background: color-mix(in srgb, var(--heat-4) var(--heat-mix), var(--panel)); }
+.fcal-legend > span:first-child { margin-right: 2px; }
+.fcal-legend > i.l4 + span { margin-left: 2px; }
+.fcal-legend-in { display: inline-flex; align-items: center; gap: 5px; }
+.fcal-legend-in i { width: 5px; height: 5px; border-radius: 50%; background: var(--ok); }
+
+.fcal-sel { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); min-height: 0; display: flex; flex-direction: column; animation: fcal-in .22s cubic-bezier(.2, .8, .2, 1); }
+.fcal-sel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 13.5px; }
+.fcal-sel-head span { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--muted); display: inline-flex; gap: 10px; }
+.fcal-sel-head em { font-style: normal; color: var(--ok); }
+.fcal-sel-list { margin-top: 6px; overflow-y: auto; min-height: 0; }
+@keyframes fcal-in { from { opacity: 0; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { .fcal-sel { animation: none; } .fcal-day { transition: none; } }
+
+/* notebook: o calendário é a coluna da esquerda e tudo cabe na tela; dias mais baixos que largos e os lançamentos do dia rolam dentro do card */
+@media (min-width: 1024px) {
+  .fcal-grid { gap: 5px; }
+  .fcal-day { border-radius: 10px; aspect-ratio: 1.3; }
+  .fcal-sel-list { max-height: max(64px, calc(100dvh - 680px)); }
+}
+
+/* celular: sem moldura, como o resto de Finanças no celular */
+@media (max-width: 767px) {
+  html.pj-fin .fin-page .fin-col .card.fcal { border: none; padding: 2px 0 6px; background: none; border-radius: 0; }
+  .fcal-sum { padding-bottom: 16px; }
+  .fcal-sum strong { font-size: 15.5px; }
+  .fcal-grid { gap: 5px; }
+  .fcal-day { border-radius: 11px; }
+  .fcal-day .n { font-size: 14.5px; }
+  .fcal-day .v { font-size: 10px; }
+  .fcal-day .inc { top: 5px; right: 5px; }
+  .fcal-sel-list .fin-tx { padding-left: 0; padding-right: 0; }
+}
+@media (max-width: 379px) {
+  .fcal-sum strong { font-size: 14px; }
+  .fcal-day .v { font-size: 9px; }
+}
+/* iPad: o calendário ocupa a largura toda, então os dias ficam mais baixos */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .fcal-day { aspect-ratio: 1.6; }
+}

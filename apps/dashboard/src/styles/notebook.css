@@ -26,12 +26,6 @@
   .dash-fit .corner.br { display: none; }
 
   /* Finanças */
-  .fin-page.fit .fin-kpis { margin-bottom: 14px; flex-shrink: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .fin-page.fit .fin-kpis > div:nth-child(3) { border-left: 1px solid var(--border); }
-  .fin-page.fit .fin-kpis > div:nth-child(n + 3) { border-top: none; }
-  .fin-page.fit .fin-kpis strong { font-size: clamp(18px, 1.7vw, 24px); }
-  .fin-page.fit .fin-kpis strong.long { font-size: clamp(14px, 1.25vw, 18px); }
-  .fin-page.fit .fin-kpis > div { padding: 14px 18px; }
   .fin-page.fit .fin-overview { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(280px, .9fr); gap: 14px; align-items: stretch; }
   .fin-page.fit .fin-col { min-height: 0; gap: 14px; }
   .fin-page.fit .fin-overview > .fin-col:last-child { grid-column: auto; display: flex; flex-direction: column; }
@@ -40,12 +34,6 @@
   .fin-page.fit:has(> .fin-overview) { height: auto; min-height: 100%; }
   .fin-page.fit .fin-overview { flex: 1 0 auto; }
   .fin-page.fit .fin-col > .card { min-height: auto; overflow: visible; }
-  .fin-page.fit .fin-insight { flex: 0 1 auto; padding: 16px 18px; }
-  .fin-page.fit .fin-insight-text { font-size: 15px; margin: 8px 0 12px; }
-  .fin-page.fit .fin-trend { flex: 1 1 0; min-height: 180px; padding: 14px 16px; display: flex; flex-direction: column; }
-  .fin-page.fit .fin-trend .fin-months { flex: 1; height: auto; min-height: 48px; }
-  .fin-page.fit .fin-trend h3 { margin-top: 12px !important; }
-  .fin-page.fit .fin-trend .bars { height: 40px !important; flex-shrink: 0; }
   .fin-page.fit .fin-donut-card { flex: 1; padding: 16px 18px; }
   .fin-page.fit .fin-donut { flex-direction: column; align-items: stretch; gap: 12px; }
   .fin-page.fit .fin-donut > div:first-child { align-self: center; }
@@ -84,8 +72,6 @@
 @media (min-width: 1024px) and (min-height: 680px) {
   .fin-page.fit .fin-overview { align-items: start; }
   .fin-page.fit .fin-col, .fin-page.fit .fin-col-donut { min-height: 0; }
-  .fin-page.fit .fin-trend { flex: 0 0 auto; min-height: 0; }
-  .fin-page.fit .fin-trend .fin-months { flex: none; height: 96px; }
   .fin-page.fit .fin-donut-card, .fin-page.fit .fin-side-card { flex: 0 0 auto; }
 }
 

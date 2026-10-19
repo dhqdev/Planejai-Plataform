@@ -13,27 +13,12 @@
 .fin-people { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
 .fin-people button { border: 1px solid var(--border); background: var(--panel); color: var(--text); padding: 7px 14px; border-radius: 99px; font-weight: 600; font-size: 13px; cursor: pointer; white-space: nowrap; }
 .fin-people button.active { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
-.fin-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 18px; overflow: hidden; position: relative; }
-.fin-kpis > div { padding: 18px 20px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.fin-kpis > div + div { border-left: 1px solid var(--border); }
-.fin-kpis small { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-/* valor nunca é cortado: se for comprido a fonte diminui (.long) e, em último caso, quebra a linha */
-.fin-kpis strong { font-variant-numeric: tabular-nums; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; overflow-wrap: anywhere; }
-.fin-kpis strong.long { font-size: 18px; }
-.fin-kpis strong.pos { color: var(--ok); }
-.fin-kpis strong.neg { color: var(--brand-2); }
-.fin-kpis span { font-size: 12px; color: var(--muted); }
 .fin-overview { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(280px, .9fr); gap: 18px; align-items: start; }
 .fin-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .fin-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .fin-card-head h3 { margin: 0; font-size: 15px; }
 .chip-mini { font-size: 12px; font-weight: 600; padding: 2px 7px; border-radius: 99px; background: var(--panel-2); color: var(--muted); }
-.fin-insight { padding: 20px 22px; position: relative; overflow: hidden; background: var(--panel); }
-.fin-insight-text { font-size: 17px; font-weight: 600; line-height: 1.45; margin: 12px 0 16px; letter-spacing: -0.01em; }
-.fin-insight-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; padding-top: 14px; border-top: 1px solid var(--border); }
 .fin-pill { max-width: 100%; display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 99px; font-weight: 650; font-size: 12px; color: var(--c); background: color-mix(in srgb, var(--c) 14%, var(--panel)); margin-right: 6px; }
-.fin-insight-bar { height: 5px; border-radius: 99px; background: var(--panel-2); margin-top: 12px; overflow: hidden; }
-.fin-insight-bar i { display: block; height: 100%; border-radius: 99px; background: var(--grad); }
 .fin-donut-card { padding: 20px 22px; }
 .fin-donut-card .fin-card-head { align-items: flex-start; margin-bottom: 14px; }
 .fin-donut { display: flex; align-items: center; gap: 28px; }
@@ -64,9 +49,6 @@
 @media (max-width: 1100px) {
   .fin-overview { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .fin-overview > .fin-col:last-child { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
-  .fin-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .fin-kpis > div:nth-child(3) { border-left: none; }
-  .fin-kpis > div:nth-child(n + 3) { border-top: 1px solid var(--border); }
 }
 @media (max-width: 767px) {
   .fin-top { display: grid; grid-template-columns: 1fr auto; }
@@ -78,10 +60,6 @@
   .fin-people { grid-column: 1 / -1; }
   .fin-range { flex: 1; justify-content: center; }
   .fin-period { width: 100%; }
-  .fin-kpis > div { padding: 14px; }
-  .fin-kpis strong { font-size: 18px; }
-  .fin-kpis strong.long { font-size: 14px; }
-  .fin-insight-text { font-size: 15.5px; }
   .fin-donut { flex-direction: column; align-items: stretch; gap: 14px; }
   .fin-donut > div:first-child { align-self: center; }
 }
@@ -93,26 +71,11 @@
 .fab.ink, .cal-fab, .cal-mini-grid button.sel, .cal-cell.today .cal-num, .cal-week-day.today strong, .cal-list-date.today strong, .avatar { background: var(--grad-strong); background-origin: border-box; }
 
 
-/* Sem limite do mês: só Entradas, Saídas e Saldo (a média por dia saiu a pedido do David) */
-.fin-kpis.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-@media (min-width: 1024px) and (min-height: 680px) { .fin-page.fit .fin-kpis.three { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.fin-kpis.three > div:nth-child(3) { border-left: 1px solid var(--border); border-top: none; }
-@media (max-width: 767px) {
-  .fin-kpis.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .fin-kpis.three > div:nth-child(3) { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--border); }
-}
-
 /* Desktop: quando há poucos dados na Visão geral, ajusta gaps e paddings para caber na tela sem rolagem forçada */
 @media (min-width: 1024px) {
   .fin-page.fit { padding-top: 20px; padding-bottom: 24px; }
-  .fin-kpis { margin-bottom: 12px; }
-  .fin-kpis > div { padding: 12px 16px; }
   .fin-overview { gap: 12px; }
   .fin-col { gap: 12px; }
-  .fin-insight { padding: 14px 16px; }
-  .fin-insight-text { margin: 8px 0 12px; font-size: 15px; }
-  .fin-insight-meta { padding-top: 10px; }
-  .fin-trend { padding: 14px 16px; }
   .fin-donut-card { padding: 14px 16px; }
   .fin-donut-card .fin-card-head { margin-bottom: 8px; }
   .fin-side-card { padding: 12px 14px; }
