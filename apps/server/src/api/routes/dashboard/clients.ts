@@ -11,6 +11,8 @@ import { selfUserId } from "../../../sharing.js";
 import { inviteLink } from "../../../social.js";
 import { getTabs, saveTabs } from "../../../tabs.js";
 import { config } from "../../../config.js";
+import { paymentsOf } from "../../../billing.js";
+import { clientActivity, clientBilling, clientDaily, clientFeatures } from "../../../client-overview.js";
 import { IMPERSONATE_COOKIE, publicAccount, requireAuth, requireSuper } from "../../server.js";
 import { isUuid, withLook } from "./shared.js";
 
@@ -146,9 +148,10 @@ export function clientRoutes(api: FastifyInstance) {
   });
 
   // ---------- Acompanhamento de uso de cada cliente ----------
-  api.get<{ Params: { id: string } }>("/api/clients/:id/usage", async (req, reply) => {
+  api.get<{ Params: { id: string }; Querystring: { days?: string } }>("/api/clients/:id/usage", async (req, reply) => {
     const id = req.params.id;
     if (!isUuid(id)) return reply.code(404).send({ error: "não encontrado" });
+    const days = [7, 14, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 14;
     const totals = await one(
       `SELECT COUNT(*) FILTER (WHERE started_at > now() - interval '24 hours')::int AS executions_24h,
               COUNT(*) FILTER (WHERE started_at > now() - interval '7 days')::int AS executions_7d,
@@ -165,12 +168,12 @@ export function clientRoutes(api: FastifyInstance) {
          FROM executions WHERE user_id = $1`,
       [id],
     );
-    const daily = await many(
-      `SELECT to_char(d, 'YYYY-MM-DD') AS day, COALESCE(u.messages, 0)::int AS messages,
-              COALESCE(u.cost_usd, 0)::float AS cost
-         FROM generate_series(current_date - 13, current_date, interval '1 day') d LEFT JOIN usage_daily u ON u.user_id = $1 AND u.day = d::date ORDER BY d`,
-      [id],
-    ).catch(() => []);
+    const [daily, billing, activity, features] = await Promise.all([
+      clientDaily(id, days).catch(() => []),
+      clientBilling(id),
+      clientActivity(id),
+      clientFeatures(id),
+    ]);
     const byAgent = await many(
       `SELECT s.agent, COUNT(*)::int AS calls, COALESCE(SUM(s.cost_usd), 0)::float AS cost, COALESCE(SUM(s.tokens_in + s.tokens_out), 0)::int AS tokens
          FROM execution_steps s JOIN executions e ON e.id = s.execution_id
@@ -199,7 +202,16 @@ export function clientRoutes(api: FastifyInstance) {
          FROM transactions WHERE user_id = $1`,
       [id],
     ).catch(() => null);
-    return { totals, daily, byAgent, tools, agents, topics, styleNotes: person?.style_notes ?? null, notes, private: !own, counts: money, tabs: await getTabs(id) };
+    return { days, totals, daily, billing, activity, features, byAgent, tools, agents, topics, styleNotes: person?.style_notes ?? null, notes, private: !own, counts: money, tabs: await getTabs(id) };
+  });
+  // cobranças da pessoa no Asaas (mensalidades e pacotes); sem Asaas ou sem cadastro vem vazio com o motivo
+  api.get<{ Params: { id: string } }>("/api/clients/:id/payments", async (req, reply) => {
+    if (!isUuid(req.params.id)) return reply.code(404).send({ error: "não encontrado" });
+    try {
+      return { payments: await paymentsOf(req.params.id) };
+    } catch (err) {
+      return { payments: [], error: (err as Error).message };
+    }
   });
   api.put<{ Params: { id: string }; Body: { modules?: string[]; custom?: unknown[] } }>("/api/clients/:id/tabs", async (req) => {
     const cur = await getTabs(req.params.id);

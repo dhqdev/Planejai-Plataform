@@ -1,0 +1,162 @@
+/* ---------- Ficha do cliente em Pessoas (ClientSheet.tsx) ----------
+   Topo fixo (contato, situação e abas) e só o conteúdo da aba rola. Números em mono, rótulos discretos, uma cor só
+   (o roxo marca só as barras e o dia escolhido). No celular a folha ocupa a tela e as abas dividem a largura. */
+
+.modal-bg > .modal.cs-modal,
+.modal-bg.drop > .modal.wide.cs-modal { width: min(900px, calc(100vw - 24px)); height: min(86dvh, 800px); }
+.cs-modal .modal-body { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+
+.cs-top { flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; padding: 14px 18px 12px; border-bottom: 1px solid var(--lg-line, var(--border)); }
+.cs-id { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cs-sub { color: var(--muted); font-size: 13.5px; overflow-wrap: anywhere; }
+.cs-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cs-chip-muted { font-size: 12.5px; color: var(--muted); padding-left: 2px; }
+.cs-tabs { align-self: flex-start; border-radius: 99px; }
+.cs-tabs button { padding: 7px 18px; font-size: 13.5px; font-weight: 550; border-radius: 99px; }
+
+.cs-pane, .cs-loading { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 16px 18px 22px; }
+.cs-pane { display: flex; flex-direction: column; gap: 14px; }
+.cs-loading { color: var(--muted); font-size: 14px; display: grid; place-items: center; }
+
+/* cartões e títulos */
+.cs-card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; min-width: 0; }
+.cs-card h4 { margin: 0 0 10px; font-size: 14px; font-weight: 650; letter-spacing: -0.01em; }
+.cs-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.cs-card-head h4 { margin: 0; }
+.cs-card-head > .muted { font-size: 12px; text-align: right; }
+.cs-eyebrow { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.cs-note { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.cs-empty { margin: 0; font-size: 13px; }
+.cs-mono { font-family: var(--mono); font-size: 12.5px; }
+.cs-break { overflow-wrap: anywhere; }
+.cs-inline { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; max-width: 100%; }
+
+/* números do topo do Resumo: tocam e levam à aba certa */
+.cs-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.cs-kpi { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 12px 14px; border-radius: 16px; background: var(--panel); border: 1px solid var(--border); transition: border-color .15s ease, transform .15s ease; }
+.cs-kpi:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+.cs-kpi:active { transform: scale(.98); }
+@media (hover: hover) and (pointer: fine) { .cs-kpi:hover { border-color: var(--border-2); } }
+.cs-kpi small, .cs-nums small { font-size: 12px; color: var(--muted); }
+.cs-kpi strong { font-family: var(--mono); font-size: 21px; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.15; overflow-wrap: anywhere; }
+.cs-kpi span { font-size: 12px; color: var(--muted); line-height: 1.35; }
+
+/* chave e valor */
+.cs-kv { display: grid; grid-template-columns: minmax(130px, auto) minmax(0, 1fr); gap: 8px 16px; margin: 0; font-size: 13.5px; }
+.cs-kv dt { color: var(--muted); }
+.cs-kv dd { margin: 0; min-width: 0; font-variant-numeric: tabular-nums; }
+
+/* barras por dia */
+.cs-readout { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 10px; }
+.cs-readout strong { font-family: var(--mono); font-size: 18px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.cs-readout .muted { font-size: 12.5px; }
+.cs-bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; }
+.cs-bars-wrap.compact .cs-bars { height: 72px; }
+.cs-bars span { flex: 1 1 0; min-width: 2px; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 4px; }
+.cs-bars i { display: block; width: 100%; border-radius: 4px 4px 2px 2px; background: color-mix(in srgb, var(--violet) 38%, transparent); transition: background .12s ease; }
+.cs-bars span:last-child i, .cs-bars span.on i { background: var(--violet); }
+.cs-bars:has(span.on) span:last-child:not(.on) i { background: color-mix(in srgb, var(--violet) 38%, transparent); }
+.cs-axis { display: flex; justify-content: space-between; font-size: 11.5px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+
+/* horários do dia */
+.cs-hours { display: flex; align-items: flex-end; gap: 2px; height: 56px; }
+.cs-hours i { flex: 1 1 0; min-height: 0; border-radius: 3px 3px 1px 1px; background: color-mix(in srgb, var(--text) 16%, transparent); }
+.cs-hours i.on { background: var(--violet); }
+
+/* Uso: período, métrica e totais */
+.cs-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+.cs-mini-seg { border-radius: 99px; }
+.cs-mini-seg button { padding: 6px 12px; font-size: 13px; border-radius: 99px; white-space: nowrap; }
+.cs-nums { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.cs-nums div { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 10px 12px; border-radius: 14px; background: var(--panel-2); }
+.cs-nums strong { font-family: var(--mono); font-size: 15.5px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* tabela dia a dia: rola dentro do cartão */
+.cs-table { max-height: 300px; overflow: auto; overscroll-behavior: contain; margin: 0 -4px; }
+.cs-tr { display: grid; grid-template-columns: minmax(84px, 1.4fr) repeat(3, minmax(44px, .8fr)) minmax(84px, 1.1fr); gap: 8px; padding: 8px 4px; border-bottom: 1px solid var(--border); font-size: 13px; font-variant-numeric: tabular-nums; }
+.cs-tr span:not(:first-child) { text-align: right; font-family: var(--mono); font-size: 12.5px; }
+.cs-tr em { font-style: normal; color: var(--muted); font-size: 12px; margin-left: 4px; }
+.cs-tr:last-child { border-bottom: none; }
+.cs-th { position: sticky; top: 0; z-index: 1; background: var(--panel); color: var(--muted); font-size: 12px; padding-top: 2px; }
+.cs-th span:not(:first-child) { font-family: inherit; font-size: 12px; }
+
+.cs-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+
+/* linhas de lista */
+.cs-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; min-width: 0; }
+.cs-row:last-child { border-bottom: none; padding-bottom: 2px; }
+.cs-row .grow { min-width: 0; }
+.cs-row-sub { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.cs-row-val { flex-shrink: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; }
+.cs-row-val em { font-style: normal; font-family: var(--font, inherit); color: var(--muted); font-size: 12px; }
+.cs-in { color: var(--ok); }
+.cs-pay { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.cs-pay strong { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+/* Plano */
+.cs-card h3.cs-plan-name { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.02em; }
+.cs-plan .cs-card-head { align-items: flex-start; }
+.cs-plan .cs-kv { margin-top: 12px; }
+.cs-invoice { margin-top: 12px; display: inline-flex; gap: 6px; }
+.cs-wallet { display: grid; grid-template-columns: minmax(140px, auto) minmax(0, 1fr); gap: 18px; align-items: center; }
+.cs-wallet-total { display: flex; flex-direction: column; gap: 2px; }
+.cs-wallet-total strong { font-family: var(--mono); font-size: 30px; font-weight: 600; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.cs-wallet-total span { font-size: 12.5px; color: var(--muted); }
+.cs-bucket { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cs-bucket-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+.cs-bucket-row span { color: var(--muted); }
+.cs-bucket-row strong { font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cs-bucket-row em { font-style: normal; color: var(--muted); font-weight: 400; }
+.cs-meter { height: 6px; border-radius: 99px; background: var(--panel-2); overflow: hidden; }
+.cs-meter i { display: block; height: 100%; border-radius: 99px; background: var(--violet); }
+.cs-plan-facts { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
+.cs-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.cs-pane > .cs-actions { margin-top: 0; }
+
+/* Perfil: o que ele tem no app */
+.cs-uses { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.cs-uses div { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding: 10px 12px; border-radius: 14px; background: var(--panel-2); }
+.cs-uses strong { font-family: var(--mono); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cs-uses span { font-size: 12px; color: var(--muted); line-height: 1.3; }
+.cs-uses em { font-style: normal; font-size: 11.5px; color: var(--muted); }
+.cs-uses .zero { opacity: .5; }
+
+.cs-danger { display: flex; flex-direction: column; }
+.cs-danger-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+.cs-danger-row:first-child { padding-top: 0; }
+.cs-danger-row:last-child { border-bottom: none; padding-bottom: 0; }
+.cs-danger-row .grow { min-width: 0; }
+.cs-danger-row .btn { flex-shrink: 0; }
+
+@media (max-width: 1023px) {
+  .cs-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cs-nums { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cs-uses { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 767px) {
+  .modal-bg > .modal.cs-modal { height: calc(var(--vvh, 100dvh) - env(safe-area-inset-top, 0px) - 12px); }
+  .cs-top { padding: 4px 16px 12px; gap: 10px; }
+  .cs-tabs { align-self: stretch; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .cs-tabs button { padding: 8px 4px; text-align: center; }
+  .cs-pane, .cs-loading { padding: 14px 14px calc(22px + env(safe-area-inset-bottom, 0px)); }
+  .cs-pane { gap: 12px; }
+  .cs-card { padding: 14px; border-radius: 16px; }
+  .cs-kpi { padding: 12px; }
+  .cs-kpi strong { font-size: 19px; }
+  .cs-kv { grid-template-columns: minmax(0, 1fr); gap: 2px; font-size: 14px; }
+  .cs-kv dt { font-size: 12.5px; margin-top: 8px; }
+  .cs-kv dt:first-child { margin-top: 0; }
+  .cs-toolbar { flex-direction: column; }
+  .cs-toolbar .cs-mini-seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; }
+  .cs-mini-seg button { padding: 8px 4px; text-align: center; }
+  .cs-nums { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cs-bars { height: 104px; gap: 2px; }
+  .cs-split { grid-template-columns: minmax(0, 1fr); }
+  .cs-tr { grid-template-columns: minmax(70px, 1.3fr) repeat(3, minmax(34px, .7fr)) minmax(70px, 1fr); gap: 6px; }
+  .cs-wallet { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .cs-uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cs-actions .btn { flex: 1 1 auto; }
+  .cs-danger-row { flex-wrap: wrap; }
+  .cs-danger-row .grow { flex-basis: 100%; }
+}
