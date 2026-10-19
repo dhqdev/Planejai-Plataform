@@ -12,9 +12,7 @@ import { UserMascote } from "./mascote/UserMascote";
 import { MascoteStroll } from "./mascote/Stroll";
 import { MascoteButton, WardrobeHost } from "./mascote/Wardrobe";
 import { useUnread } from "./notify";
-import { AuthPage } from "./pages/Login";
-import { PrivacyPage } from "./pages/Privacy";
-import { OnboardingFlow, type Onboarding } from "./pages/Onboarding";
+import type { Onboarding } from "./pages/Onboarding";
 import { PullToRefresh } from "./PullToRefresh";
 import { useInstallAction } from "./Install";
 import { haptic, isStandalone } from "./touch";
@@ -65,6 +63,11 @@ const Pricing = page(() => import("./pages/Pricing").then((m) => m.PricingPage))
 /** Blog público (/blog e /blog/:slug): abre com ou sem login. */
 const Blog = page(() => import("./pages/Blog").then((m) => m.BlogPage));
 const BlogAdminPage = page(() => load.blogAdmin().then((m) => m.BlogAdminPage));
+/** Login, termos e primeira conversa: quem já entrou nunca baixa (saíram do pedaço inicial). */
+const loadAuth = () => import("./pages/Login");
+const AuthPage = page(() => loadAuth().then((m) => m.AuthPage));
+const PrivacyPage = page(() => import("./pages/Privacy").then((m) => m.PrivacyPage));
+const OnboardingFlow = page(() => import("./pages/Onboarding").then((m) => m.OnboardingFlow));
 
 function PageUnavailable() {
   return (
@@ -146,6 +149,19 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
 };
 function preload(to: string) {
   ROUTE_CHUNK[to]?.().catch(() => {});
+}
+
+/**
+ * Abertura em paralelo: o index.html já pediu o /api/auth/me antes do JS chegar (window.__pjMe) e aqui o código da
+ * tela aberta começa a baixar junto, sem esperar o login responder. "/" fora do app instalado pode ser a landing.
+ */
+const bootTop = "/" + (location.pathname.split("/")[1] ?? "");
+if (bootTop !== "/" || isStandalone()) preload(bootTop);
+function bootMe(): Promise<Me | null> {
+  const w = window as Window & { __pjMe?: Promise<Me | null | undefined> };
+  const early = w.__pjMe;
+  w.__pjMe = undefined; // só a primeira vez: depois (sair, trocar de conta) pergunta de novo
+  return (early ?? Promise.resolve(undefined)).then((m) => (m !== undefined ? m : api<Me>("/api/auth/me")));
 }
 
 /** Versão do app (package.json), igual à release vX.Y.Z no GitHub. */
@@ -320,8 +336,11 @@ export function App() {
     if (!me) return;
     const d = new Date();
     const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    // a tela aberta e o Início já pedem agora, junto com o código da tela; o resto quando o app parar
+    preload("/" + (location.pathname.split("/")[1] ?? ""));
+    ["/api/me/overview", "/api/me/dashboard"].forEach(prefetchApi);
     const t = setTimeout(() => {
-      ["/api/me/overview", `/api/finance?month=${month}`, "/api/watches", "/api/me/dashboard"].forEach(prefetchApi);
+      [`/api/finance?month=${month}`, "/api/watches"].forEach(prefetchApi);
     }, 1200);
     return () => clearTimeout(t);
   }, [me?.id]);
@@ -340,7 +359,7 @@ export function App() {
   }, [routes]);
 
   useEffect(() => {
-    api<Me>("/api/auth/me").then(setMe, () => setMe(null));
+    bootMe().then(setMe, () => setMe(null));
     const onLogout = () => setMe(null);
     window.addEventListener("pj:logout", onLogout);
     return () => window.removeEventListener("pj:logout", onLogout);
@@ -395,14 +414,14 @@ export function App() {
   };
 
   // termos e privacidade abrem sem login (link do cadastro e do convite no WhatsApp)
-  if (loc.pathname === "/privacidade") return <PrivacyPage />;
+  if (loc.pathname === "/privacidade") return <Suspense fallback={<BlockLoader />}><PrivacyPage /></Suspense>;
   // página de preços: aberta pelo "Planos" da landing, com ou sem login
   if (loc.pathname === "/precos") return <Suspense fallback={<BlockLoader />}><Pricing /></Suspense>;
   // sem login o blog abre sozinho; logado, ele abre dentro da moldura do app (rota /blog/* mais abaixo)
   if (!me && (loc.pathname === "/blog" || loc.pathname.startsWith("/blog/"))) return <Suspense fallback={<BlockLoader />}><Blog loggedIn={Boolean(me)} /></Suspense>;
   if (me === undefined) return <BlockLoader />;
   if (!me && loc.pathname === "/" && !isStandalone()) return <Suspense fallback={<BlockLoader />}><Landing /></Suspense>;
-  if (!me) return <AuthPage onLogin={setMe} />;
+  if (!me) return <Suspense fallback={<BlockLoader />}><AuthPage onLogin={setMe} /></Suspense>;
 
   // Plataforma (só o super admin) vai para a barra de cima; Avisos e Minha conta descem para o pé do trilho
   const platform = sectionsOf(NAV).find((sec) => sec.title === "Plataforma")?.items ?? [];
@@ -556,6 +575,7 @@ export function App() {
       <WardrobeHost />
       <MascoteStroll />
       {onb && (
+        <Suspense fallback={null}>
         <OnboardingFlow
           data={onb.data}
           tour={onb.tour}
@@ -566,6 +586,7 @@ export function App() {
             if (location.search.includes("tour")) history.replaceState(null, "", location.pathname);
           }}
         />
+        </Suspense>
       )}
 
       {update && (

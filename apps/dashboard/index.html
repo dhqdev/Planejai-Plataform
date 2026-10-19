@@ -11,6 +11,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <meta name="theme-color" content="#fafafa" />
     <script>
+      /* Quem está logado: pergunta já, enquanto o JS do app baixa (o App.tsx usa esta resposta em vez de pedir de novo). */
+      try {
+        window.__pjMe = fetch("/api/auth/me", { credentials: "include" }).then(function (r) { return r.ok ? r.json() : r.status === 401 ? null : undefined; }, function () { return undefined; });
+      } catch (e) {}
+    </script>
+    <script>
       /* Barra de cima do celular (status bar do iPhone no app instalado) na cor do tema escolhido no painel, não do sistema. */
       try {
         var t = localStorage.getItem("pj-theme");
