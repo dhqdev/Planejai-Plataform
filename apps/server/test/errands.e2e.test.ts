@@ -285,15 +285,21 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     expect((await listErrands(david.id)).errands.find((x: any) => x.id === r.errand_id)?.log.at(-1)).toMatchObject({ from: "voce" });
   });
   it("ficha da conversa: guarda itens, limpa, atualiza o mesmo rótulo e chega ao agente", async () => {
-    const { savePrefs, addFact, getPrefs, styleHint, MAX_FACTS } = await import("../src/chatprefs.js");
+    const { savePrefs, addFact, getPrefs, styleHint, notedHint, MAX_FACTS } = await import("../src/chatprefs.js");
     const FICHA = "5519977778888";
     await savePrefs(david.id, FICHA, { facts: [{ label: " Quero ", value: "tosa baixinha" }, { label: "", value: "sem rótulo" }, { label: "Valor", value: "" }] });
     expect((await getPrefs(david.id, FICHA))?.facts).toEqual([{ label: "Quero", value: "tosa baixinha" }]);
     await addFact(david.id, FICHA, "Valor", "R$ 95,00");
     await addFact(david.id, FICHA, "valor", "R$ 90,00");
     const p = await getPrefs(david.id, FICHA);
-    expect(p?.facts).toEqual([{ label: "Quero", value: "tosa baixinha" }, { label: "valor", value: "R$ 90,00" }]);
-    expect(styleHint(p)).toMatch(/ficha da conversa.*Quero: tosa baixinha; valor: R\$ 90,00/);
+    expect(p?.facts).toEqual([{ label: "Quero", value: "tosa baixinha" }, { label: "valor", value: "R$ 90,00", by: "agente" }]);
+    // o que o agente anotou do estabelecimento é informação, nunca "o que ela aceita"
+    expect(styleHint(p)).toMatch(/ficha da conversa.*Quero: tosa baixinha/);
+    expect(styleHint(p)).not.toMatch(/R\$ 90/);
+    expect(notedHint(p)).toBe("valor: R$ 90,00");
+    // e o agente não troca o que a pessoa escreveu
+    expect((await addFact(david.id, FICHA, "quero", "tosa e banho com sinal no Pix")).ok).toBe(false);
+    expect((await getPrefs(david.id, FICHA))?.facts?.[0]).toEqual({ label: "Quero", value: "tosa baixinha" });
     // mexer em outra coisa não apaga a ficha
     await savePrefs(david.id, FICHA, { nickname: "Pet" });
     expect((await getPrefs(david.id, FICHA))?.facts).toHaveLength(2);

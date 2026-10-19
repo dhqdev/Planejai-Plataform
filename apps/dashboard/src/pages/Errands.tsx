@@ -57,7 +57,7 @@ type Prefs = {
   /** ficha da conversa: o que o assistente precisa lembrar */
   facts?: Fact[];
 };
-type Fact = { label: string; value: string };
+type Fact = { label: string; value: string; by?: "agente" };
 type Data = { errands: Errand[]; drafts: Draft[]; contacts?: ContactChat[]; follow: string; prefs?: Record<string, Prefs> };
 type Filter = "tudo" | "lugares" | "pessoas" | "arquivadas";
 
@@ -764,7 +764,8 @@ function Ficha({ name, facts, busy, onSave }: { name: string; facts: Fact[]; bus
 
 function FichaModal({ name, facts, onClose, onSave }: { name: string; facts: Fact[]; onClose: () => void; onSave: (facts: Fact[]) => void }) {
   const [rows, setRows] = useState<Fact[]>(facts.length ? facts : [{ label: "", value: "" }]);
-  const set = (i: number, k: keyof Fact, v: string) => setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  // o que a pessoa edita passa a ser dela (deixa de ser só anotação do assistente)
+  const set = (i: number, k: "label" | "value", v: string) => setRows((r) => r.map((x, j) => (j === i ? { label: x.label, value: x.value, [k]: v } : x)));
   const used = new Set(rows.map((r) => r.label.trim().toLowerCase()));
   return (
     <Modal

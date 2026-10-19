@@ -36,6 +36,8 @@ export interface ChatPrefs {
 export interface Fact {
   label: string;
   value: string;
+  /** "agente": anotado pelo assistente do que o outro lado disse (informação, nunca o que a pessoa liberou) */
+  by?: "agente";
 }
 
 export const MAX_FACTS = 12;
@@ -48,9 +50,10 @@ export function cleanFacts(raw: unknown): Fact[] {
     const label = clean((f as Fact)?.label, 30);
     const value = clean((f as Fact)?.value, 200);
     if (!label || !value) continue;
+    const item: Fact = (f as Fact)?.by === "agente" ? { label, value, by: "agente" } : { label, value };
     const i = out.findIndex((x) => x.label.toLowerCase() === label.toLowerCase());
-    if (i >= 0) out[i] = { label, value };
-    else out.push({ label, value });
+    if (i >= 0) out[i] = item;
+    else out.push(item);
   }
   return out.slice(0, MAX_FACTS);
 }
@@ -159,15 +162,28 @@ export function withSignature(text: string, signature: string | null | undefined
 /** Uma linha para o agente escrever do jeito combinado com esse número (vazio se não tem nada combinado). */
 export function styleHint(p: Pick<ChatPrefs, "tone" | "note" | "nickname"> & { facts?: Fact[] } | null | undefined) {
   if (!p) return "";
-  const ficha = p.facts?.length ? `ficha da conversa (use para guiar o que perguntar e o que aceitar): ${p.facts.map((f) => `${f.label}: ${f.value}`).join("; ")}` : "";
+  // só o que a própria pessoa escreveu na ficha guia o que aceitar; o que o agente anotou da conversa vai à parte (notedHint)
+  const own = p.facts?.filter((f) => f.by !== "agente") ?? [];
+  const ficha = own.length ? `ficha da conversa (use para guiar o que perguntar e o que aceitar): ${own.map((f) => `${f.label}: ${f.value}`).join("; ")}` : "";
   const parts = [p.tone && CHAT_TONES[p.tone] ? `tom ${CHAT_TONES[p.tone]}` : "", p.note ? `anotação da pessoa: ${p.note}` : "", ficha].filter(Boolean);
   return parts.join("; ");
 }
 
-/** O agente (ou a tela) guarda um item na ficha: o mesmo rótulo é atualizado, não duplicado. */
+/** O que o agente anotou da conversa (valor cotado, atendente...): informação dita pelo outro lado, nunca liberação da pessoa. */
+export function notedHint(p: { facts?: Fact[] } | null | undefined) {
+  const noted = p?.facts?.filter((f) => f.by === "agente") ?? [];
+  return noted.map((f) => `${f.label}: ${f.value}`).join("; ");
+}
+
+/**
+ * O agente guarda um item na ficha, marcado como dele: o mesmo rótulo dele é atualizado, e o que a pessoa escreveu
+ * não é trocado (senão o que o estabelecimento disse viraria o que ela aceita).
+ */
 export async function addFact(userId: string, phone: string, label: string, value: string) {
   const cur = await getPrefs(userId, phone);
-  const facts = cleanFacts([...(cur?.facts ?? []), { label, value }]);
+  if (cur?.facts?.some((f) => f.by !== "agente" && f.label.toLowerCase() === label.trim().toLowerCase()))
+    return { ok: false as const, error: `"${label}" foi escrito pela pessoa na ficha e não muda por aqui; anote com outro rótulo.` };
+  const facts = cleanFacts([...(cur?.facts ?? []), { label, value, by: "agente" }]);
   if (!facts.some((f) => f.label.toLowerCase() === label.trim().toLowerCase())) return { ok: false as const, error: "Ficha cheia ou item vazio." };
   return savePrefs(userId, phone, { facts });
 }
