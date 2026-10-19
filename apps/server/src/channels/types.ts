@@ -19,6 +19,8 @@ export interface InboundMessage {
   text: string;
   media?: InboundMedia;
   quoted?: { id: string; text?: string };
+  /** mensagem encaminhada de outra conversa */
+  forwarded?: boolean;
   /** para reações: id da mensagem que recebeu a reação */
   reactionTo?: string;
   timestamp: Date;

@@ -104,7 +104,7 @@ export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; re
     `INSERT INTO messages (conversation_id, role, content, external_id, media, meta, created_at)
      VALUES ($1, 'user', $2, $3, $4, $5, $6)
      ON CONFLICT (conversation_id, external_id) WHERE external_id IS NOT NULL DO NOTHING RETURNING id`,
-    [conv.id, msg.text, msg.externalId, msg.media ?? null, { kind: msg.kind, quoted: msg.quoted ?? null, fileName: msg.media?.fileName ?? null }, msg.timestamp],
+    [conv.id, msg.text, msg.externalId, msg.media ?? null, { kind: msg.kind, quoted: msg.quoted ?? null, ...(msg.forwarded ? { forwarded: true } : {}), fileName: msg.media?.fileName ?? null }, msg.timestamp],
   );
   if (!inserted) return { queued: false, reason: "duplicada" };
   await query(

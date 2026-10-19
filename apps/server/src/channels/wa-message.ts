@@ -1,3 +1,4 @@
+import { normalizeMessageContent } from "baileys";
 import type { InboundKind, InboundMessage } from "./types.js";
 
 /**
@@ -14,14 +15,20 @@ export function parseWAMessage(d: any, channel: string): InboundMessage | null {
   const phone = pnJid.split("@")[0]!.split(":")[0]!.replace(/\D/g, "");
 
   // Mensagens efêmeras / view once vêm embrulhadas
+  // (normalizeMessageContent desembrulha todas: efêmera, view once, documento com legenda, editada...)
   let m = d.message ?? {};
-  m = m.ephemeralMessage?.message ?? m.viewOnceMessage?.message ?? m.viewOnceMessageV2?.message ?? m;
+  try {
+    m = normalizeMessageContent(m) ?? m;
+  } catch {
+    m = m.ephemeralMessage?.message ?? m.viewOnceMessage?.message ?? m.viewOnceMessageV2?.message ?? m;
+  }
 
   let kind: InboundKind = "other";
   let text = "";
   let media: InboundMessage["media"];
   let reactionTo: string | undefined;
-  const ctx = m.extendedTextMessage?.contextInfo ?? m.imageMessage?.contextInfo ?? m.audioMessage?.contextInfo ?? m.videoMessage?.contextInfo ?? m.stickerMessage?.contextInfo;
+  const ctx =
+    m.extendedTextMessage?.contextInfo ?? m.imageMessage?.contextInfo ?? m.audioMessage?.contextInfo ?? m.videoMessage?.contextInfo ?? m.stickerMessage?.contextInfo ?? m.documentMessage?.contextInfo;
   if (m.conversation != null || m.extendedTextMessage) {
     kind = "text";
     text = m.conversation ?? m.extendedTextMessage?.text ?? "";
@@ -76,6 +83,7 @@ export function parseWAMessage(d: any, channel: string): InboundMessage | null {
     text,
     media,
     reactionTo,
+    forwarded: !!(ctx?.isForwarded || (ctx?.forwardingScore ?? 0) > 0) || undefined,
     quoted: ctx?.stanzaId ? { id: ctx.stanzaId, text: ctx.quotedMessage?.conversation ?? ctx.quotedMessage?.extendedTextMessage?.text } : undefined,
     timestamp: d.messageTimestamp ? new Date(Number(d.messageTimestamp?.toNumber?.() ?? d.messageTimestamp) * 1000) : new Date(),
     raw: d,

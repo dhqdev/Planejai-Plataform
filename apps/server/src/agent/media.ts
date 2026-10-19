@@ -33,6 +33,9 @@ export const VISION_PROMPT =
   "e depois liste os itens. Se for uma lista de vários gastos ou receitas (extrato, fatura, print do banco, anotação, planilha), " +
   "comece com 'FINANCEIRO: tipo=lista; itens=<quantidade>' e depois uma linha por lançamento: " +
   "'ITEM: data=<AAAA-MM-DD ou ?>; descricao=<texto>; valor=<número com ponto decimal>; tipo=<gasto|receita>'. " +
+  "Se for foto de coisa, pessoa, lugar, planta, alimento, parte do corpo ou problema de saúde (dente, pele, ferida, exame), " +
+  "descreva só o que se vê (cor, forma, tamanho, posição, manchas, inchaço, sinais), sem diagnosticar nem dar nome de doença; " +
+  "diga se a foto está escura, tremida ou cortada e o que faltou ver. " +
   "Nunca invente o ano: data sem ano na imagem (ex.: 'terça, 06 de outubro') vira '??-10-06' (dia e mês, ano desconhecido).";
 
 const ext = (fileName?: string | null) => (fileName?.split(".").pop() ?? "").toLowerCase();
@@ -122,15 +125,39 @@ async function transcribe(base64: string, format: string) {
   });
 }
 
+/** Foto grande demais estoura o limite do provedor e custa mais token: reduz para 1280 px (JPEG) com o ffmpeg; se não der, segue com a original. */
+async function shrinkImage(img: { base64: string; mimetype: string }): Promise<{ base64: string; mimetype: string }> {
+  if (!/^image\/(jpeg|jpg|png|webp|heic|heif|gif)/.test(img.mimetype) || !(await hasFfmpeg())) return img;
+  const dir = await mkdtemp(join(tmpdir(), "pj-img-"));
+  try {
+    await writeFile(join(dir, "in"), Buffer.from(img.base64, "base64"));
+    await run("ffmpeg", ["-v", "error", "-i", join(dir, "in"), "-vf", "scale='min(1280,iw)':'min(1280,ih)':force_original_aspect_ratio=decrease", "-frames:v", "1", "-q:v", "4", join(dir, "out.jpg")]);
+    const out = await readFile(join(dir, "out.jpg"));
+    return out.length ? { base64: out.toString("base64"), mimetype: "image/jpeg" } : img;
+  } catch {
+    return img;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 async function describeImages(images: { base64: string; mimetype: string }[], prompt?: string) {
-  return chatCompletion(await resolveModel("vision"), {
-    messages: [
-      {
-        role: "user",
-        content: [{ type: "text", text: prompt ?? (await promptText("visao", VISION_PROMPT)) }, ...images.map((i) => ({ type: "image_url" as const, image_url: { url: `data:${i.mimetype};base64,${i.base64}` } }))],
-      },
-    ],
-  });
+  const small = await Promise.all(images.map((i) => shrinkImage({ base64: i.base64, mimetype: i.mimetype.split(";")[0]! })));
+  const messages = [
+    {
+      role: "user" as const,
+      content: [{ type: "text" as const, text: prompt ?? (await promptText("visao", VISION_PROMPT)) }, ...small.map((i) => ({ type: "image_url" as const, image_url: { url: `data:${i.mimetype};base64,${i.base64}` } }))],
+    },
+  ];
+  const choice = await resolveModel("vision");
+  try {
+    return await chatCompletion(choice, { messages });
+  } catch (err) {
+    // o modelo barato falhou (fora do ar, recusou, resposta vazia): uma segunda tentativa no modelo mais forte da cadeia
+    const backup = choice.fallbacks?.at(-1);
+    if (!backup) throw err;
+    return chatCompletion({ ...choice, model: backup, fallbacks: [] }, { messages });
+  }
 }
 
 /** PDF escaneado (sem texto): o OpenRouter lê com OCR. */
@@ -153,6 +180,7 @@ async function ocrPdf(base64: string, fileName: string) {
 export function describeMessage(m: any): string {
   const parts: string[] = [];
   const meta = m.meta ?? {};
+  if (meta.forwarded) parts.push("(encaminhada)");
   if (meta.kind === "audio") parts.push(`[áudio] ${meta.transcript ?? "(não consegui transcrever)"}`);
   if (meta.kind === "image") parts.push(`[foto] ${meta.image_description ?? (meta.image_error ? `(não consegui descrever: ${meta.image_error})` : "(não consegui ver a imagem)")}`);
   if (meta.kind === "video") parts.push(`[vídeo] ${meta.video_description ?? ""}${meta.transcript ? ` Fala no vídeo: ${meta.transcript}` : ""}`);

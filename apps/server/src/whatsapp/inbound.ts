@@ -22,11 +22,16 @@ export async function handleIncoming(sock: WASocket, raw: WAMessage, log: Log) {
   // Baixa a mídia já na chegada (a mídia do WhatsApp expira e o socket só existe aqui)
   // figurinha também: quando é resposta de um recado, ela é encaminhada de verdade para quem mandou
   if (msg.media && ["audio", "image", "document", "video", "sticker"].includes(msg.kind)) {
-    try {
-      const buf = await downloadMediaMessage(raw, "buffer", {}, { logger: pino({ level: "silent" }), reuploadRequest: sock.updateMediaMessage });
-      if (buf.length <= MEDIA_MAX_BYTES) msg.media.base64 = buf.toString("base64");
-    } catch (err) {
-      log.warn({ err }, "não consegui baixar a mídia");
+    // encaminhada costuma ter link velho: a segunda tentativa pede o reenvio da mídia ao WhatsApp
+    for (let attempt = 0; attempt < 2 && !msg.media.base64; attempt++) {
+      try {
+        const buf = await downloadMediaMessage(raw, "buffer", {}, { logger: pino({ level: "silent" }), reuploadRequest: sock.updateMediaMessage });
+        if (buf.length <= MEDIA_MAX_BYTES) msg.media.base64 = buf.toString("base64");
+        break;
+      } catch (err) {
+        log.warn({ err, attempt, forwarded: msg.forwarded }, "não consegui baixar a mídia");
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
+      }
     }
   }
   await ingest(msg);
