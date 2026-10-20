@@ -26,15 +26,18 @@
 .fcal-limit-bar i { display: block; height: 100%; border-radius: 99px; background: var(--violet); }
 .fcal-limit-bar.over i { background: var(--err); }
 
-.fcal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.fcal-grid { --gap: 6px; --ratio: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--gap); container-type: inline-size; flex-shrink: 0; }
 .fcal-wd { text-align: center; font-size: 11.5px; font-weight: 600; color: var(--muted); padding-bottom: 2px; }
 .fcal-day {
   --h: transparent;
-  position: relative; aspect-ratio: 1; min-width: 0; border: none; border-radius: 12px; padding: 0; cursor: pointer;
+  position: relative; aspect-ratio: var(--ratio); min-width: 0; border: none; border-radius: 12px; padding: 0; cursor: pointer;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   background: var(--panel-2); color: var(--text); font: inherit; font-variant-numeric: tabular-nums;
   transition: transform .16s cubic-bezier(.2, .8, .2, 1), box-shadow .16s;
 }
+/* altura pela largura do calendário: o Safari do iPhone não conta o aspect-ratio do <button> na altura da linha da grade,
+   a linha ficava mais baixa que o dia e a última semana passava por cima da legenda */
+@supports (height: 1cqw) { .fcal-day { aspect-ratio: auto; height: calc((100cqw - 6 * var(--gap)) / 7 / var(--ratio)); } }
 .fcal-day .n { font-size: 14px; font-weight: 600; line-height: 1; }
 .fcal-day .v { font-size: 10.5px; font-weight: 600; line-height: 1.1; color: color-mix(in srgb, var(--h) 75%, var(--text)); max-width: 100%; overflow: hidden; white-space: nowrap; }
 .fcal-day.l1 { --h: var(--heat-1); }
@@ -50,7 +53,7 @@
 @media (hover: hover) and (pointer: fine) { .fcal-day:hover:not(.sel) { box-shadow: inset 0 0 0 1px var(--muted); } .fcal-day.today:hover:not(.sel) { box-shadow: inset 0 0 0 2px var(--violet); } }
 .fcal-day .inc { position: absolute; top: 6px; right: 6px; width: 5px; height: 5px; border-radius: 50%; background: var(--ok); }
 
-.fcal-legend { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); margin-top: 12px; }
+.fcal-legend { position: relative; display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); margin-top: 14px; flex-shrink: 0; }
 .fcal-legend > i { width: 12px; height: 12px; border-radius: 4px; }
 .fcal-legend > i.l1 { background: color-mix(in srgb, var(--heat-1) var(--heat-mix), var(--panel)); }
 .fcal-legend > i.l2 { background: color-mix(in srgb, var(--heat-2) var(--heat-mix), var(--panel)); }
@@ -71,8 +74,8 @@
 
 /* notebook: o calendário é a coluna da esquerda e tudo cabe na tela; dias mais baixos que largos e os lançamentos do dia rolam dentro do card */
 @media (min-width: 1024px) {
-  .fcal-grid { gap: 5px; }
-  .fcal-day { border-radius: 10px; aspect-ratio: 1.3; }
+  .fcal-grid { --gap: 5px; --ratio: 1.3; }
+  .fcal-day { border-radius: 10px; }
   .fcal-sel-list { max-height: max(64px, calc(100dvh - 680px)); }
 }
 
@@ -81,7 +84,7 @@
   html.pj-fin .fin-page .fin-col .card.fcal { border: none; padding: 2px 0 6px; background: none; border-radius: 0; }
   .fcal-sum { padding-bottom: 16px; }
   .fcal-sum strong { font-size: 15.5px; }
-  .fcal-grid { gap: 5px; }
+  .fcal-grid { --gap: 5px; }
   .fcal-day { border-radius: 11px; }
   .fcal-day .n { font-size: 14.5px; }
   .fcal-day .v { font-size: 10px; }
@@ -94,5 +97,5 @@
 }
 /* iPad: o calendário ocupa a largura toda, então os dias ficam mais baixos */
 @media (min-width: 768px) and (max-width: 1023px) {
-  .fcal-day { aspect-ratio: 1.6; }
+  .fcal-grid { --ratio: 1.6; }
 }

@@ -386,7 +386,9 @@ export function App() {
     preload("/" + (location.pathname.split("/")[1] ?? ""));
     ["/api/me/overview", "/api/me/dashboard"].forEach(prefetchApi);
     const t = setTimeout(() => {
-      [`/api/finance?month=${month}`, "/api/watches"].forEach(prefetchApi);
+      [`/api/finance?month=${month}`, "/api/watches", "/api/shares", "/api/finance/categories", "/api/cards", "/api/goals", "/api/bills"].forEach(prefetchApi);
+      // código das telas do dia a dia já baixado e pronto: no celular não existe "passar o mouse" para adiantar
+      ["/agenda", "/finance", "/conta", "/recados", "/contatos", "/documentos", "/watches"].forEach(preload);
     }, 1200);
     return () => clearTimeout(t);
   }, [me?.id]);
