@@ -9,6 +9,7 @@ import { haptic } from "../touch";
 import { PhoneAgenda } from "./CalendarPhone";
 import { Vazio } from "../Vazio";
 import { GoogleSync } from "./GoogleSync";
+import { justDragged, useDrag } from "./arrastar";
 
 /**
  * Agenda no estilo Google Agenda: painel lateral (Criar, minicalendário, agendas), mês com número da
@@ -251,11 +252,11 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
     if (readonly || ev.kind !== "reminder" || ev.recurring || !ev.reminderId) return;
     try {
       await api(`/api/reminders/${ev.reminderId}`, { method: "PATCH", json: { at: to.toISOString() } });
-      haptic(12);
     } catch (e) {
       void alertDialog("Não deu para mover o lembrete", (e as Error).message);
     }
-    void reload();
+    // a prévia do arrasto fica no lugar novo até isto terminar
+    await reload();
   };
 
   const title =
@@ -271,7 +272,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
   const swipe = useRef<{ x: number; y: number } | null>(null);
   const onTouchStart = (e: React.TouchEvent) => (swipe.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY });
   const onTouchEnd = (e: React.TouchEvent) => {
-    if (!swipe.current || view === "list") return;
+    if (!swipe.current || view === "list" || justDragged()) return;
     const dx = e.changedTouches[0]!.clientX - swipe.current.x;
     const dy = e.changedTouches[0]!.clientY - swipe.current.y;
     swipe.current = null;
@@ -425,11 +426,11 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
               }}
               onCreate={(d) => create(withTime(d))}
               onOpen={setOpen}
-              onMove={(ev, d) => { const s = new Date(ev.start); d.setHours(s.getHours(), s.getMinutes()); void move(ev, d); }}
+              onMove={readonly ? undefined : move}
             />
           )}
           {(view === "week" || view === "day") && (
-            <WeekView from={range.from} days={view === "day" ? 1 : 7} byDay={byDay} onOpen={setOpen} onCreate={(d) => create(d)} onMove={move} />
+            <WeekView from={range.from} days={view === "day" ? 1 : 7} byDay={byDay} onOpen={setOpen} onCreate={(d) => create(d)} onMove={readonly ? undefined : move} />
           )}
           {view === "list" && <ListView from={range.from} byDay={byDay} onOpen={setOpen} />}
         </div>
@@ -517,74 +518,6 @@ function weekTitle(a: Date, b: Date, short = false) {
   return `${a.getDate()} ${MONTHS[a.getMonth()]!.slice(0, 3)} a ${b.getDate()} ${MONTHS[b.getMonth()]!.slice(0, 3)}`;
 }
 
-/** Arrastar com mouse na hora ou com o dedo depois de segurar um instante. */
-function useDrag(onDrop: (ev: Ev, target: HTMLElement, e: PointerEvent) => void) {
-  return (ev: Ev) => (e: React.PointerEvent) => {
-    if (ev.kind !== "reminder" || ev.recurring) return;
-    const el = e.currentTarget as HTMLElement;
-    const startX = e.clientX;
-    const startY = e.clientY;
-    // mouse só vira arrasto depois de andar uns pixels: clique parado abre o detalhe (antes virava "soltar no mesmo dia")
-    let active = false;
-    let ghost: HTMLElement | null = null;
-    let hover: HTMLElement | null = null;
-    const hold = e.pointerType === "mouse" ? null : setTimeout(() => { active = true; haptic(14); begin(); }, 380);
-    const begin = () => {
-      el.classList.add("dragging");
-      ghost = el.cloneNode(true) as HTMLElement;
-      ghost.classList.add("cal-ghost");
-      ghost.style.width = `${el.getBoundingClientRect().width}px`;
-      document.body.appendChild(ghost);
-    };
-    const target = (x: number, y: number) =>
-      document.elementsFromPoint(x, y).find((n) => (n as HTMLElement).dataset?.drop) as HTMLElement | undefined;
-    const onMove = (m: PointerEvent) => {
-      if (!active) {
-        if (Math.hypot(m.clientX - startX, m.clientY - startY) > 8) {
-          if (hold) { clearTimeout(hold); cleanup(); return; }
-          active = true;
-          begin();
-        }
-        return;
-      }
-      m.preventDefault();
-      if (ghost) ghost.style.transform = `translate(${m.clientX + 8}px, ${m.clientY + 8}px)`;
-      const t = target(m.clientX, m.clientY) ?? null;
-      if (t !== hover) {
-        hover?.classList.remove("drop-hover");
-        t?.classList.add("drop-hover");
-        hover = t;
-        if (t) haptic(3);
-      }
-    };
-    const onUp = (u: PointerEvent) => {
-      if (hold) clearTimeout(hold);
-      const t = active ? target(u.clientX, u.clientY) : undefined;
-      cleanup();
-      if (t) {
-        // não abre o detalhe depois de soltar
-        el.addEventListener("click", (c) => c.stopPropagation(), { capture: true, once: true });
-        onDrop(ev, t, u);
-      }
-    };
-    const cleanup = () => {
-      el.classList.remove("dragging");
-      hover?.classList.remove("drop-hover");
-      ghost?.remove();
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", cleanup);
-      window.removeEventListener("touchmove", block);
-    };
-    // segurou e está arrastando: a página não rola
-    const block = (t: TouchEvent) => active && t.cancelable && t.preventDefault();
-    window.addEventListener("touchmove", block, { passive: false });
-    window.addEventListener("pointermove", onMove, { passive: false });
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", cleanup);
-  };
-}
-
 /** Eventos que se cruzam dividem a coluna lado a lado (senão um cobre o outro e some). */
 function lanes(evs: Ev[]) {
   const items = evs
@@ -620,7 +553,7 @@ function MonthView(p: {
   onDay: (d: Date) => void;
   onCreate: (d: Date) => void;
   onOpen: (e: Ev) => void;
-  onMove: (e: Ev, d: Date) => void;
+  onMove?: (e: Ev, d: Date) => unknown;
 }) {
   const days = monthGrid(p.cursor);
   const today = new Date();
@@ -652,10 +585,7 @@ function MonthView(p: {
   // estreito: some a hora; mais estreito ainda: só pontinho
   const readable = room.w >= 70;
   const showTime = !p.compact && room.w >= 110;
-  const drag = useDrag((ev, t) => {
-    const [y, m, d] = t.dataset.drop!.split("-").map(Number) as [number, number, number];
-    p.onMove(ev, new Date(y, m - 1, d));
-  });
+  const drag = useDrag({ mode: "day", onDrop: p.onMove });
   const weeks = Array.from({ length: 6 }, (_, i) => days.slice(i * 7, i * 7 + 7));
   return (
     <div ref={grid} className={`card cal-month ${p.compact ? "compact" : ""} ${readable ? "" : "tight"}`}>
@@ -704,7 +634,7 @@ function MonthView(p: {
   );
 }
 
-export function WeekView(p: { from: Date; days: number; byDay: Map<string, Ev[]>; onOpen: (e: Ev) => void; onCreate: (d: Date) => void; onMove: (e: Ev, d: Date) => void }) {
+export function WeekView(p: { from: Date; days: number; byDay: Map<string, Ev[]>; onOpen: (e: Ev) => void; onCreate: (d: Date) => void; onMove?: (e: Ev, d: Date) => unknown }) {
   const cols = Array.from({ length: p.days }, (_, i) => addDays(p.from, i));
   const scroller = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(new Date());
@@ -713,12 +643,7 @@ export function WeekView(p: { from: Date; days: number; byDay: Map<string, Ev[]>
     const t = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(t);
   }, []);
-  const drag = useDrag((ev, t, e) => {
-    const [y, m, d] = t.dataset.drop!.split("-").map(Number) as [number, number, number];
-    const top = t.getBoundingClientRect().top;
-    const minutes = Math.max(0, Math.round(((e.clientY - top) / HOUR_PX) * 4) * 15) + FIRST_HOUR * 60;
-    p.onMove(ev, new Date(y, m - 1, d, Math.floor(minutes / 60), minutes % 60));
-  });
+  const drag = useDrag({ mode: "time", hourPx: HOUR_PX, firstHour: FIRST_HOUR, onDrop: p.onMove });
   const hours = Array.from({ length: 24 - FIRST_HOUR }, (_, i) => i + FIRST_HOUR);
   const allDay = cols.map((d) => (p.byDay.get(key(d)) ?? []).filter((e) => e.allDay));
   return (

@@ -32,6 +32,7 @@ import {
 import "../styles/agenda-celular.css";
 import "../styles/agenda-celular-chips.css";
 import { GoogleSync } from "./GoogleSync";
+import { justDragged, useDrag } from "./arrastar";
 import { useKeyboardShell } from "../teclado";
 
 /**
@@ -236,6 +237,18 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
     if (readonly) return;
     setCreating(withTime(d));
   };
+  // segurar um lembrete e arrastar para outro dia (mês) ou horário (semana); muda o compromisso e o aviso junto
+  const move = async (ev: Ev, to: Date) => {
+    if (readonly || !ev.reminderId) return;
+    try {
+      await api(`/api/reminders/${ev.reminderId}`, { method: "PATCH", json: { at: to.toISOString() } });
+    } catch (e) {
+      void alertDialog("Não deu para mover o lembrete", (e as Error).message);
+    }
+    reload();
+    // a prévia tracejada segura o lugar novo enquanto a agenda recarrega
+    await new Promise((r) => setTimeout(r, 550));
+  };
   const calendars = CALENDARS.filter((c) => c.id !== "google" || isSuper || googleSeen);
   const filtered = hidden.length > 0;
   const title =
@@ -336,7 +349,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
         className={`pc-body pc-body-${bodyKey} enter-${enter}`}
         onTouchStart={(e) => (swipe.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY })}
         onTouchEnd={(e) => {
-          if (!swipe.current || mode !== "week" || tab !== "cal") return;
+          if (!swipe.current || mode !== "week" || tab !== "cal" || justDragged()) return;
           const dx = e.changedTouches[0]!.clientX - swipe.current.x;
           const dy = e.changedTouches[0]!.clientY - swipe.current.y;
           swipe.current = null;
@@ -358,11 +371,12 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
               onMeta={meta}
               onOpen={openEv}
               onDay={(d) => { haptic(5); setDay(d); }}
+              onMove={readonly ? undefined : move}
             />
           ))}
         {tab === "cal" && mode === "week" && range && (
           <div key={key(weekFrom)} className={`pc-slide ${weekDir}`}>
-            <WeekView from={range.from} days={7} byDay={listByDay} onOpen={(e) => openEv(e)} onCreate={create} onMove={() => {}} />
+            <WeekView from={range.from} days={7} byDay={listByDay} onOpen={(e) => openEv(e)} onCreate={create} onMove={readonly ? undefined : move} />
           </div>
         )}
         {(tab === "rem" || mode === "list") && range && (
@@ -484,8 +498,10 @@ function MonthBlock(p: {
   onMeta: (d: { readonly?: boolean; tags?: Tag[]; events: Ev[] }) => void;
   onOpen: (e: Ev, from?: Element | null) => void;
   onDay: (d: Date) => void;
+  onMove?: (e: Ev, d: Date) => unknown;
 }) {
   const el = useRef<HTMLElement>(null);
+  const drag = useDrag({ mode: "day", onDrop: p.onMove });
   const [near, setNear] = useState(false);
   useEffect(() => {
     const node = el.current;
@@ -533,6 +549,7 @@ function MonthBlock(p: {
               <div
                 key={j}
                 className={`pc-day ${sameDay(d, today) ? "today" : ""} ${d < startOfDay(today) ? "past" : ""}`}
+                data-drop={key(d)}
                 role="button"
                 tabIndex={0}
                 aria-label={`${d.getDate()} de ${MONTHS[d.getMonth()]}${evs.length ? `, ${evs.length} ${evs.length === 1 ? "evento" : "eventos"}` : ""}`}
@@ -545,6 +562,7 @@ function MonthBlock(p: {
                     key={e.id}
                     className={`pc-chip ${e.kind} ${n > 0 ? "line" : ""}`}
                     style={{ ["--ev" as string]: evColor(e), ["--n" as string]: n }}
+                    onPointerDown={drag(e)}
                     onClick={(c) => { c.stopPropagation(); p.onOpen(e, c.currentTarget); }}
                   >
                     <span className="pc-chip-t">{e.title}</span>
