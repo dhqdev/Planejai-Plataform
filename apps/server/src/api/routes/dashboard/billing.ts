@@ -7,11 +7,13 @@ import {
   buyPack,
   cancelSubscription,
   changePlan,
+  forgetCard,
   getSubscription,
   hasPlan,
   paymentsOf,
   pricingOf,
   referralDiscount,
+  savedCardOf,
   subscribe,
   withDiscount,
 } from "../../../billing.js";
@@ -73,6 +75,8 @@ export function billingRoutes(base: FastifyInstance) {
       // já pagou alguma vez: o menu mostra a aba Pagamentos
       paid,
       ledger,
+      // cartão que já pagou: pacote sai com um toque, sem abrir a página do Asaas
+      savedCard: savedCardOf(sub),
       pending: pending.map((p) => ({ kind: p.kind, itemId: p.item_id, grains: Number(p.grains), value: Number(p.value), invoiceUrl: p.invoice_url })),
       subscription: hasPlan(sub)
         ? {
@@ -137,7 +141,7 @@ export function billingRoutes(base: FastifyInstance) {
     }
   });
 
-  base.post<{ Body: { packId?: string; name?: string; cpfCnpj?: string; email?: string } }>("/api/billing/pack", async (req, reply) => {
+  base.post<{ Body: { packId?: string; name?: string; cpfCnpj?: string; email?: string; savedCard?: boolean } }>("/api/billing/pack", async (req, reply) => {
     const user = await me(req);
     if (!user) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil antes de comprar." });
     try {
@@ -145,11 +149,20 @@ export function billingRoutes(base: FastifyInstance) {
         name: req.body?.name,
         cpfCnpj: req.body?.cpfCnpj,
         email: req.body?.email ?? user.email ?? req.account.email,
+        savedCard: req.body?.savedCard === true,
+        remoteIp: req.ip,
       });
-      return { ok: true, invoiceUrl: p.invoice_url, value: Number(p.value), grains: Number(p.grains) };
+      return { ok: true, paid: p.status === "paid", invoiceUrl: p.invoice_url, value: Number(p.value), grains: Number(p.grains) };
     } catch (err) {
       return fail(reply, err);
     }
+  });
+
+  base.delete("/api/billing/card", async (req, reply) => {
+    const uid = req.account.userId;
+    if (!uid) return reply.code(400).send({ error: "Sem cartão nesta conta." });
+    await forgetCard(uid);
+    return { ok: true };
   });
 
   base.post("/api/billing/cancel", async (req, reply) => {

@@ -43,6 +43,7 @@ interface Billing {
   access?: { allowed: boolean; state: string; until?: string | null };
   paid?: boolean;
   ledger?: { delta: number; reason: string; label: string; note: string | null; day: string | null; at: string }[];
+  savedCard?: { brand: string | null; last4: string } | null;
   pending?: { kind: "pack" | "upgrade"; itemId: string; grains: number; value: number; invoiceUrl: string | null }[];
   subscription?: {
     status: "trial" | "active" | "overdue" | "canceled";
@@ -208,6 +209,22 @@ export function BillingPage() {
     }
   };
 
+  const forgetCard = async () => {
+    const ok = await confirmDialog({
+      title: "Esquecer o cartão?",
+      body: "Os pacotes avulsos voltam a abrir a página de pagamento. A mensalidade no cartão continua igual.",
+      confirmLabel: "Esquecer",
+      cancelLabel: "Manter",
+    });
+    if (!ok) return;
+    try {
+      await api("/api/billing/card", { method: "DELETE" });
+      await reload();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
+
   // o próximo plano acima do atual: a sugestão de subir mostra o que ganha e quanto paga hoje
   const nextUp = sub?.plan && !sub.nextPlan ? pricing.plans.filter((p) => p.price > currentPrice).sort((a, b) => a.price - b.price)[0] ?? null : null;
   const upToday = nextUp && sub?.lastPaymentAt ? Math.round((nextUp.price - currentPrice) * (1 - discount / 100) * 100) / 100 : null;
@@ -311,6 +328,19 @@ export function BillingPage() {
                   <span>Pagamento</span>
                   <b>{sub.card ? `${sub.card.brand ?? "Cartão"} final ${sub.card.last4}` : sub.method === "card" ? "Cartão de crédito" : "Pix ou boleto"}</b>
                 </li>
+                <li>
+                  <span>Cobrança automática</span>
+                  <b>{sub.method === "card" ? "Ligada, renova sozinha todo mês" : "Desligada, eu lembro antes de vencer"}</b>
+                </li>
+                {data.savedCard && (
+                  <li>
+                    <span>Pacotes com um toque</span>
+                    <b>
+                      {data.savedCard.brand ?? "Cartão"} final {data.savedCard.last4}{" "}
+                      <button type="button" className="link-btn" onClick={forgetCard}>esquecer</button>
+                    </b>
+                  </li>
+                )}
                 {sub.discount > 0 && (
                   <li>
                     <span>Desconto por indicação</span>
@@ -459,6 +489,7 @@ export function BillingPage() {
         <CheckoutModal
           checkout={checkout}
           needsDoc={!data.hasCustomer}
+          savedCard={data.savedCard ?? null}
           defaultName={data.name ?? ""}
           price={checkout.kind === "plan" ? priceOf(checkout.plan) : checkout.pack.price}
           onClose={() => setCheckout(null)}
@@ -493,8 +524,10 @@ export function BillingPage() {
 }
 
 /** Assinar um plano ou comprar um pacote: forma de pagamento e, na primeira vez, nome e CPF/CNPJ para o Asaas. */
-function CheckoutModal({ checkout, needsDoc, defaultName, price, onClose, onDone }: { checkout: Checkout; needsDoc: boolean; defaultName: string; price: number; onClose: () => void; onDone: (message?: string) => void }) {
+function CheckoutModal({ checkout, needsDoc, savedCard, defaultName, price, onClose, onDone }: { checkout: Checkout; needsDoc: boolean; savedCard: { brand: string | null; last4: string } | null; defaultName: string; price: number; onClose: () => void; onDone: (message?: string) => void }) {
   const [method, setMethod] = useState<"card" | "pix">("card");
+  // pacote com cartão guardado: cobra na hora, sem abrir a página do Asaas
+  const [useSaved, setUseSaved] = useState(Boolean(savedCard) && checkout.kind === "pack");
   const [name, setName] = useState(defaultName);
   const [doc, setDoc] = useState("");
   const [busy, setBusy] = useState(false);
@@ -505,6 +538,12 @@ function CheckoutModal({ checkout, needsDoc, defaultName, price, onClose, onDone
     setErr(null);
     setBusy(true);
     try {
+      if (useSaved && checkout.kind === "pack") {
+        haptic();
+        const r = await api<{ paid?: boolean; invoiceUrl: string | null }>("/api/billing/pack", { method: "POST", json: { packId: checkout.pack.id, savedCard: true } });
+        onDone(r.paid ? undefined : "O cartão está sendo conferido pelo Asaas. Os grãos entram assim que ele confirmar.");
+        return;
+      }
       const who = needsDoc ? { name, cpfCnpj: doc } : {};
       const opened = await payIn(async () =>
         plan
@@ -527,7 +566,7 @@ function CheckoutModal({ checkout, needsDoc, defaultName, price, onClose, onDone
       footer={(close) => (
         <>
           <button className="btn btn-ghost" onClick={close}>Voltar</button>
-          <button className="btn btn-primary" form="grain-checkout" disabled={busy}>{busy ? "Abrindo o pagamento…" : "Ir para o pagamento"}</button>
+          <button className="btn btn-primary" form="grain-checkout" disabled={busy}>{useSaved ? (busy ? "Cobrando no cartão…" : `Pagar ${brl(price)}`) : busy ? "Abrindo o pagamento…" : "Ir para o pagamento"}</button>
         </>
       )}
     >
@@ -558,8 +597,23 @@ function CheckoutModal({ checkout, needsDoc, defaultName, price, onClose, onDone
             </label>
           </fieldset>
         )}
-        {!plan && <p className="help">Pix, cartão ou boleto, na página de pagamento do Asaas.</p>}
-        {needsDoc && (
+        {!plan && savedCard && (
+          <fieldset className="grain-methods">
+            <legend>Como prefere pagar?</legend>
+            <label className={useSaved ? "on" : ""}>
+              <input type="radio" name="pack-method" checked={useSaved} onChange={() => setUseSaved(true)} />
+              <b>{savedCard.brand ?? "Cartão"} final {savedCard.last4}</b>
+              <span>O mesmo cartão do seu plano. Cobra agora e os grãos entram na hora.</span>
+            </label>
+            <label className={!useSaved ? "on" : ""}>
+              <input type="radio" name="pack-method" checked={!useSaved} onChange={() => setUseSaved(false)} />
+              <b>Outro jeito</b>
+              <span>Pix, boleto ou outro cartão, na página de pagamento do Asaas.</span>
+            </label>
+          </fieldset>
+        )}
+        {!plan && !savedCard && <p className="help">Pix, cartão ou boleto, na página de pagamento do Asaas.</p>}
+        {needsDoc && !useSaved && (
           <>
             <div className="field">
               <label htmlFor="grain-name">Nome completo</label>

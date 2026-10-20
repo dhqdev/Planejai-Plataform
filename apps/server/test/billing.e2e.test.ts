@@ -110,6 +110,10 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
       }
       if (path === "/payments" && method === "POST") {
         payN++;
+        const body = JSON.parse(init.body);
+        // cartão guardado: o Asaas responde na hora se passou
+        if (body.creditCardToken === "tok_recusado") return new Response(JSON.stringify({ errors: [{ description: "Transação não autorizada" }] }), { status: 400 });
+        if (body.creditCardToken) return json({ id: `pay_av_${payN}`, status: "CONFIRMED", billingType: "CREDIT_CARD", value: body.value, invoiceUrl: `https://sandbox.asaas.com/i/pay_av_${payN}` });
         return json({ id: `pay_av_${payN}`, invoiceUrl: `https://sandbox.asaas.com/i/pay_av_${payN}` });
       }
       return json({ ok: true });
@@ -475,5 +479,35 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     // depois de pagar a primeira, assinar de novo volta a ser recusado
     await hook({ id: "n4", event: "PAYMENT_CONFIRMED", payment: { id: "pay_sub_3", subscription: "sub_3", value: 39.9, billingType: "CREDIT_CARD" } });
     await expect(billing.subscribe(user, { planId: "leve" })).rejects.toThrow(/já tem um plano/);
+  });
+  it("cartão guardado: o token do Asaas fica cifrado e o pacote sai com um toque, creditado uma vez só", async () => {
+    const { upsertUser } = await import("../src/ingest.js");
+    const dani = await upsertUser("5519955550000", "Dani");
+    await db.query("UPDATE users SET status = 'active', created_at = now() - interval '30 days' WHERE id = $1", [dani.id]);
+    await expect(billing.buyPack(dani, "p500", { savedCard: true })).rejects.toThrow(/Não tenho cartão guardado/);
+    // primeiro pacote pela página; pagou no cartão e o webhook traz o token
+    const first = await billing.buyPack(dani, "p500", { name: "Dani Lima", cpfCnpj: "529.982.247-25" });
+    await hook({ id: "cc1", event: "PAYMENT_CONFIRMED", payment: { id: first.asaas_payment_id, externalReference: `grains:${first.id}`, billingType: "CREDIT_CARD", creditCard: { creditCardNumber: "1111", creditCardBrand: "MASTERCARD", creditCardToken: "tok_bom" } } });
+    const row = await db.one("SELECT saved_card_token, saved_card_brand, saved_card_last4 FROM subscriptions WHERE user_id = $1", [dani.id]);
+    expect(row).toMatchObject({ saved_card_brand: "MASTERCARD", saved_card_last4: "1111" });
+    expect(row.saved_card_token).not.toContain("tok_bom");
+    expect(billing.savedCardOf(await billing.getSubscription(dani.id))).toEqual({ brand: "MASTERCARD", last4: "1111" });
+    const before = Number((await wallet(dani.id)).extra_grains);
+    asaasCalls.length = 0;
+    const p = await billing.buyPack(dani, "p500", { savedCard: true, remoteIp: "200.1.2.3" });
+    expect(asaasCalls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /payments"]);
+    expect(asaasCalls[0]!.body).toMatchObject({ billingType: "CREDIT_CARD", value: 9.9, creditCardToken: "tok_bom", remoteIp: "200.1.2.3", externalReference: `grains:${p.id}` });
+    expect(p.status).toBe("paid");
+    expect(Number((await wallet(dani.id)).extra_grains)).toBe(before + 500);
+    // o webhook do mesmo pagamento chega depois e não credita de novo
+    await hook({ id: "cc2", event: "PAYMENT_CONFIRMED", payment: { id: p.asaas_payment_id, externalReference: `grains:${p.id}`, billingType: "CREDIT_CARD" } });
+    expect(Number((await wallet(dani.id)).extra_grains)).toBe(before + 500);
+    // cartão recusado: a compra fecha e a mensagem diz o final do cartão
+    const { encryptJson } = await import("../src/crypto.js");
+    await db.query("UPDATE subscriptions SET saved_card_token = $2 WHERE user_id = $1", [dani.id, encryptJson({ token: "tok_recusado" })]);
+    await expect(billing.buyPack(dani, "p500", { savedCard: true })).rejects.toThrow(/final 1111 não passou/);
+    expect(await db.one("SELECT status FROM grain_purchases WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1", [dani.id])).toEqual({ status: "canceled" });
+    await billing.forgetCard(dani.id);
+    expect(billing.savedCardOf(await billing.getSubscription(dani.id))).toBeNull();
   });
 });

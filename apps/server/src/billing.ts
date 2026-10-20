@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { decryptJson, encryptJson } from "./crypto.js";
 import { GRAIN_TEXT, creditGrains, ensureWallet, grains, grainsExempt, grainsLink, hasPaid, packById, planById, plansOf, tellPerson, trialEndsAt } from "./credits.js";
 import { emitEvent } from "./events.js";
 import { many, one, query } from "./db/pool.js";
@@ -17,7 +18,8 @@ import { type AgentSettings, type BillingPlan, getSettings, perksOf } from "./se
  * - Indicação: cada amigo convidado que paga um plano dá billingReferralStep% de desconto na mensalidade de quem convidou,
  *   até billingReferralMax%. O desconto acompanha: amigo que para de pagar tira a parte dele.
  *
- * Dados de cartão nunca passam por aqui: a pessoa paga na página do Asaas. O CPF/CNPJ vai para o Asaas e não fica no nosso banco.
+ * Dados de cartão nunca passam por aqui: a pessoa paga na página do Asaas. Depois do primeiro pagamento no cartão o Asaas
+ * devolve um token (creditCardToken); ele fica cifrado em subscriptions.saved_card_token e compra pacote com um toque. O CPF/CNPJ vai para o Asaas e não fica no nosso banco.
  * O Asaas avisa pelo webhook (/webhooks/asaas), que é quem credita os grãos.
  */
 
@@ -42,6 +44,9 @@ export interface SubscriptionRow {
   pay_method: string | null;
   card_brand: string | null;
   card_last4: string | null;
+  saved_card_token?: string | null;
+  saved_card_brand?: string | null;
+  saved_card_last4?: string | null;
 }
 
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
@@ -338,14 +343,74 @@ async function createCharge(user: any, customerId: string, item: { kind: "pack" 
   return one("UPDATE grain_purchases SET asaas_payment_id = $2, invoice_url = $3 WHERE id = $1 RETURNING *", [row.id, String(payment.id), payment.invoiceUrl ?? null]);
 }
 
+/**
+ * Guarda o cartão que pagou (token do Asaas, cifrado). Vem no webhook de pagamento no cartão, da mensalidade ou de um pacote;
+ * sem token (conta do Asaas sem tokenização liberada) não guarda nada e o pacote segue pela página de pagamento.
+ */
+async function rememberCard(userId: string, p: any) {
+  const card = p?.creditCard ?? {};
+  const token = String(card.creditCardToken ?? "").trim();
+  if (!token) return;
+  await query(
+    "UPDATE subscriptions SET saved_card_token = $2, saved_card_brand = $3, saved_card_last4 = $4, saved_card_at = now(), updated_at = now() WHERE user_id = $1",
+    [userId, encryptJson({ token }), String(card.creditCardBrand ?? "").slice(0, 20) || null, card.creditCardNumber ? String(card.creditCardNumber).slice(-4) : null],
+  );
+}
+
+/** Cartão guardado para compra com um toque (só bandeira e final; o token nunca sai do servidor). */
+export function savedCardOf(sub: SubscriptionRow | null | undefined) {
+  return sub?.saved_card_token && sub.saved_card_last4 ? { brand: sub.saved_card_brand ?? null, last4: sub.saved_card_last4 } : null;
+}
+
+/** Esquece o cartão guardado (a mensalidade no cartão continua no Asaas; só a compra com um toque some). */
+export async function forgetCard(userId: string) {
+  await query("UPDATE subscriptions SET saved_card_token = NULL, saved_card_brand = NULL, saved_card_last4 = NULL, saved_card_at = NULL, updated_at = now() WHERE user_id = $1", [userId]);
+}
+
 /** Compra um pacote avulso de grãos. Sem cadastro no Asaas ainda, precisa de nome e CPF/CNPJ. */
-export async function buyPack(user: any, packId: string, input?: { name?: string; cpfCnpj?: string; email?: string | null }) {
+export async function buyPack(user: any, packId: string, input?: { name?: string; cpfCnpj?: string; email?: string | null; savedCard?: boolean; remoteIp?: string }) {
   const s = await getSettings();
   if (!s.billingEnabled) throw new Error("A cobrança ainda não está ligada.");
   const pack = packById(s, packId);
   if (!pack) throw new Error("Pacote não encontrado.");
+  const item = { kind: "pack" as const, itemId: pack.id, grains: pack.grains, value: pack.price, description: `Planejai: pacote de ${grains(pack.grains)}` };
+  if (input?.savedCard) return chargeSavedCard(user, item, input.remoteIp ?? "");
   const customerId = await ensureCustomer(user, input);
-  return createCharge(user, customerId, { kind: "pack", itemId: pack.id, grains: pack.grains, value: pack.price, description: `Planejai: pacote de ${grains(pack.grains)}` });
+  return createCharge(user, customerId, item);
+}
+
+/**
+ * Cobra no cartão guardado, sem abrir página: o Asaas responde na hora se passou. Passou: credita já (o webhook que chega
+ * depois encontra a compra paga e não repete). Recusou: a compra fecha e a pessoa escolhe outro jeito.
+ */
+async function chargeSavedCard(user: any, item: { kind: "pack"; itemId: string; grains: number; value: number; description: string }, remoteIp: string) {
+  const sub = await getSubscription(user.id);
+  const card = savedCardOf(sub);
+  if (!sub?.asaas_customer_id || !card) throw new Error("Não tenho cartão guardado. Escolha o pacote e pague pela página do Asaas.");
+  const { token } = decryptJson<{ token: string }>(sub.saved_card_token!);
+  const row = await one("INSERT INTO grain_purchases (user_id, kind, item_id, grains, value) VALUES ($1, $2, $3, $4, $5) RETURNING *", [user.id, item.kind, item.itemId, item.grains, item.value]);
+  let payment: any;
+  try {
+    payment = await asaas("POST", "/payments", {
+      customer: sub.asaas_customer_id,
+      billingType: "CREDIT_CARD",
+      value: item.value,
+      dueDate: isoDay(new Date()),
+      description: item.description,
+      externalReference: `grains:${row.id}`,
+      creditCardToken: token,
+      remoteIp: remoteIp || undefined,
+    });
+  } catch (err) {
+    await query("UPDATE grain_purchases SET status = 'canceled' WHERE id = $1", [row.id]);
+    throw new Error(`O cartão ${card.brand ?? ""} final ${card.last4} não passou. Tente pela página de pagamento (Pix, boleto ou outro cartão).`.replace("  ", " "), { cause: err });
+  }
+  const saved = await one("UPDATE grain_purchases SET asaas_payment_id = $2, invoice_url = $3 WHERE id = $1 RETURNING *", [row.id, String(payment.id), payment.invoiceUrl ?? null]);
+  if (PAID.has(`PAYMENT_${String(payment.status ?? "")}`)) {
+    await handleAsaasEvent({ event: "PAYMENT_CONFIRMED", payment: { ...payment, externalReference: `grains:${row.id}` } });
+    return { ...saved, status: "paid", invoice_url: null };
+  }
+  return saved;
 }
 
 /** Mesmo dia no mês seguinte; sem esse dia lá (31/01, 29/02), cai no último dia do mês (28/02, não 03/03). */
@@ -409,6 +474,7 @@ const CARD_REFUSED = new Set(["PAYMENT_CREDIT_CARD_CAPTURE_REFUSED", "PAYMENT_RE
 /** Compra avulsa: pagou entra (uma vez); apagada ou vencida só fecha a compra. */
 async function applyPurchaseEvent(event: string, p: any, purchase: any) {
   if (PAID.has(event)) {
+    await rememberCard(purchase.user_id, p).catch((err) => console.error("[cartão]", err));
     const paid = await one("UPDATE grain_purchases SET status = 'paid', paid_at = now() WHERE id = $1 AND status <> 'paid' RETURNING *", [purchase.id]);
     if (!paid) return { handled: true, status: "paid" };
     const s = await getSettings();
@@ -492,6 +558,7 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
       ...(plan ? { base_value: plan.price } : {}),
       ...(card.creditCardNumber ? { card_brand: String(card.creditCardBrand ?? "").slice(0, 20) || null, card_last4: String(card.creditCardNumber).slice(-4) } : {}),
     });
+    await rememberCard(sub.user_id, p).catch((err) => console.error("[cartão]", err));
     if (wasBlocked) await query("UPDATE users SET profile = profile - 'billing_notice_at' WHERE id = $1", [sub.user_id]);
     // o crédito tem ref do pagamento e entra uma vez só (dois eventos ao mesmo tempo: o segundo para aqui)
     const credited = plan ? await creditGrains(sub.user_id, { amount: plan.grains, bucket: "plan", reason: "plano", ref, note: plan.name, set: true }) : null;
