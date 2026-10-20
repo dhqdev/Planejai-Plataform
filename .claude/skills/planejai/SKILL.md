@@ -60,7 +60,7 @@ apps/server/src/
   accounts.ts              contas do painel: dono (.env) = super admin; cadastro = admin (scopeUserId limita os dados)
   sharing.ts               telas particulares e o que um contato liberou (selfUserId, personalUser)
   shortmem.ts              memória curta no Redis (pj:conv:<id>:msgs, TTL = MESSAGE_RETENTION_HOURS); cai pro Postgres se o Redis sumir
-  maintenance.ts           de hora em hora: resume e apaga mensagens > 24h, logs e gravações antigas, fecha execuções órfãs
+  maintenance.ts           de hora em hora: apaga mensagens > 24h, logs e gravações antigas, fecha execuções órfãs; resumo da conversa só às 19h (summarizeDay) ou se ia expirar antes
   net.ts                   safeFetch/checkedUrl: toda URL externa passa aqui
   crypto.ts                AES-256-GCM das credenciais (ENCRYPTION_KEY + chaves antigas)
   ratelimit.ts             limites por IP/e-mail (login, cadastro, convite)

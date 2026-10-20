@@ -16,6 +16,8 @@ import { planAccess } from "./plan-access.js";
  * Assuntos se acumulam dia a dia; um agente só nasce quando o assunto se repete em dias diferentes.
  */
 
+/** hora da reunião (e do resumo do dia das conversas) no DEFAULT_TIMEZONE */
+export const MEETING_HOUR = 19;
 const MAX_AGENTS = 3;
 /** basta uma conversa no dia para a reunião aprender algo; agente novo continua exigindo assunto repetido */
 const MIN_EXECUTIONS = 1;

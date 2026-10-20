@@ -208,6 +208,33 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     expect(tx.n).toBe(1);
   });
 
+  it.skipIf(!process.env.REDIS_URL)("resumo da memória curta: um por dia às 19h, de hora em hora só o que ia expirar antes", async () => {
+    const { summarizeConversation } = await import("../src/agent/orchestrator.js");
+    const { pushShort } = await import("../src/shortmem.js");
+    const { summarizeDay } = await import("../src/maintenance.js");
+    const u = await db.one("INSERT INTO users (phone, name, status) VALUES ('5511900000077', 'Lia', 'active') RETURNING *");
+    const conv = await db.one("INSERT INTO conversations (user_id, channel, remote_jid) VALUES ($1, 'playground', 'jid-lia') RETURNING id", [u.id]);
+    const now = Date.now();
+    // 30 falas há 20h: antes resumia (passava de 36 só com mais algumas; e de hora em hora pela idade); agora espera as 19h
+    await pushShort(conv.id, Array.from({ length: 30 }, (_, i) => ({ id: 9000 + i, role: i % 2 ? "assistant" : "user", text: `fala ${i}`, ts: now - 20 * 3600_000 + i * 1000 }) as any));
+    const summaries = () => db.one("SELECT COUNT(*)::int AS n FROM executions WHERE trigger = 'summary' AND conversation_id = $1", [conv.id]).then((r) => r.n);
+    await summarizeConversation(conv.id);
+    await summarizeConversation(conv.id, { expiringBefore: now + 75 * 60_000 });
+    expect(await summaries()).toBe(0);
+    // ia expirar antes da próxima rodada: resume tudo de uma vez
+    await summarizeConversation(conv.id, { expiringBefore: now + 5 * 3600_000 });
+    expect(await summaries()).toBe(1);
+    const c1 = await db.one("SELECT summary_ts FROM conversations WHERE id = $1", [conv.id]);
+    expect(Number(c1.summary_ts)).toBe(now - 20 * 3600_000 + 29 * 1000);
+    // rodada das 19h: só quem tem fala nova; a mesma conversa sem nada novo não chama o modelo
+    await pushShort(conv.id, [{ id: 9100, role: "user", text: "fala nova", ts: now } as any]);
+    await db.query("UPDATE conversations SET updated_at = now() WHERE id = $1", [conv.id]);
+    await summarizeDay();
+    expect(await summaries()).toBe(2);
+    await summarizeDay();
+    expect(await summaries()).toBe(2);
+  });
+
   it("memória: o mesmo fato não duplica e o perfil sempre entra no contexto", async () => {
     const core = await import("../src/agent/tools/core.js");
     const { loadMemories } = await import("../src/agent/orchestrator.js");

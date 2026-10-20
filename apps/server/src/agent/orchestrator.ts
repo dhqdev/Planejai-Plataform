@@ -44,8 +44,13 @@ import { Outbox, type ConversationRow, type ToolContext, type UserRow } from "./
 const HISTORY_LIMIT = 16;
 /** Mensagens que disparam a compactação em resumo */
 const SUMMARY_TRIGGER = 40;
-/** Entradas na memória curta que disparam o resumo (a lista guarda no máximo 60) */
-const REDIS_SUMMARY_TRIGGER = 36;
+/**
+ * Entradas na memória curta que disparam o resumo durante o dia: só quando a lista (máximo 60) está quase cheia
+ * e ia cortar o começo. O resumo normal é um por dia, na rodada das 19h (summarizeDay em maintenance.ts).
+ */
+const REDIS_SUMMARY_TRIGGER = 52;
+/** Fala recente já resumida (pela rodada das 19h) continua no contexto por esse tempo: a conversa que está rolando não some */
+const RECENT_AFTER_SUMMARY_MS = 2 * 3600_000;
 /** Numa enxurrada de mensagens, só as últimas entram numa resposta */
 const MAX_BATCH = 20;
 /**
@@ -397,7 +402,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       ).map((m) => ({ id: m.id, role: m.role, text: m.role === "event" ? m.content : describeMessage(m), ts: new Date(m.created_at).getTime(), ext: m.external_id }));
     }
     const summarizedTs = Number((conversation as any).summary_ts ?? 0);
-    const history = [...past.filter((e) => !pendingIds.has(e.id) && e.ts > summarizedTs), ...fresh];
+    const history = [...past.filter((e) => !pendingIds.has(e.id) && (e.ts > summarizedTs || e.ts > Date.now() - RECENT_AFTER_SUMMARY_MS)), ...fresh];
 
     const messages: ChatMessage[] = [];
     let afterEvent = false;
@@ -843,8 +848,10 @@ export async function deliver(bubbles: Bubble[], o: { channel: Channel; conversa
  * Compacta a conversa: resume mensagens antigas e avança summary_until.
  * Sem upTo, resume quando passa de SUMMARY_TRIGGER (mantendo as recentes); com upTo, resume tudo até esse id
  * (usado antes de apagar mensagens com mais de 24h, para nada importante se perder).
+ * Com Redis: olderThanMs resume o que tem mais que isso (0 = tudo, rodada das 19h); expiringBefore (epoch ms)
+ * resume tudo só se a fala mais antiga ainda sem resumo vai expirar antes desse instante (rede de segurança de hora em hora).
  */
-export async function summarizeConversation(conversationId: string, opts: { upTo?: number; olderThanMs?: number } = {}) {
+export async function summarizeConversation(conversationId: string, opts: { upTo?: number; olderThanMs?: number; expiringBefore?: number } = {}) {
   const conv = await one<ConversationRow & { summary_ts: string }>("SELECT * FROM conversations WHERE id = $1", [conversationId]);
   if (!conv) return;
   // Com Redis, a conversa mora só na memória curta: resume de lá antes que expire ou que a lista seja cortada
@@ -852,7 +859,10 @@ export async function summarizeConversation(conversationId: string, opts: { upTo
     const since = Number(conv.summary_ts ?? 0);
     const entries = ((await allShort(conversationId)) ?? []).filter((e) => e.ts > since);
     let old: ShortEntry[];
-    if (opts.olderThanMs != null) old = entries.filter((e) => e.ts < Date.now() - opts.olderThanMs!);
+    if (opts.expiringBefore != null) {
+      const oldest = entries[0]?.ts;
+      old = oldest != null && oldest + config.MESSAGE_RETENTION_HOURS * 3600_000 < opts.expiringBefore ? entries : [];
+    } else if (opts.olderThanMs != null) old = entries.filter((e) => e.ts <= Date.now() - opts.olderThanMs!);
     else old = entries.length >= REDIS_SUMMARY_TRIGGER ? entries.slice(0, entries.length - HISTORY_LIMIT) : [];
     if (!old.length) return;
     const transcript = old

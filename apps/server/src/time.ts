@@ -43,3 +43,11 @@ export function isoLocal(date: Date, timeZone: string) {
   const local = new Date(date.getTime() + tzOffsetMs(date, timeZone));
   return local.toISOString().slice(0, 16);
 }
+
+/** Próxima vez que o relógio do fuso marca `hour`:00 (depois de `now`). */
+export function nextLocalHour(hour: number, timeZone: string, now = new Date()): Date {
+  const day = isoLocal(now, timeZone).slice(0, 10);
+  const today = parseLocalDateTime(`${day}T${String(hour).padStart(2, "0")}:00`, timeZone);
+  if (today.getTime() > now.getTime()) return today;
+  return parseLocalDateTime(`${isoLocal(new Date(today.getTime() + 24 * 3600_000), timeZone).slice(0, 10)}T${String(hour).padStart(2, "0")}:00`, timeZone);
+}

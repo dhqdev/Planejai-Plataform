@@ -1,13 +1,16 @@
 import { summarizeConversation } from "./agent/orchestrator.js";
 import { config } from "./config.js";
 import { many, query } from "./db/pool.js";
+import { MEETING_HOUR } from "./improve.js";
 import { getSettings } from "./settings.js";
 import { moveBlobsToStorage, purgeStorageTrash, relocateLegacyObjects } from "./storage.js";
 import { redisAlive } from "./shortmem.js";
+import { nextLocalHour } from "./time.js";
 
 /**
  * Limpeza periódica (de hora em hora, no worker):
  * - mensagens com mais de MESSAGE_RETENTION_HOURS viram resumo da conversa e são apagadas
+ *   (com Redis o resumo do dia é às 19h, em summarizeDay; aqui só o que ia expirar antes disso)
  *   (a memória curta no Redis expira sozinha no mesmo prazo; gastos, memórias e lembretes ficam);
  * - o texto dos logs de execução sai depois de LOG_CONTENT_HOURS (fica só custo/tempo/modelo);
  * - logs de execução e gravações antigas saem depois de EXECUTION_RETENTION_DAYS;
@@ -29,11 +32,13 @@ export async function purgeOld(log?: { info: (...a: any[]) => void; error: (...a
       log?.error({ err, conversationId: c.conversation_id }, "falha ao resumir antes de limpar");
     }
   }
-  // Memória curta no Redis expira em MESSAGE_RETENTION_HOURS: resume antes o que está perto de sumir
+  // Memória curta no Redis: o resumo é um por dia, às 19h (summarizeDay). De hora em hora só a rede de segurança:
+  // resume se alguma fala ainda sem resumo vai expirar antes da próxima rodada (e da próxima limpeza), o que quase nunca acontece
   if (await redisAlive()) {
     const recent = await many<{ id: string }>("SELECT id FROM conversations WHERE updated_at > now() - make_interval(hours => $1)", [hours + 2]);
+    const before = Math.min(Date.now() + 75 * 60_000, nextLocalHour(MEETING_HOUR, config.DEFAULT_TIMEZONE).getTime());
     for (const c of recent) {
-      await summarizeConversation(c.id, { olderThanMs: Math.max(1, hours - 3) * 3600_000 }).catch((err) =>
+      await summarizeConversation(c.id, { expiringBefore: before }).catch((err) =>
         log?.error({ err, conversationId: c.id }, "falha ao resumir memória curta"),
       );
     }
@@ -94,4 +99,20 @@ export async function closeOrphanRuns() {
     [Math.ceil(maxExecutionMinutes) + 10],
   );
   return r.rowCount ?? 0;
+}
+
+/**
+ * Resumo do dia, junto da reunião das 19h: uma chamada por conversa que teve fala nova desde o último resumo
+ * (antes era de hora em hora, uma chamada por conversa ativa a cada hora). Roda antes da reunião, que lê o resumo novo.
+ */
+export async function summarizeDay(log?: { info: (...a: any[]) => void; error: (...a: any[]) => void }) {
+  if (!(await redisAlive())) return 0;
+  const convs = await many<{ id: string }>(
+    "SELECT id FROM conversations WHERE updated_at > now() - make_interval(hours => $1) ORDER BY updated_at",
+    [config.MESSAGE_RETENTION_HOURS + 2],
+  );
+  for (const c of convs) {
+    await summarizeConversation(c.id, { olderThanMs: 0 }).catch((err) => log?.error({ err, conversationId: c.id }, "falha no resumo do dia"));
+  }
+  return convs.length;
 }

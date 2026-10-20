@@ -3,9 +3,9 @@ import { type OutboundJob, runOutboundJob } from "../api/routes/internal.js";
 import { startTelegramPolling } from "../telegram.js";
 import { processConversation, summarizeConversation } from "../agent/orchestrator.js";
 import { one } from "../db/pool.js";
-import { purgeOld } from "../maintenance.js";
+import { purgeOld, summarizeDay } from "../maintenance.js";
 import { snapshotStorage } from "../resources.js";
-import { dailyImprovement } from "../improve.js";
+import { dailyImprovement, MEETING_HOUR } from "../improve.js";
 import { sendInvite } from "../social.js";
 import { checkDueWatches } from "../watches.js";
 import { billingReminders } from "../billing.js";
@@ -114,9 +114,11 @@ async function startChannelJobs(log: WorkerLog) {
 
   // melhoria diária dos agentes de cada cliente, às 19h
   await boss.work(QUEUES.improve, { batchSize: 1, pollingIntervalSeconds: 60 }, async () => {
+    // primeiro o resumo do dia de cada conversa (um por dia, não de hora em hora); a reunião já lê o resumo novo
+    await summarizeDay(log).catch((err) => log.error({ err }, "resumo do dia falhou"));
     await dailyImprovement(log);
   });
-  await boss.schedule(QUEUES.improve, "0 19 * * *", undefined, { tz: config.DEFAULT_TIMEZONE });
+  await boss.schedule(QUEUES.improve, `0 ${MEETING_HOUR} * * *`, undefined, { tz: config.DEFAULT_TIMEZONE });
 
   // contas fixas, faturas de cartão e mensalidade: lembretes do dia, às 9h (sem IA)
   await boss.work(QUEUES.financeDaily, { batchSize: 1, pollingIntervalSeconds: 60 }, async () => {
