@@ -28,6 +28,19 @@ const dateBR = (iso: string | null | undefined) => (iso ? new Date(iso).toLocale
 const weekday = (s: string) => new Date(`${s}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
 const daysUntil = (s: string | null | undefined) => (s ? Math.round((new Date(`${s}T12:00:00`).getTime() - Date.now()) / 86_400_000) : null);
 const inDays = (n: number | null) => (n == null ? "" : n === 0 ? "hoje" : n === 1 ? "amanhã" : n > 1 ? `em ${n} dias` : n === -1 ? "venceu ontem" : `venceu há ${-n} dias`);
+/** Quanto falta até um instante: "2 dias e 4 h", "5 h e 10 min", "12 min". Passou: null. */
+const countdown = (iso: string | null | undefined) => {
+  if (!iso) return null;
+  const ms = new Date(iso).getTime() - Date.now();
+  if (!(ms > 0)) return null;
+  const d = Math.floor(ms / 86_400_000);
+  const h = Math.floor((ms % 86_400_000) / 3_600_000);
+  const m = Math.max(1, Math.floor((ms % 3_600_000) / 60_000));
+  if (d > 0) return `${d} ${d === 1 ? "dia" : "dias"}${h ? ` e ${h} h` : ""}`;
+  return h > 0 ? `${h} h${m ? ` e ${m} min` : ""}` : `${m} min`;
+};
+const dayHour = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(", ", " às ") : "–";
 const duration = (ms: number | null) => (ms == null ? "–" : ms < 60_000 ? `${Math.max(1, Math.round(ms / 1000))} s` : `${(ms / 60_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} min`);
 
 const STATE: Record<string, { label: string; tone: string; hint: string }> = {
@@ -60,6 +73,7 @@ export function ClientSheet({ client, onClose, isSuper }: { client: any; onClose
           <div className="cs-chips">
             <Status status={status} />
             {state && <span className={`badge ${state.tone}`}>{billing.subscription?.active && billing.subscription.plan ? `Plano ${billing.subscription.plan.name}` : state.label}</span>}
+            {billing?.state === "trial" && countdown(billing.trialUntil) && <span className="cs-chip-muted">livre por mais {countdown(billing.trialUntil)}</span>}
             <span className="cs-chip-muted">última mensagem {ago(client.last_seen_at)}</span>
           </div>
         </div>
@@ -113,11 +127,19 @@ function Resumo({ client, data, isSuper, onClose, go }: { client: any; data: any
           <strong>{int(a.messages30)} msg</strong>
           <span>ativo em {a.activeDays30 ?? 0} de 30 dias</span>
         </button>
-        <button className="cs-kpi" onClick={() => go("plano")}>
-          <small>Próximo pagamento</small>
-          <strong>{sub?.active && sub.nextDueDate ? ymd(sub.nextDueDate) : "Sem plano"}</strong>
-          <span>{sub?.active ? `${brl(sub.value)} · ${inDays(due)}` : STATE[b?.state]?.label ?? "–"}</span>
-        </button>
+        {b?.state === "trial" ? (
+          <button className="cs-kpi" onClick={() => go("plano")}>
+            <small>Começa a gastar grãos em</small>
+            <strong>{countdown(b.trialUntil) ?? "agora"}</strong>
+            <span>{dayHour(b.trialUntil)}, com {grains(b.wallet.total)}</span>
+          </button>
+        ) : (
+          <button className="cs-kpi" onClick={() => go("plano")}>
+            <small>Próximo pagamento</small>
+            <strong>{sub?.active && sub.nextDueDate ? ymd(sub.nextDueDate) : "Sem plano"}</strong>
+            <span>{sub?.active ? `${brl(sub.value)} · ${inDays(due)}${sub.autoRenew ? " · automático" : ""}` : STATE[b?.state]?.label ?? "–"}</span>
+          </button>
+        )}
       </div>
 
       <section className="cs-card">
@@ -373,6 +395,43 @@ function Plano({ id, name, data, reload }: { id: string; name: string; data: any
           <p className="muted cs-empty">Teve plano e cancelou{sub.paidUntil ? `; pago até ${ymd(sub.paidUntil, true)}` : ""}.</p>
         ) : null}
         {sub?.invoiceUrl && <a className="btn btn-sm cs-invoice" href={sub.invoiceUrl} target="_blank" rel="noreferrer">Abrir cobrança em aberto <Icon name="external" size={14} /></a>}
+      </section>
+
+      <section className="cs-card">
+        <div className="cs-card-head"><h4>Linha do tempo</h4>{b.state === "trial" && countdown(b.trialUntil) ? <span className="muted">faltam {countdown(b.trialUntil)}</span> : null}</div>
+        <ol className="cs-steps">
+          <li className="done"><b>Cadastro</b><span>{dateBR(data.activity?.since ?? null)}</span></li>
+          {b.trialDays > 0 && (
+            <li className={b.state === "trial" ? "now" : "done"}>
+              <b>Período livre de {b.trialDays} {b.trialDays === 1 ? "dia" : "dias"}</b>
+              <span>{b.state === "trial" ? `usa sem gastar grãos até ${dayHour(b.trialUntil)} (faltam ${countdown(b.trialUntil) ?? "minutos"})` : `acabou em ${dayHour(b.trialEndsAt)}`}</span>
+            </li>
+          )}
+          <li className={b.welcomeAt ? (b.state === "free" || b.state === "empty" ? "now" : "done") : ""}>
+            <b>{grains(b.welcomeGrains)} de boas-vindas</b>
+            <span>{b.welcomeAt ? `recebeu em ${dateBR(b.welcomeAt)}${b.state === "trial" ? "; começam a ser gastos quando o período livre acabar" : ""}` : "entram na primeira mensagem"}</span>
+          </li>
+          <li className={sub?.active ? "now" : ""}>
+            <b>{sub?.active && sub.plan ? `Plano ${sub.plan.name}` : "Plano mensal"}</b>
+            <span>
+              {sub?.active
+                ? sub.lastPaymentAt
+                  ? `assinou em ${dateBR(sub.since)}, ${grains(sub.plan?.grains)} por mês`
+                  : `assinou em ${dateBR(sub.since)}, esperando o primeiro pagamento`
+                : sub && !sub.active
+                  ? "cancelou"
+                  : "ainda não assinou"}
+            </span>
+          </li>
+        </ol>
+        <dl className="cs-kv">
+          <dt>Cobrança automática</dt>
+          <dd>{sub?.active ? (sub.autoRenew ? "ligada: o cartão renova sozinho todo mês" : "desligada: Pix ou boleto, eu lembro antes de vencer") : "sem plano"}</dd>
+          <dt>Cartão para pacotes</dt>
+          <dd>{b.savedCard ? `${b.savedCard.brand ?? "Cartão"} final ${b.savedCard.last4} (compra com um toque)` : "nenhum guardado"}</dd>
+          <dt>Último aviso de acabando</dt><dd>{b.notices?.low ? dateBR(b.notices.low) : "não precisou"}</dd>
+          <dt>Último aviso de zerado</dt><dd>{b.notices?.empty ? dateBR(b.notices.empty) : "não precisou"}</dd>
+        </dl>
       </section>
 
       <section className="cs-card">

@@ -163,3 +163,12 @@
   .cs-danger-row { flex-wrap: wrap; }
   .cs-danger-row .grow { flex-basis: 100%; }
 }
+
+/* Linha do tempo do plano: cadastro, período livre, boas-vindas e plano */
+.cs-steps { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 12px; }
+.cs-steps li { position: relative; display: grid; gap: 2px; padding-left: 22px; font-size: 13.5px; }
+.cs-steps li::before { content: ""; position: absolute; left: 0; top: 4px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--border); background: var(--panel); }
+.cs-steps li:not(:last-child)::after { content: ""; position: absolute; left: 6px; top: 18px; bottom: -10px; width: 2px; background: var(--border); }
+.cs-steps li.done::before { background: var(--muted); border-color: var(--muted); }
+.cs-steps li.now::before { background: var(--violet); border-color: var(--violet); }
+.cs-steps li span { color: var(--muted); }

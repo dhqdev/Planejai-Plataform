@@ -11,6 +11,7 @@
 - `pages/ClientSheet.tsx` + `styles/pessoas.css`: modal em abas Resumo, Uso, Plano e Perfil; topo fixo e só a aba rola. No celular vira folha de tela cheia com as abas dividindo a largura.
 - Dados: `GET /api/clients/:id/usage?days=7|14|30|90` junta `client-overview.ts` (`clientBilling` sem criar carteira, `clientDaily` de `usage_daily` + grãos do extrato, `clientActivity`, `clientFeatures` só com contagens) ao detalhe de agentes/ferramentas (execuções, só 7 dias). Cobranças do Asaas em `GET /api/clients/:id/payments`.
 - Aba Plano tem "Dar grãos" e "Liberar sem cobrança" (mesmas rotas de Configurações > Grãos).
+- Período livre: chip "livre por mais X" no topo e, no Resumo, o cartão "Começa a gastar grãos em" com a contagem. Aba Plano tem a linha do tempo (cadastro, período livre, grãos de boas-vindas, plano) e cobrança automática, cartão para pacotes e últimos avisos de grãos (`clientBilling`: `trialEndsAt`, `welcomeAt`, `notices`, `savedCard`, `subscription.autoRenew`).
 
 ## Teclado do celular (teclado.ts)
 - `installKeyboardWatch()` (main.tsx) publica no `<html>` `--vvh`/`--vvtop` (área visível de verdade), a classe `pj-kb` com o teclado aberto (some a barra de abas) e zera `--sab` (folga do risco do iPhone; use `var(--sab)` em vez de `env(safe-area-inset-bottom)` em caixa presa embaixo). O campo com foco rola para dentro da sua lista.

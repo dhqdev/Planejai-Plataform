@@ -1,4 +1,4 @@
-import { getSubscription, hasPlan } from "./billing.js";
+import { getSubscription, hasPlan, savedCardOf } from "./billing.js";
 import { dailyBurn, grainsExempt, ledgerOf, planById, trialEndsAt } from "./credits.js";
 import { config } from "./config.js";
 import { many, one } from "./db/pool.js";
@@ -16,7 +16,7 @@ export async function clientBilling(userId: string) {
   const user = await one("SELECT id, phone, billing_exempt, created_at FROM users WHERE id = $1", [userId]);
   if (!user) return null;
   const [wallet, sub, burn, ledger, packs] = await Promise.all([
-    one("SELECT plan_grains, extra_grains FROM wallets WHERE user_id = $1", [userId]),
+    one("SELECT plan_grains, extra_grains, welcome_at, low_notice_at, empty_notice_at FROM wallets WHERE user_id = $1", [userId]),
     getSubscription(userId),
     dailyBurn(userId),
     ledgerOf(userId, 15),
@@ -47,6 +47,13 @@ export async function clientBilling(userId: string) {
     enabled: Boolean(s.billingEnabled),
     state,
     trialUntil: trial?.toISOString() ?? null,
+    // linha do tempo: cadastro, fim do período livre (daí em diante gasta os grãos de boas-vindas) e o plano
+    trialDays: Number(s.billingTrialDays ?? 0),
+    trialEndsAt: Number(s.billingTrialDays ?? 0) > 0 ? new Date(new Date(user.created_at).getTime() + Number(s.billingTrialDays) * 86_400_000).toISOString() : null,
+    welcomeGrains: Number(s.billingWelcomeGrains ?? 0),
+    welcomeAt: wallet?.welcome_at ?? null,
+    notices: { low: wallet?.low_notice_at ?? null, empty: wallet?.empty_notice_at ?? null },
+    savedCard: savedCardOf(sub),
     grainsPerUsd: Number(s.billingGrainsPerUsd || 1500),
     wallet: { plan: planGrains, extra: extraGrains, total, created: Boolean(wallet) },
     burnPerDay: Math.round(burn),
@@ -63,6 +70,8 @@ export async function clientBilling(userId: string) {
           discount: Number(sub.discount_percent ?? 0),
           method: sub.pay_method ?? sub.last_billing_type ?? null,
           card: sub.card_last4 ? { brand: sub.card_brand, last4: sub.card_last4 } : null,
+          // cartão renova sozinho todo mês; Pix/boleto gera a cobrança e eu lembro antes de vencer
+          autoRenew: active && sub.status !== "canceled" && (sub.pay_method === "card" || sub.last_billing_type === "CREDIT_CARD"),
           nextDueDate: sub.next_due_date,
           paidUntil: sub.paid_until,
           lastPaymentAt: sub.last_payment_at,
