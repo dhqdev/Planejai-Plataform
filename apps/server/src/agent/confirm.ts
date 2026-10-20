@@ -162,9 +162,11 @@ export async function resolvePending(pending: PendingAction[], userTexts: string
       if (!failed) ctx.room.done.add(p.tool);
       notes.push({
         role: "system",
-        content:
-          `A pessoa confirmou e o sistema JÁ executou: ${p.summary}. Resultado: ${JSON.stringify(out ?? { ok: true }).slice(0, 2000)}. ` +
-          "Conte o resultado a ela em poucas palavras. Não chame essa ferramenta de novo.",
+        content: failed
+          ? `A pessoa confirmou "${p.summary}", mas NÃO foi feito: ${JSON.stringify(out).slice(0, 1000)}. ` +
+            "Diga a ela, em poucas palavras, que não saiu e o motivo real. Não diga que foi enviado ou que está valendo, não peça outro sim e não chame a ferramenta de novo, a menos que o motivo seja algo que ela possa resolver agora."
+          : `A pessoa confirmou e o sistema JÁ executou: ${p.summary}. Resultado: ${JSON.stringify(out ?? { ok: true }).slice(0, 2000)}. ` +
+            "Conte o resultado a ela em poucas palavras. Não chame essa ferramenta de novo.",
       });
     } catch (err) {
       await step.fail(err);

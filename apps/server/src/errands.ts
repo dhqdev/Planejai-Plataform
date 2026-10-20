@@ -84,6 +84,8 @@ const EMERGENCY =
 
 /** Quanto tempo um recado com estabelecimento fica sendo acompanhado (7 dias); depois disso, sem resposta, deixa de acompanhar. */
 export const ERRAND_FOLLOW_HOURS = 168;
+/** Quantos clientes diferentes falam com o mesmo estabelecimento ao mesmo tempo. */
+export const MAX_PARALLEL_PER_NUMBER = 3;
 
 export function emergencySign(text: string) {
   const t = text
@@ -169,9 +171,10 @@ export async function startErrand(opts: {
   if (variants.some((v) => phoneVariants(opts.user.phone).includes(v)) || isOwner(phone)) return { ok: false, error: "Esse número é da própria pessoa." };
   const member = await one("SELECT id FROM users WHERE phone = ANY($1) AND status = 'active'", [variants]);
   if (member) return { ok: false, error: "Esse número é de alguém que usa o Planejai: use send_to_contact ou invite_person." };
-  const busy = await one(`SELECT user_id FROM errands WHERE phone = ANY($1) AND status = ANY($2) AND expires_at > now()`, [variants, OPEN]);
-  if (busy && busy.user_id !== opts.user.id) return { ok: false, error: "Já tem outro recado ou conversa em andamento com esse número. Tente de novo mais tarde." };
-  if (busy) await query(`UPDATE errands SET status = 'cancelled', updated_at = now() WHERE user_id = $1 AND phone = ANY($2) AND status = ANY($3)`, [opts.user.id, variants, OPEN]);
+  // vários clientes podem falar com o mesmo estabelecimento ao mesmo tempo (a resposta é roteada por `routeErrand`); o limite protege o número
+  const others = await one<{ n: number }>(`SELECT COUNT(*)::int AS n FROM errands WHERE phone = ANY($1) AND status = ANY($2) AND expires_at > now() AND user_id <> $3`, [variants, OPEN, opts.user.id]);
+  if ((others?.n ?? 0) >= MAX_PARALLEL_PER_NUMBER) return { ok: false, error: "Esse número já está em muitas conversas ao mesmo tempo. Tente de novo mais tarde." };
+  await query(`UPDATE errands SET status = 'cancelled', updated_at = now() WHERE user_id = $1 AND phone = ANY($2) AND status = ANY($3)`, [opts.user.id, variants, OPEN]);
   if ((await openErrands(opts.user.id)).length >= MAX_OPEN_ERRANDS)
     return { ok: false, error: `Já tem ${MAX_OPEN_ERRANDS} recados ou conversas em andamento. Espere um terminar ou encerre um (errand_cancel).` };
   const today = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM errands WHERE user_id = $1 AND created_at > now() - interval '24 hours'", [opts.user.id]);
@@ -192,11 +195,11 @@ export async function startErrand(opts: {
     redactSecrets(humanize(introduce(opts.message, firstName(opts.user), opts.timezone ?? config.DEFAULT_TIMEZONE, new Date(), persona))),
     (await getPrefs(opts.user.id, phone))?.signature,
   );
-  await channel.sendText(jid, text);
+  const first = await channel.sendText(jid, text);
   await resumeFollow(opts.user.id, phone);
   // recado: acompanha por 7 dias; conversa delegada: 24h por padrão (até 72h)
   const hours = kind === "conversa" ? Math.min(Math.max(opts.hours ?? 24, 1), 72) : Math.min(Math.max(opts.hours ?? ERRAND_FOLLOW_HOURS, 1), ERRAND_FOLLOW_HOURS);
-  const log: ErrandLogEntry[] = [{ from: "nos", text, at: new Date().toISOString() }];
+  const log: ErrandLogEntry[] = [{ from: "nos", text, at: new Date().toISOString(), external_id: first?.id }];
   const row = await one<{ id: string }>(
     `INSERT INTO errands (user_id, conversation_id, place, phone, jid, goal, allowed, log, sent, expires_at, kind, agent)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, now() + make_interval(hours => $9), $10, $11) RETURNING id`,
@@ -225,6 +228,7 @@ export async function sendToErrand(errandId: string, text: string, opts: { sameT
   if (e.sent >= limit)
     return { ok: false, error: e.kind === "conversa" ? `Já foram ${limit} mensagens nesta conversa. Despeça-se e encerre com conversa_end.` : `Já foram ${limit} mensagens para eles. Feche com errand_done ou pergunte à pessoa.` };
   let clean: string;
+  let sentId: string | undefined;
   if (opts.media) {
     // áudio, foto, PDF, figurinha ou GIF (só na conversa delegada): no histórico fica o que foi, para o agente e a tela
     const m = opts.media;
@@ -242,7 +246,7 @@ export async function sendToErrand(errandId: string, text: string, opts: { sameT
   } else {
     clean = redactSecrets(humanize(text.trim())).slice(0, MAX_ERRAND_TEXT);
     if (!clean) return { ok: false, error: "Mensagem vazia" };
-    await outboundChannel().sendText(e.jid, clean);
+    sentId = (await outboundChannel().sendText(e.jid, clean))?.id;
   }
   await query(
     // fechar e responder podem vir juntos (em paralelo): mandar não reabre um recado que acabou de fechar
@@ -250,9 +254,23 @@ export async function sendToErrand(errandId: string, text: string, opts: { sameT
        status = CASE WHEN status IN ('waiting', 'asking') AND NOT $3 THEN 'waiting' ELSE status END,
        question = CASE WHEN status IN ('waiting', 'asking') AND NOT $3 THEN NULL ELSE question END
      WHERE id = $1`,
-    [errandId, JSON.stringify([{ from: "nos", text: clean, at: new Date().toISOString() }]), Boolean(opts.sameTurn)],
+    [errandId, JSON.stringify([{ from: "nos", text: clean, at: new Date().toISOString(), external_id: sentId }]), Boolean(opts.sameTurn)],
   );
   return { ok: true, sent: clean, messages_left: limit - e.sent - 1 };
+}
+
+/**
+ * Vários clientes podem falar com o mesmo estabelecimento: a resposta vai para o recado cuja mensagem eles citaram (responder em cima);
+ * sem citação, para o que recebeu a mensagem nossa mais recente (quem perguntou por último é quem eles costumam responder).
+ */
+export function routeErrand(open: Errand[], quotedId?: string) {
+  if (open.length <= 1) return open[0];
+  if (quotedId) {
+    const hit = open.find((e) => e.log.some((l) => l.from === "nos" && l.external_id === quotedId));
+    if (hit) return hit;
+  }
+  const lastOurs = (e: Errand) => Math.max(0, ...e.log.filter((l) => l.from === "nos").map((l) => Date.parse(l.at) || 0));
+  return [...open].sort((a, b) => lastOurs(b) - lastOurs(a))[0];
 }
 
 /**
@@ -261,10 +279,8 @@ export async function sendToErrand(errandId: string, text: string, opts: { sameT
  */
 export async function handleErrandInbound(msg: InboundMessage): Promise<boolean> {
   if (!msg.phone || msg.kind === "reaction") return false;
-  const e = await one<Errand>(`SELECT * FROM errands WHERE phone = ANY($1) AND status = ANY($2) AND expires_at > now() ORDER BY updated_at DESC LIMIT 1`, [
-    phoneVariants(msg.phone),
-    OPEN,
-  ]);
+  const open = await many<Errand>(`SELECT * FROM errands WHERE phone = ANY($1) AND status = ANY($2) AND expires_at > now() ORDER BY updated_at DESC`, [phoneVariants(msg.phone), OPEN]);
+  const e = routeErrand(open, msg.quoted?.id);
   if (!e) return false;
   if (msg.externalId && (await markSeen(`errand:${msg.channel}:${msg.externalId}`, 48 * 3600)) === false) return true;
   const entry: ErrandLogEntry = { from: "eles", text: msg.text ?? "", at: new Date().toISOString(), kind: msg.kind, external_id: msg.externalId };

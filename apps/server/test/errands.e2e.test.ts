@@ -281,6 +281,23 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     expect(((await errandContinue.run(again, { ...ctxFor("errand_continue", again, "pode sim"), proactive: true })) as any).needs_confirmation).toBe(true);
   });
 
+  it("dois clientes falam com o mesmo estabelecimento ao mesmo tempo e a resposta vai para o certo", async () => {
+    const { startErrand, routeErrand } = await import("../src/errands.js");
+    await db.query("UPDATE errands SET status = 'cancelled' WHERE status IN ('waiting', 'asking')");
+    const other = await db.one("INSERT INTO users (phone, name, status) VALUES ('5519988880001', 'Ana', 'active') RETURNING id, phone");
+    const a: any = await startErrand({ user: { id: david.id, phone: david.phone, name: "David" }, conversationId: conv, place: "PetCamp", phone: PET, message: "Tem banho amanhã?", goal: "banho" });
+    const b: any = await startErrand({ user: { id: other.id, phone: other.phone, name: "Ana" }, conversationId: conv, place: "PetCamp", phone: PET, message: "Tem tosa sexta?", goal: "tosa" });
+    expect(a.ok && b.ok).toBe(true);
+    expect(await db.one("SELECT COUNT(*)::int AS n FROM errands WHERE status = 'waiting' AND phone = $1", [PET])).toEqual({ n: 2 });
+    const open = (await db.query("SELECT * FROM errands WHERE status = 'waiting' AND phone = $1", [PET])).rows;
+    const ea = open.find((e: any) => e.id === a.errand_id), eb = open.find((e: any) => e.id === b.errand_id);
+    ea.log = [{ from: "nos", text: "x", at: "2026-10-20T10:00:00Z", external_id: "AAA" }];
+    eb.log = [{ from: "nos", text: "y", at: "2026-10-20T10:05:00Z", external_id: "BBB" }];
+    expect(routeErrand([ea, eb], "AAA")?.id).toBe(ea.id); // citou a mensagem do primeiro
+    expect(routeErrand([ea, eb])?.id).toBe(eb.id); // sem citar: quem perguntou por último
+    expect(routeErrand([ea])?.id).toBe(ea.id);
+  });
+
   it("a pessoa responde pelo painel: sai com o nome dela, entra no recado e só em conversa que já existe", async () => {
     const { startErrand, cancelErrand, listErrands } = await import("../src/errands.js");
     const { replyFromPanel } = await import("../src/panelreply.js");
