@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { query } from "../../db/pool.js";
 import { deleteObject, mediaKey, storeBlob } from "../../storage.js";
 import { checkedUrl, safeFetch } from "../../net.js";
-import { BrowserSession, type Snapshot } from "../browser.js";
+import { BrowserRefusal, BrowserSession, type BrowserAct, type Snapshot } from "../browser.js";
 import { defineTool, obj, type ToolContext } from "./types.js";
 
 export function htmlToText(html: string): string {
@@ -358,16 +358,25 @@ export const browserOpen = defineTool<{ url: string; record?: boolean; send_reco
   },
 });
 
-export const browserAction = defineTool<{ action: string; ref?: number; text?: string; url?: string; key?: string; direction?: string }>({
+export const browserAction = defineTool<BrowserAct>({
   name: "browser_action",
   description:
-    "Age no navegador aberto: click (ref), type (ref + text), select (ref + text da opção numa lista), press (key, ex. Enter), scroll (direction up/down), back, goto (url), wait. " +
+    "Age no navegador aberto: click (ref), type (ref + text; submit=true aperta Enter, para busca ou \"digite para entrar\"), " +
+    "fill (fields=[{ref,text}] preenche vários campos de uma vez, conta como 1 ação; submit=true envia), select (ref + texto da opção, em lista comum ou menu), " +
+    "hover (ref, abre menu de passar o mouse), press (key: Enter, Escape, Tab ou atalho tipo Control+K; ref opcional foca antes), scroll (direction), back, goto (url), wait. " +
+    "A lista mostra primeiro o que está aberto na frente (menu, janela, sugestões) e os campos com o valor atual. Senha, cartão e botão de pagar a pessoa faz: o navegador recusa. " +
     "Retorna a página atualizada com novos números de elementos.",
   parameters: obj(
     {
-      action: { type: "string", enum: ["click", "type", "select", "press", "scroll", "back", "goto", "wait"] },
+      action: { type: "string", enum: ["click", "type", "fill", "select", "hover", "press", "scroll", "back", "goto", "wait"] },
       ref: { type: "number", description: "número do elemento na última lista" },
       text: { type: "string" },
+      submit: { type: "boolean", description: "type/fill: aperta Enter no fim" },
+      fields: {
+        type: "array",
+        description: "fill: campos a preencher",
+        items: obj({ ref: { type: "number" }, text: { type: "string" } }, ["ref", "text"]),
+      },
       url: { type: "string" },
       key: { type: "string" },
       direction: { type: "string", enum: ["up", "down"] },
@@ -385,9 +394,10 @@ export const browserAction = defineTool<{ action: string; ref?: number; text?: s
     try {
       await b.act(args);
     } catch (err) {
+      if (err instanceof BrowserRefusal) return { error: err.message, ...snapshotText(await b.snapshot()) };
       // a página mudou depois da última lista (carregou mais coisa, abriu um menu): devolve a lista nova em vez de um erro seco
-      if (!/No element found|data-pj-ref/.test((err as Error).message)) throw err;
-      return { error: `O item [${args.ref}] não está mais na página (ela mudou). Use a lista nova abaixo.`, ...snapshotText(await b.snapshot()) };
+      if (!/No element found|data-pj-ref|failed to find element/i.test((err as Error).message)) throw err;
+      return { error: `O item [${args.ref ?? args.fields?.[0]?.ref}] não está mais na página (ela mudou). Use a lista nova abaixo.`, ...snapshotText(await b.snapshot()) };
     }
     return snapshotText(await b.snapshot());
   },

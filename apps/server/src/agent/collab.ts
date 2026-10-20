@@ -109,8 +109,8 @@ function shareTool(): Tool<{ note: string }> {
 
 /** Ferramentas que abrem um Chrome de verdade: lentas (segundos por clique) e pesadas na máquina. */
 const CHROME_TOOL = /^(browser_|screenshot_url$)/;
-/** A pessoa (ou o CTO no pedido) quer ver a página: print, gravação, tela, entrar e navegar no site. */
-const WANTS_SCREEN = /\b(print|printa|captura de tela|screenshot|grav(a|e|ar|ação|acao|ando)|v[ií]deo da (tela|navega)|mostr\w* (a )?tela|entr\w* no site|abr\w* o site|naveg\w*)/i;
+/** A pessoa (ou o CTO no pedido) quer ver a página: print, gravação, tela, entrar, navegar ou preencher formulário no site. */
+const WANTS_SCREEN = /\b(print|printa|captura de tela|screenshot|grav(a|e|ar|ação|acao|ando)|v[ií]deo da (tela|navega)|mostr\w* (a )?tela|entr\w* no site|abr\w* o site|naveg\w*|preench\w* (o |um |esse |este )?(formul[aá]rio|cadastro|site|campo)|formul[aá]rio (do|no|de) site)/i;
 
 /**
  * Pesquisa é texto: busca e leitura de página resolvem sem navegador. O Chrome (browser_*, screenshot_url) só entra

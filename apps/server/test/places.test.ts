@@ -152,6 +152,16 @@ describe("prazo do especialista", () => {
     expect(needsChrome(pesq, "tira um print da programação")).toBe(true);
     expect(needsChrome(pesq, undefined, "grava a tela entrando no site")).toBe(true);
     expect(needsChrome({ id: "compras" }, "acha o tênis mais barato")).toBe(false);
+    expect(needsChrome(pesq, "preenche o formulário de inscrição do curso pra mim")).toBe(true);
+  });
+
+  it("número de cartão não vai para o navegador", async () => {
+    const { looksLikeCard } = await import("../src/agent/browser.js");
+    expect(looksLikeCard("4111 1111 1111 1111")).toBe(true);
+    expect(looksLikeCard("5555-5555-5555-4444")).toBe(true);
+    expect(looksLikeCard("4111 1111 1111 1112")).toBe(false);
+    expect(looksLikeCard("11987654321")).toBe(false);
+    expect(looksLikeCard("Duna parte 2")).toBe(false);
   });
 
   it("cai junto quando a execução cai", async () => {

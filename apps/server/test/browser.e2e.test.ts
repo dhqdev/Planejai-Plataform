@@ -27,6 +27,20 @@ describe.skipIf(!enabled)("navegador com gravação", () => {
         } else if (req.url?.startsWith("/login")) {
           seen.push(String(req.headers["user-agent"]));
           res.end(`<meta name="viewport" content="width=device-width"><h1>Entrar</h1><input type="password" placeholder="Senha"><button>Entrar</button>`);
+        } else if (req.url?.startsWith("/form")) {
+          // página com muitos links antes do formulário, aviso de cookies, menu que abre e lista feita de div
+          res.end(
+            `<div id="ck">Usamos cookies para melhorar sua experiência <button onclick="document.getElementById('ck').remove()">Aceitar</button></div>` +
+              `<nav>${Array.from({ length: 60 }, (_, i) => `<a href="/l${i}">Link ${i}</a>`).join(" ")}</nav>` +
+              `<button aria-haspopup="menu" aria-expanded="false" onclick="this.setAttribute('aria-expanded','true');document.getElementById('m').hidden=false">Conta</button>` +
+              `<div role="menu" id="m" hidden><a role="menuitem" href="/sessoes?q=pedidos">Meus pedidos</a></div>` +
+              `<form action="/sessoes"><label>Nome <input name="nome" required></label><label>Cidade <select name="c"><option>Campinas</option><option>Recife</option></select></label>` +
+              `<label><input type="checkbox" name="news"> Quero novidades</label>` +
+              `<label>Senha <input type="password" name="s"></label><label>Número do cartão <input name="cc" autocomplete="cc-number"></label>` +
+              `<div role="combobox" tabindex="0" aria-label="Sabor" onclick="document.getElementById('lb').hidden=false">escolha</div>` +
+              `<ul role="listbox" id="lb" hidden><li role="option" onclick="document.querySelector('[aria-label=Sabor]').innerText='Morango';this.parentNode.hidden=true">Morango</li></ul>` +
+              `<button type="button">Pagar agora</button></form><form action="/sessoes"><input name="q" placeholder="Digite para entrar"></form>`,
+          );
         } else if (req.url?.startsWith("/longa")) {
           res.end(`<h1>Topo da página</h1><div style="height:4000px">${"<p>enchimento</p>".repeat(5)}</div><h2>Fim com o preço R$ 249,99</h2><button>Adicionar ao carrinho</button>`);
         } else if (req.url?.startsWith("/sessoes")) {
@@ -88,6 +102,57 @@ describe.skipIf(!enabled)("navegador com gravação", () => {
       await b.close();
     }
   }, 60_000);
+
+  it("vê e preenche formulário, menu e lista; aceita cookies; recusa senha, cartão e botão de pagar", async () => {
+    const { BrowserSession } = await import("../src/agent/browser.js");
+    const { browserAction } = await import("../src/agent/tools/research.js");
+    const b = await BrowserSession.open(false);
+    const ctx: any = { room: { browser: b, usage: { browserActions: 0 } }, agent: "pesquisador" };
+    const ref = (list: string, re: RegExp) => Number(list.match(new RegExp(`\\[(\\d+)\\] ${re.source}`))?.[1]);
+    try {
+      await b.goto(`${base}/form`);
+      expect(b.actions).toContain("aceitar aviso de cookies");
+      let s = await b.snapshot();
+      // campos vêm antes dos 60 links, com rótulo do <label>, estado e opções
+      expect(s.elements).toMatch(/campo text: Nome \(obrigatório\)/);
+      expect(s.elements).toMatch(/lista: Cidade = "Campinas" \(opções: Campinas, Recife\)/);
+      expect(s.elements).toMatch(/caixa de marcar: Quero novidades \(desmarcado\)/);
+      expect(s.elements).toMatch(/campo senha: Senha/);
+      expect(s.elements).toMatch(/campo cartão: Número do cartão/);
+      expect(s.elements).toMatch(/botão: Conta \(abre menu\)/);
+      expect(s.elements).not.toMatch(/Aceitar/);
+
+      let r: any = await browserAction.run({ action: "type", ref: ref(s.elements, /campo senha/), text: "123456" }, ctx);
+      expect(r.error).toMatch(/Senha e dados de cartão/);
+      r = await browserAction.run({ action: "type", ref: ref(r.clickable, /campo text: Nome/), text: "4111 1111 1111 1111" }, ctx);
+      expect(r.error).toMatch(/cartão/);
+      r = await browserAction.run({ action: "click", ref: ref(r.clickable, /botão: Pagar agora/) }, ctx);
+      expect(r.error).toMatch(/quem conclui é a pessoa/);
+
+      const list = r.clickable as string;
+      r = await browserAction.run(
+        { action: "fill", fields: [{ ref: ref(list, /campo text: Nome/), text: "Ana" }, { ref: ref(list, /lista: Cidade/), text: "recife" }] },
+        ctx,
+      );
+      expect(r.clickable).toMatch(/campo text: Nome = "Ana"/);
+      expect(r.clickable).toMatch(/lista: Cidade = "Recife"/);
+      r = await browserAction.run({ action: "click", ref: ref(r.clickable, /caixa de marcar/) }, ctx);
+      expect(r.clickable).toMatch(/Quero novidades \(marcado\)/);
+      r = await browserAction.run({ action: "select", ref: ref(r.clickable, /lista: Sabor/), text: "morango" }, ctx);
+      expect(r.clickable).toMatch(/lista: Sabor = "Morango"/);
+
+      // menu: abre e o item dele vem primeiro na lista
+      r = await browserAction.run({ action: "click", ref: ref(r.clickable, /botão: Conta/) }, ctx);
+      expect(r.clickable).toMatch(/^\(aberto na frente: "Meus pedidos"/);
+      expect(r.clickable).toMatch(/\[1\] item de menu: Meus pedidos/);
+
+      // "digite para entrar": digita e aperta Enter
+      r = await browserAction.run({ action: "type", ref: ref(r.clickable, /campo text: Digite para entrar/), text: "Duna", submit: true }, ctx);
+      expect(r.page_text).toContain("Sessões de");
+    } finally {
+      await b.close();
+    }
+  }, 90_000);
 
   it("site abre como um Chrome comum, no tamanho do aparelho", async () => {
     const { BrowserSession } = await import("../src/agent/browser.js");
