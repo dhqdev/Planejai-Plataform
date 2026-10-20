@@ -4,6 +4,9 @@ import { CopyField, ErrorBox, Loading, PageHead } from "../components";
 import { Icon } from "../icons";
 import { useApi } from "../hooks";
 
+/** Nível de cada plano padrão quando o dono ainda não escolheu (igual a DEFAULT_PLANS no servidor). */
+const PLAN_DEFAULT_LEVEL: Record<string, string> = { leve: "basico", "dia-a-dia": "time", completo: "completo" };
+
 const BILL_STATE: Record<string, string> = { plan: "com plano", free: "nos grãos grátis", empty: "sem grãos", exempt: "liberado" };
 const nf = new Intl.NumberFormat("pt-BR");
 
@@ -63,6 +66,14 @@ function BillingSection({ form, setForm }: { form: any; setForm: (f: any) => voi
               value={Array.isArray(p.perks) ? p.perks.join("\n") : p.perks ?? ""}
               onChange={(e) => setPlan(i, { perks: e.target.value.split("\n") })}
             />
+            <label className="set-plan-level">
+              <span>O que libera</span>
+              <select className="select" aria-label={`O que o plano ${p.name ?? ""} libera`} value={p.level ?? PLAN_DEFAULT_LEVEL[p.id] ?? "time"} onChange={(e) => setPlan(i, { level: e.target.value })}>
+                <option value="basico">Só gastos e agenda (o assistente sozinho)</option>
+                <option value="time">Time inteiro e até 2 especialistas</option>
+                <option value="completo">Tudo: 6 especialistas e agentes sob medida</option>
+              </select>
+            </label>
           </div>
         ))}
         {plans.length < 4 && <button className="btn btn-sm" onClick={() => setForm({ ...form, billingPlans: [...plans, { name: "", price: 29.9, grains: 3000, blurb: "" }] })}>Adicionar plano</button>}

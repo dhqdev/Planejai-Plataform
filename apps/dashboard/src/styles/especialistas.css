@@ -59,6 +59,10 @@
 .sp-switch-row:disabled { cursor: default; }
 .sp-switch-row:disabled:not(.busy) .sp-switch { opacity: .45; }
 .sp-switch-row.busy { opacity: .7; }
+.sp-locked { text-decoration: none; }
+.sp-locked .sp-switch { opacity: .45; }
+.sp-plan-note { margin: 0 0 16px; }
+.sp-plan-note a { color: var(--accent, inherit); font-weight: 600; }
 .sp-switch { position: relative; flex-shrink: 0; width: 34px; height: 20px; border-radius: 999px; background: var(--border-2); transition: background .2s ease; }
 .sp-switch i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .22s cubic-bezier(.3, .7, .3, 1); }
 .sp-switch.on { background: var(--act, var(--violet)); }
