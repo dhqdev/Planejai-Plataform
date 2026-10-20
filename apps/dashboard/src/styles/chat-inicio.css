@@ -225,13 +225,16 @@ html.pj-kb .hc-dock { padding-bottom: 0; }
 /* ---------- No notebook: a conversa abre dentro da moldura, numa coluna centralizada ---------- */
 @media (min-width: 768px) {
   .hc.hc-wide {
-    --hc-tab: 0px; --hc-col: max(24px, calc((100% - 780px) / 2));
+    --hc-tab: 0px;
     left: var(--rail); top: var(--top-h); height: auto; bottom: 0; z-index: 8;
     border-top: 1px solid var(--frame-line); border-left: 1px solid var(--frame-line); border-top-left-radius: var(--panel-r); overflow: hidden;
   }
   .hc-wide .hc-top { padding-top: 14px; }
-  .hc-wide .hc-list { padding-top: 128px; padding-left: var(--hc-col); padding-right: var(--hc-col); }
-  .hc-wide .hc-dock { padding: 18px var(--hc-col) 16px; }
+  .hc-wide .hc-list { padding: 128px 28px calc(var(--hc-dock, 132px) + 8px); }
+  .hc-wide .hc-dock { padding: 18px 28px 16px; align-items: center; }
+  /* a coluna de leitura: cada linha, o cartão e a caixa de mensagem têm a mesma largura e ficam no meio */
+  .hc-wide .hc-list > .hc-row, .hc-wide .hc-list > .hc-huddle { width: 100%; max-width: 780px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
+  .hc-wide .hc-dock > * { width: 100%; max-width: 780px; box-sizing: border-box; }
   .hc-wide .hc-chips { margin: 0; padding: 2px 0; }
   .hc-wide .hc-bubble { max-width: 70%; }
   .hc-wide .hc-text { font-size: 16px; }
