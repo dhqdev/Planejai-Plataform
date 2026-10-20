@@ -6,6 +6,7 @@ import { many, one, query } from "../../../db/pool.js";
 import { NOBODY, personalUser, personalUsers, selfUserId } from "../../../sharing.js";
 import { createBill, deleteBill, listBills, payBill, updateBill, type BillInput } from "../../../bills.js";
 import { getReportSchedule, renderFinanceReport, reportFileName, sendFinanceReport, setReportSchedule } from "../../../finance-report.js";
+import { importOfx, previewOfx, type ImportChoice } from "../../../ofx-import.js";
 import { createCard, deleteCard, getCard, invoiceItems, listCards, placeOnCard, payInvoice, unpayInvoice, updateCard, type CardInput } from "../../../cards.js";
 
 /**
@@ -198,6 +199,29 @@ export function financeRoutes(base: FastifyInstance) {
     if (!uid) return reply;
     try {
       return { ok: true, ...(await deleteCategory(uid, req.params.id, req.query.move_to)) };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  // ---------- Importar extrato OFX (prévia sem gravar; importar lê o arquivo de novo) ----------
+  base.post<{ Body: { file?: string } }>("/api/finance/ofx/preview", async (req, reply) => {
+    const uid = await selfUserId(req.account);
+    if (!uid) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil para importar o extrato" });
+    try {
+      return await previewOfx(uid, req.body?.file ?? "");
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  base.post<{ Body: { file?: string; rows?: ImportChoice[]; create?: { name: string; kind?: string; color?: string; keywords?: string[] }[]; card_id?: string | null } }>("/api/finance/ofx/import", async (req, reply) => {
+    const uid = await selfUserId(req.account);
+    if (!uid) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil para importar o extrato" });
+    const b = req.body ?? {};
+    if (!Array.isArray(b.rows) || !b.rows.length) return reply.code(400).send({ error: "Escolha pelo menos um lançamento" });
+    try {
+      return { ok: true, ...(await importOfx(uid, { file: b.file ?? "", rows: b.rows, create: Array.isArray(b.create) ? b.create : [], card_id: b.card_id ?? null, tz: config.DEFAULT_TIMEZONE })) };
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }

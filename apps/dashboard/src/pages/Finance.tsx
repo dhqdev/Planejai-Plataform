@@ -9,6 +9,7 @@ import { DateField, isoDate, SelectField } from "../pickers";
 import { useLongPress } from "../ios";
 import { haptic } from "../touch";
 import { ReportModal } from "./FinanceReport";
+import { ImportModal } from "./FinanceImport";
 import { GoalsCard } from "./FinanceGoals";
 import { CategoriesModal, useCategories } from "./FinanceCategories";
 import { CardsTab, InvoicesCard, invoiceMonthFor, invoiceMonthLabel, useCards, type CreditCard } from "./FinanceCards";
@@ -77,6 +78,7 @@ export function FinancePage() {
   };
   const [adding, setAdding] = useState(false);
   const [report, setReport] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [cat, setCat] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
   const [editing, setEditing] = useState<any | null>(null);
@@ -213,7 +215,7 @@ export function FinancePage() {
         <PageHead
           title="Finanças"
           subtitle={`${cap(monthName(month))} de ${month.slice(0, 4)}${user ? `, de ${owners.find((p) => p.id === user)?.name ?? ""} (só para ver)` : ""}`}
-          actions={<><button className="btn" onClick={() => setReport(true)}><Icon name="file" size={16} /> Relatório PDF</button>{!readonly && <button className="btn btn-brand" onClick={() => setAdding(true)}><Icon name="plus" size={16} /> Lançamento</button>}</>}
+          actions={<>{!readonly && <button className="btn" onClick={() => { haptic(6); setImporting(true); }}><Icon name="upload" size={16} /> Importar extrato</button>}<button className="btn" onClick={() => setReport(true)}><Icon name="file" size={16} /> Relatório PDF</button>{!readonly && <button className="btn btn-brand" onClick={() => setAdding(true)}><Icon name="plus" size={16} /> Lançamento</button>}</>}
         />
       </div>
       <div className="fin-top">
@@ -303,6 +305,7 @@ export function FinancePage() {
           text="Anote gastos e entradas e veja para onde vai cada real, com limite por categoria e as faturas dos cartões. Dá para mandar a foto do comprovante no WhatsApp que ele lança sozinho."
           actions={[
             { label: "Anotar um gasto", icon: "plus", onClick: () => setAdding(true) },
+            { label: "Importar extrato do banco", icon: "upload", onClick: () => setImporting(true) },
             { label: "Cadastrar um cartão", icon: "card", onClick: () => setTab("cards") },
           ]}
           tip="Ou diga: “gastei 32 no almoço”"
@@ -322,6 +325,13 @@ export function FinancePage() {
                 renderTx={txRow}
               />
               {!readonly && <CategoriesBar className="phone-only" />}
+              {!readonly && (
+                <button className="fin-cats-bar phone-only fin-import-bar" onClick={() => { haptic(5); setImporting(true); }}>
+                  <span className="fin-import-ico" aria-hidden><Icon name="upload" size={16} /></span>
+                  <span className="fin-cats-bar-text"><strong>Importar extrato do banco</strong><small className="muted">Arquivo OFX da conta ou do cartão</small></span>
+                  <Icon name="chevron-right" size={16} />
+                </button>
+              )}
             </div>
 
             <div className="fin-col fin-col-donut">
@@ -479,6 +489,19 @@ export function FinancePage() {
       )}
       {managing && <CategoriesModal onClose={(changed) => { setManaging(false); if (changed) { void reload(); void categories.reload(); } }} />}
       {budget && <BudgetModal initial={budget} onClose={() => { setBudget(null); void reload(); }} />}
+      {importing && (
+        <ImportModal
+          onClose={(m) => {
+            setImporting(false);
+            if (m) {
+              setCat(null);
+              setMonth(m > thisMonth() ? thisMonth() : m);
+              void categories.reload();
+            }
+            void reload();
+          }}
+        />
+      )}
       {report && <ReportModal month={month} user={user} readonly={readonly} onClose={() => setReport(false)} />}
       {adding && <TransactionForm onClose={() => { setAdding(false); void reload(); }} />}
       {editing && <TransactionForm initial={editing} onClose={() => { setEditing(null); setDetail(null); void reload(); }} />}
