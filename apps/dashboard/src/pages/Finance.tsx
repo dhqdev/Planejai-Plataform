@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { api, brl, day } from "../api";
+import { api, brl, brlCompact, day } from "../api";
 import { Donut, Empty, ErrorBox, Loading, Modal, PageHead, alertDialog, confirmDialog } from "../components";
 import { useApi, useMedia } from "../hooks";
 import { Vazio } from "../Vazio";
@@ -40,7 +40,7 @@ const CAT_ICON: Record<string, string> = {
   Outros: "hash",
 };
 /** Valor curto para onde o espaço é fixo (miolo da rosca): R$ 1,2 mi em vez de R$ 1.234.567,89. */
-const brlShort = (v: number) => (Math.abs(v) < 100000 ? brl(v) : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", notation: "compact", maximumFractionDigits: 1 }).format(v));
+const brlShort = (v: number) => (Math.abs(v) < 100000 ? brl(v) : brlCompact(v));
 /** Valor que nunca é cortado: acima de R$ 99.999,99 ganha a classe "long" (fonte menor). */
 const longMoney = (v: number) => (brl(v).length > 12 ? " long" : "");
 const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];

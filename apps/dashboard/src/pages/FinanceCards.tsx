@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, brl } from "../api";
+import { api, brl, brlCompact } from "../api";
 import { CATEGORY_COLORS, Empty, ErrorBox, Loading, Modal, alertDialog, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
@@ -43,7 +43,7 @@ const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "jul
 const monthName = (m: string) => MONTHS[Number(m.slice(5)) - 1] ?? m;
 const short = (m: string) => monthName(m).slice(0, 3);
 const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
-const brlShort = (v: number) => (Math.abs(v) < 10000 ? brl(v) : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", notation: "compact", maximumFractionDigits: 1 }).format(v));
+const brlShort = (v: number) => (Math.abs(v) < 10000 ? brl(v) : brlCompact(v));
 
 export const STATUS_LABEL: Record<InvoiceStatus, string> = { aberta: "Aberta", futura: "Futura", fechada: "Fechada", atrasada: "Vencida", paga: "Paga", zerada: "Sem gastos" };
 

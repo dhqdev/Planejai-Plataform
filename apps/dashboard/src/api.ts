@@ -67,8 +67,12 @@ export const ago = (iso: string | null | undefined) => {
   return `há ${Math.round(s / 86400)} d`;
 };
 
-export const brl = (v: number | string | null | undefined) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(v ?? 0));
+// criar um Intl.NumberFormat custa caro (Finanças chama brl centenas de vezes por tela): um só para o app todo
+const BRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+export const brl = (v: number | string | null | undefined) => BRL.format(Number(v ?? 0));
+const BRL_COMPACT = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", notation: "compact", maximumFractionDigits: 1 });
+/** R$ 1,2 mil / R$ 3,4 mi: para números grandes em cartões pequenos. */
+export const brlCompact = (v: number) => BRL_COMPACT.format(v);
 
 export const day = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "–";

@@ -15,23 +15,29 @@ const isPhone = () => matchMedia("(max-width: 767px)").matches;
 const SEG = ".seg, .subtabs, .fin-tabs, .cal-pills, .sidebar .nav";
 
 function placeThumbs() {
-  document.querySelectorAll<HTMLElement>(SEG).forEach((box) => {
+  // lê todas as medidas primeiro e só depois escreve: medir depois de escrever obriga o navegador a refazer o
+  // layout da tela inteira a cada seletor (na troca de tela eram vários layouts seguidos)
+  const boxes = [...document.querySelectorAll<HTMLElement>(SEG)].map((box) => {
     const on = box.querySelector<HTMLElement>(":scope > button.active, :scope > button[aria-selected='true'], :scope > a.active");
-    if (!on || !box.offsetParent) {
+    if (!on || !box.offsetParent) return { box, at: null };
+    return { box, at: { x: on.offsetLeft, w: on.offsetWidth, y: on.offsetTop, h: on.offsetHeight } };
+  });
+  for (const { box, at } of boxes) {
+    if (!at) {
       box.style.setProperty("--seg-o", "0");
-      return;
+      continue;
     }
-    box.style.setProperty("--seg-x", `${on.offsetLeft}px`);
-    box.style.setProperty("--seg-w", `${on.offsetWidth}px`);
-    box.style.setProperty("--seg-y", `${on.offsetTop}px`);
-    box.style.setProperty("--seg-h", `${on.offsetHeight}px`);
+    box.style.setProperty("--seg-x", `${at.x}px`);
+    box.style.setProperty("--seg-w", `${at.w}px`);
+    box.style.setProperty("--seg-y", `${at.y}px`);
+    box.style.setProperty("--seg-h", `${at.h}px`);
     box.style.setProperty("--seg-o", "1");
     // primeira vez: aparece já no lugar; depois desliza
     if (!box.dataset.seg) {
       box.dataset.seg = "ready";
       requestAnimationFrame(() => requestAnimationFrame(() => (box.dataset.seg = "on")));
     }
-  });
+  }
 }
 
 export function installSegmented() {

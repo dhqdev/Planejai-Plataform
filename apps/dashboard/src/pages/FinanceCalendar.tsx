@@ -6,8 +6,9 @@ import "../styles/financas-calendario.css";
 type Day = { day: number | string; expenses?: number | string | null; income?: number | string | null };
 
 /** Valor curto dentro do quadradinho do dia: 85, 1,2 mil. O valor exato aparece ao tocar no dia. */
-const cellMoney = (v: number) =>
-  v < 1000 ? String(Math.round(v)) : `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: v < 10000 ? 1 : 0 }).format(v / 1000)} mil`;
+const MIL1 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
+const MIL0 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+const cellMoney = (v: number) => (v < 1000 ? String(Math.round(v)) : `${(v < 10000 ? MIL1 : MIL0).format(v / 1000)} mil`);
 
 /**
  * Nível de 1 a 4 do gasto do dia. A régua é o limite do mês dividido pelos dias (quando há limite total)
