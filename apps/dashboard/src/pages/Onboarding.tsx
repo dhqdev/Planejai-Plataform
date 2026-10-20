@@ -6,6 +6,7 @@ import { haptic } from "../touch";
 import { Mascote, type Mood, type Outfit } from "../mascote/Mascote";
 import { MASCOTE, MASCOTES } from "../mascote/nome";
 import { useOutfit } from "../mascote/state";
+import { ConnectScene, FinanceScene, PersonalScene, personalCards } from "./OnboardingScenes";
 
 /**
  * Primeira conversa com o mascote (pedido do David em 2026-10-16, no jeito do Kody): um mascote só no meio da
@@ -61,36 +62,6 @@ function ChatScene() {
       <Bubble at={1.6}>Anotei <b>R$ 42,00</b> em Mercado</Bubble>
       <Bubble me at={2.3}>me lembra amanhã às 9h do dentista</Bubble>
       <Bubble at={3}>Combinado! Te aviso amanhã às 9h</Bubble>
-    </div>
-  );
-}
-
-const BARS = [38, 62, 46, 80, 54, 70];
-function PanelScene() {
-  return (
-    <div className="tour-panel">
-      <div className="tour-tile tour-cal" style={d(0.4)}>
-        <span className="tour-tile-h"><Icon name="calendar" size={14} /> Agenda</span>
-        <div className="tour-cal-grid" aria-hidden="true">
-          {Array.from({ length: 14 }, (_, i) => (
-            <i key={i} className={i === 9 ? "today" : undefined} />
-          ))}
-        </div>
-        <span className="tour-event" style={d(1.2)}>9:00 · Dentista</span>
-      </div>
-      <div className="tour-tile tour-money" style={d(0.6)}>
-        <span className="tour-tile-h"><Icon name="wallet" size={14} /> Finanças</span>
-        <div className="tour-bars" aria-hidden="true">
-          {BARS.map((h, i) => (
-            <i key={i} style={{ ...d(0.8 + i * 0.08), height: `${h}%` }} />
-          ))}
-        </div>
-      </div>
-      <div className="tour-tile tour-row" style={d(1.7)}>
-        <span className="tour-row-ico"><Icon name="cart" size={15} /></span>
-        <span className="tour-row-t">Mercado<small>agora há pouco</small></span>
-        <b>R$ 42,00</b>
-      </div>
     </div>
   );
 }
@@ -240,7 +211,22 @@ export function OnboardingFlow({
           reply: "Que prático",
           scene: <ChatScene />,
         },
-        { id: "painel", kind: "talk", say: "Tudo o que a gente combina aparece aqui no painel, arrumadinho.", mood: "curious", reply: "Gostei", scene: <PanelScene /> },
+        {
+          id: "financas",
+          kind: "talk",
+          say: "Cada gasto vira um quadradinho no seu calendário de Finanças. A cor mostra quando o dia pesou.",
+          mood: "curious",
+          reply: "Gostei",
+          scene: <FinanceScene />,
+        },
+        {
+          id: "conexoes",
+          kind: "talk",
+          say: "Também converso com os apps que você já usa. É só ligar em Conexões, na sua conta.",
+          mood: "happy",
+          reply: "Show",
+          scene: <ConnectScene small={phone} />,
+        },
         {
           id: "time",
           kind: "talk",
@@ -258,6 +244,8 @@ export function OnboardingFlow({
       if (tour) list.push({ id: "convite", kind: "talk", say: "Agora quero te conhecer. São umas perguntinhas rápidas. Topa?", mood: "curious", reply: "Vamos nessa!", invite: true });
       for (const q of active(data.questions, answers)) list.push({ id: `q-${q.id}`, kind: "ask", q });
     }
+    if (data && asking && saved && personalCards(answers).length)
+      list.push({ id: "seu", kind: "talk", say: `Pronto${oi}, montei o seu Planejai com o que você me contou:`, mood: "happy", reply: "Ficou a minha cara", scene: <PersonalScene answers={answers} /> });
     if (tour)
       list.push({
         id: "onde",
@@ -270,7 +258,7 @@ export function OnboardingFlow({
     list.push({
       id: "fim",
       kind: "talk",
-      say: saved ? `Prontinho${oi}! Já sei por onde começar. Me chama no WhatsApp quando quiser.` : "É isso! Qualquer coisa, é só me chamar no WhatsApp.",
+      say: saved ? `Prontinho${oi}! Agora é só me chamar no WhatsApp quando quiser.` : "É isso! Qualquer coisa, é só me chamar no WhatsApp.",
       mood: "laughing",
       reply: "Começar",
     });

@@ -17,29 +17,6 @@
 .tour-typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: tour-dot .9s infinite ease-in-out; }
 .tour-typing i:nth-child(2) { animation-delay: .15s; } .tour-typing i:nth-child(3) { animation-delay: .3s; }
 
-/* ---- cena 3: o painel se enchendo ---- */
-.tour-panel { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.tour-tile {
-  background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 10px;
-  animation: tour-rise .5s var(--d, 0s) var(--soft) both;
-}
-.tour-tile-h { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
-.tour-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.tour-cal-grid i { aspect-ratio: 1; border-radius: 50%; background: var(--panel-2); }
-.tour-cal-grid i.today { background: var(--act, var(--violet)); }
-.tour-event {
-  font-size: 11px; font-weight: 600; padding: 5px 8px; border-radius: 8px; background: var(--violet-soft); color: var(--violet);
-  animation: tour-slide .45s var(--d, 0s) var(--spring) both;
-}
-:root[data-theme="dark"] .tour-event { background: rgba(140, 75, 255, .18); color: #c9adff; }
-.tour-bars { height: 76px; display: flex; align-items: flex-end; gap: 6px; }
-.tour-bars i { flex: 1; border-radius: 5px 5px 2px 2px; background: var(--text); opacity: .85; transform-origin: bottom; animation: tour-grow .6s var(--d, 0s) var(--soft) both; }
-.tour-bars i:last-child { background: var(--act, var(--violet)); opacity: 1; }
-.tour-row { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 10px; font-size: 14px; }
-.tour-row-ico { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: var(--panel-2); }
-.tour-row-t { flex: 1; display: flex; flex-direction: column; font-weight: 600; }
-.tour-row-t small { font-weight: 400; color: var(--muted); font-size: 12px; }
-
 /* ---- cena 4: o time ---- */
 .tour-team { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 18px; position: relative; }
 .tour-team-row { display: flex; justify-content: space-between; width: 100%; position: relative; z-index: 1; }
@@ -96,7 +73,6 @@
 @keyframes tour-typing { 0% { height: 0; opacity: 0; padding-block: 0; margin-bottom: -8px; } 15%, 85% { height: 28px; opacity: 1; padding-block: 11px; margin-bottom: 0; } }
 @keyframes tour-dot { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-3px); opacity: 1; } }
 @keyframes tour-rise { from { opacity: 0; transform: translateY(14px); } }
-@keyframes tour-slide { from { opacity: 0; transform: translateX(-12px) scale(.95); } }
 @keyframes tour-grow { from { transform: scaleY(0); } }
 @keyframes tour-hop { 0%, 100% { transform: none; } 40% { transform: translateY(-14px); } 70% { transform: translateY(0) scaleY(.94); } }
 @keyframes tour-line { from { transform: scaleX(0); } }

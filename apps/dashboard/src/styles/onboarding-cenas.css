@@ -1,0 +1,116 @@
+/* ---------- Cenas maiores da primeira conversa (pages/OnboardingScenes.tsx) ----------
+   Calendário de gastos de Finanças, apps ligando e o painel montado com as respostas. Mesma régua das cenas de
+   tour.css: o estilo normal é o final, as animações (com atraso --d) só dizem de onde vem. */
+
+/* ---- Finanças ---- */
+.ob-fin {
+  --heat-1: #2f9e6b; --heat-2: #d4a017; --heat-3: #e2733a; --heat-4: #d64545; --heat-mix: 26%;
+  position: relative; width: 100%; padding: 14px; border-radius: 20px; background: var(--panel); border: 1px solid var(--border);
+  animation: tour-rise .5s .1s var(--soft) both;
+}
+:root[data-theme="dark"] .ob-fin { --heat-1: #45c08a; --heat-2: #e2b54a; --heat-3: #f08a52; --heat-4: #f06666; --heat-mix: 32%; }
+.ob-fin-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-bottom: 12px; animation: tour-rise .45s var(--d) var(--soft) both; }
+.ob-fin-sum > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ob-fin-sum small { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+.ob-fin-sum small i { width: 6px; height: 6px; border-radius: 50%; }
+.ob-fin-sum small i.in { background: var(--ok); }
+.ob-fin-sum small i.out { background: var(--heat-4); }
+.ob-fin-sum small i.bal { background: var(--violet); }
+.ob-fin-sum strong { font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ob-fin-grid { position: relative; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.ob-fin-wd { text-align: center; font-size: 10.5px; font-weight: 600; color: var(--muted); }
+.ob-day {
+  --h: transparent; position: relative; aspect-ratio: 1; border-radius: 9px; display: grid; place-items: center; font-size: 11.5px; font-weight: 600;
+  background: var(--panel-2); color: var(--text); font-variant-numeric: tabular-nums; font-style: normal;
+  animation: ob-day-in .38s var(--d) var(--spring) both;
+}
+.ob-day.l1 { --h: var(--heat-1); } .ob-day.l2 { --h: var(--heat-2); } .ob-day.l3 { --h: var(--heat-3); } .ob-day.l4 { --h: var(--heat-4); }
+.ob-day:not(.l0) { background: color-mix(in srgb, var(--h) var(--heat-mix), var(--panel)); }
+.ob-day.future { background: none; box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); }
+.ob-day.today { box-shadow: inset 0 0 0 2px var(--violet); }
+.ob-day.tap { animation: ob-day-in .38s var(--d) var(--spring) both, ob-day-tap .5s 2.35s ease-out both; }
+.ob-fin-finger {
+  position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; margin: -12px 0 0 -12px;
+  border-radius: 50%; background: rgba(17, 17, 17, .18); box-shadow: 0 0 0 2px rgba(255, 255, 255, .85); opacity: 0; pointer-events: none;
+  animation: tour-finger 1.1s var(--d) var(--soft) both;
+}
+:root[data-theme="dark"] .ob-fin-finger { background: rgba(255, 255, 255, .3); box-shadow: 0 0 0 2px rgba(255, 255, 255, .5); }
+.ob-fin-pop {
+  position: absolute; left: 50%; bottom: -14px; translate: -50% 0; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+  padding: 8px 14px; border-radius: 99px; background: var(--ink); color: var(--on-ink); font-size: 13px;
+  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, .35); animation: tour-bubble .45s var(--d) var(--spring) both; transform-origin: 50% 100%;
+}
+.ob-fin-pop em { font-style: normal; font-weight: 650; font-variant-numeric: tabular-nums; }
+
+/* ---- Conexões ---- */
+.ob-con { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ob-con-app {
+  display: flex; align-items: center; gap: 9px; min-width: 0; padding: 10px; border-radius: 16px; background: var(--panel); border: 1px solid var(--border);
+  animation: ob-pop .45s var(--d) var(--spring) both;
+}
+.ob-con-ico { flex: none; width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: var(--panel-2); }
+.ob-con-ico svg { width: 19px; height: 19px; }
+:root[data-theme="dark"] .ob-con-ico { background: #f1f1ee; }
+.ob-con-t { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 12.5px; font-weight: 600; line-height: 1.25; }
+.ob-con-t, .ob-con-t small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ob-con-t small { font-size: 11px; font-weight: 450; color: var(--muted); }
+/* chave que liga sozinha */
+.ob-con-sw { flex: none; position: relative; width: 28px; height: 17px; border-radius: 99px; background: var(--ok); animation: ob-sw-bg .35s var(--d) ease-out both; }
+.ob-con-sw i {
+  position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .2);
+  transform: translateX(11px); animation: ob-sw-knob .35s var(--d) var(--spring) both;
+}
+
+/* ---- o painel montado com as respostas ---- */
+.ob-me { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.ob-me-card {
+  position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 18px;
+  background: var(--panel); border: 1px solid var(--border); box-shadow: 0 8px 20px -16px rgba(0, 0, 0, .3);
+  animation: ob-deal .55s var(--d) var(--spring) both;
+}
+.ob-me-ico { flex: none; width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; background: var(--panel-2); color: var(--text); }
+.ob-me-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; font-size: 14px; font-weight: 650; text-align: left; }
+.ob-me-t small { font-size: 12.5px; font-weight: 450; color: var(--muted); line-height: 1.3; }
+.ob-me-art { flex: none; width: 40px; height: 28px; }
+.ob-me-art.bars { display: flex; align-items: flex-end; gap: 3px; }
+.ob-me-art.bars i { flex: 1; border-radius: 3px 3px 1px 1px; background: var(--text); opacity: .8; transform-origin: bottom; animation: tour-grow .5s var(--d) var(--soft) both; }
+.ob-me-art.bars i:last-child { background: var(--violet); opacity: 1; }
+.ob-me-art.dots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; align-content: center; }
+.ob-me-art.dots i { aspect-ratio: 1; border-radius: 50%; background: var(--panel-2); animation: ob-pop .35s var(--d) var(--spring) both; }
+.ob-me-art.dots i.on { background: var(--violet); }
+.ob-me-art.ring { width: 30px; height: 30px; }
+.ob-me-art.ring circle { fill: none; stroke: var(--panel-2); stroke-width: 4; }
+.ob-me-art.ring circle.fill { stroke: var(--violet); stroke-linecap: round; stroke-dasharray: 88; stroke-dashoffset: 30; transform: rotate(-90deg); transform-origin: center; animation: ob-ring .9s var(--d) var(--soft) both; }
+.ob-me-check {
+  position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--ok); color: #fff; box-shadow: 0 0 0 3px var(--panel); animation: ob-pop .4s var(--d) var(--spring) both;
+}
+
+@keyframes ob-day-in { from { opacity: 0; transform: scale(.4); } }
+@keyframes ob-day-tap { 0%, 100% { transform: none; } 40% { transform: scale(.85); } 70% { transform: scale(1.08); } }
+@keyframes ob-pop { from { opacity: 0; transform: scale(.6); } }
+@keyframes ob-sw-bg { from { background: var(--border-2); } }
+@keyframes ob-sw-knob { from { transform: none; } }
+@keyframes ob-deal { from { opacity: 0; transform: translateY(26px) rotate(-2deg) scale(.94); } }
+@keyframes ob-ring { from { stroke-dashoffset: 88; } }
+
+/* celular baixinho: o calendário encolhe um pouco */
+@media (max-width: 599px) and (max-height: 760px) {
+  .ob-fin-grid { gap: 4px; }
+  .ob-day { border-radius: 8px; font-size: 10.5px; }
+  .ob-con-app { padding: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ob-fin *, .ob-fin, .ob-con *, .ob-me * { animation: none !important; }
+  .ob-fin-finger { display: none; }
+}
+
+/* as cenas maiores pedem mais largura que as do tour (340 px) */
+.onb-scene:has(.ob-con, .ob-me) { width: min(460px, 100%); }
+.onb-scene:has(.ob-fin) { width: min(380px, 100%); }
+.ob-fin { margin-bottom: 16px; }
+@media (max-width: 599px) {
+  .ob-con { grid-template-columns: 1fr; gap: 7px; }
+  .ob-con-app { padding: 8px 12px; }
+  .onb-scene:has(.ob-con, .ob-me, .ob-fin) { width: 100%; }
+}
