@@ -15,7 +15,6 @@ import {
   MONTHS,
   NewReminder,
   WEEKDAYS,
-  WeekView,
   addDays,
   cap,
   hhmm,
@@ -24,7 +23,6 @@ import {
   sameDay,
   startOfDay,
   tagItems,
-  weekStart,
   withTime,
   type Ev,
   type Tag,
@@ -32,7 +30,8 @@ import {
 import "../styles/agenda-celular.css";
 import "../styles/agenda-celular-chips.css";
 import { GoogleSync } from "./GoogleSync";
-import { justDragged, useDrag } from "./arrastar";
+import { useDrag } from "./arrastar";
+import { PhoneWeek, WIN, winStartFor } from "./SemanaCelular";
 import { useKeyboardShell } from "../teclado";
 
 /**
@@ -76,14 +75,13 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
   });
   const [center, setCenter] = useState(() => startOfDay(new Date()));
   const [visible, setVisible] = useState(() => startOfDay(new Date()));
-  const [weekFrom, setWeekFromRaw] = useState(() => weekStart(new Date()));
-  // direção das transições: aba e semana entram do lado de onde vieram; Agenda/Semana/Mês trocam com um esmaecer
+  // semana: janela de dias montada (12 semanas), primeiro dia à vista e pedido de ir até um dia (Hoje, Ir para)
+  const [weekWin, setWeekWin] = useState(() => winStartFor(new Date()));
+  const [weekFirst, setWeekFirst] = useState(() => startOfDay(new Date()));
+  const [weekGo, setWeekGo] = useState<{ d: Date; n: number } | null>(null);
+  const goWeek = (d: Date) => setWeekGo((g) => ({ d, n: (g?.n ?? 0) + 1 }));
+  // direção das transições: aba entra do lado de onde veio; Agenda/Semana/Mês trocam com um esmaecer
   const [enter, setEnter] = useState<"fade" | "left" | "right">("fade");
-  const [weekDir, setWeekDir] = useState<"left" | "right">("right");
-  const setWeekFrom = (d: Date) => {
-    setWeekDir(d < weekFrom ? "left" : "right");
-    setWeekFromRaw(d);
-  };
   const titleDir = useRef<"up" | "down">("up");
   const [rev, setRev] = useState(0);
   const [open, setOpen] = useState<Ev | null>(null);
@@ -137,7 +135,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
     tab === "rem" || mode === "list"
       ? { from: startOfDay(new Date()), to: addDays(startOfDay(new Date()), 45) }
       : mode === "week"
-        ? { from: weekFrom, to: addDays(weekFrom, 7) }
+        ? { from: weekWin, to: addDays(weekWin, WIN) }
         : null;
   const single = useApi<{ events: Ev[]; readonly?: boolean; tags?: Tag[] }>(
     range ? `/api/calendar?from=${range.from.toISOString()}&to=${range.to.toISOString()}${person ? `&user=${person}` : ""}&r=${rev}` : null,
@@ -156,15 +154,18 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
   const q = search?.trim().toLowerCase() ?? "";
   const keep = (e: Ev) =>
     !hidden.includes(e.kind) && !(e.tag && hidden.includes(`tag:${e.tag}`)) && (!q || `${e.title} ${e.tag ?? ""}`.toLowerCase().includes(q));
+  // trocar a janela da semana não esvazia a tela enquanto o pedido novo não chega
+  const lastEvents = useRef<Ev[]>([]);
+  if (single.data) lastEvents.current = single.data.events;
   const listByDay = useMemo(() => {
     if (!range) return new Map<string, Ev[]>();
     const years = new Set([range.from.getFullYear(), addDays(range.to, -1).getFullYear()]);
     const hol = tab === "rem" ? [] : [...years].flatMap(holidays).filter((h) => new Date(h.start) >= range.from && new Date(h.start) < range.to);
     return groupByDay(
-      [...hol, ...(single.data?.events ?? [])].filter((e) => keep(e) && (tab !== "rem" || e.kind === "reminder" || e.kind === "message")),
+      [...hol, ...(single.data?.events ?? (mode === "week" ? lastEvents.current : []))].filter((e) => keep(e) && (tab !== "rem" || e.kind === "reminder" || e.kind === "message")),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [single.data, hidden, q, tab, mode, weekFrom]);
+  }, [single.data, hidden, q, tab, mode, weekWin]);
 
   const months = useMemo(() => Array.from({ length: BACK + AHEAD + 1 }, (_, i) => new Date(center.getFullYear(), center.getMonth() - BACK + i, 1)), [center]);
 
@@ -211,7 +212,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
     haptic(6);
     const t = startOfDay(new Date());
     if (tab === "rem" || mode === "list") return void scroller.current?.scrollTo({ top: 0, behavior: reduced() ? "auto" : "smooth" });
-    if (mode === "week") return setWeekFrom(weekStart(t));
+    if (mode === "week") return goWeek(t);
     if (!scrollToMonth(t, true)) {
       pendingJump.current = t;
       setCenter(t);
@@ -225,7 +226,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
   const jumpTo = (d: Date) => {
     setJump(false);
     setTab("cal");
-    if (mode === "week") return setWeekFrom(weekStart(d));
+    if (mode === "week") return goWeek(d);
     if (mode === "list") pickMode("month");
     const inside = months.some((m) => monthKey(m) === monthKey(d));
     if (inside && scrollToMonth(d, true)) return;
@@ -255,13 +256,11 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
     tab === "rem"
       ? "Próximos 45 dias"
       : mode === "week"
-        ? weekLabel(weekFrom)
+        ? `${MONTHS[weekFirst.getMonth()]}${weekFirst.getFullYear() !== new Date().getFullYear() ? ` ${weekFirst.getFullYear()}` : ""}`
         : mode === "list"
           ? "Próximos 45 dias"
           : `${MONTHS[visible.getMonth()]}${visible.getFullYear() !== new Date().getFullYear() ? ` ${visible.getFullYear()}` : ""}`;
 
-  // semana: arrastar para os lados troca a semana
-  const swipe = useRef<{ x: number; y: number } | null>(null);
   const bodyKey = tab === "rem" ? "rem" : mode;
 
   // tela cheia como o chat do Início: sem o cabeçalho do app por trás
@@ -318,20 +317,10 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
           </div>
         )}
         <div className="pc-row pc-row-2">
-          {tab === "cal" && mode === "week" && (
-            <button className="pc-ico sm" aria-label="Semana anterior" onClick={() => { haptic(5); setWeekFrom(addDays(weekFrom, -7)); }}>
-              <Icon name="chevron-left" size={18} />
-            </button>
-          )}
           <button className="pc-title" aria-label={`${title}: escolher outro mês`} onClick={() => { haptic(5); setJump(true); }}>
             <span key={title} className={`pc-title-txt ${titleDir.current}`}>{title}</span>
             <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7z" fill="currentColor" /></svg>
           </button>
-          {tab === "cal" && mode === "week" && (
-            <button className="pc-ico sm" aria-label="Próxima semana" onClick={() => { haptic(5); setWeekFrom(addDays(weekFrom, 7)); }}>
-              <Icon name="chevron-right" size={18} />
-            </button>
-          )}
           <span className="spacer" />
           <button className="pc-today" onClick={goToday}>Hoje</button>
         </div>
@@ -347,17 +336,6 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
         key={bodyKey}
         ref={scroller}
         className={`pc-body pc-body-${bodyKey} enter-${enter}`}
-        onTouchStart={(e) => (swipe.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY })}
-        onTouchEnd={(e) => {
-          if (!swipe.current || mode !== "week" || tab !== "cal" || justDragged()) return;
-          const dx = e.changedTouches[0]!.clientX - swipe.current.x;
-          const dy = e.changedTouches[0]!.clientY - swipe.current.y;
-          swipe.current = null;
-          if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-            haptic(6);
-            setWeekFrom(addDays(weekFrom, dx < 0 ? 7 : -7));
-          }
-        }}
       >
         {tab === "cal" && mode === "month" &&
           months.map((m) => (
@@ -375,9 +353,16 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
             />
           ))}
         {tab === "cal" && mode === "week" && range && (
-          <div key={key(weekFrom)} className={`pc-slide ${weekDir}`}>
-            <WeekView from={range.from} days={7} byDay={listByDay} onOpen={(e) => openEv(e)} onCreate={create} onMove={readonly ? undefined : move} />
-          </div>
+          <PhoneWeek
+            win={weekWin}
+            onWin={setWeekWin}
+            go={weekGo}
+            onFirst={setWeekFirst}
+            byDay={listByDay}
+            onOpen={(e) => openEv(e)}
+            onCreate={create}
+            onMove={readonly ? undefined : move}
+          />
         )}
         {(tab === "rem" || mode === "list") && range && (
           single.data && !listByDay.size ? (
@@ -429,7 +414,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
         </Modal>
       )}
 
-      {jump && <MonthJump current={mode === "week" ? weekFrom : visible} onPick={jumpTo} onClose={() => setJump(false)} />}
+      {jump && <MonthJump current={mode === "week" ? weekFirst : visible} onPick={jumpTo} onClose={() => setJump(false)} />}
 
       {day && (
         <DaySheet
@@ -479,13 +464,6 @@ function groupByDay(evs: Ev[]) {
   }
   for (const [k, list] of m) m.set(k, list.sort((a, b) => Number(!a.allDay) - Number(!b.allDay) || a.start.localeCompare(b.start)));
   return m;
-}
-
-function weekLabel(from: Date) {
-  const to = addDays(from, 6);
-  return from.getMonth() === to.getMonth()
-    ? `${from.getDate()} a ${to.getDate()} de ${MONTHS[from.getMonth()]}`
-    : `${from.getDate()} ${MONTHS[from.getMonth()]!.slice(0, 3)} a ${to.getDate()} ${MONTHS[to.getMonth()]!.slice(0, 3)}`;
 }
 
 /** Um mês da rolagem: carrega quando chega perto da tela (e fica carregado), semanas com os eventos escritos. */

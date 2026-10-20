@@ -44,7 +44,7 @@ export type Ev = {
 export type Tag = { name: string; color: string };
 /** Mesmas cores do servidor (agenda-tags.ts): todas com texto branco legível. */
 const TAG_COLORS = ["#e03150", "#e8710a", "#b45309", "#0c8040", "#0f8b8d", "#0369a1", "#2a6fdb", "#4f46e5", "#7c3aed", "#d63384", "#475569"];
-const evStyle = (e: Ev) => (e.kind === "reminder" && e.color ? ({ ["--ev" as any]: e.color } as React.CSSProperties) : undefined);
+export const evStyle = (e: Ev) => (e.kind === "reminder" && e.color ? ({ ["--ev" as any]: e.color } as React.CSSProperties) : undefined);
 type View = "day" | "week" | "month" | "list";
 
 export const WEEKDAYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
@@ -519,7 +519,7 @@ function weekTitle(a: Date, b: Date, short = false) {
 }
 
 /** Eventos que se cruzam dividem a coluna lado a lado (senão um cobre o outro e some). */
-function lanes(evs: Ev[]) {
+export function lanes(evs: Ev[]) {
   const items = evs
     .map((e) => {
       const s = new Date(e.start).getTime();

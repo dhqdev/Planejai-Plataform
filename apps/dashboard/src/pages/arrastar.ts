@@ -230,7 +230,10 @@ export function useDrag(o: Opts) {
     const cleanup = () => {
       if (hold) clearTimeout(hold);
       stopListening();
-      if (active) endedAt = Date.now();
+      if (active) {
+        endedAt = Date.now();
+        window.dispatchEvent(new Event("cal-drag-end"));
+      }
       el.classList.remove("dragging");
       document.documentElement.classList.remove("cal-dragging");
       hover?.classList.remove("drop-hover");
