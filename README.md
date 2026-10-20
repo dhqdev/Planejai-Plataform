@@ -129,7 +129,7 @@ A stack segue o mesmo padrão do n8n do servidor: Traefik na rede externa `netwo
 1. **Imagem.** Cada push na `main` roda o workflow `CI`. Se os testes passarem, ele publica `ghcr.io/dhqdev/planejai-plataform` com as tags `latest` e `sha-XXXXXXX`.
    - Se a imagem estiver privada no GitHub, o servidor puxa com login: crie um token **clássico** só com `read:packages` (*GitHub > Settings > Developer settings > Personal access tokens > Tokens (classic)*) e cadastre em *Portainer > Registries > Add registry > Custom registry* com URL `ghcr.io`, usuário `dhqdev` e o token como senha. Detalhes em [`docs/operacao.md`](docs/operacao.md#repositório-e-imagem-privados).
 2. **Stack.** No Portainer, abra *Stacks > Add stack*, cole [`deploy/swarm-traefik-stack.yml`](deploy/swarm-traefik-stack.yml) e troque todos os valores marcados com `TROQUE`. Gere os segredos com `openssl rand -hex 32`.
-   - Para outro domínio, troque `planejai.tekvosoft.com` nas labels do Traefik e no `PUBLIC_URL`.
+   - Para outro domínio, troque `meuplanejai.com.br` nas labels do Traefik e no `PUBLIC_URL` (o roteador `autoplanejai-antigo` manda o endereço antigo para o novo).
    - Sem Swarm/Traefik, use [`deploy/portainer-stack.yml`](deploy/portainer-stack.yml), que é um compose comum com porta exposta.
 3. **Serviços que sobem:**
 

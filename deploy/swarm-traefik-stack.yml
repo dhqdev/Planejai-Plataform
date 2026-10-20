@@ -7,7 +7,7 @@ x-env: &env
   # --- Banco próprio da stack ---
   DATABASE_URL: postgres://planejai:TROQUE_SENHA_DO_BANCO@db:5432/planejai
   # --- Endereço público ---
-  PUBLIC_URL: https://planejai.tekvosoft.com
+  PUBLIC_URL: https://meuplanejai.com.br
   TZ: America/Sao_Paulo
   DEFAULT_TIMEZONE: America/Sao_Paulo
   # --- Segurança: um segredo para cada coisa ---
@@ -85,11 +85,27 @@ services:
       labels:
         - "traefik.enable=true"
         - "traefik.docker.network=network_public"
-        - "traefik.http.routers.autoplanejai.rule=Host(`planejai.tekvosoft.com`)"
+        # domínio principal: meuplanejai.com.br (no Cloudflare, registro A em "DNS only" para o Let's Encrypt emitir o certificado)
+        - "traefik.http.routers.autoplanejai.rule=Host(`meuplanejai.com.br`)"
         - "traefik.http.routers.autoplanejai.entrypoints=websecure"
         - "traefik.http.routers.autoplanejai.service=autoplanejai-service"
         - "traefik.http.routers.autoplanejai.tls.certresolver=letsencryptresolver"
         - "traefik.http.services.autoplanejai-service.loadbalancer.server.port=3000"
+        # www e o endereço antigo mandam para o principal (301), mantendo o caminho: convites, links e o app instalado continuam abrindo.
+        # Um roteador por nome: se um deles ainda não tiver DNS, o certificado dos outros sai do mesmo jeito.
+        - "traefik.http.middlewares.autoplanejai-dominio.redirectregex.regex=^https?://[^/]+/(.*)"
+        - "traefik.http.middlewares.autoplanejai-dominio.redirectregex.replacement=https://meuplanejai.com.br/$${1}"
+        - "traefik.http.middlewares.autoplanejai-dominio.redirectregex.permanent=true"
+        - "traefik.http.routers.autoplanejai-www.rule=Host(`www.meuplanejai.com.br`)"
+        - "traefik.http.routers.autoplanejai-www.entrypoints=websecure"
+        - "traefik.http.routers.autoplanejai-www.service=autoplanejai-service"
+        - "traefik.http.routers.autoplanejai-www.middlewares=autoplanejai-dominio"
+        - "traefik.http.routers.autoplanejai-www.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.autoplanejai-antigo.rule=Host(`planejai.tekvosoft.com`)"
+        - "traefik.http.routers.autoplanejai-antigo.entrypoints=websecure"
+        - "traefik.http.routers.autoplanejai-antigo.service=autoplanejai-service"
+        - "traefik.http.routers.autoplanejai-antigo.middlewares=autoplanejai-dominio"
+        - "traefik.http.routers.autoplanejai-antigo.tls.certresolver=letsencryptresolver"
 
   # Time de agentes, lembretes e a conexão do WhatsApp. Sempre 1 réplica.
   # O healthcheck da imagem confere se o processo e a conexão do WhatsApp não travaram (o Swarm reinicia se travar).
