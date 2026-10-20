@@ -53,3 +53,11 @@
   .lv-facts li { padding: 7px 12px; font-size: 13.5px; }
   .lv-packs { padding: 16px; }
 }
+
+.lv-plan .plan-adds { margin: -10px 0 14px; font-size: 14px; line-height: 1.45; color: var(--lp-muted); }
+.lv-plan .plan-adds b { display: block; margin-bottom: 4px; font-weight: 600; }
+.lv-plan .plan-adds ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+.lv-plan .plan-adds li::before { content: "+ "; opacity: .6; }
+.lv-plan .plan-lacks { margin: 0 0 18px; font-size: 13px; line-height: 1.45; color: var(--lp-muted); opacity: .8; }
+.lv-plan .plan-lacks b { font-weight: 600; }
+.lv-plan.hi .plan-adds, .lv-plan.hi .plan-lacks { color: rgba(246, 239, 255, .66); }

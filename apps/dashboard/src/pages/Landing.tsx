@@ -13,6 +13,7 @@ import "../landing.css";
 import { AppScenes, AppsOrbit, AppsRow } from "./LandingApps";
 import { HeroChat, HeroTitle } from "./LandingHero";
 import { TeamScroll } from "./LandingTeam";
+import { Adds, Lacks, type PlanFeature } from "../planFeatures";
 
 /**
  * Landing pública (quem abre "/" sem estar logado). Curta e minimalista (pedido do David): a conversa do topo,
@@ -27,11 +28,13 @@ interface Plan {
   grains: number;
   blurb: string;
   highlight?: boolean;
+  level?: string;
 }
 
 interface Pricing {
   enabled: boolean;
   plans: Plan[];
+  features?: PlanFeature[];
   packs: { id: string; grains: number; price: number }[];
   welcome: number;
   grainsPerUsd: number;
@@ -353,6 +356,8 @@ function Plans({ pricing, cta, go, closed }: { pricing: Pricing; cta: (p: Plan) 
                   <CountUp to={p.grains} duration={1.3} delay={0.2 + i * 0.12} /> grãos
                 </p>
                 <p className="lv-plan-blurb">{p.blurb}</p>
+                <Adds features={pricing.features} level={p.level} prev={i > 0 ? plans[i - 1] : undefined} />
+                <Lacks features={pricing.features} level={p.level} />
                 {!closed && (
                   <a className={`lp-btn ${p.highlight ? "light" : "ghost"}`} href="/login?cadastro=1" onClick={go}>
                     {cta(p)}

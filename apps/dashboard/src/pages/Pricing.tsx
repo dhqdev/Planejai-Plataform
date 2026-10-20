@@ -3,14 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { Mascote } from "../mascote/Mascote";
 import { CountUp } from "../reactbits/CountUp";
+import { featureAt, Lacks, type PlanFeature } from "../planFeatures";
 import "../pricing.css";
 
 /**
  * Página de preços pública (/precos), aberta pelo "Planos" da landing. No jeito da página de preços do Toki (pedido do
  * David): fundo escuro com aurora no topo, selos, chave Planos/Pacotes, cartões com o destaque de borda viva e a lista de
  * benefícios, comparação, como subir de plano e perguntas. Tudo vem de /api/auth/config (o que o dono configura em
- * Configurações > Grãos e planos), então nada aqui promete o que o produto não faz: todo plano tem todos os recursos,
- * o que muda é quanto grão entra por mês.
+ * Configurações > Grãos e planos), então nada aqui promete o que o produto não faz: o que cada plano libera vem do
+ * servidor (pricing.features, plan-features.ts) e aparece em cada cartão ("Não inclui") e na tabela de comparação.
  */
 
 interface Plan {
@@ -21,6 +22,7 @@ interface Plan {
   blurb: string;
   highlight?: boolean;
   perks?: string[];
+  level?: string;
 }
 interface Pack {
   id: string;
@@ -30,6 +32,7 @@ interface Pack {
 interface Pricing {
   enabled: boolean;
   plans: Plan[];
+  features?: PlanFeature[];
   packs: Pack[];
   welcome: number;
   trialDays?: number;
@@ -66,6 +69,9 @@ const Check = () => (
     <path d="M5 12.5l4.2 4.2L19 7" />
   </svg>
 );
+
+/** Célula da tabela: marca, texto ("até 2") ou traço quando o plano não tem. */
+const FeatCell = ({ v }: { v: boolean | string }) => (v === true ? <Check /> : v ? <>{v}</> : <span className="pr-no" aria-label="Não inclui">–</span>);
 
 /** Ramo de louro dos selos do topo (espelhado do outro lado). */
 function Laurel({ flip }: { flip?: boolean }) {
@@ -161,8 +167,10 @@ export function PricingPage() {
         ? `Não. Toda conta nova ${trial > 0 ? `usa à vontade por ${trialTxt} e depois ainda tem` : "ganha"} ${grainsTxt(welcome)} de presente, sem cartão. Quando acabarem, a IA pausa (o painel continua) até você assinar um plano ou comprar um pacote.`
         : "Você escolhe um plano ou um pacote avulso e já começa.",
     ],
+    ["O que cada plano libera?", "Todos têm gastos, cartões, lembretes e agenda, no WhatsApp e no painel. O Dia a dia soma o time de agentes: pesquisa, menor preço, mensagens e recados, PDF, imagem e áudio, e até 2 especialistas da loja. O Completo libera tudo: até 6 especialistas, a Secretária de reuniões, Notion, GitHub e n8n, agentes feitos sob medida e voz caprichada. A tabela Compare os planos mostra item por item."],
+    ["O que acontece se eu pedir algo que meu plano não tem?", "O assistente avisa com jeito, diz em qual plano aquilo entra e manda o link. Nada é cobrado nem fica pela metade."],
     ["Posso subir de plano no meio do mês?", "Pode. Você paga hoje só a diferença do mês e os grãos a mais entram assim que o pagamento cai. A partir daí a mensalidade é a do plano novo."],
-    ["E descer de plano?", "Também. A troca vale a partir da próxima mensalidade e os grãos deste mês continuam com você."],
+    ["E descer de plano?", "Também. A troca vale a partir da próxima mensalidade e os grãos deste mês continuam com você. Quem usa um especialista que o plano novo não inclui fica pausado, e volta sozinho se você subir de novo."],
     ["O que sobra no fim do mês acumula?", "Os grãos do plano recarregam todo mês para a quantidade do plano, então o que sobrou não acumula. Os grãos de presente e os de pacotes avulsos não vencem."],
     ["Como eu pago?", "Cartão de crédito (renova sozinho), Pix ou boleto, na página de pagamento do Asaas. O cartão fica com o Asaas, não com a gente. Cancele quando quiser."],
   ];
@@ -225,9 +233,9 @@ export function PricingPage() {
           <div className="pr-badge" style={{ ["--i" as string]: 1 } as CSSProperties}>
             <Laurel />
             <div>
-              <small>todo plano tem</small>
-              <b>o time todo</b>
-              <small>de agentes, sem trava</small>
+              <small>cada plano mostra</small>
+              <b>o que libera</b>
+              <small>e o que não inclui</small>
             </div>
             <Laurel flip />
           </div>
@@ -271,9 +279,9 @@ export function PricingPage() {
                   <a className="pr-cta" href={start} onClick={go}>{logged ? "Ver meus grãos" : invite ? "Tenho um convite" : "Comece agora"}</a>
                 )}
                 <ul className="pr-perks">
-                  <li style={{ ["--k" as string]: 0 } as CSSProperties}><PerkIcon i={0} />O time inteiro de agentes no WhatsApp</li>
-                  <li style={{ ["--k" as string]: 1 } as CSSProperties}><PerkIcon i={1} />Agenda, finanças e lembretes no painel</li>
-                  <li style={{ ["--k" as string]: 2 } as CSSProperties}><PerkIcon i={4} />{trial > 0 ? `Ilimitado nos primeiros ${trial === 1 ? "dia" : `${trial} dias`}, depois usa os grãos de presente` : "Usa até os grãos acabarem, sem prazo"}</li>
+                  {trial > 0 && <li style={{ ["--k" as string]: 0 } as CSSProperties}><PerkIcon i={0} />{`Tudo liberado nos primeiros ${trial === 1 ? "dia" : `${trial} dias`}, para conhecer o time`}</li>}
+                  <li style={{ ["--k" as string]: 1 } as CSSProperties}><PerkIcon i={1} />{trial > 0 ? "Depois, gastos e agenda com os grãos de presente" : "Gastos, cartões, lembretes e agenda"}</li>
+                  <li style={{ ["--k" as string]: 2 } as CSSProperties}><PerkIcon i={4} />{trial > 0 ? "Para usar o time inteiro, assine o Dia a dia ou o Completo" : "Usa até os grãos acabarem, sem prazo"}</li>
                 </ul>
               </article>
             )}
@@ -304,6 +312,7 @@ export function PricingPage() {
                   ))}
                   <li style={{ ["--k" as string]: (p.perks?.length ?? 1) } as CSSProperties}><PerkIcon i={3} />{per1000(p.price, p.grains)} por 1.000 grãos</li>
                 </ul>
+                <Lacks features={pricing?.features} level={p.level} />
               </article>
             ))}
           </div>
@@ -332,7 +341,7 @@ export function PricingPage() {
             })}
           </div>
         )}
-        <p className="pr-foot" data-reveal>Todos os planos têm todos os recursos. O que muda é quantos grãos entram por mês.</p>
+        <p className="pr-foot" data-reveal>O que cada plano libera está na tabela abaixo. Grãos são o combustível: quanto mais você usa, mais gasta.</p>
       </section>
 
       {plans.length > 0 && (
@@ -370,18 +379,18 @@ export function PricingPage() {
                   {welcome > 0 && <td>–</td>}
                   {plans.map((p) => <td key={p.id} className={p.highlight ? "hi" : ""}>{per1000(p.price, p.grains)}</td>)}
                 </tr>
-                {[
-                  "Todos os agentes no WhatsApp",
-                  "Painel com agenda, finanças e documentos",
-                  "Google, Notion e e-mail conectados",
-                  "Compra grãos avulsos quando precisar",
-                ].map((row) => (
-                  <tr key={row}>
-                    <th scope="row">{row}</th>
-                    {welcome > 0 && <td><Check /></td>}
-                    {plans.map((p) => <td key={p.id} className={p.highlight ? "hi" : ""}><Check /></td>)}
+                {(pricing?.features ?? []).map((f) => (
+                  <tr key={f.label}>
+                    <th scope="row">{f.label}</th>
+                    {welcome > 0 && <td><FeatCell v={featureAt(f, "basico")} /></td>}
+                    {plans.map((p) => <td key={p.id} className={p.highlight ? "hi" : ""}><FeatCell v={featureAt(f, p.level)} /></td>)}
                   </tr>
                 ))}
+                <tr>
+                  <th scope="row">Compra grãos avulsos quando precisar</th>
+                  {welcome > 0 && <td><Check /></td>}
+                  {plans.map((p) => <td key={p.id} className={p.highlight ? "hi" : ""}><Check /></td>)}
+                </tr>
                 <tr>
                   <th scope="row">Recarga automática todo mês</th>
                   {welcome > 0 && <td>–</td>}
@@ -397,6 +406,11 @@ export function PricingPage() {
               </tbody>
             </table>
           </div>
+          {welcome > 0 && trial > 0 && (
+            <p className="pr-foot" data-reveal>
+              Nos primeiros {trial === 1 ? "dia" : `${trial} dias`} da conta grátis tudo fica liberado, para você conhecer o time. Depois, quem não assina continua com gastos e agenda.
+            </p>
+          )}
         </section>
       )}
 

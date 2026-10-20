@@ -160,3 +160,11 @@
 }
 /* notebook: os planos já ficam ao lado da carteira, então o botão grande de subir sai */
 @media (min-width: 1024px) { .plan-cta { display: none; } }
+
+.grain-lacks { margin: 8px 0 12px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.grain-lacks b { font-weight: 600; }
+.grain-scope { margin: 4px 0 14px; font-size: 13px; color: var(--muted); }
+.grain-scope > b { display: block; margin-bottom: 6px; color: var(--text); font-weight: 600; }
+.grain-scope .plan-adds ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.grain-scope .plan-adds li::before { content: "+ "; opacity: .6; }
+.grain-scope .plan-lacks { margin: 8px 0 0; font-size: 12.5px; }

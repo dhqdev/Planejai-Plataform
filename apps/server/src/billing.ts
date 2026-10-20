@@ -6,7 +6,8 @@ import { many, one, query } from "./db/pool.js";
 import { isOwner } from "./ingest.js";
 import { getCredentials } from "./integrations/registry.js";
 import { notify } from "./notifications.js";
-import { type AgentSettings, type BillingPlan, getSettings, perksOf } from "./settings.js";
+import { PLAN_FEATURES } from "./plan-features.js";
+import { type AgentSettings, type BillingPlan, getSettings, levelOf, perksOf } from "./settings.js";
 
 /**
  * Cobrança por grãos pelo Asaas (o dono liga em Configurações > Cobrança e cola a chave em Integrações > Asaas).
@@ -774,7 +775,9 @@ export async function paymentsOf(userId: string) {
 export function pricingOf(s: AgentSettings) {
   return {
     enabled: Boolean(s.billingEnabled),
-    plans: plansOf(s).map((p) => ({ ...p, perks: perksOf(p) })),
+    plans: plansOf(s).map((p) => ({ ...p, perks: perksOf(p), level: levelOf(p) })),
+    // o que cada plano libera (plan-access.ts), para landing, preços e Meu plano mostrarem a mesma coisa
+    features: PLAN_FEATURES,
     packs: s.billingPacks ?? [],
     welcome: Number(s.billingWelcomeGrains ?? 0),
     trialDays: Number(s.billingTrialDays ?? 0),

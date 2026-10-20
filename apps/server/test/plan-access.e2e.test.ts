@@ -12,6 +12,24 @@ describe("planos por recurso: regras sem banco", () => {
     expect(cleanPlans([{ name: "Família", price: 50, grains: 5000, level: "vip" }])[0]!.level).toBeUndefined();
   });
 
+  it("a vitrine manda o nível de cada plano e a tabela do que cada um libera", async () => {
+    const { pricingOf } = await import("../src/billing.js");
+    const { DEFAULT_PLANS } = await import("../src/settings.js");
+    const { PLAN_FEATURES } = await import("../src/plan-features.js");
+    const p = pricingOf({ billingPlans: DEFAULT_PLANS, billingPacks: [] } as any);
+    expect(p.plans.map((x) => x.level)).toEqual(["basico", "time", "completo"]);
+    expect(p.features).toBe(PLAN_FEATURES);
+    // o Leve só promete gastos e agenda; pesquisa e mensagens começam no Dia a dia; sob medida só no Completo
+    const at = (label: RegExp, i: number) => PLAN_FEATURES.find((f) => label.test(f.label))!.values[i];
+    expect(at(/Gastos/, 0)).toBe(true);
+    expect(at(/Pesquisa/, 0)).toBe(false);
+    expect(at(/Pesquisa/, 1)).toBe(true);
+    expect(at(/Mensagens/, 0)).toBe(false);
+    expect(at(/sob medida/, 1)).toBe(false);
+    expect(at(/sob medida/, 2)).toBe(true);
+    expect(at(/loja/, 1)).toBe("até 2");
+  });
+
   it("no básico o Juvenal só tem gastos e agenda, mesmo pedindo outra coisa", async () => {
     const { basicTools } = await import("../src/agent/team.js");
     const names = (t: string) => {
