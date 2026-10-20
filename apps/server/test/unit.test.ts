@@ -582,11 +582,15 @@ describe("figurinhas do Mascote", () => {
 describe("perguntas de boas-vindas do cadastro", () => {
   it("só abre a pergunta seguinte pelo caminho escolhido e resume em uma linha", async () => {
     const { activeQuestions, cleanAnswers, onboardingSummary } = await import("../src/onboarding.js");
-    expect(activeQuestions({}).map((q) => q.id)).toEqual(["goal", "home", "tone", "more"]);
-    expect(activeQuestions({ goal: ["work"], income: "business" }).map((q) => q.id)).toEqual(["goal", "income", "split", "forget", "home", "tone", "more"]);
-    const a = cleanAnswers({ goal: "agenda", forget: ["meds", "x"], home: "alone", shared: "split", more: "  tenho   um gato " });
-    expect(a).toEqual({ goal: ["agenda"], forget: ["meds"], home: "alone", more: "tenho um gato" });
-    expect(onboardingSummary(a)).toBe("Quer ajuda com: Agenda e lembretes. Costuma esquecer: Remédios. Mora: Sozinho(a). Contou: tenho um gato");
+    expect(activeQuestions({}).map((q) => q.id)).toEqual(["goal", "tone"]);
+    expect(activeQuestions({ goal: ["money", "work"] }).map((q) => q.id)).toEqual(["goal", "money_goal", "forget", "tone"]);
+    const a = cleanAnswers({ goal: "agenda", forget: ["meds", "x"], money_goal: "debt", tone: "short", more: "fora da lista" });
+    expect(a).toEqual({ goal: ["agenda"], forget: ["meds"], tone: "short" });
+    expect(onboardingSummary(a)).toBe("Quer ajuda com: Agenda e lembretes. Costuma esquecer: Remédios. Prefere conversa: Direto e curto");
+    const { welcomeText } = await import("../src/onboarding.js");
+    const hi = welcomeText("Ana Souza", { goal: ["habits", "money"] }, "Bolinho");
+    expect(hi.startsWith("Oi, Ana! Aqui é o Bolinho")).toBe(true);
+    expect(hi).toContain('• "me lembra de beber água às 10h todo dia"\n• "gastei 42 no mercado"\n• "me lembra amanhã às 9h do dentista"');
     const { specialistSystemPrompt } = await import("../src/agent/prompts.js");
     const user = { id: "u", phone: "5519900000000", name: "Ana", status: "active", timezone: null, profile: { onboarding: { summary: onboardingSummary(a) } } };
     const prompt = specialistSystemPrompt({ name: "Financeiro", role: "dinheiro", instructions: "" } as any, { timezone: "America/Sao_Paulo", user, settings: { assistantName: "Planejai" } as any });

@@ -391,9 +391,12 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
       method: "PUT",
       url: "/api/me/onboarding",
       headers: { cookie: adm },
-      payload: { answers: { goal: ["money", "hack"], money_now: "short", debt_plan: "yes", habit: ["water"], tone: "short", more: "recebo dia 5" } },
+      payload: { answers: { goal: ["money", "hack"], money_goal: "debt", habit: ["water"], tone: "short", more: "recebo dia 5" } },
     });
-    expect(saved.json().summary).toBe("Quer ajuda com: Organizar meu dinheiro. Fim do mês: Falta, ou tenho dívidas. Plano de dívidas: Quero. Prefere conversa: Direto e curto. Contou: recebo dia 5");
+    expect(saved.json().summary).toBe("Quer ajuda com: Organizar meu dinheiro. Objetivo financeiro: Sair das dívidas. Prefere conversa: Direto e curto");
+    // fim da primeira conversa: boas-vindas no WhatsApp uma vez só
+    expect((await app.inject({ method: "POST", url: "/api/me/welcome", headers: { cookie: adm } })).json().sent).toBe(true);
+    expect((await app.inject({ method: "POST", url: "/api/me/welcome", headers: { cookie: adm } })).json().sent).toBe(false);
     expect((await app.inject({ method: "GET", url: "/api/me/onboarding", headers: { cookie: adm } })).json().due).toBe(false);
     const prof = await db.one("SELECT profile FROM users WHERE phone = '5519911111111'");
     expect(prof.profile.onboarding.answers.habit).toBeUndefined();

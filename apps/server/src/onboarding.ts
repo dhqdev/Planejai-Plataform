@@ -23,6 +23,10 @@ export interface OnboardingQuestion {
 
 const o = (id: string, label: string): OnboardingOption => ({ id, label });
 
+/**
+ * Poucas perguntas (pedido do David em 2026-10-20: "faça menos perguntas, está muito demorado"): o que quer primeiro,
+ * no máximo uma pergunta a mais por assunto escolhido e o jeito de falar. Quem marca tudo responde 5; o normal é 3.
+ */
 export const ONBOARDING: OnboardingQuestion[] = [
   {
     id: "goal",
@@ -33,44 +37,12 @@ export const ONBOARDING: OnboardingQuestion[] = [
     options: [o("money", "Organizar meu dinheiro"), o("agenda", "Agenda e lembretes"), o("work", "Trabalho ou negócio"), o("habits", "Hábitos e rotina"), o("study", "Estudos")],
   },
   {
-    id: "money_now",
-    text: "Como está o dinheiro no fim do mês hoje?",
-    kind: "one",
-    about: "Fim do mês",
-    when: { q: "goal", any: ["money"] },
-    options: [o("left", "Sobra um pouco"), o("even", "Fica no zero a zero"), o("short", "Falta, ou tenho dívidas"), o("unknown", "Não faço ideia")],
-  },
-  {
-    id: "debt_plan",
-    text: "Quer que eu monte com você um plano pra sair das dívidas?",
-    kind: "one",
-    about: "Plano de dívidas",
-    when: { q: "money_now", any: ["short"] },
-    options: [o("yes", "Quero"), o("later", "Mais pra frente")],
-  },
-  {
     id: "money_goal",
-    text: "E tem algum objetivo com o dinheiro?",
-    kind: "many",
+    text: "E o que você quer com o dinheiro?",
+    kind: "one",
     about: "Objetivo financeiro",
-    when: { q: "money_now", any: ["left", "even", "unknown"] },
-    options: [o("reserve", "Reserva de emergência"), o("trip", "Viagem"), o("house", "Casa ou carro"), o("invest", "Começar a investir"), o("control", "Só saber pra onde vai")],
-  },
-  {
-    id: "income",
-    text: "Como você ganha dinheiro?",
-    kind: "one",
-    about: "Renda",
-    when: { q: "goal", any: ["money", "work"] },
-    options: [o("salary", "Salário fixo"), o("freela", "Autônomo ou freela"), o("business", "Tenho empresa"), o("mixed", "Um pouco de cada"), o("none", "Ainda não tenho renda")],
-  },
-  {
-    id: "split",
-    text: "Quer separar as contas da empresa das suas?",
-    kind: "one",
-    about: "Separar empresa e pessoal",
-    when: { q: "income", any: ["business", "mixed"] },
-    options: [o("yes", "Sim, misturo tudo hoje"), o("already", "Já são separadas")],
+    when: { q: "goal", any: ["money"] },
+    options: [o("debt", "Sair das dívidas"), o("reserve", "Ter uma reserva"), o("trip", "Juntar pra algo"), o("invest", "Começar a investir"), o("control", "Saber pra onde vai")],
   },
   {
     id: "forget",
@@ -90,33 +62,11 @@ export const ONBOARDING: OnboardingQuestion[] = [
     options: [o("exercise", "Exercício"), o("water", "Beber água"), o("reading", "Leitura"), o("sleep", "Dormir mais cedo"), o("meditate", "Meditar")],
   },
   {
-    id: "home",
-    text: "Com quem você mora?",
-    kind: "one",
-    about: "Mora",
-    options: [o("alone", "Sozinho(a)"), o("partner", "Com companheiro(a)"), o("kids", "Com filhos"), o("parents", "Com a família"), o("friends", "Dividindo com amigos")],
-  },
-  {
-    id: "shared",
-    text: "As contas da casa são divididas?",
-    kind: "one",
-    about: "Contas da casa",
-    when: { q: "home", any: ["partner", "kids", "friends"] },
-    options: [o("split", "Sim, a gente divide"), o("me", "Eu pago tudo"), o("other", "Outra pessoa paga")],
-  },
-  {
     id: "tone",
     text: "Como você prefere que eu fale com você?",
     kind: "one",
     about: "Prefere conversa",
     options: [o("short", "Direto e curto"), o("detail", "Com explicação"), o("fun", "Descontraído, com emoji")],
-  },
-  {
-    id: "more",
-    text: "Quer me contar mais alguma coisa?",
-    hint: "Opcional. Ex.: trabalho de noite, tenho um cachorro, recebo dia 5.",
-    kind: "text",
-    about: "Contou",
   },
 ];
 
@@ -174,4 +124,40 @@ export async function saveOnboarding(userId: string, raw: unknown, skipped = fal
   const value = { answers, summary: onboardingSummary(answers), skipped: skipped || !Object.keys(answers).length, at: new Date().toISOString() };
   await query("UPDATE users SET profile = profile || jsonb_build_object('onboarding', $2::jsonb) WHERE id = $1", [userId, JSON.stringify(value)]);
   return value;
+}
+
+/** Exemplos para a primeira mensagem, pelo que a pessoa quer primeiro (o primeiro de cada assunto escolhido). */
+const TRY: Record<string, string> = {
+  money: "gastei 42 no mercado",
+  agenda: "me lembra amanhã às 9h do dentista",
+  work: "anota reunião com o cliente quinta às 15h",
+  habits: "me lembra de beber água às 10h todo dia",
+  study: "me explica juros compostos de um jeito simples",
+};
+
+/** Boas-vindas no WhatsApp ao terminar a primeira conversa no painel. Texto fixo, sem IA (pouco token). */
+export function welcomeText(name: string | null | undefined, answers: OnboardingAnswers = {}, assistant = "Bolinho") {
+  const first = (name ?? "").trim().split(/\s+/)[0];
+  const goals = (Array.isArray(answers.goal) ? answers.goal : []).filter((g) => TRY[g]);
+  const tries = [...new Set([...goals.map((g) => TRY[g]!), TRY.money!, TRY.agenda!])].slice(0, 3);
+  const fun = answers.tone === "fun";
+  return [
+    `Oi${first ? `, ${first}` : ""}! ${fun ? "🎉 " : ""}Aqui é o ${assistant}, do Planejai. Seu cadastro ficou pronto!`,
+    "",
+    "A partir de agora é só falar comigo por aqui, do jeito que você mandaria pra um amigo: texto, áudio ou foto.",
+    "",
+    "*Pra começar, tenta mandar:*",
+    ...tries.map((t) => `• "${t}"`),
+    "",
+    "Salva este número nos seus contatos pra não perder nenhum aviso.",
+  ].join("\n");
+}
+
+/** Marca e devolve true só na primeira vez (duas abas ou dois cliques não mandam duas mensagens). */
+export async function claimWelcome(userId: string) {
+  const row = await one(
+    "UPDATE users SET profile = profile || jsonb_build_object('welcome_sent_at', now()) WHERE id = $1 AND NOT (profile ? 'welcome_sent_at') RETURNING id",
+    [userId],
+  );
+  return Boolean(row);
 }

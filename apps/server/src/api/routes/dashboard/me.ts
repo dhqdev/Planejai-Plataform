@@ -3,7 +3,8 @@ import { hashPassword, loadAccount, verifyPassword } from "../../../accounts.js"
 import { config } from "../../../config.js";
 import { many, one, query } from "../../../db/pool.js";
 import { eraseUserData } from "../../../privacy.js";
-import { getOnboarding, ONBOARDING, saveOnboarding } from "../../../onboarding.js";
+import { claimWelcome, getOnboarding, ONBOARDING, saveOnboarding, welcomeText } from "../../../onboarding.js";
+import { MASCOT_NAME } from "../../../mascot-name.js";
 import { NOBODY, selfUserId } from "../../../sharing.js";
 import { activeStoreAgents } from "../../../agent/store.js";
 import { ESSENTIAL, getTabs, OPTIONAL } from "../../../tabs.js";
@@ -110,6 +111,28 @@ export function meRoutes(base: FastifyInstance) {
     if (!uid) return reply.code(400).send({ error: "Conta sem WhatsApp ligado" });
     const saved = await saveOnboarding(uid, req.body?.answers, req.body?.skip === true);
     return { ok: true, summary: saved.summary };
+  });
+
+  // fim da primeira conversa no painel: um oi no WhatsApp da pessoa (pedido do David em 2026-10-20). Uma vez por pessoa
+  // e só para conta nova (até 30 dias), assim quem refaz o tour ou as perguntas depois não recebe de novo.
+  base.post("/api/me/welcome", async (req) => {
+    if (req.account.owner) return { sent: false };
+    const uid = await selfUserId(req.account);
+    if (!uid) return { sent: false };
+    const fresh = await one("SELECT 1 FROM accounts WHERE id = $1 AND created_at > now() - interval '30 days'", [req.account.id]);
+    if (!fresh || !(await claimWelcome(uid))) return { sent: false };
+    const user = await one("SELECT name, full_name FROM users WHERE id = $1", [uid]);
+    const ob = await getOnboarding(uid);
+    try {
+      const { notifyUser } = await import("../../../social.js");
+      await notifyUser(uid, welcomeText(user?.full_name ?? user?.name ?? req.account.name, ob?.answers ?? {}, MASCOT_NAME));
+      return { sent: true };
+    } catch (e) {
+      // não saiu (WhatsApp desconectado): solta a marca para tentar de novo na próxima vez
+      await query("UPDATE users SET profile = profile - 'welcome_sent_at' WHERE id = $1", [uid]);
+      req.log.warn({ err: e }, "boas-vindas no WhatsApp não saiu");
+      return { sent: false };
+    }
   });
 
   // ---------- Painel editável: layout de cada conta ----------

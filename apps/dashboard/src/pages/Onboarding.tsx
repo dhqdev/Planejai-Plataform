@@ -3,8 +3,8 @@ import { api } from "../api";
 import { useMedia } from "../hooks";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
-import { Mascote, type Mood, type Outfit } from "../mascote/Mascote";
-import { MASCOTE, MASCOTES } from "../mascote/nome";
+import { Mascote, type Mood } from "../mascote/Mascote";
+import { MASCOTE } from "../mascote/nome";
 import { useOutfit } from "../mascote/state";
 import { ConnectScene, FinanceScene, PersonalScene, personalCards } from "./OnboardingScenes";
 
@@ -66,31 +66,6 @@ function ChatScene() {
   );
 }
 
-const TEAM: { outfit: Outfit; label: string }[] = [
-  { outfit: { eyes: "glasses", neck: "bowtie" }, label: "Finanças" },
-  { outfit: { head: "headphones" }, label: "Agenda" },
-  { outfit: { head: "cap", eyes: "sunglasses" }, label: "Pesquisa" },
-  { outfit: { head: "beanie", neck: "scarf" }, label: "Recados" },
-];
-function TeamScene({ small }: { small: boolean }) {
-  return (
-    <div className="tour-team">
-      <div className="tour-team-row">
-        {TEAM.map((m, i) => (
-          <span key={m.label} className="tour-team-one" style={d(0.45 + i * 0.16)}>
-            <span className="tour-team-hop" style={d(1.4 + i * 0.3)}>
-              <Mascote size={small ? 54 : 62} outfit={m.outfit} mood={i % 2 ? "happy" : "curious"} />
-            </span>
-            <small>{m.label}</small>
-          </span>
-        ))}
-      </div>
-      <span className="tour-link" style={d(1.2)} aria-hidden="true" />
-      <span className="tour-note" style={d(2.2)}>“Conferi com a Agenda: dia 12 você já tem compromisso.”</span>
-    </div>
-  );
-}
-
 function YesScene() {
   return (
     <div className="tour-yes">
@@ -105,39 +80,6 @@ function YesScene() {
       <span className="tour-sent" style={d(2.2)}>
         <Icon name="check" size={14} /> Enviado para Ana
       </span>
-    </div>
-  );
-}
-
-const RAIL = ["home", "calendar", "wallet", "eye", "send", "users", "file"];
-function WhereScene({ phone }: { phone: boolean }) {
-  if (phone)
-    return (
-      <div className="tour-where phone">
-        <div className="tour-mini-screen" aria-hidden="true">
-          <i style={d(0.5)} /><i style={d(0.6)} /><i className="short" style={d(0.7)} />
-        </div>
-        <div className="tour-mini-bar" aria-hidden="true">
-          {["home", "calendar", "wallet", "more"].map((n, i) => (
-            <span key={n} style={d(1 + i * 0.35)}><Icon name={n} size={16} /></span>
-          ))}
-        </div>
-      </div>
-    );
-  return (
-    <div className="tour-where">
-      <div className="tour-mini-rail" aria-hidden="true">
-        <span className="tour-mini-brand" />
-        {RAIL.map((n, i) => (
-          <span key={n} className="tour-mini-ico" style={d(0.8 + i * 0.2)}><Icon name={n} size={15} /></span>
-        ))}
-        <span className="tour-mini-gap" />
-        <span className="tour-mini-ico" style={d(0.8 + RAIL.length * 0.2)}><Icon name="bell" size={15} /></span>
-        <span className="tour-mini-me" style={d(1 + RAIL.length * 0.2)} />
-      </div>
-      <div className="tour-mini-screen" aria-hidden="true">
-        <i style={d(0.5)} /><i style={d(0.6)} /><i className="short" style={d(0.7)} />
-      </div>
     </div>
   );
 }
@@ -179,7 +121,6 @@ export function OnboardingFlow({
   onDone: (answered: boolean) => void;
 }) {
   const phone = useMedia("(max-width: 599px)");
-  const narrow = useMedia("(max-width: 767px)");
   const [outfit] = useOutfit();
   const [answers, setAnswers] = useState<Answers>(data?.answers ?? {});
   const [asking, setAsking] = useState(!!data);
@@ -227,14 +168,6 @@ export function OnboardingFlow({
           reply: "Show",
           scene: <ConnectScene small={phone} />,
         },
-        {
-          id: "time",
-          kind: "talk",
-          say: `Não trabalho sozinho: tenho um time de ${MASCOTES}, cada um cuidando de um assunto.`,
-          mood: "wink",
-          reply: "Que time!",
-          scene: <TeamScene small={phone} />,
-        },
         { id: "sim", kind: "talk", say: "Mandar mensagem, pagar ou apagar alguma coisa? Só depois do seu sim.", mood: "happy", reply: "Combinado", scene: <YesScene /> },
       );
     } else if (data) {
@@ -244,26 +177,22 @@ export function OnboardingFlow({
       if (tour) list.push({ id: "convite", kind: "talk", say: "Agora quero te conhecer. São umas perguntinhas rápidas. Topa?", mood: "curious", reply: "Vamos nessa!", invite: true });
       for (const q of active(data.questions, answers)) list.push({ id: `q-${q.id}`, kind: "ask", q });
     }
-    if (data && asking && saved && personalCards(answers).length)
-      list.push({ id: "seu", kind: "talk", say: `Pronto${oi}, montei o seu Planejai com o que você me contou:`, mood: "happy", reply: "Ficou a minha cara", scene: <PersonalScene answers={answers} /> });
-    if (tour)
-      list.push({
-        id: "onde",
-        kind: "talk",
-        say: narrow ? "As telas principais ficam na barra de baixo. O resto mora em Conta, no último botão." : "O menu fica aqui à esquerda. Avisos e a sua conta ficam no pé dele.",
-        mood: "wink",
-        reply: "Beleza",
-        scene: <WhereScene phone={narrow} />,
-      });
+    // fim: o painel montado com as respostas (quando há o que mostrar) e o aviso do oi que acabou de ir pro WhatsApp
+    const cards = data && asking && saved && personalCards(answers).length > 0;
     list.push({
       id: "fim",
       kind: "talk",
-      say: saved ? `Prontinho${oi}! Agora é só me chamar no WhatsApp quando quiser.` : "É isso! Qualquer coisa, é só me chamar no WhatsApp.",
+      say: tour
+        ? cards
+          ? `Prontinho${oi}! Montei o seu Planejai e te mandei um oi no WhatsApp.`
+          : `Prontinho${oi}! Te mandei um oi no WhatsApp. É só responder por lá.`
+        : `Prontinho${oi}! Já atualizei o que eu sei de você.`,
       mood: "laughing",
       reply: "Começar",
+      scene: cards ? <PersonalScene answers={answers} /> : undefined,
     });
     return list;
-  }, [tour, data, asking, answers, saved, oi, phone, narrow]);
+  }, [tour, data, asking, answers, saved, oi, phone]);
 
   const at = Math.min(i, steps.length - 1);
   const step = steps[at]!;
@@ -315,7 +244,11 @@ export function OnboardingFlow({
     // pular no meio das perguntas guarda o que já respondeu (ou marca como pulado)
     if (data && asking && !saved && !(await save(true))) return;
     setLeaving(true);
-    if (tour) void api("/api/me/tour", { method: "PUT" }).catch(() => {});
+    if (tour) {
+      void api("/api/me/tour", { method: "PUT" }).catch(() => {});
+      // fim da primeira conversa: oi no WhatsApp da pessoa (o servidor manda uma vez só, e só para conta nova)
+      void api("/api/me/welcome", { method: "POST" }).catch(() => {});
+    }
     const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
     setTimeout(() => onDone(!!data && asking), calm ? 0 : 260);
   };

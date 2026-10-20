@@ -17,22 +17,6 @@
 .tour-typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: tour-dot .9s infinite ease-in-out; }
 .tour-typing i:nth-child(2) { animation-delay: .15s; } .tour-typing i:nth-child(3) { animation-delay: .3s; }
 
-/* ---- cena 4: o time ---- */
-.tour-team { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 18px; position: relative; }
-.tour-team-row { display: flex; justify-content: space-between; width: 100%; position: relative; z-index: 1; }
-.tour-team-one { display: flex; flex-direction: column; align-items: center; gap: 4px; animation: tour-drop .6s var(--d, 0s) var(--spring) both; }
-.tour-team-one small { font-size: 12px; font-weight: 600; color: var(--muted); }
-.tour-team-hop { display: block; animation: tour-hop .5s var(--d, 0s) ease-in-out both; }
-.tour-link {
-  position: absolute; top: 38px; left: 12%; right: 12%; height: 2px; border-radius: 2px;
-  background: repeating-linear-gradient(90deg, var(--border-2) 0 6px, transparent 6px 12px);
-  transform-origin: left; animation: tour-line .9s var(--d, 0s) var(--soft) both;
-}
-.tour-note {
-  font-size: 13px; line-height: 1.4; text-align: center; color: var(--text); background: var(--panel); border: 1px solid var(--border);
-  border-radius: 14px; padding: 10px 14px; max-width: 280px; animation: tour-rise .5s var(--d, 0s) var(--soft) both;
-}
-
 /* ---- cena 5: o sim ---- */
 .tour-yes { width: 100%; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
 .tour-yes .tour-bubble { max-width: 100%; }
@@ -50,35 +34,14 @@
   background: var(--ok-soft); padding: 6px 12px; border-radius: 99px; animation: tour-bubble .45s var(--d, 0s) var(--spring) both;
 }
 
-/* ---- cena 6: onde fica cada coisa (moldura do notebook ou barra do celular) ---- */
-.tour-where { width: 100%; height: 240px; display: flex; gap: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 8px; animation: tour-rise .5s var(--soft) both; }
-.tour-mini-rail > * { flex-shrink: 0; }
-.tour-mini-rail { width: 44px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 0; }
-.tour-mini-ico { width: 30px; height: 26px; display: grid; place-items: center; border-radius: 9px; color: var(--muted); animation: tour-light .9s var(--d, 0s) ease-in-out both; }
-.tour-mini-brand { width: 22px; height: 22px; border-radius: 50%; background: var(--text); margin: 2px 0 6px; }
-.tour-mini-gap { flex: 1; }
-.tour-mini-me { width: 22px; height: 22px; border-radius: 50%; background: var(--border-2); margin-top: 4px; animation: tour-pop .4s var(--d, 0s) var(--spring) both; }
-.tour-mini-screen { flex: 1; border-radius: 12px; background: var(--panel-2); padding: 14px; display: flex; flex-direction: column; gap: 8px; }
-.tour-mini-screen i { height: 34px; border-radius: 8px; background: var(--panel); animation: tour-rise .5s var(--d, 0s) var(--soft) both; }
-.tour-mini-screen i.short { width: 60%; }
-.tour-where.phone { width: 170px; height: 280px; flex-direction: column; border-radius: 28px; padding: 8px 8px 10px; }
-.tour-where.phone .tour-mini-screen { border-radius: 20px; }
-.tour-mini-bar { align-self: center; display: flex; gap: 4px; padding: 4px; border-radius: 99px; background: var(--panel-2); box-shadow: 0 0 0 1px var(--border); }
-.tour-mini-bar span { width: 30px; height: 26px; display: grid; place-items: center; border-radius: 99px; color: var(--muted); animation: tour-light .9s var(--d, 0s) ease-in-out both; }
-
 /* ---------- animações (o estilo normal é o final; elas dizem só de onde vem) ---------- */
-@keyframes tour-pop { from { opacity: 0; transform: scale(.4); } }
-@keyframes tour-drop { 0% { opacity: 0; transform: translateY(-36px) scale(.9); } 60% { opacity: 1; } }
 @keyframes tour-bubble { from { opacity: 0; transform: translateY(8px) scale(.85); } }
 @keyframes tour-typing { 0% { height: 0; opacity: 0; padding-block: 0; margin-bottom: -8px; } 15%, 85% { height: 28px; opacity: 1; padding-block: 11px; margin-bottom: 0; } }
 @keyframes tour-dot { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-3px); opacity: 1; } }
 @keyframes tour-rise { from { opacity: 0; transform: translateY(14px); } }
 @keyframes tour-grow { from { transform: scaleY(0); } }
-@keyframes tour-hop { 0%, 100% { transform: none; } 40% { transform: translateY(-14px); } 70% { transform: translateY(0) scaleY(.94); } }
-@keyframes tour-line { from { transform: scaleX(0); } }
 @keyframes tour-press { 0%, 100% { transform: none; } 40% { transform: scale(.9); } }
 @keyframes tour-finger { 0% { opacity: 0; transform: translate(40px, 40px); } 50% { opacity: 1; transform: none; } 70% { opacity: 1; transform: scale(.8); } 100% { opacity: 0; transform: scale(1.4); } }
-@keyframes tour-light { 0%, 100% { background: transparent; color: var(--muted); } 40%, 60% { background: var(--violet-soft); color: var(--nav-act, var(--violet)); } }
 
 @media (prefers-reduced-motion: reduce) {
   .onb-scene *, .onb-scene *::before { animation: none !important; transition: none !important; }

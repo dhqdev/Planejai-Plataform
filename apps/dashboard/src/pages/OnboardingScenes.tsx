@@ -112,7 +112,7 @@ const pick = (a: Answers, id: string) => {
 };
 
 const HABIT: Record<string, string> = { exercise: "Exercício", water: "Beber água", reading: "Leitura", sleep: "Dormir mais cedo", meditate: "Meditar" };
-const MONEY_GOAL: Record<string, string> = { reserve: "Reserva de emergência", trip: "Viagem", house: "Casa ou carro", invest: "Começar a investir", control: "Saber pra onde vai" };
+const MONEY_GOAL: Record<string, string> = { reserve: "ter uma reserva", trip: "juntar pra algo", invest: "começar a investir", control: "saber pra onde vai" };
 const FORGET: Record<string, string> = { bills: "contas", meetings: "compromissos", birthdays: "aniversários", meds: "remédios", tasks: "tarefas do dia" };
 const TONE: Record<string, string> = { short: "direto e curto", detail: "com explicação", fun: "descontraído" };
 
@@ -129,13 +129,14 @@ export function personalCards(a: Answers): Card[] {
   const goals = pick(a, "goal");
   const out: Card[] = [];
   if (goals.includes("money")) {
-    const g = pick(a, "money_goal").map((x) => MONEY_GOAL[x]).filter(Boolean);
-    const debt = pick(a, "debt_plan")[0] === "yes";
+    const goal = pick(a, "money_goal")[0] ?? "";
+    const g = MONEY_GOAL[goal];
+    const debt = goal === "debt";
     out.push({
       id: "money",
       icon: "wallet",
       title: "Finanças",
-      text: debt ? "Calendário de gastos e um plano pra sair das dívidas" : g.length ? `Calendário de gastos e a meta ${g[0]!.toLowerCase()}` : "Calendário de gastos e limite do mês",
+      text: debt ? "Calendário de gastos e um plano pra sair das dívidas" : g ? `Calendário de gastos e a meta: ${g}` : "Calendário de gastos e limite do mês",
       art: "bars",
     });
   }
@@ -148,10 +149,9 @@ export function personalCards(a: Answers): Card[] {
     out.push({ id: "habits", icon: "repeat", title: "Hábitos", text: h.length ? `${h.slice(0, 2).join(" e ")}, um dia de cada vez` : "Rotina com lembrete na hora certa", art: "ring" });
   }
   if (goals.includes("work")) {
-    out.push({ id: "work", icon: "briefcase", title: "Trabalho", text: pick(a, "split")[0] === "yes" ? "Contas da empresa separadas das suas" : "Tarefas, reuniões e recados do trabalho" });
+    out.push({ id: "work", icon: "briefcase", title: "Trabalho", text: "Tarefas, reuniões e recados do trabalho" });
   }
   if (goals.includes("study")) out.push({ id: "study", icon: "book", title: "Estudos", text: "Resumos, mapas mentais e revisão" });
-  if (pick(a, "shared")[0] === "split") out.push({ id: "home", icon: "users", title: "Casa", text: "Contas da casa divididas, cada um com a sua parte" });
   const tone = TONE[pick(a, "tone")[0] ?? ""];
   if (tone) out.push({ id: "tone", icon: "sparkle", title: "Do seu jeito", text: `Vou falar ${tone} com você` });
   return out.slice(0, 4);
