@@ -23,6 +23,9 @@ const ROOTS = [
   "apps/server/test",
   "apps/dashboard",
   "apps/dashboard/src",
+  // telas e estilos do painel costumam ser citados só pelo nome (Billing.tsx, avisos.css)
+  "apps/dashboard/src/pages",
+  "apps/dashboard/src/styles",
   ".claude/skills/planejai",
   ".github/workflows",
 ];
