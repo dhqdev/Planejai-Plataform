@@ -450,8 +450,12 @@ export function startRestore(input: RestoreInput, log: (m: string) => void, onDo
   if (restoreState && !["pronto", "erro"].includes(restoreState.phase)) throw new Error("Já tem uma restauração em andamento.");
   if (!DUMP_RE.test(input.key)) throw new Error("Escolha um backup da pasta banco/.");
   restoreState = { phase: "baixando", key: input.key, startedAt: new Date().toISOString(), message: "Baixando o backup do bucket" };
+  // "pronto" só depois da limpeza (conexões fechadas, arquivo apagado) e logo antes de reiniciar
   void doRestore(input, log)
-    .then(() => onDone())
+    .then((previous) => {
+      restoreState = { ...restoreState!, phase: "pronto", finishedAt: new Date().toISOString(), previousDb: previous, message: "Restaurado. O Planejai reinicia sozinho em alguns segundos: entre de novo." };
+      onDone();
+    })
     .catch((err) => {
       log(`restauração falhou: ${(err as Error).message}`);
       restoreState = { ...restoreState!, phase: "erro", finishedAt: new Date().toISOString(), error: (err as Error).message, message: "Nada mudou: o banco atual continua igual." };
@@ -547,8 +551,8 @@ async function doRestore(input: RestoreInput, log: (m: string) => void) {
     // só o banco de antes desta restauração fica guardado
     const olds = await admin.query("SELECT datname FROM pg_database WHERE datname LIKE $1 AND datname <> $2", [`${cur}\\_antes\\_%`, previous]);
     for (const o of olds.rows) await admin.query(`DROP DATABASE IF EXISTS ${ident(o.datname)} WITH (FORCE)`).catch(() => {});
-    restoreState = { ...restoreState!, phase: "pronto", finishedAt: new Date().toISOString(), previousDb: previous, message: "Restaurado. O Planejai reinicia sozinho em alguns segundos: entre de novo." };
     log(`restauração pronta: ${input.key}; banco anterior guardado como ${previous}`);
+    return previous;
   } catch (err) {
     await target?.end().catch(() => {});
     target = null;
