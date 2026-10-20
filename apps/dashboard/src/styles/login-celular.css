@@ -67,9 +67,11 @@
   }
 
   /* teclado aberto: sai o que não é campo (seta, Bolinho, frase de apoio, pontinhos e o link do pé) e o formulário
-     fica no meio do espaço que sobra acima do teclado, não colado no topo (David, 2026-10-20: "muito alto") */
+     fica perto do topo com uma folga fixa. Centralizar na área visível falhou no iPhone instalado: a altura do
+     teclado chega atrasada (ou não chega) e o formulário caía atrás dele. A folga usa dvh, que o teclado não muda.
+     David, 2026-10-20: colado no topo era "muito alto" e centralizado ficou "muito baixo". */
   html.pj-kb .auth-back, html.pj-kb .auth-logo, html.pj-kb .auth-form .signup-dots,
   html.pj-kb .auth-form h1 + p.muted, html.pj-kb .auth-form .card > p.muted:last-child { display: none; }
-  html.pj-kb .auth-form .card { padding-top: calc(16px + var(--safe-top)); padding-bottom: 16px; justify-content: safe center; }
+  html.pj-kb .auth-form .card { padding-top: calc(var(--safe-top) + clamp(28px, 10dvh, 96px)); padding-bottom: 16px; }
   html.pj-kb .auth-form h1 { font-size: 24px; margin-bottom: 16px; }
 }
