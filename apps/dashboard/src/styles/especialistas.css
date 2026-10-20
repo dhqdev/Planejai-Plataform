@@ -1,16 +1,77 @@
 /* ---------- Loja de especialistas e aba de cada um ---------- */
-.store-count { margin: -4px 0 12px; font-size: 13px; }
-.store-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 720px) { .store-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (min-width: 1180px) { .store-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.store-card { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; min-width: 0; transition: box-shadow .2s ease; }
-.store-card.on { box-shadow: inset 0 0 0 1.5px var(--accent); }
-.store-card-main { display: flex; gap: 12px; align-items: flex-start; color: inherit; text-decoration: none; min-width: 0; }
-.store-card-main > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.store-card-main strong { font-size: 15px; }
-.store-card-main .muted { font-size: 12.5px; }
-.store-card-main p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.4; overflow-wrap: anywhere; }
-.store-card > .btn, .store-card > .badge { align-self: flex-end; }
+/* Lista no jeito de vitrine (David, 2026-10-20, inspirado na tela de agentes do Pierre): pílula de resumo,
+   fileiras que correm para o lado, retratos grandes do Bolinho vestido sobre o tom pastel de cada um e chave
+   no lugar de Ligar/Desligar. Sem degradê: o nome fica numa faixa de vidro em cima do retrato. */
+.sp-page { --sp-h: clamp(186px, 25.5vh, 290px); --sp-w: calc(var(--sp-h) * .76); }
+.sp-stats { display: inline-flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; padding: 8px 14px; margin: 0; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); font-size: 12.5px; color: var(--muted); }
+.sp-stats span { display: inline-flex; align-items: center; gap: 6px; }
+.sp-stats b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sp-stats svg { opacity: .8; }
+.sp-page > .page-head { align-items: flex-end; }
+.sp-section { margin-bottom: 16px; min-width: 0; }
+.sp-section h2 { margin: 0 0 10px; font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+.sp-empty, .sp-note { margin: -4px 0 12px; font-size: 13px; }
+
+/* fileira: rola para o lado sem barra; setinhas redondas por cima nas pontas */
+.sp-rail-wrap { position: relative; min-width: 0; }
+.sp-rail { display: flex; gap: 14px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding: 0 2px; padding: 2px 2px 4px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.sp-rail::-webkit-scrollbar { display: none; }
+.sp-item { flex: 0 0 var(--sp-w); width: var(--sp-w); scroll-snap-align: start; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.sp-item.wide { flex-basis: calc(var(--sp-w) * 1.42); width: calc(var(--sp-w) * 1.42); }
+.sp-arrow { position: absolute; top: calc(50% - 22px); width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; box-shadow: 0 6px 18px -8px rgba(0, 0, 0, .35); transition: transform .15s ease; }
+.sp-arrow.prev { left: -10px; }
+.sp-arrow.next { right: -10px; }
+.sp-arrow:active { transform: scale(.94); }
+@media (hover: none) { .sp-arrow { display: none; } }
+
+/* retrato: o tom da carinha (pastel no claro, o mesmo tom bem fundo no escuro) com o Bolinho grande */
+.sp-art { --tint: #eae2fc; position: relative; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: end center; overflow: hidden; background: var(--tint); }
+:root[data-theme="dark"] .sp-art { background: color-mix(in oklab, var(--tint) 24%, #1a1a1a); }
+/* o pastel tem pouca cor: no escuro o mesmo tom, fundo e mais vivo (navegador sem cor relativa fica no de cima) */
+@supports (color: oklch(from red l c h)) { :root[data-theme="dark"] .sp-art { background: oklch(from var(--tint) .33 calc(c * 2.4) h); } }
+.sp-art .mascote { margin-bottom: -6%; transition: transform .35s cubic-bezier(.2, .8, .2, 1); }
+
+.sp-card, .sp-sug { position: relative; display: block; overflow: hidden; border-radius: 18px; color: inherit; text-decoration: none; border: 1px solid var(--border); background: var(--panel); transition: transform .2s ease, border-color .2s ease; }
+.sp-card { height: var(--sp-h); }
+.sp-card .sp-art { position: absolute; inset: 0; place-items: center; padding-bottom: 58px; }
+.sp-card .sp-art .mascote { width: 80%; height: auto; margin: 0; }
+@media (hover: hover) and (pointer: fine) {
+  .sp-card:hover, .sp-sug:hover { transform: translateY(-2px); border-color: var(--border-2); }
+  .sp-card:hover .mascote, .sp-sug:hover .mascote { transform: scale(1.04); }
+}
+.sp-card:active, .sp-sug:active { transform: scale(.98); }
+/* faixa de vidro com o nome, por cima do retrato */
+.sp-label { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 1px; padding: 9px 12px; border-radius: 12px; background: rgba(255, 255, 255, .62); -webkit-backdrop-filter: blur(14px) saturate(160%); backdrop-filter: blur(14px) saturate(160%); color: #111; }
+:root[data-theme="dark"] .sp-label { background: rgba(20, 20, 20, .58); color: #f1f1ee; }
+.sp-label strong, .sp-sug-text strong { font-size: 14.5px; font-weight: 650; line-height: 1.25; overflow-wrap: anywhere; }
+.sp-sug-text strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-label small { font-size: 12px; opacity: .72; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* sugestão: retrato em cima, nome e o que faz embaixo */
+.sp-sug .sp-art { height: calc(var(--sp-h) * .54); border-bottom: 1px solid var(--border); }
+.sp-sug .sp-art .mascote { width: auto; height: 104%; aspect-ratio: 1; margin-bottom: -9%; }
+.sp-sug-text { display: flex; flex-direction: column; gap: 1px; padding: 11px 14px 13px; min-height: calc(var(--sp-h) * .46 - 1px); }
+.sp-sug-text small { font-size: 12px; color: var(--muted); }
+.sp-sug-text p { margin: 6px 0 0; font-size: 13px; line-height: 1.42; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* chave de ligar: neutra desligada, roxa ligada (o roxo marca quem está no time) */
+.sp-switch-row { display: inline-flex; align-items: center; gap: 10px; min-height: 32px; padding: 0 2px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; align-self: flex-start; }
+.sp-switch-row:disabled { cursor: default; }
+.sp-switch-row:disabled:not(.busy) .sp-switch { opacity: .45; }
+.sp-switch-row.busy { opacity: .7; }
+.sp-switch { position: relative; flex-shrink: 0; width: 34px; height: 20px; border-radius: 999px; background: var(--border-2); transition: background .2s ease; }
+.sp-switch i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .22s cubic-bezier(.3, .7, .3, 1); }
+.sp-switch.on { background: var(--act, var(--violet)); }
+.sp-switch.on i { transform: translateX(14px); }
+.sp-switch-row:has(.sp-switch.on) { color: var(--text); }
+
+@media (max-width: 767px) {
+  .sp-page { --sp-h: 228px; }
+  .sp-stats { display: flex; justify-content: space-between; border-radius: 14px; margin-top: 4px; }
+  /* no celular a fileira vai até a borda da tela */
+  .sp-rail { margin: 0 -16px; padding: 2px 16px 4px; scroll-padding: 0 16px; gap: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .store-ask, .sp-card, .sp-sug, .sp-art .mascote, .sp-switch, .sp-switch i, .sp-arrow { transition: none; } .store-ask:active, .sp-card:active, .sp-sug:active { transform: none; } }
 .store-hero { display: flex; gap: 16px; align-items: center; padding: 18px; margin-bottom: 12px; }
 .store-hero > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .store-hero h1 { margin: 0; font-size: 22px; }
@@ -23,4 +84,3 @@
 .store-ask svg { flex-shrink: 0; color: var(--accent); }
 .store-ask:active { transform: scale(.98); background: var(--hover, rgba(127, 127, 127, .08)); }
 .store-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
-@media (prefers-reduced-motion: reduce) { .store-ask, .store-card { transition: none; } .store-ask:active { transform: none; } }
