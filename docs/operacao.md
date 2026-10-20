@@ -14,12 +14,36 @@ Guia curto para quem cuida da stack: segredos, backup, voltar versão, saúde do
 
 Gere com `openssl rand -hex 32` (a do n8n pode ser `openssl rand -hex 24`).
 
-## Backup do banco
+## Backup e migração (painel > Servidor > Backup)
+
+Com o bucket ligado (`STORAGE_S3_*`, seção abaixo), o próprio app faz o backup todo dia às 3h30 (`DEFAULT_TIMEZONE`), sem rclone:
+`pg_dump` do banco inteiro em `banco/` com uma ficha `.json` do lado (versão, quantas pessoas, impressão digital da `ENCRYPTION_KEY`, conferência dos arquivos), 30 dias (sempre ficam os 7 mais novos).
+A tela Servidor > Backup (só o dono da stack) mostra o que está salvo, tem "Testar backup agora" (sobe, baixa de volta e confere o hash e o `pg_restore -l`), o cofre das chaves, o passo a passo para migrar e o botão de restaurar.
+
+Pastas no bucket (dentro do prefixo de `STORAGE_S3_BUCKET`, ex.: `planejai/planejai`):
+
+```
+banco/                     planejai-AAAAMMDD-HHMM.dump + .json (e antes-de-restaurar-*.dump)
+arquivos/documentos/<id>/  documentos de cada pessoa
+arquivos/midia/            fotos, áudios, gravações
+chaves/                    cofre-das-chaves.json (variáveis da stack cifradas com a senha do dono, scrypt + AES-256-GCM)
+LEIA-ME.txt
+```
+
+Objetos do formato antigo (`documents/`, `media/`) mudam para `arquivos/` aos poucos na limpeza de hora em hora (copia, troca a chave na linha, apaga o antigo). Dumps que o serviço `backup` da stack deixa em `backups/` vão para `banco/` no backup do app.
+
+**O que está no backup:** todo o Postgres (pessoas, agenda, finanças, memórias, integrações cifradas, configurações, filas, sessão do WhatsApp em `wa_auth`) + os arquivos do bucket. **Fora:** a memória curta do Redis (o resumo das conversas está no banco), o cache e as variáveis da stack (por isso o cofre).
+
+**Restaurar (outra VPS ou a mesma):** suba a stack com os mesmos `STORAGE_S3_*`, `ADMIN_EMAIL` e `ADMIN_PASSWORD`, entre como dono (sem WhatsApp conectado o login não pede código) e use Servidor > Backup > Restaurar. O app baixa o dump, restaura num banco ao lado (`<banco>_restaurando`), roda as migrações, regrava as credenciais com a `ENCRYPTION_KEY` desta stack (se o backup usava outra, pede a senha do cofre ou a chave antiga) e só então troca os nomes: o banco de antes fica como `<banco>_antes_<data>` e, se tinha gente cadastrada, também vai uma cópia para `banco/antes-de-restaurar-*.dump`. App e worker reiniciam sozinhos. Precisa que o usuário do banco crie bancos (o `POSTGRES_USER` da imagem oficial pode).
+
+**Abrir o bucket como pasta:** o B2 não tem FTP; use WinSCP (protocolo Amazon S3) ou Cyberduck com uma Application Key **só leitura** do bucket. Não renomeie nada em `arquivos/`: o banco guarda o caminho.
+
+### Backup local da stack (serviço `backup`)
 
 O serviço `backup` faz um `pg_dump` por dia (formato custom) no volume `planejai_backups` e guarda 14 dias.
 O backup tem dados pessoais e a sessão do WhatsApp: guarde a cópia externa num bucket privado.
 
-**Cópia fora do servidor (recomendado).** Preencha `BACKUP_REMOTE` e as variáveis do rclone no serviço `backup`. Exemplo com Cloudflare R2:
+**Cópia fora do servidor pelo rclone (opcional, o app já manda para o bucket).** Preencha `BACKUP_REMOTE` e as variáveis do rclone no serviço `backup`. Exemplo com Cloudflare R2:
 
 ```
 BACKUP_REMOTE: r2:planejai-backups
@@ -30,10 +54,10 @@ RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ...
 RCLONE_CONFIG_R2_ENDPOINT: https://<conta>.r2.cloudflarestorage.com
 ```
 
-Com Backblaze B2 (um bucket só para banco e arquivos, dumps na pasta `backups/`):
+Com Backblaze B2 (mesmo bucket dos arquivos, pasta `backups/`, que o app arruma para `banco/`):
 
 ```
-BACKUP_REMOTE: b2:Mensageria/backups
+BACKUP_REMOTE: b2:<bucket>/<prefixo>/backups
 RCLONE_CONFIG_B2_TYPE: s3
 RCLONE_CONFIG_B2_PROVIDER: Other
 RCLONE_CONFIG_B2_ACCESS_KEY_ID: <keyID da Application Key>
@@ -41,11 +65,11 @@ RCLONE_CONFIG_B2_SECRET_ACCESS_KEY: <applicationKey>
 RCLONE_CONFIG_B2_ENDPOINT: https://s3.us-east-005.backblazeb2.com
 ```
 
-No B2 crie uma Application Key só desse bucket (Read and Write), nunca a Master. Com "Keep all versions" o que o rclone apaga vira versão oculta e continua cobrando: ponha a regra de ciclo de vida "Keep prior versions for this number of days" (ex.: 30).
+No B2 crie uma Application Key só desse bucket (Read and Write), nunca a Master. Com "Keep all versions" o que é apagado vira versão oculta e continua cobrando: ponha a regra de ciclo de vida "Keep prior versions for this number of days" (ex.: 30).
 
 **Conferir:** os logs do serviço `backup` mostram `backup ok: /backups/planejai-AAAAMMDD-HHMM.dump`.
 
-**Restaurar:**
+**Restaurar à mão (sem o painel):**
 
 ```sh
 # 1. pare app e worker (Portainer > serviço > scale 0)
@@ -71,10 +95,10 @@ STORAGE_S3_SECRET_ACCESS_KEY: ...
 
 No B2 o endpoint é `https://s3.<região>.backblazeb2.com` e `STORAGE_S3_REGION` é a região (ex.: `us-east-005`), não `auto`: a assinatura usa a região.
 
-3. Atualize a stack. Arquivo novo já vai pro bucket (`documents/<pessoa>/<id>` e `media/<id>`). Os antigos saem do banco aos poucos: a limpeza de hora em hora leva até 50 por rodada (log `limpeza de dados antigos`, campo `movedToStorage`).
+3. Atualize a stack. Arquivo novo já vai pro bucket (`arquivos/documentos/<pessoa>/<id>` e `arquivos/midia/<id>`). Os antigos saem do banco aos poucos: a limpeza de hora em hora leva até 50 por rodada (log `limpeza de dados antigos`, campo `movedToStorage`).
 
 - Apagar documento, a pessoa (LGPD) ou mídia vencida apaga o objeto também; o que falhar fica em `storage_trash` e sai na rodada seguinte.
-- O `pg_dump` do backup **não** tem os arquivos que estão no bucket: ative a cópia/versão do próprio bucket se quiser backup deles.
+- O `pg_dump` não tem os arquivos que estão no bucket: eles já estão lá, e o backup do app confere a cada dia se cada linha tem o objeto.
 - Não desligue o storage depois de ligado: arquivo que já está no bucket só é lido de lá.
 - **Cópia na VM** (painel > Servidor > Armazenamento, "Guardar cópia na VM", só super admin; padrão ligado): ligado, documento e mídia novos ficam no bucket e também no banco, e o dump diário fica no volume além do `BACKUP_REMOTE`. Desligado, vão só para o bucket: a limpeza de hora em hora tira do banco o que já está no bucket e o serviço `backup` apaga o dump local depois de copiar (precisa da versão nova do serviço `backup`, então atualize a stack). O Postgres, o Redis e a sessão do WhatsApp continuam sempre na VM.
 - O tamanho por cliente na tela Servidor continua vindo da coluna `size` de cada linha.

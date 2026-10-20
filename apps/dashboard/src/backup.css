@@ -1,0 +1,90 @@
+/* Servidor > Backup (só o dono da stack). Mesma tinta da tela Servidor: verde só no "está salvo", amarelo no que falta. */
+.bk-page .mono-num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.bk-page code { font-family: var(--mono); font-size: 12px; background: var(--panel-2); padding: 1px 5px; border-radius: 5px; word-break: break-all; }
+.bk-page h3 { margin: 0 0 12px; font-size: 14px; font-weight: 600; }
+
+.bk-verdict { display: flex; align-items: center; gap: 14px; padding: 16px 18px; margin-bottom: 14px; }
+.bk-verdict-dot { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
+.bk-verdict.ok .bk-verdict-dot { background: var(--ok-soft); color: var(--ok); }
+.bk-verdict.warn .bk-verdict-dot { background: var(--warn-soft); color: var(--warn); }
+.bk-verdict-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.bk-verdict-text strong { font-size: 15px; font-weight: 600; }
+.bk-verdict-text small { font-size: 13px; color: var(--muted); line-height: 1.4; }
+.bk-running { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+
+.bk-fresh { display: flex; align-items: center; gap: 16px; padding: 16px 18px; margin-bottom: 14px; }
+.bk-fresh > div { flex: 1; min-width: 0; }
+.bk-fresh p { margin: 4px 0 0; font-size: 13px; }
+
+.bk-restore { display: flex; align-items: flex-start; gap: 12px; padding: 14px 18px; margin-bottom: 14px; }
+.bk-restore .srv-live { margin-top: 6px; }
+.bk-restore > div { display: flex; flex-direction: column; gap: 3px; }
+.bk-restore small { font-size: 13px; color: var(--muted); }
+.bk-restore.ok { border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+.bk-restore.err { border-color: color-mix(in srgb, var(--err) 40%, var(--border)); }
+.bk-restore.err small:first-of-type { color: var(--err); }
+
+.bk-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, 1fr); gap: 14px; align-items: start; }
+.bk-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.bk-card { padding: 16px 18px; min-width: 0; }
+.bk-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.bk-head h3 { margin: 0; }
+.bk-lead { margin: 0 0 10px; font-size: 13px; line-height: 1.45; }
+.mono-small { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+.bk-sub { margin: 16px 0 6px; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.bk-foot { margin: 12px 0 0; font-size: 12px; line-height: 1.5; }
+
+.bk-item { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }
+.bk-item:first-of-type { border-top: none; padding-top: 2px; }
+.bk-mark { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; margin-top: 1px; }
+.bk-mark.ok { background: var(--ok-soft); color: var(--ok); }
+.bk-mark.warn { background: var(--warn-soft); color: var(--warn); }
+.bk-mark.err { background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); }
+.bk-item-body { min-width: 0; flex: 1; }
+.bk-item-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.bk-item-top strong { font-size: 14px; font-weight: 600; }
+.bk-item-top small { font-size: 12.5px; color: var(--muted); }
+.bk-item-body p { margin: 4px 0 0; font-size: 13px; line-height: 1.45; }
+.bk-inv { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 12.5px; }
+.bk-inv strong { color: var(--text, inherit); font-weight: 600; }
+.bk-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.bk-warn { display: block; margin-top: 8px; font-size: 12.5px; color: var(--warn); background: var(--warn-soft); padding: 8px 10px; border-radius: 10px; }
+.bk-err { color: var(--err); font-size: 13px; margin: 0; }
+
+.bk-not { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.45; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+.bk-not strong { color: var(--text, inherit); font-weight: 550; }
+
+.bk-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 1.5; }
+.bk-steps strong { font-weight: 600; }
+
+.bk-tree { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.bk-folder { display: flex; align-items: center; gap: 10px; padding: 10px 12px; font-size: 13px; }
+.bk-folder + .bk-folder { border-top: 1px solid var(--border); }
+.bk-folder > svg { color: var(--muted); flex-shrink: 0; }
+.bk-folder-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.bk-folder-name code { background: none; padding: 0; font-size: 12.5px; font-weight: 600; }
+.bk-folder-name small { font-size: 12px; }
+.bk-folder > small { white-space: nowrap; font-size: 12px; }
+
+.bk-list { display: flex; flex-direction: column; }
+.bk-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); min-width: 0; }
+.bk-row:first-child { border-top: none; padding-top: 0; }
+.bk-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.bk-row-main strong { font-size: 13px; font-weight: 550; }
+.bk-row-main small { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-state { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--border-2); }
+.bk-state.ok { background: var(--ok); }
+.bk-state.err { background: var(--err); }
+.bk-state.run { background: var(--violet); }
+
+.bk-form { display: flex; flex-direction: column; gap: 4px; }
+.bk-form > p { margin: 0 0 10px; font-size: 13px; line-height: 1.5; }
+.bk-env { margin: 0; padding: 12px 14px; background: var(--panel-2); border-radius: 12px; font-family: var(--mono); font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; max-height: 60vh; overflow: auto; scrollbar-width: none; }
+.bk-env::-webkit-scrollbar { display: none; }
+
+@media (max-width: 900px) {
+  .bk-grid { grid-template-columns: minmax(0, 1fr); }
+  .bk-fresh { flex-direction: column; align-items: stretch; }
+  .bk-verdict { align-items: flex-start; }
+  .bk-running { display: none; }
+}

@@ -19,6 +19,9 @@ export const pool = new pg.Pool({
   statement_timeout: config.DB_STATEMENT_TIMEOUT_MS || undefined,
 });
 
+// conexão ociosa derrubada (Postgres reiniciou, restauração do backup trocou o banco): o pool descarta e abre outra
+pool.on("error", (err) => console.error("[pg] conexão ociosa caiu:", err.message));
+
 /** Tira o limite de tempo desta conexão (esperar uma trava pode levar minutos); devolve o RESET para o finally. */
 export async function waitLonger(client: pg.PoolClient) {
   await client.query("SET statement_timeout = 0");

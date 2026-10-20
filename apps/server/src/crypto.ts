@@ -43,6 +43,28 @@ export function decryptJsonWithInfo<T = Record<string, string>>(payload: string)
   throw new Error("Não consegui abrir a credencial: ENCRYPTION_KEY mudou? Coloque a anterior em ENCRYPTION_KEY_OLD.");
 }
 
+/** Impressão digital curta de uma chave (não revela a chave): mostra no painel e na ficha do backup se a chave é a mesma. */
+export function keyFingerprint(secret: string = config.ENCRYPTION_KEY || config.APP_SECRET) {
+  return secret ? createHash("sha256").update(`fp:${secret}`).digest("hex").slice(0, 12) : null;
+}
+
+/**
+ * Abre com a chave atual/antigas da stack ou com chaves extras (as da stack antiga, na restauração).
+ * Devolve null se nenhuma abre; `stale` = precisa gravar de novo com a chave atual.
+ */
+export function decryptWithExtra(payload: string, extraSecrets: string[] = []): { value: unknown; stale: boolean } | null {
+  const buf = Buffer.from(payload, "base64");
+  const list = [...keys(), ...extraSecrets.filter(Boolean).map(keyFrom)];
+  for (const [i, key] of list.entries()) {
+    try {
+      return { value: JSON.parse(decryptWith(key, buf)), stale: i > 0 };
+    } catch {
+      /* próxima */
+    }
+  }
+  return null;
+}
+
 export function decryptJson<T = Record<string, string>>(payload: string): T {
   return decryptJsonWithInfo<T>(payload).value;
 }

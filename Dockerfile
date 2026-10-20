@@ -2,7 +2,8 @@
 # Imagem única (API + worker + dashboard). Multi-arch: todo o build roda na arquitetura
 # do runner ($BUILDPLATFORM) e as dependências de produção são JS puro, então o estágio final
 # só copia arquivos para a base node:22-alpine da arquitetura alvo (amd64 e arm64).
-# A única coisa instalada na arquitetura alvo é o ffmpeg (gravação do navegador e leitura de vídeo).
+# Instalados na arquitetura alvo: ffmpeg (gravação do navegador e leitura de vídeo) e o cliente do
+# Postgres 16 (pg_dump/pg_restore do backup no bucket e da restauração, mesma versão do serviço db).
 
 FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 WORKDIR /app
@@ -25,7 +26,7 @@ COPY apps/dashboard/package.json apps/dashboard/
 RUN npm ci --omit=dev --workspace apps/server --include-workspace-root=false --ignore-scripts
 
 FROM node:22-alpine
-RUN apk add --no-cache ffmpeg
+RUN apk add --no-cache ffmpeg && (apk add --no-cache postgresql16-client || apk add --no-cache postgresql-client)
 # versão (release vX.Y.Z) e commit, mostrados no painel e no /health
 ARG APP_VERSION=""
 ARG GIT_SHA=""

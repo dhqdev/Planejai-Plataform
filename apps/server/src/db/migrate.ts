@@ -1,12 +1,14 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type pg from "pg";
 import { pool, waitLonger } from "./pool.js";
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), "migrations");
 
-export async function migrate(log: (msg: string) => void = console.log) {
-  const client = await pool.connect();
+/** `target`: outro pool (a restauração do backup atualiza o banco restaurado antes de trocar). */
+export async function migrate(log: (msg: string) => void = console.log, target: pg.Pool = pool) {
+  const client = await target.connect();
   const restore = await waitLonger(client);
   try {
     await client.query("SELECT pg_advisory_lock(727274)");

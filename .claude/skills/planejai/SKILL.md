@@ -75,6 +75,7 @@ apps/server/src/
   charts.ts  images.ts  pdf.ts
                            gráficos e imagens simples (HTML -> PNG, sem LLM); PDF A4 de várias páginas (HTML -> PDF)
   resources.ts             tela Servidor/Armazenamento
+  backup.ts                backup no bucket (banco/, ficha, conferência), cofre das chaves e restauração (Servidor > Backup; ver deploy.md)
   wa-status.ts             status do WhatsApp do número (Bolinho ou post do blog a cada X dias; ver blog.md)
   usage-report.ts          resumo diário do gasto de IA no WhatsApp do dono (fila `usage.report`, 00:02 no DEFAULT_TIMEZONE): total, tokens, por pessoa (usage_daily), sistema (cost_daily menos pessoas) e saldo do OpenRouter; sem IA
   alive.ts  healthcheck.ts  version.ts

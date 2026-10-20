@@ -48,6 +48,7 @@ const load = {
   conta: () => import("./pages/Conta"),
   queues: () => import("./pages/Queues"),
   resources: () => import("./pages/Resources"),
+  backup: () => import("./pages/Backup"),
   settings: () => import("./pages/Settings"),
   specialists: () => import("./pages/Specialists"),
   team: () => import("./pages/Team"),
@@ -104,6 +105,7 @@ const WatchesPage = page(() => load.watches().then((m) => m.WatchesPage));
 const QueuesPage = page(() => load.queues().then((m) => m.QueuesPage));
 const ServerPage = page(() => load.resources().then((m) => m.ServerPage));
 const StoragePage = page(() => load.resources().then((m) => m.StoragePage));
+const BackupPage = page(() => load.backup().then((m) => m.BackupPage));
 const TeamPage = page(() => load.team().then((m) => m.TeamPage));
 const CustomTabPage = page(() => load.dashboard().then((m) => m.CustomTabPage));
 const NotificationsPage = page(() => load.notifications().then((m) => m.NotificationsPage));
@@ -125,6 +127,7 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/queues": load.queues,
   "/servidor": load.resources,
   "/armazenamento": load.resources,
+  "/backup": load.backup,
   "/clients": load.clients,
   "/invites": load.invites,
   "/agents": load.agents,
@@ -192,7 +195,7 @@ const GROUPS: { to: string; label: string }[][] = [
   [{ to: "/clients", label: "Clientes" }, { to: "/invites", label: "Convites" }],
   [{ to: "/agents", label: "Agentes" }, { to: "/models", label: "Modelos" }],
   [{ to: "/whatsapp", label: "WhatsApp" }, { to: "/integrations", label: "Integrações" }],
-  [{ to: "/servidor", label: "Servidor" }, { to: "/armazenamento", label: "Armazenamento" }],
+  [{ to: "/servidor", label: "Servidor" }, { to: "/armazenamento", label: "Armazenamento" }, { to: "/backup", label: "Backup" }],
   [{ to: "/esteira", label: "Chamados" }, { to: "/esteira-custos", label: "Custos" }, { to: "/esteira-skills", label: "Skills" }],
 ];
 const groupOf = (path: string) => GROUPS.find((g) => g.some((t) => t.to === "/" + (path.split("/")[1] ?? "")));
@@ -550,6 +553,7 @@ export function App() {
               <Route path="/queues" element={<QueuesPage />} />
               <Route path="/servidor" element={<ServerPage />} />
               <Route path="/armazenamento" element={<StoragePage />} />
+              <Route path="/backup" element={<BackupPage />} />
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/whatsapp" element={<WhatsAppPage />} />
               <Route path="/agents" element={<AgentsPage />} />

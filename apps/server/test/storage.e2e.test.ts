@@ -118,16 +118,16 @@ describe.skipIf(!enabled)("documentos e mídias no bucket (e2e)", () => {
     const saved = await docs.saveDocument({ userId: ana.id, name: "contrato", mimetype: "application/pdf", data: pdf });
     const row = await db.one("SELECT data, storage_key, size FROM documents WHERE id = $1", [saved.id]);
     expect(row.data).toBeNull();
-    expect(row.storage_key).toBe(`documents/${ana.id}/${saved.id}`);
+    expect(row.storage_key).toBe(`arquivos/documentos/${ana.id}/${saved.id}`);
     expect(row.size).toBe(pdf.length);
-    expect(objects.get(`/planejai/documents/${ana.id}/${saved.id}`)?.body.equals(pdf)).toBe(true);
+    expect(objects.get(`/planejai/arquivos/documentos/${ana.id}/${saved.id}`)?.body.equals(pdf)).toBe(true);
 
     const got = await docs.getDocument(saved.id, ana.id);
     expect(got?.data.equals(pdf)).toBe(true);
     expect((await docs.documentUsage(ana.id)).bytes).toBe(pdf.length);
 
     expect(await docs.deleteDocument(saved.id, ana.id)).toBe(true);
-    expect(objects.has(`/planejai/documents/${ana.id}/${saved.id}`)).toBe(false);
+    expect(objects.has(`/planejai/arquivos/documentos/${ana.id}/${saved.id}`)).toBe(false);
     expect((await db.one("SELECT count(*)::int AS n FROM storage_trash")).n).toBe(0);
   });
 
@@ -147,7 +147,7 @@ describe.skipIf(!enabled)("documentos e mídias no bucket (e2e)", () => {
     expect(await moveBlobsToStorage(50)).toBe(0);
     const row = await db.one("SELECT data, storage_key FROM documents WHERE id = $1", [doc.id]);
     expect(row.data).toBeNull();
-    expect(objects.get(`/planejai/media/${media.id}`)?.body.equals(Buffer.from([1, 2, 3]))).toBe(true);
+    expect(objects.get(`/planejai/arquivos/midia/${media.id}`)?.body.equals(Buffer.from([1, 2, 3]))).toBe(true);
     const { getDocument } = await import("../src/documents.js");
     expect((await getDocument(doc.id, ana.id))?.data.equals(old)).toBe(true);
   });
@@ -161,7 +161,7 @@ describe.skipIf(!enabled)("documentos e mídias no bucket (e2e)", () => {
     const saved = await docs.saveDocument({ userId: ana.id, name: "dois.txt", mimetype: "text/plain", data: a });
     let row = await db.one("SELECT data, storage_key FROM documents WHERE id = $1", [saved.id]);
     expect(row.data.equals(a)).toBe(true);
-    expect(row.storage_key).toBe(`documents/${ana.id}/${saved.id}`);
+    expect(row.storage_key).toBe(`arquivos/documentos/${ana.id}/${saved.id}`);
     expect(objects.get(`/planejai/${row.storage_key}`)?.body.equals(a)).toBe(true);
 
     // bucket recusando: com a cópia na VM o documento ainda é salvo e sobe depois

@@ -1,4 +1,9 @@
 import { createHash, createHmac } from "node:crypto";
+import { createReadStream, createWriteStream } from "node:fs";
+import { stat } from "node:fs/promises";
+import { request as httpRequest, type IncomingMessage } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { pipeline } from "node:stream/promises";
 import { config } from "./config.js";
 import { many, one, query } from "./db/pool.js";
 import { getSettings } from "./settings.js";
@@ -14,8 +19,17 @@ export function storageEnabled() {
   return Boolean(config.STORAGE_S3_ENDPOINT && config.STORAGE_S3_BUCKET && config.STORAGE_S3_ACCESS_KEY_ID && config.STORAGE_S3_SECRET_ACCESS_KEY);
 }
 
-export const docKey = (userId: string, id: string) => `documents/${userId}/${id}`;
-export const mediaKey = (id: string) => `media/${id}`;
+/**
+ * Pastas no bucket (dentro do prefixo de STORAGE_S3_BUCKET, ex.: "planejai/planejai"):
+ *   banco/      dump diário do Postgres + ficha .json de cada um (backup.ts)
+ *   chaves/     cofre das chaves da stack, cifrado com a senha do dono
+ *   arquivos/documentos/<id da pessoa>/<id>   e   arquivos/midia/<id>
+ * Objetos antigos (documents/, media/, backups/) vão para o lugar novo aos poucos (relocateLegacyObjects).
+ */
+export const docKey = (userId: string, id: string) => `arquivos/documentos/${userId}/${id}`;
+export const mediaKey = (id: string) => `arquivos/midia/${id}`;
+export const DB_FOLDER = "banco/";
+export const KEYS_FOLDER = "chaves/";
 
 const sha256 = (data: string | Buffer) => createHash("sha256").update(data).digest("hex");
 const hmac = (key: string | Buffer, data: string) => createHmac("sha256", key).update(data).digest();
@@ -26,19 +40,47 @@ const encodeKey = (key: string) =>
     .map((p) => encodeURIComponent(p).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`))
     .join("/");
 
+const encodeQuery = (q: Record<string, string>) =>
+  Object.keys(q)
+    .sort()
+    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(q[k]!).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`)
+    .join("&");
+
+/** STORAGE_S3_BUCKET pode levar um prefixo ("planejai/planejai" = bucket planejai, tudo dentro de planejai/). */
+export function bucketParts() {
+  const [bucket = "", ...rest] = config.STORAGE_S3_BUCKET.split("/").filter(Boolean);
+  const prefix = rest.length ? `${rest.join("/")}/` : "";
+  return { bucket, prefix };
+}
+
+interface SignOpts {
+  contentType?: string;
+  now?: Date;
+  /** query string (ex.: list-type=2) */
+  query?: Record<string, string>;
+  /** cabeçalhos extras assinados (ex.: x-amz-copy-source) */
+  headers?: Record<string, string>;
+  /** hash do corpo quando ele vem de um arquivo (streaming) */
+  payloadHash?: string;
+  /** chave crua no caminho do bucket (sem o prefixo do STORAGE_S3_BUCKET), para listar */
+  bucketOnly?: boolean;
+}
+
 /** Monta a requisição assinada (path-style: <endpoint>/<bucket>/<chave>). Exportada para o teste conferir a assinatura. */
-export function signRequest(method: string, key: string, body: Buffer | null, opts: { contentType?: string; now?: Date } = {}) {
+export function signRequest(method: string, key: string, body: Buffer | null, opts: SignOpts = {}) {
   const base = new URL(config.STORAGE_S3_ENDPOINT);
   const prefix = base.pathname.replace(/\/+$/, "");
-  const url = new URL(`${base.origin}${prefix}/${encodeKey(config.STORAGE_S3_BUCKET)}/${encodeKey(key)}`);
+  const path = opts.bucketOnly ? `${prefix}/${encodeKey(bucketParts().bucket)}` : `${prefix}/${encodeKey(config.STORAGE_S3_BUCKET)}/${encodeKey(key)}`;
+  const qs = opts.query ? encodeQuery(opts.query) : "";
+  const url = new URL(`${base.origin}${path}${qs ? `?${qs}` : ""}`);
   const amzDate = (opts.now ?? new Date()).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
   const day = amzDate.slice(0, 8);
   const region = config.STORAGE_S3_REGION || "auto";
-  const payloadHash = sha256(body ?? "");
-  const headers: Record<string, string> = { host: url.host, "x-amz-content-sha256": payloadHash, "x-amz-date": amzDate };
+  const payloadHash = opts.payloadHash ?? sha256(body ?? "");
+  const headers: Record<string, string> = { host: url.host, "x-amz-content-sha256": payloadHash, "x-amz-date": amzDate, ...opts.headers };
   if (opts.contentType) headers["content-type"] = opts.contentType;
   const names = Object.keys(headers).sort();
-  const canonical = [method, url.pathname, "", ...names.map((n) => `${n}:${headers[n]!.trim()}`), "", names.join(";"), payloadHash].join("\n");
+  const canonical = [method, path, qs, ...names.map((n) => `${n}:${headers[n]!.trim()}`), "", names.join(";"), payloadHash].join("\n");
   const scope = `${day}/${region}/s3/aws4_request`;
   const toSign = ["AWS4-HMAC-SHA256", amzDate, scope, sha256(canonical)].join("\n");
   let k: Buffer = hmac(`AWS4${config.STORAGE_S3_SECRET_ACCESS_KEY}`, day);
@@ -49,9 +91,9 @@ export function signRequest(method: string, key: string, body: Buffer | null, op
   return { url: url.toString(), headers };
 }
 
-async function send(method: string, key: string, body: Buffer | null, contentType?: string) {
+async function send(method: string, key: string, body: Buffer | null, contentType?: string, opts: SignOpts = {}) {
   if (!storageEnabled()) throw new Error("Storage de arquivos não configurado");
-  const { url, headers } = signRequest(method, key, body, { contentType });
+  const { url, headers } = signRequest(method, key, body, { ...opts, contentType });
   const res = await fetch(url, { method, headers, body: body ? new Uint8Array(body) : undefined, signal: AbortSignal.timeout(TIMEOUT_MS) });
   return res;
 }
@@ -80,6 +122,104 @@ export async function deleteObject(key: string) {
   const res = await send("DELETE", key, null);
   if (!res.ok && res.status !== 404) await fail(res, "DELETE");
   await res.arrayBuffer().catch(() => null);
+}
+
+/** Tamanho do objeto, ou null se não existe. */
+export async function headObject(key: string): Promise<{ size: number; lastModified: string | null } | null> {
+  const res = await send("HEAD", key, null);
+  if (res.status === 404) return null;
+  if (!res.ok) await fail(res, "HEAD");
+  return { size: Number(res.headers.get("content-length") ?? 0), lastModified: res.headers.get("last-modified") };
+}
+
+/** Cópia dentro do bucket, sem baixar (CopyObject). */
+export async function copyObject(from: string, to: string) {
+  const source = `/${encodeKey(config.STORAGE_S3_BUCKET)}/${encodeKey(from)}`;
+  const res = await send("PUT", to, null, undefined, { headers: { "x-amz-copy-source": source } });
+  const text = await res.text().catch(() => "");
+  // o S3 pode responder 200 com <Error> no corpo
+  if (!res.ok || /<Error>/.test(text)) {
+    const code = text.match(/<Code>([^<]{1,60})<\/Code>/)?.[1];
+    throw new Error(`Storage COPY falhou: ${res.status}${code ? ` ${code}` : ""}`);
+  }
+}
+
+export interface StoredObject {
+  /** chave relativa ao prefixo do STORAGE_S3_BUCKET (igual à que o app grava) */
+  key: string;
+  size: number;
+  lastModified: string;
+}
+
+const xmlDecode = (v: string) => v.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+
+/** Lista objetos de uma pasta (ListObjectsV2, de 1000 em 1000), até `max`. */
+export async function listObjects(folder: string, max = 50_000): Promise<{ objects: StoredObject[]; truncated: boolean }> {
+  const { prefix } = bucketParts();
+  const objects: StoredObject[] = [];
+  let token: string | undefined;
+  for (;;) {
+    const query: Record<string, string> = { "list-type": "2", prefix: prefix + folder, "max-keys": "1000" };
+    if (token) query["continuation-token"] = token;
+    const res = await send("GET", "", null, undefined, { query, bucketOnly: true });
+    if (!res.ok) await fail(res, "LIST");
+    const xml = await res.text();
+    for (const m of xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)) {
+      const body = m[1]!;
+      const key = xmlDecode(body.match(/<Key>([\s\S]*?)<\/Key>/)?.[1] ?? "");
+      if (!key.startsWith(prefix)) continue;
+      objects.push({ key: key.slice(prefix.length), size: Number(body.match(/<Size>(\d+)<\/Size>/)?.[1] ?? 0), lastModified: body.match(/<LastModified>([^<]+)<\/LastModified>/)?.[1] ?? "" });
+    }
+    token = xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/)?.[1];
+    const more = /<IsTruncated>true<\/IsTruncated>/.test(xml) && token;
+    if (!more) return { objects, truncated: false };
+    if (objects.length >= max) return { objects, truncated: true };
+    token = xmlDecode(token!);
+  }
+}
+
+/** Requisição com corpo/resposta em stream (arquivos grandes, como o dump do banco, não passam pela memória). */
+function rawRequest(method: string, key: string, opts: SignOpts & { file?: string; size?: number }, timeoutMs: number): Promise<IncomingMessage> {
+  const { url, headers } = signRequest(method, key, null, opts);
+  const u = new URL(url);
+  const req = (u.protocol === "https:" ? httpsRequest : httpRequest)(u, { method, headers: { ...headers, ...(opts.size != null ? { "content-length": String(opts.size) } : {}) }, timeout: timeoutMs });
+  return new Promise((resolve, reject) => {
+    req.on("response", resolve);
+    req.on("timeout", () => req.destroy(new Error("Storage: tempo esgotado")));
+    req.on("error", reject);
+    if (opts.file) createReadStream(opts.file).on("error", reject).pipe(req);
+    else req.end();
+  });
+}
+
+async function drainError(res: IncomingMessage, method: string): Promise<never> {
+  const chunks: Buffer[] = [];
+  for await (const c of res) chunks.push(c as Buffer);
+  const code = Buffer.concat(chunks).toString("utf8").match(/<Code>([^<]{1,60})<\/Code>/)?.[1];
+  throw new Error(`Storage ${method} falhou: ${res.statusCode}${code ? ` ${code}` : ""}`);
+}
+
+export async function fileSha256(file: string) {
+  const h = createHash("sha256");
+  for await (const c of createReadStream(file)) h.update(c as Buffer);
+  return h.digest("hex");
+}
+
+/** Sobe um arquivo do disco sem carregar na memória. */
+export async function putObjectFile(key: string, file: string, contentType = "application/octet-stream", hash?: string) {
+  if (!storageEnabled()) throw new Error("Storage de arquivos não configurado");
+  const { size } = await stat(file);
+  const res = await rawRequest("PUT", key, { contentType, payloadHash: hash ?? (await fileSha256(file)), file, size }, 30 * 60_000);
+  if ((res.statusCode ?? 500) >= 300) await drainError(res, "PUT");
+  res.resume();
+}
+
+/** Baixa um objeto direto para o disco. */
+export async function getObjectToFile(key: string, file: string) {
+  if (!storageEnabled()) throw new Error("Storage de arquivos não configurado");
+  const res = await rawRequest("GET", key, {}, 30 * 60_000);
+  if ((res.statusCode ?? 500) >= 300) await drainError(res, "GET");
+  await pipeline(res, createWriteStream(file));
 }
 
 /** Com bucket e o interruptor ligado, o arquivo fica também no banco (VM). Sem bucket fica sempre no banco. */
@@ -180,6 +320,41 @@ export async function moveBlobsToStorage(limit = 50) {
     // a linha sumiu no meio do caminho: o objeto não tem dono
     if (!r.rowCount) await deleteObject(key).catch(() => {});
     else moved++;
+  }
+  return moved;
+}
+
+/** Chave nova (pastas arquivos/...) para um objeto gravado no formato antigo, ou null se já está no lugar. */
+export function relocatedKey(key: string) {
+  if (key.startsWith("documents/")) return `arquivos/documentos/${key.slice("documents/".length)}`;
+  if (key.startsWith("media/")) return `arquivos/midia/${key.slice("media/".length)}`;
+  return null;
+}
+
+/**
+ * Arruma o bucket nas pastas novas sem parar nada: copia o objeto antigo para arquivos/..., troca a chave
+ * na linha e só então apaga o antigo. Se a linha sumiu no meio, apaga a cópia (o antigo já foi pra lixeira).
+ */
+export async function relocateLegacyObjects(limit = 100) {
+  if (!storageEnabled()) return 0;
+  const rows = await many<{ t: "documents" | "media_files"; id: string; storage_key: string }>(
+    `(SELECT 'documents' AS t, id, storage_key FROM documents WHERE storage_key LIKE 'documents/%' LIMIT $1)
+     UNION ALL
+     (SELECT 'media_files' AS t, id, storage_key FROM media_files WHERE storage_key LIKE 'media/%' LIMIT $1)`,
+    [limit],
+  );
+  let moved = 0;
+  for (const r of rows.slice(0, limit)) {
+    const to = relocatedKey(r.storage_key);
+    if (!to) continue;
+    await copyObject(r.storage_key, to);
+    const u = await query(`UPDATE ${r.t} SET storage_key = $3 WHERE id = $1 AND storage_key = $2`, [r.id, r.storage_key, to]);
+    if (!u.rowCount) {
+      await deleteObject(to).catch(() => {});
+      continue;
+    }
+    await deleteObject(r.storage_key).catch(() => query("INSERT INTO storage_trash (key) VALUES ($1) ON CONFLICT DO NOTHING", [r.storage_key]));
+    moved++;
   }
   return moved;
 }

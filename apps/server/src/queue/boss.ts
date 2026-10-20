@@ -25,6 +25,8 @@ export const QUEUES = {
   waStatus: "wa-status.run",
   /** resumo diário do gasto de IA no WhatsApp do dono (usage-report.ts) */
   usageReport: "usage.report",
+  /** backup diário do banco no bucket, com ficha e conferência dos arquivos (backup.ts) */
+  backup: "backup.run",
 } as const;
 
 let boss: PgBoss | null = null;
@@ -51,6 +53,7 @@ export async function getBoss(): Promise<PgBoss> {
   await b.createQueue(QUEUES.meet, { name: QUEUES.meet, policy: "standard" });
   await b.createQueue(QUEUES.waStatus, { name: QUEUES.waStatus, policy: "singleton" });
   await b.createQueue(QUEUES.usageReport, { name: QUEUES.usageReport, policy: "singleton" });
+  await b.createQueue(QUEUES.backup, { name: QUEUES.backup, policy: "singleton" });
   boss = b;
   return b;
 }
@@ -79,6 +82,7 @@ export const QUEUE_LABELS: Record<string, string> = {
   [QUEUES.meet]: "Reuniões do Meet",
   [QUEUES.waStatus]: "Status do WhatsApp",
   [QUEUES.usageReport]: "Resumo de gasto de IA",
+  [QUEUES.backup]: "Backup no bucket",
 };
 
 /**

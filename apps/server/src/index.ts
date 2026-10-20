@@ -49,6 +49,11 @@ async function main() {
     process.exit(0);
   };
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  // restauração do backup trocou o banco: reinicia para ler a sessão do WhatsApp e o resto do banco novo
+  if (runsChannel() || runsConversations()) {
+    const { watchRestore } = await import("./backup.js");
+    watchRestore(() => void shutdown("banco restaurado do backup"));
+  }
   process.on("SIGINT", () => void shutdown("SIGINT"));
 }
 

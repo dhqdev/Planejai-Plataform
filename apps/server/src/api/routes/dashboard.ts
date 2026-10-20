@@ -22,6 +22,7 @@ import { shoppingRoutes } from "./dashboard/shopping.js";
 import { storeRoutes } from "./dashboard/store.js";
 import { goalRoutes } from "./dashboard/goals.js";
 import { resourceRoutes } from "./dashboard/resources.js";
+import { backupRoutes } from "./dashboard/backup.js";
 import { settingsRoutes } from "./dashboard/settings.js";
 import { teamAdminRoutes, teamRoutes } from "./dashboard/team.js";
 import { studioRoutes } from "./dashboard/studio.js";
@@ -74,6 +75,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       blogAdminRoutes(api);
       // só o dono da stack (requireOwner dentro do módulo)
       await devPipelineRoutes(api);
+      await backupRoutes(api);
     });
   });
 }

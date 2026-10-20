@@ -136,6 +136,15 @@ async function startChannelJobs(log: WorkerLog) {
   });
   await boss.schedule(QUEUES.usageReport, "2 0 * * *", undefined, { tz: config.DEFAULT_TIMEZONE });
 
+  // backup do banco no bucket (Backblaze), às 3h30: dump + ficha + conferência dos arquivos (backup.ts)
+  await boss.work(QUEUES.backup, { batchSize: 1, pollingIntervalSeconds: 60 }, async () => {
+    const { storageEnabled } = await import("../storage.js");
+    if (!storageEnabled()) return;
+    const { runBackup } = await import("../backup.js");
+    await runBackup("agenda", { log: (m) => log.info(m) }).catch((err) => log.error({ err }, "backup no bucket falhou"));
+  });
+  await boss.schedule(QUEUES.backup, "30 3 * * *", undefined, { tz: config.DEFAULT_TIMEZONE });
+
   // blog público: de hora em hora confere posts de partida, ilustrações que faltam e o post da semana (dia e hora no painel)
   await boss.work<import("../blog.js").BlogJob>(QUEUES.blog, { batchSize: 1, pollingIntervalSeconds: 10 }, async ([job]) => {
     const { runBlogJob } = await import("../blog.js");

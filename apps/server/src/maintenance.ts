@@ -2,7 +2,7 @@ import { summarizeConversation } from "./agent/orchestrator.js";
 import { config } from "./config.js";
 import { many, query } from "./db/pool.js";
 import { getSettings } from "./settings.js";
-import { moveBlobsToStorage, purgeStorageTrash } from "./storage.js";
+import { moveBlobsToStorage, purgeStorageTrash, relocateLegacyObjects } from "./storage.js";
 import { redisAlive } from "./shortmem.js";
 
 /**
@@ -63,6 +63,8 @@ export async function purgeOld(log?: { info: (...a: any[]) => void; error: (...a
   const trashed = await purgeStorageTrash(1000).catch((err) => (log?.error({ err }, "falha ao apagar arquivos do storage"), 0));
   // storage ligado: leva aos poucos o que ainda está no banco (bytea) para o bucket
   const movedToStorage = await moveBlobsToStorage(50).catch((err) => (log?.error({ err }, "falha ao mover arquivos para o storage"), 0));
+  // objetos do formato antigo (documents/, media/) vão para as pastas arquivos/ do bucket, aos poucos
+  const relocated = await relocateLegacyObjects(200).catch((err) => (log?.error({ err }, "falha ao arrumar as pastas do storage"), 0));
   // lembrete que já passou ou foi cancelado não serve mais para nada
   // conversa com contatos da tela Recados: só o último mês
   await query("DELETE FROM contact_messages WHERE created_at < now() - interval '30 days'").catch(() => {});
@@ -71,7 +73,7 @@ export async function purgeOld(log?: { info: (...a: any[]) => void; error: (...a
   await query("UPDATE app_chat SET data = NULL WHERE data IS NOT NULL AND created_at < now() - interval '30 days'").catch(() => {});
   await query("DELETE FROM wa_polls WHERE created_at < now() - interval '1 day'").catch(() => {});
   const rems = await query("DELETE FROM reminders WHERE status IN ('done', 'cancelled') OR (status = 'failed' AND created_at < now() - interval '7 days')");
-  const out = { messages: msgs.rowCount ?? 0, logSteps: scrubbed.rowCount ?? 0, executions: execs.rowCount ?? 0, files: files.rowCount ?? 0, reminders: rems.rowCount ?? 0, trashed, movedToStorage };
+  const out = { messages: msgs.rowCount ?? 0, logSteps: scrubbed.rowCount ?? 0, executions: execs.rowCount ?? 0, files: files.rowCount ?? 0, reminders: rems.rowCount ?? 0, trashed, movedToStorage, relocated };
   log?.info(out, "limpeza de dados antigos");
   return out;
 }
