@@ -19,6 +19,9 @@
 - Faixa amarela de impersonação (`ImpersonateBanner` em App.tsx, `styles/impersonacao.css`): no celular gruda no topo em toda tela; nas de tela cheia (`html.pj-shell`) fica presa e a tela desce `--imp-h`, com `--safe-top` zerado. Topo de tela cheia usa `var(--safe-top)`, não `env(safe-area-inset-top)`.
 - Chat do Início: tocar na caixa lendo mensagens antigas não desce para o fim (`keepPlace` segura a distância do fim enquanto o teclado abre ou fecha). No celular o canto direito do topo é o botão de convite (`InviteForm`), não o sino.
 
+## Puxar para atualizar (celular/PWA)
+- `PullToRefresh.tsx` no `.main` (vale para toda tela do layout): com a tela no topo, o Bolinho desce com o dedo e um anel roxo (`--act`) se fecha em volta dele conforme o puxão (`TRIGGER` 64px, borracha em `resist`); fechou, ele sorri e vibra; soltou, o anel corre enquanto `refreshAll()` + `checkForUpdate()` rodam e termina fechado. Posição e anel mexidos direto no DOM (sem re-render por quadro). Não pega em `.modal`, folhas, campos de texto, lista com rolagem própria já descida nem em `[data-no-ptr]` (lista do chat do Início). CSS em `styles/avisos.css`.
+
 ## Chat do Início (celular e notebook)
 - `pages/HomeChat.tsx` (rota `/api/chat`, tabela `app_chat`): no celular é o Início; no notebook abre por `/?chat=1` (botão "Conversar" do painel, prop `wide`, coluna centralizada dentro da moldura).
 - Cada fala de agente vem num cartão com o nome dele; o time conversando entre si vira cartões quadrados, dois por linha.

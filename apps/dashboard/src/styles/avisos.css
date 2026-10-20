@@ -17,11 +17,21 @@
 
 /* ---------- Puxar para atualizar ---------- */
 .main { position: relative; }
+/* o Bolinho desce com o dedo e um anel roxo se fecha em volta dele; soltou fechado, o anel corre enquanto recarrega */
 .ptr {
-  position: fixed; z-index: 60; left: 50%; top: calc(56px + env(safe-area-inset-top)); width: 40px; height: 40px; border-radius: 50%;
-  display: grid; place-items: center; background: var(--panel); border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(0, 0, 0, .1); pointer-events: none;
+  position: fixed; z-index: 60; left: 50%; top: calc(56px + env(safe-area-inset-top)); width: 52px; height: 52px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--panel); box-shadow: 0 6px 20px rgba(0, 0, 0, .12); pointer-events: none;
+  will-change: transform, opacity;
 }
-.ptr.settle { transition: transform .25s ease, opacity .25s ease; }
-.ptr.busy svg { animation: ptr-spin .8s linear infinite; }
-@keyframes ptr-spin { to { transform: rotate(360deg); } }
+:root[data-theme="dark"] .ptr { background: #191919; box-shadow: 0 6px 20px rgba(0, 0, 0, .45); }
+.ptr > * { grid-area: 1 / 1; }
+.ptr.settle { transition: transform .26s cubic-bezier(.32, .72, 0, 1), opacity .26s ease; }
+.ptr-ring { transform: rotate(-90deg); overflow: visible; }
+.ptr-ring circle { fill: none; stroke-width: 2.4; }
+.ptr-track { stroke: var(--border); }
+.ptr-arc { stroke: var(--act, var(--violet)); stroke-linecap: round; }
+.ptr-busy .ptr-arc { stroke-dashoffset: 110 !important; transition: stroke-dashoffset .3s ease; }
+.ptr-busy .ptr-ring { animation: ptr-spin .9s linear infinite; }
+.ptr-done .ptr-arc { transition: stroke-dashoffset .3s ease; }
+@keyframes ptr-spin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }
 
