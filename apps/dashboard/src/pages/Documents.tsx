@@ -5,6 +5,7 @@ import { useApi } from "../hooks";
 import { Vazio } from "../Vazio";
 import { Icon } from "../icons";
 import { haptic } from "../touch";
+import { DocPreview, previewKind } from "./DocPreview";
 
 interface Doc { id: string; name: string; mimetype: string; size: number; folder: string | null; notes: string | null; source: string; created_at: string; owner_name?: string | null }
 interface Resp { items: Doc[]; usage: { count: number; bytes: number; quota: number } | null; max_bytes: number }
@@ -28,6 +29,8 @@ export function DocumentsPage() {
   const [err, setErr] = useState<string | null>(null);
   const [newFolder, setNewFolder] = useState("");
   const [del, setDel] = useState<Doc | null>(null);
+  const [view, setView] = useState<Doc | null>(null);
+  const open = (d: Doc) => { haptic(); setView(d); };
   const input = useRef<HTMLInputElement>(null);
 
   const all = data?.items ?? [];
@@ -95,13 +98,13 @@ export function DocumentsPage() {
       <div className="doc-rows phone-only">
         {items.map((d) => (
           <div key={d.id} className="doc-row">
-            <a className="doc-row-main" href={`/api/documents/${d.id}/file?inline=1`} target="_blank" rel="noreferrer">
+            <button className="doc-row-main" onClick={() => open(d)}>
               <span className="doc-row-ico"><Icon name={d.mimetype.startsWith("image/") ? "eye" : "file"} size={18} /></span>
               <span className="doc-row-text">
                 <strong>{d.name}</strong>
                 <small>{[kind(d.mimetype), d.folder, bytes(d.size), day(d.created_at)].filter(Boolean).join(" · ")}</small>
               </span>
-            </a>
+            </button>
             <a className="icon-btn" href={`/api/documents/${d.id}/file`} aria-label="Baixar" onClick={() => haptic()}><Icon name="download" size={17} /></a>
             <button className="icon-btn" aria-label="Apagar" onClick={() => { haptic(); setDel(d); }}><Icon name="trash" size={17} /></button>
           </div>
@@ -117,10 +120,10 @@ export function DocumentsPage() {
             {items.map((d) => (
               <tr key={d.id}>
                 <td>
-                  <a className="doc-name" href={`/api/documents/${d.id}/file?inline=1`} target="_blank" rel="noreferrer">
+                  <button className="doc-name" onClick={() => open(d)}>
                     <Icon name={d.mimetype.startsWith("image/") ? "eye" : "file"} size={16} />
                     <span>{d.name}</span>
-                  </a>
+                  </button>
                   {d.notes && <div className="muted doc-notes">{d.notes}</div>}
                 </td>
                 <td className="hide-phone muted">{kind(d.mimetype)}</td>
@@ -128,6 +131,7 @@ export function DocumentsPage() {
                 <td className="hide-phone mono muted">{bytes(d.size)}</td>
                 <td className="muted mono" style={{ whiteSpace: "nowrap" }}>{day(d.created_at)}</td>
                 <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
+                  {previewKind(d) !== "none" && <button className="btn btn-sm btn-ghost" title="Visualizar" onClick={() => open(d)}><Icon name="eye" size={14} /></button>}
                   <a className="btn btn-sm btn-ghost" href={`/api/documents/${d.id}/file`} title="Baixar" onClick={() => haptic()}><Icon name="download" size={14} /></a>
                   <button className="btn btn-sm btn-ghost" title="Apagar" onClick={() => { haptic(); setDel(d); }}><Icon name="trash" size={14} /></button>
                 </td>
@@ -138,6 +142,7 @@ export function DocumentsPage() {
         {data && !items.length && <Empty>{all.length ? "Nada com esse filtro." : "Nenhum documento ainda. Envie aqui ou mande no WhatsApp pedindo para guardar."}</Empty>}
       </div>
       </>)}
+      {view && <DocPreview doc={view} onClose={() => setView(null)} />}
       {del && (
         <Modal
           title="Apagar documento"

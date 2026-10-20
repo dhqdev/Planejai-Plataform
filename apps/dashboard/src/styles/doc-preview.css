@@ -1,0 +1,14 @@
+/* Pré-visualização de documentos: ocupa a janela sem estourar a tela; o PDF rola dentro dela */
+.doc-preview .modal-body { padding: 0; background: var(--panel-2); }
+.doc-preview.modal.wide { width: min(880px, 100%); }
+.dp-stage { height: min(68dvh, 720px); overflow: auto; overscroll-behavior: contain; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 12px; gap: 10px; }
+.dp-pdf { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.dp-page { width: 100%; height: auto; border-radius: 6px; background: #fff; box-shadow: 0 1px 8px rgba(0, 0, 0, 0.18); animation: fade-in 0.25s ease both; }
+.dp-img { max-width: 100%; max-height: 100%; margin: auto; border-radius: 8px; object-fit: contain; animation: fade-in 0.25s ease both; }
+.dp-text { margin: 0; width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; font: 12.5px/1.55 var(--mono, ui-monospace, monospace); color: var(--text); }
+.dp-hint { margin: auto; font-size: 12px; color: var(--muted); }
+.dp-none { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; color: var(--muted); }
+.dp-none strong { color: var(--text); font-weight: 600; }
+.doc-name, .doc-row-main { cursor: pointer; background: none; border: 0; padding: 0; font: inherit; text-align: left; }
+@media (max-width: 700px) { .dp-stage { height: min(72dvh, 640px); padding: 8px; } }
+@media (prefers-reduced-motion: reduce) { .dp-page, .dp-img { animation: none; } }
