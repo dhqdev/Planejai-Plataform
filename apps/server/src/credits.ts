@@ -177,6 +177,32 @@ export const GRAIN_TEXT = {
     `Seus ${days} ${days === 1 ? "dia" : "dias"} de uso livre acabaram 🎉 Daqui pra frente cada pedido gasta grãos, e você ainda tem ${grains(left)} de presente. Quando acabarem, dá para assinar um plano ou comprar mais aqui: ${link}`,
 };
 
+/** O mesmo aviso por e-mail (assunto e texto), que o fluxo "[Sistema] Planejai · Eventos" do n8n manda. */
+export const GRAIN_EMAIL = {
+  low: (left: number, link: string) => ({
+    subject: "Seus grãos do Planejai estão acabando",
+    text: `Oi! Sobraram ${grains(left)} na sua conta do Planejai.\n\nPara o assistente não parar no meio, dá para comprar um pacote avulso (com o cartão já cadastrado é um toque só) ou subir de plano:\n${link}\n\nEquipe Planejai`,
+  }),
+  empty: (link: string) => ({
+    subject: "Seus grãos do Planejai acabaram",
+    text: `Oi! Seus grãos acabaram, então o assistente pausou no WhatsApp e no chat do app. O painel continua aberto.\n\nPara ele voltar a responder, compre um pacote avulso (com o cartão já cadastrado é um toque só) ou suba de plano:\n${link}\n\nEquipe Planejai`,
+  }),
+  freeOver: (link: string) => ({
+    subject: "Seu período grátis no Planejai acabou",
+    text: `Oi! Seus grãos de presente acabaram, então o assistente pausou no WhatsApp e no chat do app. O painel continua aberto.\n\nPara ele voltar a te ajudar, é só assinar um plano ou comprar grãos. Leva um minutinho:\n${link}\n\nEquipe Planejai`,
+  }),
+};
+
+/** Evento para o n8n com o e-mail da pessoa; sem e-mail cadastrado o evento sai igual (o fluxo só não manda nada). */
+async function mailGrains(userId: string, event: "grains.low" | "grains.empty", mail: { subject: string; text: string }, extra: Record<string, unknown>) {
+  try {
+    const { emailFields, emailOf, emitEvent } = await import("./events.js");
+    await emitEvent(event, { user_id: userId, link: grainsLink(), ...extra, ...emailFields(await emailOf(userId), mail.subject, mail.text) });
+  } catch {
+    /* aviso extra: o WhatsApp e o sininho já saíram */
+  }
+}
+
 /** Fila de envio do WhatsApp + sininho do painel (o aviso não some se o número cair). */
 export async function tellPerson(userId: string, text: string, kind = "assinatura", link = "/plano") {
   await notify({ userId, kind, title: text.split(/(?<=[.!?:])\s/)[0]!, body: text, link });
@@ -231,12 +257,15 @@ export async function chargeUsage(userId: string, costUsd: number) {
     // o aviso de zerado sai na hora; a trava do orquestrador não repete hoje
     await query("UPDATE wallets SET empty_notice_at = now() WHERE user_id = $1", [userId]);
     await query("UPDATE users SET profile = profile || jsonb_build_object('billing_notice_at', now()) WHERE id = $1", [userId]);
-    await tellPerson(userId, (await hasPaid(userId)) ? GRAIN_TEXT.empty(grainsLink()) : GRAIN_TEXT.freeOver(grainsLink())).catch(() => {});
+    const paid = await hasPaid(userId);
+    await tellPerson(userId, paid ? GRAIN_TEXT.empty(grainsLink()) : GRAIN_TEXT.freeOver(grainsLink())).catch(() => {});
+    void mailGrains(userId, "grains.empty", paid ? GRAIN_EMAIL.empty(grainsLink()) : GRAIN_EMAIL.freeOver(grainsLink()), { paid });
   } else if (left > 0 && !r.low_notice_at) {
     const line = await lowLine(userId, s);
     if (before.total > line && left <= line) {
       await query("UPDATE wallets SET low_notice_at = now() WHERE user_id = $1", [userId]);
       await tellPerson(userId, GRAIN_TEXT.low(left, grainsLink())).catch(() => {});
+      void mailGrains(userId, "grains.low", GRAIN_EMAIL.low(left, grainsLink()), { left });
     }
   }
   return { charged: amount, left };

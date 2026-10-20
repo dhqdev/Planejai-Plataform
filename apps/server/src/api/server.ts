@@ -25,7 +25,7 @@ import { registerNotificationRoutes } from "./routes/notifications.js";
 import { blogPage, registerBlogRoutes } from "./routes/blog.js";
 import { registerSecurity, trustProxySetting } from "./security.js";
 import { DEVICE_COOKIE, isTrustedDevice, startChallenge, startReset, startSignupChallenge, trustDevice, verifyChallenge, verifyReset, verifySignup, whatsappReady } from "../logincode.js";
-import { emitEvent } from "../events.js";
+import { emailFields, emitEvent } from "../events.js";
 import { notify } from "../notifications.js";
 import { QUEUES, getBoss } from "../queue/boss.js";
 
@@ -164,9 +164,12 @@ export async function buildServer() {
   // Senha certa: navegador conhecido entra direto; navegador novo recebe um código no WhatsApp
   async function finishLogin(req: FastifyRequest, reply: FastifyReply, account: Account) {
     if (!(await isTrustedDevice(account.id, req.cookies[DEVICE_COOKIE]))) {
-      const ch = await startChallenge(account, (phone, text, code) =>
-        getBoss().then((b) => b.send(QUEUES.outbound, { type: "send", userId: null, phone, channel: "whatsapp", text, copy: code }, { retryLimit: 1 })),
-      );
+      // pelo fluxo do n8n (WhatsApp + e-mail); sem fluxo, o WhatsApp sai pela nossa fila
+      const ch = await startChallenge(account, async (phone, text, code) => {
+        const mail = emailFields(account.email, "Seu código para entrar no Planejai", `Seu código para acessar o painel do Planejai:\n\n${code}\n\nVale por 10 minutos. Não foi você? Ignore este e-mail e troque sua senha.`);
+        const sent = await emitEvent("login.code_requested", { user_id: account.userId ?? null, account_id: account.id, phone, code, intro: text, minutes: 10, ...mail });
+        if (!sent) await (await getBoss()).send(QUEUES.outbound, { type: "send", userId: null, phone, channel: "whatsapp", text, copy: code }, { retryLimit: 1 });
+      });
       if (ch.needs_code) return { needs_code: true, challenge: ch.challenge, to: ch.to };
     }
     return completeLogin(req, reply, account, false);
@@ -209,7 +212,8 @@ export async function buildServer() {
     const row = await one("SELECT * FROM accounts WHERE email = $1", [email]);
     const r = await startReset(row ? toAccount(row) : null, async (d) => {
       // intro + code = texto e código em mensagens separadas (o fluxo do n8n manda o código no campo copy); text traz tudo junto
-      const sent = await emitEvent("password.reset_requested", { user_id: d.userId, account_id: d.accountId, phone: d.phone, name: d.name, code: d.code, intro: d.text, text: `${d.text.split("\n\n")[0]}\n\n${d.code}\n\nVale por 15 minutos.`, minutes: 15 });
+      const mail = emailFields(email, "Código para criar uma senha nova no Planejai", `Seu código para criar uma senha nova no Planejai:\n\n${d.code}\n\nVale por 15 minutos. Não foi você? É só ignorar: sua senha continua a mesma.`);
+      const sent = await emitEvent("password.reset_requested", { user_id: d.userId, account_id: d.accountId, phone: d.phone, name: d.name, code: d.code, intro: d.text, text: `${d.text.split("\n\n")[0]}\n\n${d.code}\n\nVale por 15 minutos.`, minutes: 15, ...mail });
       if (!sent) await (await getBoss()).send(QUEUES.outbound, { type: "send", userId: null, phone: d.phone, channel: "whatsapp", text: d.text, copy: d.code }, { retryLimit: 1 });
     });
     return { challenge: r.challenge };

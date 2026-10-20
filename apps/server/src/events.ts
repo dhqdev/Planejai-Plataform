@@ -20,7 +20,31 @@ export type PlanejaiEvent =
   | "subscription.canceled"
   | "referral.credited"
   | "password.reset_requested"
+  | "login.code_requested"
+  | "grains.low"
+  | "grains.empty"
   | "support.requested";
+
+/**
+ * E-mail que o fluxo do n8n manda junto com o evento (campos email, email_subject, email_text). O Planejai não manda
+ * e-mail sozinho: sem fluxo ligado, só o WhatsApp sai.
+ */
+export function emailFields(email: string | null | undefined, subject: string, text: string) {
+  const to = String(email ?? "").trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return {};
+  return { email: to, email_subject: subject, email_text: text.replace(/\*([^*\n]+)\*/g, "$1").replace(/_([^_\n]+)_/g, "$1") };
+}
+
+/** E-mail da pessoa: o do cadastro dela ou o da conta do painel ligada a ela. */
+export async function emailOf(userId: string | null | undefined) {
+  if (!userId) return null;
+  const { one } = await import("./db/pool.js");
+  const r = await one<{ email: string | null }>(
+    "SELECT COALESCE(NULLIF(u.email, ''), (SELECT a.email FROM accounts a WHERE a.user_id = u.id ORDER BY a.created_at LIMIT 1)) AS email FROM users u WHERE u.id = $1",
+    [userId],
+  );
+  return r?.email ?? null;
+}
 
 /** Chave da API interna. Vazia = API interna desligada (nada derivado de outro segredo). */
 export function internalKey() {
