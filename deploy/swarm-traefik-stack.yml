@@ -91,7 +91,7 @@ services:
         - "traefik.http.routers.autoplanejai.service=autoplanejai-service"
         - "traefik.http.routers.autoplanejai.tls.certresolver=letsencryptresolver"
         - "traefik.http.services.autoplanejai-service.loadbalancer.server.port=3000"
-        # www e o endereço antigo mandam para o principal (301), mantendo o caminho: convites, links e o app instalado continuam abrindo.
+        # www, meuplanejai.com e o endereço antigo mandam para o principal (301), mantendo o caminho: convites, links e o app instalado continuam abrindo.
         # Um roteador por nome: se um deles ainda não tiver DNS, o certificado dos outros sai do mesmo jeito.
         - "traefik.http.middlewares.autoplanejai-dominio.redirectregex.regex=^https?://[^/]+/(.*)"
         - "traefik.http.middlewares.autoplanejai-dominio.redirectregex.replacement=https://meuplanejai.com.br/$${1}"
@@ -106,6 +106,16 @@ services:
         - "traefik.http.routers.autoplanejai-antigo.service=autoplanejai-service"
         - "traefik.http.routers.autoplanejai-antigo.middlewares=autoplanejai-dominio"
         - "traefik.http.routers.autoplanejai-antigo.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.autoplanejai-com.rule=Host(`meuplanejai.com`)"
+        - "traefik.http.routers.autoplanejai-com.entrypoints=websecure"
+        - "traefik.http.routers.autoplanejai-com.service=autoplanejai-service"
+        - "traefik.http.routers.autoplanejai-com.middlewares=autoplanejai-dominio"
+        - "traefik.http.routers.autoplanejai-com.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.autoplanejai-com-www.rule=Host(`www.meuplanejai.com`)"
+        - "traefik.http.routers.autoplanejai-com-www.entrypoints=websecure"
+        - "traefik.http.routers.autoplanejai-com-www.service=autoplanejai-service"
+        - "traefik.http.routers.autoplanejai-com-www.middlewares=autoplanejai-dominio"
+        - "traefik.http.routers.autoplanejai-com-www.tls.certresolver=letsencryptresolver"
 
   # Time de agentes, lembretes e a conexão do WhatsApp. Sempre 1 réplica.
   # O healthcheck da imagem confere se o processo e a conexão do WhatsApp não travaram (o Swarm reinicia se travar).
