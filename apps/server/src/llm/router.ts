@@ -17,6 +17,9 @@ export interface RouteDefault extends ModelChoice {
  * - xiaomi/mimo-v2.6-flash        0,14  / 0,28  texto+imagem+áudio, saída muito barata
  * - qwen/qwen3.8-omni-flash       0,15  / 0,47  omni (áudio/vídeo), bom para transcrição
  * - google/gemini-3.8-flash       0,75  / 3,75  fallback mais forte para raciocínio e multimodal
+ * - openrouter/free                0     / 0     roteador dos grátis: só em rota publicData (blog), sempre com pago de reserva
+ *
+ * Toda chamada sem publicData leva provider.data_collection = "deny": dado de cliente não vai para provedor que treina.
  *
  * maxTokens limita a saída de cada chamada (respostas de WhatsApp são curtas) para o custo não escapar.
  */
@@ -147,9 +150,10 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
   {
     task: "blog",
     label: "Blog (post da semana)",
-    why: "Escreve sozinho o post semanal do blog público (/blog): texto longo e organizado em seções, uma vez por semana. Também o post de novidades quando o sistema muda. As ilustrações saem da rota Blog (ilustrações).",
-    model: "deepseek/deepseek-v4.1-flash",
-    fallbacks: ["google/gemini-3.8-flash"],
+    why: "Escreve sozinho o post semanal do blog público (/blog): texto longo e organizado em seções, uma vez por semana. Também o post de novidades quando o sistema muda. As ilustrações saem da rota Blog (ilustrações). Texto público, sem dado de cliente: tenta primeiro o roteador grátis do OpenRouter (escolhe um modelo :free que aceite JSON) e cai no DeepSeek pago se o grátis estiver no limite; se o texto do grátis não servir, a segunda tentativa já vai no pago.",
+    model: "openrouter/free",
+    fallbacks: ["deepseek/deepseek-v4.1-flash", "google/gemini-3.8-flash"],
+    publicData: true,
     temperature: 0.7,
     maxTokens: 9000,
   },
@@ -159,6 +163,7 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     why: "Capa e ilustração do meio de cada post do blog, no nível de revista: Gemini 3 Pro Image (~US$ 0,14 por imagem, ~US$ 0,28 por post). Só o blog usa; o cliente continua na rota Imagens, barata.",
     model: "google/gemini-3-pro-image-preview",
     fallbacks: ["google/gemini-2.5-flash-image"],
+    publicData: true,
   },
   {
     task: "image",
@@ -299,10 +304,12 @@ export async function resolveModel(task: string): Promise<ModelChoice> {
       ),
     };
   }
-  const override = cache.rows.get(task);
-  if (override) return override;
+  // publicData vem sempre do código (rota sem dado de cliente), nunca do que foi salvo na tela Modelos
   const def = ROUTE_DEFAULTS.find((d) => d.task === task) ?? ROUTE_DEFAULTS[0]!;
-  return { model: def.model, fallbacks: def.fallbacks, temperature: def.temperature, maxTokens: def.maxTokens };
+  const publicData = def.task === task && def.publicData === true ? { publicData: true } : {};
+  const override = cache.rows.get(task);
+  if (override) return { ...override, ...publicData };
+  return { model: def.model, fallbacks: def.fallbacks, temperature: def.temperature, maxTokens: def.maxTokens, ...publicData };
 }
 
 export async function listRoutes() {

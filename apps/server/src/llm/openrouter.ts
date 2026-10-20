@@ -12,7 +12,25 @@ export interface ModelChoice {
   fallbacks?: string[];
   temperature?: number | null;
   maxTokens?: number | null;
+  /** rota sem dado de cliente (blog): aceita provedor que guarda ou treina com o pedido, e modelo grátis */
+  publicData?: boolean;
 }
+
+/** modelo grátis do OpenRouter (`:free` ou o roteador openrouter/free): limite diário baixo e provedor que pode treinar */
+export const isFreeModel = (id: string) => id.endsWith(":free") || id === "openrouter/free";
+
+/** a mesma escolha sem os modelos grátis (para tentar de novo quando o grátis devolveu algo que não serviu) */
+export function withoutFree(choice: ModelChoice): ModelChoice {
+  const ids = [choice.model, ...(choice.fallbacks ?? [])].filter((m) => !isFreeModel(m));
+  if (!ids.length || ids[0] === choice.model) return choice;
+  return { ...choice, model: ids[0]!, fallbacks: ids.slice(1) };
+}
+
+/**
+ * Listas de modelos que não têm nenhum provedor sem coleta de dados: a chamada segue sem a trava
+ * (melhor responder que cair) e não paga a tentativa recusada de novo por 1 h. O aviso sai no log uma vez.
+ */
+const noPrivateEndpoint = new Map<string, number>();
 
 /** Chamada de chat completions no OpenRouter, com fallback de modelos e custo real retornado em usage.cost. */
 export async function chatCompletion(choice: ModelChoice, req: ChatRequest, attempt = 0): Promise<ChatResult> {
@@ -39,6 +57,11 @@ export async function chatCompletion(choice: ModelChoice, req: ChatRequest, atte
   if (maxTokens != null) body.max_tokens = maxTokens;
   if (req.plugins) body.plugins = req.plugins;
   if (req.responseFormat) body.response_format = req.responseFormat;
+  // dado de cliente (finanças, agenda, conversa) só vai para provedor que não guarda nem treina com o pedido
+  const modelsKey = [choice.model, ...(choice.fallbacks ?? [])].join(",");
+  const relaxedAt = noPrivateEndpoint.get(modelsKey);
+  const denyCollection = !choice.publicData && !req.allowDataCollection && !(relaxedAt && Date.now() - relaxedAt < 3_600_000);
+  if (denyCollection) body.provider = { data_collection: "deny" };
 
   const res = await fetch(`${config.OPENROUTER_BASE_URL}/chat/completions`, {
     method: "POST",
@@ -54,6 +77,15 @@ export async function chatCompletion(choice: ModelChoice, req: ChatRequest, atte
 
   if (!res.ok) {
     const text = await res.text();
+    // nenhum provedor desses modelos atende "sem coleta de dados": repete sem a trava e avisa no log
+    if (denyCollection && (res.status === 404 || res.status === 400) && /data policy|data_collection/i.test(text)) {
+      // modelo grátis numa rota de cliente (trocado na tela Modelos) sai da lista; a trava fica
+      const paid = withoutFree(choice);
+      if (paid !== choice) return chatCompletion(paid, req, attempt);
+      noPrivateEndpoint.set(modelsKey, Date.now());
+      console.warn(`[openrouter] nenhum provedor sem coleta de dados para ${modelsKey}; seguindo sem a trava por 1 h. Troque o modelo na tela Modelos.`);
+      return chatCompletion(choice, { ...req, allowDataCollection: true }, attempt);
+    }
     // 429/5xx: tenta de novo com backoff curto
     if ((res.status === 429 || res.status >= 500) && attempt < 2 && !req.signal?.aborted) {
       await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));

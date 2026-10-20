@@ -5,7 +5,7 @@ import { Tracer } from "./agent/trace.js";
 import { htmlToPng } from "./charts.js";
 import { config } from "./config.js";
 import { many, one, query } from "./db/pool.js";
-import { chatCompletion } from "./llm/openrouter.js";
+import { chatCompletion, withoutFree } from "./llm/openrouter.js";
 import { resolveModel } from "./llm/router.js";
 import { notify } from "./notifications.js";
 import { SEED_POSTS } from "./blog-seed.js";
@@ -274,7 +274,8 @@ export async function writePost(source: "auto" | "manual", log?: { info: (...a: 
     let draft: PostDraft | null = null;
     for (let attempt = 0; attempt < 2 && !draft; attempt++) {
       const step = await tracer.step({ agent: "blog", type: "llm", name: attempt ? "redator do blog (de novo)" : "redator do blog", input: { category } });
-      const r = await chatCompletion(model, {
+      // o grátis teve a chance dele: a segunda tentativa vai direto no modelo pago
+      const r = await chatCompletion(attempt ? withoutFree(model) : model, {
         messages: messages as any,
         maxTokens: Math.max(model.maxTokens ?? 0, 6000),
         responseFormat: { type: "json_object" },

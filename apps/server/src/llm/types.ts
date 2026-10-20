@@ -36,6 +36,8 @@ export interface ChatRequest {
   reasoning?: "off";
   /** cancela a chamada (prazo máximo da execução) */
   signal?: AbortSignal;
+  /** interno do chatCompletion: repetição sem a trava de coleta de dados */
+  allowDataCollection?: boolean;
 }
 
 export interface ChatResult {
