@@ -200,6 +200,8 @@ jobs:
       # imagem publicada: marca o commit com a tag da versão e abre a release com os commits desde a anterior
       # (push feito pelo GITHUB_TOKEN não dispara outro CI, então não constrói duas vezes)
       - name: Tag da versão
+        # imagem e deploy já saíram; erro passageiro do GitHub ao gravar a tag não pode deixar o CI vermelho
+        continue-on-error: true
         if: ${{ github.ref == 'refs/heads/main' }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -210,7 +212,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "v$V" -m "Planejai v$V"
-          git push origin "v$V"
+          ok=0
+          for i in 1 2 3 4; do
+            if git push origin "v$V"; then ok=1; break; fi
+            # o push pode ter gravado a tag mesmo devolvendo erro
+            if git ls-remote --exit-code --tags origin "refs/tags/v$V" >/dev/null 2>&1; then ok=1; break; fi
+            echo "push da tag falhou (tentativa $i); esperando para tentar de novo"; sleep $((i * 5))
+          done
+          [ "$ok" = 1 ] || { echo "::error::não consegui gravar a tag v$V"; exit 1; }
           { [ -n "$last" ] && git log "$last..HEAD" --no-merges --pretty='- %s' | grep -v '^- release: ' || true; } > notes.md
           [ -s notes.md ] || echo "- Atualização" > notes.md
           gh release create "v$V" --title "Planejai v$V" --notes-file notes.md --verify-tag
