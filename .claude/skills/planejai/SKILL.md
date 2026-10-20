@@ -156,6 +156,7 @@ O CTO ganha automaticamente `ask_<id>` e o novo entra na lista da `consult_coleg
 - Travas (Configurações > Travas de segurança, chaves em `settings.ts`/`GUARD_LIMITS`): ritmo por minuto no ingest, limite de
   mensagens e de custo em 24h por pessoa no orchestrator (dono isento), corte de texto longo. Toda trava que age vira passo
   "trava: …" em Execuções. Ferramenta nova que demora deve aceitar ser abandonada (o runner usa `guard.race`).
+- Abertura do PWA: manifest `background_color` #f5f3fe (cor do ícone; `color_scheme_dark` #111) e o `.pj-boot` do index.html mostra o Bolinho na mesma cor; `theme-color` = `--panel` (#ffffff/#191919) e `body::before` pinta a faixa da ilha do iPhone com `--panel`. Fontes carregam sem travar a pintura.
 - PWA: ao mudar o `sw.js`, suba `VERSION` para limpar o cache antigo. O servidor manda `no-cache` em index/sw/manifest e
   `immutable` em /assets. O build grava `.br`/`.gz` de cada arquivo de texto (`precompress` no `vite.config.ts`) e o
   `@fastify/static` entrega o pronto (`preCompressed`); a API sai comprimida pelo `@fastify/compress`. Todo modal novo usa `<Modal>` (vira bottom sheet sozinho); botão de ação chama `haptic()`.

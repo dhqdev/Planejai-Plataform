@@ -8,8 +8,10 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <meta name="theme-color" content="#fafafa" />
+    <link rel="preload" as="image" href="/icons/logo-256.png" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" /></noscript>
+    <meta name="theme-color" content="#ffffff" />
     <script>
       /* Quem está logado: pergunta já, enquanto o JS do app baixa (o App.tsx usa esta resposta em vez de pedir de novo). */
       try {
@@ -20,7 +22,7 @@
       /* Barra de cima do celular (status bar do iPhone no app instalado) na cor do tema escolhido no painel, não do sistema. */
       try {
         var t = localStorage.getItem("pj-theme");
-        if (t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches) document.querySelector('meta[name="theme-color"]').content = "#111111";
+        if (t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches) document.querySelector('meta[name="theme-color"]').content = "#191919";
       } catch (e) {}
     </script>
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -33,7 +35,7 @@
     <title>Planejai</title>
   </head>
   <body>
-    <div id="root"><div class="pj-boot" role="status" aria-label="Carregando"><div class="pj-loader"><div class="block"></div><div class="block"></div><div class="block"></div><div class="block"></div><div class="block"></div><div class="block"></div><div class="block"></div><div class="block"></div><div class="block"></div><div class="block"></div><div class="block"></div><div class="block"></div><div class="block"></div><div class="block"></div><div class="block"></div><div class="block"></div></div></div></div>
+    <div id="root"><div class="pj-boot" role="status" aria-label="Carregando"><img class="pj-logo" src="/icons/logo-256.png" width="112" height="112" alt="" /></div></div>
     <script>
       /* Se o app não abrir (versão nova pela metade, cache velho), mostra um botão que limpa tudo e recarrega. */
       (function () {
@@ -58,18 +60,15 @@
       })();
     </script>
     <style>
-      /* blocos em onda enquanto o app baixa (o React troca isso pela tela) */
-      .pj-boot { position: fixed; inset: 0; display: grid; place-content: center; background: #fafafa; }
-      .pj-boot .pj-loader { width: 80px; height: 100px; }
-      .pj-boot .block { position: relative; float: left; margin: 0 10px 10px 0; width: 12px; height: 12px; border-radius: 3px; background: #141414; }
-      .pj-boot .block:nth-child(4n+1) { animation: pj-boot-wave 2s ease 0s infinite; }
-      .pj-boot .block:nth-child(4n+2) { animation: pj-boot-wave 2s ease .2s infinite; }
-      .pj-boot .block:nth-child(4n+3) { animation: pj-boot-wave 2s ease .4s infinite; }
-      .pj-boot .block:nth-child(4n+4) { animation: pj-boot-wave 2s ease .6s infinite; margin-right: 0; }
-      @keyframes pj-boot-wave { 0% { top: 0; opacity: 1; } 50% { top: 30px; opacity: .2; } 100% { top: 0; opacity: 1; } }
-      @media (prefers-color-scheme: dark) { .pj-boot { background: #111; } .pj-boot .block { background: #fff; } }
-      :root[data-theme="dark"] .pj-boot { background: #111; } :root[data-theme="dark"] .pj-boot .block { background: #fff; }
-      :root[data-theme="light"] .pj-boot { background: #fafafa; } :root[data-theme="light"] .pj-boot .block { background: #141414; }
+      /* abertura: o Bolinho no meio, na mesma cor da tela de abertura do Android (manifest), sem piscar; o React troca isso pela tela */
+      .pj-boot { position: fixed; inset: 0; display: grid; place-content: center; background: #f5f3fe; }
+      .pj-boot .pj-logo { width: 112px; height: 112px; border-radius: 26px; animation: pj-boot-in .45s cubic-bezier(.2, .8, .2, 1) both, pj-boot-breathe 2.4s ease-in-out .45s infinite; }
+      @keyframes pj-boot-in { from { opacity: 0; transform: scale(.86); } to { opacity: 1; transform: scale(1); } }
+      @keyframes pj-boot-breathe { 50% { transform: scale(1.04); } }
+      @media (prefers-reduced-motion: reduce) { .pj-boot .pj-logo { animation: none; } }
+      @media (prefers-color-scheme: dark) { .pj-boot { background: #111; } }
+      :root[data-theme="dark"] .pj-boot { background: #111; }
+      :root[data-theme="light"] .pj-boot { background: #f5f3fe; }
       .pj-rescue { position: fixed; inset: 0; display: grid; place-content: center; gap: 14px; text-align: center; font: 15px/1.4 Inter, system-ui, sans-serif; color: #74746f; background: #fafafa; z-index: 9999; }
       .pj-rescue p { margin: 0; }
       .pj-rescue button { justify-self: center; border: 0; border-radius: 999px; padding: 12px 26px; font: 600 15px Inter, system-ui, sans-serif; background: #141414; color: #fff; cursor: pointer; }

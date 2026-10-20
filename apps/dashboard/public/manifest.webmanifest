@@ -11,8 +11,9 @@
     "standalone"
   ],
   "orientation": "portrait",
-  "background_color": "#fafafa",
-  "theme_color": "#fafafa",
+  "background_color": "#f5f3fe",
+  "theme_color": "#ffffff",
+  "color_scheme_dark": { "background_color": "#111111", "theme_color": "#191919" },
   "lang": "pt-BR",
   "categories": [
     "finance",
