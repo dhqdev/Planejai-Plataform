@@ -19,13 +19,16 @@
 .main { position: relative; }
 /* o Bolinho desce com o dedo e um anel roxo se fecha em volta dele; soltou fechado, o anel corre enquanto recarrega */
 .ptr {
-  position: fixed; z-index: 60; left: 50%; top: calc(56px + env(safe-area-inset-top)); width: 52px; height: 52px; border-radius: 50%;
+  position: fixed; z-index: 5; left: 50%; top: max(var(--ptr-top, 0px), env(safe-area-inset-top)); width: 52px; height: 52px; border-radius: 50%;
   display: grid; place-items: center; background: var(--panel); box-shadow: 0 6px 20px rgba(0, 0, 0, .12); pointer-events: none;
   will-change: transform, opacity;
 }
 :root[data-theme="dark"] .ptr { background: #191919; box-shadow: 0 6px 20px rgba(0, 0, 0, .45); }
 .ptr > * { grid-area: 1 / 1; }
-.ptr.settle { transition: transform .26s cubic-bezier(.32, .72, 0, 1), opacity .26s ease; }
+/* a tela desce junto com o dedo (translate soma com o transform das transições de tela) */
+.main.ptr-on > :not(.ptr) { translate: 0 var(--ptr-y, 0); }
+.main.ptr-settle > :not(.ptr) { transition: translate .3s cubic-bezier(.32, .72, 0, 1); }
+.ptr.settle { transition: transform .3s cubic-bezier(.32, .72, 0, 1), opacity .3s ease; }
 .ptr-ring { transform: rotate(-90deg); overflow: visible; }
 .ptr-ring circle { fill: none; stroke-width: 2.4; }
 .ptr-track { stroke: var(--border); }

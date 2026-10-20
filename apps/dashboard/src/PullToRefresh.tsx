@@ -5,8 +5,10 @@ import { checkForUpdate } from "./update";
 import { Mascote, type Mood } from "./mascote/Mascote";
 import { useOutfit } from "./mascote/state";
 
-const TRIGGER = 64;
-const MAX = 120;
+const TRIGGER = 72;
+const MAX = 150;
+/** enquanto recarrega, a tela fica descida o bastante para o Bolinho caber no vão */
+const HOLD = 68;
 /** o anel em volta do Bolinho (viewBox 52x52) */
 const R = 24;
 const LEN = 2 * Math.PI * R;
@@ -27,8 +29,9 @@ const MOOD: Record<Phase, Mood> = { off: "idle", pull: "curious", armed: "happy"
 
 /**
  * Puxar para atualizar no celular/PWA: com a tela no topo, puxe para baixo e solte.
- * O Bolinho desce junto e um anel vai se fechando em volta dele conforme o puxão; fechou, é só soltar.
- * Enquanto recarrega, o anel corre em volta dele. Recarrega os dados de todas as telas abertas
+ * A tela desce com o dedo e o Bolinho aparece no vão de cima, com um anel que vai se fechando em volta
+ * dele conforme o puxão; fechou, é só soltar (vibra ao soltar). Enquanto recarrega, a tela fica um pouco
+ * descida e o anel corre em volta dele; no fim a tela sobe de volta. Recarrega os dados de todas as telas abertas
  * (sem recarregar a página) e confere se há versão nova.
  */
 export function PullToRefresh({ target }: { target: RefObject<HTMLElement | null> }) {
@@ -40,12 +43,23 @@ export function PullToRefresh({ target }: { target: RefObject<HTMLElement | null
 
   // posição e anel mexidos direto no DOM: nada de re-render a cada quadro do dedo
   const paint = (pull: number, animate: boolean) => {
+    const p = Math.min(1, pull / TRIGGER);
+    const main = target.current;
+    if (main) {
+      // a própria tela desce (propriedade translate, que soma com o transform das transições e do voltar da borda)
+      if (pull > 0) main.classList.add("ptr-on");
+      else if (!animate) main.classList.remove("ptr-on");
+      main.classList.toggle("ptr-settle", animate);
+      main.style.setProperty("--ptr-y", `${pull}px`);
+    }
     const b = box.current;
     if (b) {
-      const p = Math.min(1, pull / TRIGGER);
+      // telas sem barra de cima (chat, Finanças, Agenda...) começam mais alto: o vão nasce onde a tela começa
+      b.style.setProperty("--ptr-top", `${main?.getBoundingClientRect().top ?? 0}px`);
       b.classList.toggle("settle", animate);
-      b.style.transform = `translate(-50%, ${pull - 56}px) scale(${0.7 + 0.3 * p})`;
-      b.style.opacity = String(Math.min(1, p * 1.6));
+      // o Bolinho fica no meio do vão que abriu em cima da tela
+      b.style.transform = `translate(-50%, ${pull / 2 - 26}px) scale(${0.6 + 0.4 * p})`;
+      b.style.opacity = String(Math.min(1, p * 1.5));
     }
     if (ring.current && !st.current.busy) ring.current.style.strokeDashoffset = String(LEN * (1 - Math.min(1, pull / TRIGGER)));
   };
@@ -99,15 +113,21 @@ export function PullToRefresh({ target }: { target: RefObject<HTMLElement | null
       if (!s.armed) {
         if (s.pull) {
           paint(0, true);
-          setTimeout(() => !st.current.active && !st.current.busy && setPhase("off"), 260);
+          setTimeout(() => {
+            if (st.current.active || st.current.busy) return;
+            target.current?.classList.remove("ptr-settle", "ptr-on");
+            setPhase("off");
+          }, 300);
         }
         s.pull = 0;
         return;
       }
+      // o "tique" do iPhone só sai dentro do toque: vibra aqui, no soltar
+      haptic(14);
       s.busy = true;
       s.armed = false;
       setPhase("busy");
-      paint(TRIGGER * 0.8, true);
+      paint(HOLD, true);
       const t0 = Date.now();
       await Promise.all([refreshAll(), checkForUpdate()]).catch(() => undefined);
       await new Promise((r) => setTimeout(r, Math.max(0, 700 - (Date.now() - t0))));
@@ -117,7 +137,8 @@ export function PullToRefresh({ target }: { target: RefObject<HTMLElement | null
       s.busy = false;
       s.pull = 0;
       paint(0, true);
-      await new Promise((r) => setTimeout(r, 260));
+      await new Promise((r) => setTimeout(r, 300));
+      target.current?.classList.remove("ptr-settle", "ptr-on");
       if (!st.current.active) setPhase("off");
     };
     el.addEventListener("touchstart", start, { passive: true });
@@ -138,7 +159,7 @@ export function PullToRefresh({ target }: { target: RefObject<HTMLElement | null
 
   if (phase === "off") return null;
   return (
-    <div ref={box} className={`ptr ptr-${phase}`} aria-hidden="true" style={{ opacity: 0, transform: "translate(-50%, -56px) scale(.7)" }}>
+    <div ref={box} className={`ptr ptr-${phase}`} aria-hidden="true" style={{ opacity: 0, transform: "translate(-50%, -52px) scale(.6)" }}>
       <svg className="ptr-ring" viewBox="0 0 52 52" width={52} height={52}>
         <circle className="ptr-track" cx="26" cy="26" r={R} />
         <circle ref={ring} className="ptr-arc" cx="26" cy="26" r={R} strokeDasharray={LEN} strokeDashoffset={LEN} />
