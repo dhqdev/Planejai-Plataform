@@ -504,7 +504,7 @@ function Plano({ id, name, data, reload }: { id: string; name: string; data: any
 const MODULE_LABEL: Record<string, string> = { memorias: "O que ele sabe", meu_time: "Meu time" };
 
 function Perfil({ client, data, status, setStatus, reload, onClose }: { client: any; data: any; status: string; setStatus: (s: string) => void; reload: () => unknown; onClose: () => void }) {
-  const memories = useApi<any[]>(`/api/memories?user=${client.id}`);
+  const memories = useApi<any[]>(`/api/clients/${client.id}/memories`);
   const f = data.features ?? {};
   const first = String(client.full_name || client.name || "esta pessoa").split(" ")[0];
   const patch = async (body: any) => {
@@ -593,7 +593,7 @@ function Perfil({ client, data, status, setStatus, reload, onClose }: { client: 
           {memories.data!.slice(0, 12).map((m) => (
             <div key={m.id} className="cs-row">
               <span className="grow">{m.content}</span>
-              <button className="icon-btn" aria-label="Apagar memória" onClick={async () => { await api(`/api/memories/${m.id}`, { method: "DELETE" }); void memories.reload(); }}>
+              <button className="icon-btn" aria-label="Apagar memória" onClick={async () => { await api(`/api/clients/${client.id}/memories/${m.id}`, { method: "DELETE" }); void memories.reload(); }}>
                 <Icon name="x" size={14} />
               </button>
             </div>

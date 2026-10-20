@@ -204,6 +204,16 @@ export function clientRoutes(api: FastifyInstance) {
     ).catch(() => null);
     return { days, totals, daily, billing, activity, features, byAgent, tools, agents, topics, styleNotes: person?.style_notes ?? null, notes, private: !own, counts: money, tabs: await getTabs(id) };
   });
+  // o que o assistente sabe desta pessoa (e não do dono logado): fatos guardados, mais novos primeiro
+  api.get<{ Params: { id: string } }>("/api/clients/:id/memories", async (req, reply) => {
+    if (!isUuid(req.params.id)) return reply.code(404).send({ error: "não encontrado" });
+    return many("SELECT id, content, category, source, created_at FROM memories WHERE user_id = $1 ORDER BY created_at DESC LIMIT 300", [req.params.id]);
+  });
+  api.delete<{ Params: { id: string; memoryId: string } }>("/api/clients/:id/memories/:memoryId", async (req, reply) => {
+    if (!isUuid(req.params.id) || !isUuid(req.params.memoryId)) return reply.code(404).send({ error: "não encontrado" });
+    await query("DELETE FROM memories WHERE id = $1 AND user_id = $2", [req.params.memoryId, req.params.id]);
+    return { ok: true };
+  });
   // cobranças da pessoa no Asaas (mensalidades e pacotes); sem Asaas ou sem cadastro vem vazio com o motivo
   api.get<{ Params: { id: string } }>("/api/clients/:id/payments", async (req, reply) => {
     if (!isUuid(req.params.id)) return reply.code(404).send({ error: "não encontrado" });
