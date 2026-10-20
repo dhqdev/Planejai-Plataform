@@ -66,10 +66,10 @@
     .auth-form .signup-dots { margin-bottom: 12px; }
   }
 
-  /* teclado aberto: o formulário sobe para o topo da área visível e sai o que não é campo
-     (seta, Bolinho, frase de apoio, pontinhos e o link do pé), então o campo e o botão ficam à vista */
+  /* teclado aberto: sai o que não é campo (seta, Bolinho, frase de apoio, pontinhos e o link do pé) e o formulário
+     fica no meio do espaço que sobra acima do teclado, não colado no topo (David, 2026-10-20: "muito alto") */
   html.pj-kb .auth-back, html.pj-kb .auth-logo, html.pj-kb .auth-form .signup-dots,
   html.pj-kb .auth-form h1 + p.muted, html.pj-kb .auth-form .card > p.muted:last-child { display: none; }
-  html.pj-kb .auth-form .card { padding-top: calc(20px + var(--safe-top)); }
+  html.pj-kb .auth-form .card { padding-top: calc(16px + var(--safe-top)); padding-bottom: 16px; justify-content: safe center; }
   html.pj-kb .auth-form h1 { font-size: 24px; margin-bottom: 16px; }
 }
