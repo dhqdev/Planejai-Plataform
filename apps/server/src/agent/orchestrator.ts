@@ -13,7 +13,7 @@ import { ctoSystemPrompt } from "./prompts.js";
 import { promptOverrides, withPrompt } from "./prompt-overrides.js";
 import { availableTools, OWNER_INTEGRATIONS, personOf, runToolLoop } from "./runner.js";
 import { asPerson } from "../integrations/person.js";
-import { clientAgents, ctoGroups, CTO_TOOL_GROUPS, CTO_TOOLS, SPECIALISTS, TEAM_TOOLS_WHEN, type AgentDef } from "./team.js";
+import { basicTools, clientAgents, ctoGroups, CTO_TOOL_GROUPS, CTO_TOOLS, SPECIALISTS, TEAM_TOOLS_WHEN, type AgentDef } from "./team.js";
 import { TEAM_TOOLS } from "./tools/team.js";
 import { finishBrowser } from "./tools/research.js";
 import { Guard, GuardTimeout, redactSecrets } from "./guard.js";
@@ -35,6 +35,7 @@ import { appCards } from "../chat-cards.js";
 import { POLL_NO, POLL_YES, pollQuestion, sendConfirmPoll } from "../whatsapp/polls.js";
 import { allShort, pushShort, recentShort, redisAlive, type ShortEntry } from "../shortmem.js";
 import { billingAccess, blockedMessage } from "../billing.js";
+import { basicPlanLine, COMPLETO_SPECIALISTS, planAccess } from "../plan-access.js";
 import { config } from "../config.js";
 import { rememberInboundMedia, rememberSentMedia } from "./tools/attach.js";
 import { Outbox, type ConversationRow, type ToolContext, type UserRow } from "./tools/types.js";
@@ -422,8 +423,12 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     // Só entra no time quem tem pelo menos uma ferramenta utilizável (menos token e nada de delegação inútil)
     // papel e instruções editados pelo dono no Mapa do time valem para todos
     const prompts = await promptOverrides();
+    // o plano decide quem entra (plan-access.ts): no básico o Juvenal atende sozinho, sem time
+    const plan = await planAccess(user, settings);
+    const basic = plan.level === "basico";
     const team: AgentDef[] = [];
-    for (const s of [...SPECIALISTS.map((d) => withPrompt(d, prompts)), ...(await clientAgents(user.id))]) {
+    const fixed = SPECIALISTS.filter((d) => plan.level === "completo" || !COMPLETO_SPECIALISTS.has(d.id));
+    for (const s of basic ? [] : [...fixed.map((d) => withPrompt(d, prompts)), ...(await clientAgents(user.id, plan))]) {
       if ((await availableTools(s.tools, user)).length) team.push(s);
     }
     const lastText = fresh.map((e) => e.text).join(" ").slice(0, 500);
@@ -437,8 +442,8 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     // o que chegou agora e a última fala do assistente ("quer que eu mande pro João?" -> "pode")
     const lastSaid = [...past].reverse().find((e) => e.role === "assistant")?.text ?? "";
     const topicText = `${fresh.map((e) => e.text).join(" ")}\n${lastSaid.slice(-400)}`;
-    const groups = ctoGroups(topicText);
-    const wantsTeam = TEAM_TOOLS_WHEN.test(topicText);
+    const groups = basic ? [] : ctoGroups(topicText);
+    const wantsTeam = !basic && TEAM_TOOLS_WHEN.test(topicText);
     const gifs = (await isConnected("klipy")) || (await isConnected("giphy"));
     const system = ctoSystemPrompt({
       rules: prompts.get("cto")?.instructions,
@@ -454,10 +459,12 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       autoReaction,
       styleNotes: (user as any).style_notes ?? null,
       errands: errandsContext(await openErrands(user.id)),
+      planLine: basic ? basicPlanLine(settings) : null,
     });
 
     const ctx: ToolContext = {
       user,
+      plan: plan.level,
       conversation,
       channel,
       tracer,
@@ -482,10 +489,12 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
     const extra = [...groups.flatMap((g) => g.tools), ...(wantsTeam ? TEAM_TOOLS : [])];
     const extraSet = new Set(extra);
     const allPossibleGroupTools = [...new Set([...CTO_TOOL_GROUPS.flatMap((g) => g.tools), ...TEAM_TOOLS])];
+    // básico: só gastos e agenda, e nada fora disso roda nem chamado pelo nome (a trava é aqui, não no prompt)
+    const basicSet = basic ? basicTools(topicText) : null;
     const [availableCto, availableExtra, availableHiddenCandidates] = await Promise.all([
-      availableTools(CTO_TOOLS, user),
+      availableTools(basicSet ? basicSet.tools : CTO_TOOLS, user),
       availableTools(extra, user),
-      availableTools(allPossibleGroupTools.filter((t) => !extraSet.has(t)), user),
+      availableTools(basicSet ? basicSet.hidden : allPossibleGroupTools.filter((t) => !extraSet.has(t)), user),
     ]);
     const tools = [...availableCto, ...team.map(delegationTool), ...availableExtra];
     const hiddenTools = availableHiddenCandidates;

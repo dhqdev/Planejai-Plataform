@@ -349,7 +349,7 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     // os grãos deste mês ficam; na próxima mensalidade entra o plano leve
     expect((await wallet()).plan_grains).toBe(10000);
     await hook({ id: "s4", event: "PAYMENT_CONFIRMED", payment: { id: "pay_3", subscription: "sub_1", value: 19.9, billingType: "CREDIT_CARD" } });
-    expect(await wallet()).toEqual({ plan_grains: 1500, extra_grains: 500 });
+    expect(await wallet()).toEqual({ plan_grains: 2500, extra_grains: 500 });
     expect(await db.one("SELECT plan_id, next_plan_id FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ plan_id: "leve", next_plan_id: null });
 
     // subir com diferença abaixo do mínimo do Asaas (R$ 5): não cobra agora, vale da próxima mensalidade
@@ -379,14 +379,14 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     await hook({ id: "l4", event: "PAYMENT_CREATED", payment: { id: "pay_5", subscription: "sub_1", status: "PENDING", value: 19.9, dueDate: d2, invoiceUrl: "https://sandbox.asaas.com/i/pay_5" } });
     await hook({ id: "l5", event: "PAYMENT_RECEIVED", payment: { id: "pay_4", subscription: "sub_1", value: 19.9, dueDate: d1, billingType: "PIX", invoiceUrl: "https://sandbox.asaas.com/i/pay_4" } });
     expect(await row()).toEqual({ status: "active", invoice_url: "https://sandbox.asaas.com/i/pay_5", paid_until: d2 });
-    expect((await wallet()).plan_grains).toBe(1500);
+    expect((await wallet()).plan_grains).toBe(2500);
     // mensalidade de um mês que já passou, paga agora: não volta a data nem recarrega de novo
     await db.query("UPDATE wallets SET plan_grains = 100 WHERE user_id = $1", [user.id]);
     const old = new Date(Date.now() - 40 * 86_400_000).toISOString().slice(0, 10);
     await hook({ id: "l6", event: "PAYMENT_RECEIVED", payment: { id: "pay_0", subscription: "sub_1", value: 19.9, dueDate: old, billingType: "PIX" } });
     expect(await row()).toEqual({ status: "active", invoice_url: "https://sandbox.asaas.com/i/pay_5", paid_until: d2 });
     expect((await wallet()).plan_grains).toBe(100);
-    await db.query("UPDATE wallets SET plan_grains = 1500 WHERE user_id = $1", [user.id]);
+    await db.query("UPDATE wallets SET plan_grains = 2500 WHERE user_id = $1", [user.id]);
   });
 
   it("indicação: cada amigo pagando dá mais desconto na mensalidade de quem convidou, até o teto", async () => {
@@ -433,7 +433,7 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
   it("cancelar mantém os grãos que sobraram; liberado pelo dono não gasta nada", async () => {
     await billing.cancelSubscription(user.id);
     expect(asaasCalls.at(-1)).toMatchObject({ method: "DELETE", path: "/subscriptions/sub_1" });
-    expect(await wallet()).toEqual({ plan_grains: 1500, extra_grains: 500 });
+    expect(await wallet()).toEqual({ plan_grains: 2500, extra_grains: 500 });
     await db.query("UPDATE users SET billing_exempt = true WHERE id = $1", [user.id]);
     expect(await billing.billingAccess(await reloadUser())).toEqual({ allowed: true, state: "exempt" });
     expect(await credits.chargeUsage(user.id, 1)).toBeNull();

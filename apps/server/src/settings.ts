@@ -72,7 +72,18 @@ export interface BillingPlan {
   highlight?: boolean;
   /** benefícios mostrados na página de preços e na tela de grãos (um por linha, até 5) */
   perks?: string[];
+  /** o que o plano libera (plan-access.ts); sem valor, o do plano padrão de mesmo id */
+  level?: PlanLevel;
 }
+
+/**
+ * O que cada plano libera (escolha do David em 2026-10-20):
+ * - basico: o Juvenal sozinho, só gastos e agenda (uma chamada de IA a menos por mensagem);
+ * - time: o time inteiro e até 2 especialistas da loja;
+ * - completo: tudo, com agentes sob medida, Secretária de reuniões, Notion/GitHub/n8n e voz caprichada.
+ */
+export type PlanLevel = "basico" | "time" | "completo";
+export const PLAN_LEVELS: PlanLevel[] = ["basico", "time", "completo"];
 
 export interface BillingPack {
   id: string;
@@ -86,26 +97,29 @@ export const DEFAULT_PLANS: BillingPlan[] = [
     id: "leve",
     name: "Leve",
     price: 19.9,
-    grains: 1500,
-    blurb: "Gastos, lembretes e perguntas do dia a dia.",
-    perks: ["Gastos, contas e lembretes pelo WhatsApp", "Áudio, foto e comprovante viram anotação", "Agenda e finanças no painel"],
+    grains: 2500,
+    blurb: "Seus gastos e sua agenda pelo WhatsApp.",
+    level: "basico",
+    perks: ["Gastos, cartões e contas fixas pelo WhatsApp", "Lembretes e Google Agenda", "Áudio, foto e comprovante viram anotação", "Agenda e finanças no painel"],
   },
   {
     id: "dia-a-dia",
     name: "Dia a dia",
     price: 39.9,
     grains: 4000,
-    blurb: "Para quem usa todo dia: agenda, pesquisa e áudio.",
+    blurb: "O time inteiro trabalhando no seu dia.",
     highlight: true,
-    perks: ["Mais que o dobro de grãos do Leve", "Pesquisa na internet, resumos e PDFs", "Google Agenda, e-mail e Notion conectados"],
+    level: "time",
+    perks: ["Tudo do Leve, com o time inteiro", "Pesquisa na internet, resumos, imagens e PDFs", "Mensagens e recados para outras pessoas", "Até 2 especialistas da loja"],
   },
   {
     id: "completo",
     name: "Completo",
     price: 79.9,
     grains: 10000,
-    blurb: "Time inteiro trabalhando: recados, automações e muito mais.",
-    perks: ["2,5 vezes os grãos do Dia a dia", "Recados: ele fala com lojas e marca horários por você", "Relatórios e o time inteiro no seu dia"],
+    blurb: "Tudo liberado, com agentes feitos para você.",
+    level: "completo",
+    perks: ["2,5 vezes os grãos do Dia a dia", "Até 6 especialistas, Secretária de reuniões inclusa", "Agentes criados sob medida para você", "Notion, GitHub e n8n conectados", "Voz caprichada nos áudios"],
   },
 ];
 
@@ -113,6 +127,12 @@ export const DEFAULT_PLANS: BillingPlan[] = [
 export function perksOf(plan: BillingPlan): string[] {
   if (plan.perks?.length) return plan.perks;
   return DEFAULT_PLANS.find((d) => d.id === plan.id)?.perks ?? [];
+}
+
+/** O que o plano libera: o que o dono escolheu ou, sem nada, o do plano padrão de mesmo id (plano novo sem escolha = time). */
+export function levelOf(plan: BillingPlan): PlanLevel {
+  if (plan.level && PLAN_LEVELS.includes(plan.level)) return plan.level;
+  return DEFAULT_PLANS.find((d) => d.id === plan.id)?.level ?? "time";
 }
 export const DEFAULT_PACKS: BillingPack[] = [
   { id: "p500", grains: 500, price: 9.9 },
@@ -139,6 +159,7 @@ export function cleanPlans(raw: unknown): BillingPlan[] {
         .map((x: unknown) => String(x ?? "").trim().slice(0, 80))
         .filter(Boolean)
         .slice(0, 5),
+      ...(PLAN_LEVELS.includes(p?.level) ? { level: p.level as PlanLevel } : {}),
     };
     if (!plan.name) throw new Error("Todo plano precisa de nome.");
     if (!(plan.price >= 1 && plan.price <= 100_000)) throw new Error(`Preço do plano ${plan.name} precisa ficar entre R$ 1 e R$ 100.000.`);

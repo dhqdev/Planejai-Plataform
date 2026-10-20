@@ -22,6 +22,7 @@ import * as research from "./tools/research.js";
 import * as shopping from "./tools/shopping.js";
 import * as social from "./tools/social.js";
 import { many } from "../db/pool.js";
+import { allowedClientRows, type PlanAccess } from "../plan-access.js";
 import type { Tool } from "./tools/types.js";
 
 /** Carinha de desenho de cada agente (desenhada no painel). */
@@ -385,6 +386,58 @@ export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
   { id: "documentos", when: /(?<!\p{L})(apag|exclu|delet|remov)\w*.{0,40}\b(document|arquivo|pdf|contrato)/iu, tools: [documents.documentDelete] },
 ];
 
+/**
+ * Plano básico (plan-access.ts): o Juvenal atende sozinho, sem time, com o núcleo de gastos e a agenda (uma chamada de IA
+ * a menos por mensagem). Cartões e contas fixas entram pelo assunto, como no Moacir. Nada de pesquisa, mensagem a terceiros,
+ * mídia, recados, limites, metas nem gráficos: o que não está aqui não roda nem chamado pelo nome.
+ */
+const BASIC_TOOLS: Tool[] = [
+  core.reactToMessage,
+  core.saveMemory,
+  core.searchMemories,
+  core.forgetMemory,
+  core.readDocument,
+  core.getDatetime,
+  support.contactOwner,
+  finance.addTransaction,
+  finance.listTransactions,
+  finance.financeSummary,
+  finance.updateTransaction,
+  finance.deleteTransaction,
+  finance.calculate,
+  categoriesTool,
+  agenda.scheduleReminder,
+  agenda.listRemindersTool,
+  agenda.rescheduleReminderTool,
+  agenda.cancelReminderTool,
+  agenda.calendarListEvents,
+  agenda.calendarCreateEvent,
+];
+const BASIC_TOPIC_TOOLS: Tool[] = [
+  cards.cardSave,
+  cards.cardList,
+  cards.cardInvoice,
+  cards.cardInvoicePay,
+  cards.cardDelete,
+  bills.billSave,
+  bills.billList,
+  bills.billPay,
+  bills.billDelete,
+  finance.convertCurrency,
+  core.unsendMessage,
+];
+
+/** Ferramentas do Juvenal no básico: as de sempre, as do assunto (grupos do Moacir e do CTO só com ferramentas liberadas) e o resto liberado escondido. */
+export function basicTools(text: string): { tools: Tool[]; hidden: Tool[] } {
+  const ok = new Set(BASIC_TOPIC_TOOLS);
+  const fin = SPECIALISTS.find((s) => s.id === "financeiro");
+  const topic = [...(fin?.toolGroups ?? []), ...CTO_TOOL_GROUPS]
+    .filter((g) => g.tools.every((t) => ok.has(t)) && g.when.test(text))
+    .flatMap((g) => g.tools);
+  const picked = new Set([...BASIC_TOOLS, ...topic]);
+  return { tools: [...picked], hidden: BASIC_TOPIC_TOOLS.filter((t) => !picked.has(t)) };
+}
+
 /** Assunto do time sob medida (team_create_agent e companhia, em tools/team.ts). */
 export const TEAM_TOOLS_WHEN = /\b(agente|especialista|time|equipe)\b/i;
 
@@ -470,8 +523,8 @@ export function clientAgentDef(r: any): AgentDef {
   };
 }
 
-/** Agentes sob medida desta pessoa (criados pela reunião noturna ou por ela, na conversa). */
-export async function clientAgents(userId: string): Promise<AgentDef[]> {
+/** Agentes sob medida desta pessoa (criados pela reunião noturna, por ela na conversa ou ligados na loja); com o plano, só os que ele libera. */
+export async function clientAgents(userId: string, access?: PlanAccess): Promise<AgentDef[]> {
   const rows = await many("SELECT * FROM client_agents WHERE user_id = $1 AND active ORDER BY created_at", [userId]);
-  return rows.map(clientAgentDef);
+  return (access ? allowedClientRows(rows, access) : rows).map(clientAgentDef);
 }
