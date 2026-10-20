@@ -203,6 +203,6 @@ describe.skipIf(!enabled)("conversa delegada e quem chega de fora (e2e)", () => 
     expect(await db.one("SELECT COUNT(*)::int AS n FROM executions WHERE input LIKE '%quem é%'")).toEqual({ n: 0 });
     // texto próprio do dono em Configurações
     const { strangerText } = await import("../src/outreach.js");
-    expect(strangerText("  Assine em meuplanejai.com.br  ")).toBe("Assine em meuplanejai.com.br");
+    expect(strangerText("  Assine em meuplanejai.com  ")).toBe("Assine em meuplanejai.com");
   });
 });
