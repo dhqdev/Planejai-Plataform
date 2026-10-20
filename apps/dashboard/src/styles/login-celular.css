@@ -73,5 +73,10 @@
   html.pj-kb .auth-back, html.pj-kb .auth-logo, html.pj-kb .auth-form .signup-dots,
   html.pj-kb .auth-form h1 + p.muted, html.pj-kb .auth-form .card > p.muted:last-child { display: none; }
   html.pj-kb .auth-form .card { padding-top: calc(var(--safe-top) + clamp(28px, 10dvh, 96px)); padding-bottom: 16px; }
+  /* com o teclado aberto dá para rolar um pouco (David, 2026-10-20): quem rola é o .auth-form e o formulário tem
+     sempre 140px a mais que a tela, então o campo de baixo e o botão sobem para cima do teclado mesmo quando o
+     iPhone não avisa a altura dele (e o campo com foco rola sozinho para a vista, ver teclado.ts) */
+  html.pj-kb .auth-form { overflow-y: auto; overscroll-behavior: contain; }
+  html.pj-kb .auth-form .card { height: auto; min-height: calc(100% + 140px); overflow: visible; }
   html.pj-kb .auth-form h1 { font-size: 24px; margin-bottom: 16px; }
 }
