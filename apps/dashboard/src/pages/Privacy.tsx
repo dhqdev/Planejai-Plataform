@@ -11,8 +11,9 @@ interface Legal {
 /**
  * Termos de uso e política de privacidade (LGPD e CDC). Página pública em /privacidade, aberta pelo cadastro
  * e pelo link que vai no convite do WhatsApp. Quem responde pelos dados vem de Configurações > Responsável pelos dados.
+ * `embedded`: só o texto, para abrir numa janela por cima do cadastro sem sair dele (e sem perder o que foi preenchido).
  */
-export function PrivacyPage() {
+export function PrivacyPage({ embedded }: { embedded?: boolean } = {}) {
   const [legal, setLegal] = useState<Legal | null>(null);
   const [pricing, setPricing] = useState<{ enabled: boolean; welcome: number } | null>(null);
   useEffect(() => {
@@ -31,11 +32,9 @@ export function PrivacyPage() {
     "o próprio assistente (peça para falar com o responsável)"
   );
 
+  const Wrap = embedded ? EmbeddedWrap : PageWrap;
   return (
-    <div className="legal">
-      <div className="card card-pad legal-card">
-        <a href="/" className="muted" style={{ fontSize: 13 }}>Voltar</a>
-        <h1>Termos de uso e privacidade</h1>
+    <Wrap>
         <p className="muted">Atualizado em 9 de outubro de 2026.</p>
 
         <h3>Quem somos</h3>
@@ -180,7 +179,22 @@ export function PrivacyPage() {
           Quando estes termos mudarem de forma importante, avisamos pelo assistente antes de valer. Vale a lei brasileira
           {legal?.city ? `, com foro na comarca de ${legal.city}, ressalvado o seu direito de usar o foro do seu domicílio como consumidor` : ", com foro no seu domicílio como consumidor"}.
         </p>
+    </Wrap>
+  );
+}
+
+function PageWrap({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="legal">
+      <div className="card card-pad legal-card">
+        <a href="/" className="muted" style={{ fontSize: 13 }}>Voltar</a>
+        <h1>Termos de uso e privacidade</h1>
+        {children}
       </div>
     </div>
   );
+}
+
+function EmbeddedWrap({ children }: { children: React.ReactNode }) {
+  return <div className="legal-card legal-embedded">{children}</div>;
 }

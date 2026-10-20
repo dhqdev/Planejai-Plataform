@@ -6,6 +6,10 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "handle_links": "preferred",
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
   "display_override": [
     "window-controls-overlay",
     "standalone"

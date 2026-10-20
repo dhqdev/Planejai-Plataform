@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { api, phoneFmt } from "../api";
 import type { Me } from "../App";
-import { ErrorBox } from "../components";
+import { ErrorBox, Modal } from "../components";
 import { CampoSenha } from "../CampoSenha";
 import { Icon } from "../icons";
 import { haptic, isStandalone } from "../touch";
@@ -19,6 +19,27 @@ interface Invite {
 /** Código do convite quando a pessoa abre o link /convite/CODIGO. */
 const inviteCode = () => /^\/convite\/([A-Za-z0-9-]+)/.exec(location.pathname)?.[1]?.replace(/-/g, "").toUpperCase() ?? null;
 const cleanCode = (raw: string) => raw.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 8);
+
+/** Termos numa janela por cima do cadastro; o texto continua num pedaço à parte, baixado só quando abre. */
+const PrivacyPage = lazy(() => import("./Privacy").then((m) => ({ default: m.PrivacyPage })));
+
+/** Rascunho do cadastro na aba (sem a senha): se a pessoa sair para ler os termos e voltar, nada se perde. */
+const DRAFT = "planejai.cadastro";
+type Draft = { name: string; email: string; phone: string; terms: boolean };
+const readDraft = (): Partial<Draft> => {
+  try {
+    return JSON.parse(sessionStorage.getItem(DRAFT) ?? "{}") as Partial<Draft>;
+  } catch {
+    return {};
+  }
+};
+const clearDraft = () => {
+  try {
+    sessionStorage.removeItem(DRAFT);
+  } catch {
+    /* sem armazenamento */
+  }
+};
 
 /** Etapas do cadastro: código do convite, quem é você, acesso. */
 type Step = "code" | "you" | "access";
@@ -44,17 +65,27 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
   const [signup, setSignup] = useState<string>("invite");
   const [invite, setInvite] = useState<Invite | null>(null);
   const [typed, setTyped] = useState("");
-  const [form, setForm] = useState({ name: "", email: "", password: "", phone: "" });
+  const [draft] = useState(readDraft);
+  const [form, setForm] = useState({ name: draft.name ?? "", email: draft.email ?? "", password: "", phone: draft.phone ?? "" });
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [terms, setTerms] = useState(false);
+  const [terms, setTerms] = useState(Boolean(draft.terms));
+  const [showTerms, setShowTerms] = useState(false);
   const [focus, setFocus] = useState<string | null>(null);
   const [found, setFound] = useState(false);
   // navegador novo: depois da senha, código de 6 dígitos que chega no WhatsApp
   const [challenge, setChallenge] = useState<{ id: string; to: string } | null>(null);
   const [otp, setOtp] = useState("");
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
+  useEffect(() => {
+    if (mode !== "register") return;
+    try {
+      sessionStorage.setItem(DRAFT, JSON.stringify({ name: form.name, email: form.email, phone: form.phone, terms }));
+    } catch {
+      /* aba privada sem armazenamento: segue sem rascunho */
+    }
+  }, [mode, form.name, form.email, form.phone, terms]);
   const focusProps = (k: string) => ({ onFocus: () => setFocus(k), onBlur: () => setFocus((f) => (f === k ? null : f)) });
 
   const loadInvite = (c: string) =>
@@ -130,6 +161,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
         onLogin(me);
       } else if (mode === "register" && challenge) {
         const r = await api("/api/auth/register", { method: "POST", json: { ...form, code: code ?? undefined, accept_terms: true, challenge: challenge.id, verify_code: otp } });
+        clearDraft();
         if (code) history.replaceState(null, "", "/");
         if (r.pending) setDone(r.message);
         else onLogin(r);
@@ -155,6 +187,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
           setOtp("");
           return;
         }
+        clearDraft();
         if (code) history.replaceState(null, "", "/");
         if (r.pending) setDone(r.message);
         else onLogin(r);
@@ -355,7 +388,18 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
                     <label className="terms-check">
                       <input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
                       <span>
-                        Li e aceito os <a href="/privacidade" target="_blank" rel="noreferrer">termos de uso e a política de privacidade</a>.
+                        Li e aceito os{" "}
+                        <a
+                          href="/privacidade"
+                          onClick={(e) => {
+                            // abre por cima do cadastro: no app instalado o link trocava a tela e o formulário sumia
+                            e.preventDefault();
+                            setShowTerms(true);
+                          }}
+                        >
+                          termos de uso e a política de privacidade
+                        </a>
+                        .
                       </span>
                     </label>
                   </>
@@ -408,6 +452,29 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
             </>
           )}
         </form>
+        {showTerms && (
+          <Modal
+            title="Termos de uso e privacidade"
+            wide
+            onClose={() => setShowTerms(false)}
+            footer={(close) => (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setTerms(true);
+                  close();
+                }}
+              >
+                Li e aceito
+              </button>
+            )}
+          >
+            <Suspense fallback={<p className="muted">Carregando…</p>}>
+              <PrivacyPage embedded />
+            </Suspense>
+          </Modal>
+        )}
       </section>
     </div>
   );
