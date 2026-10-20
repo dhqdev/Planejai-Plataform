@@ -1,7 +1,13 @@
 /* ---------- Login no celular: sem cartão, sem mascotes boiando, só o essencial ----------
    Pedido do David (2026-10-16): mais minimalista. O notebook continua igual. */
 @media (max-width: 767px) {
-  .auth-form { display: block; padding: 0; overflow: visible; }
+  /* tela presa na área visível (--vvh/--vvtop do teclado.ts): a página não rola nem é empurrada pelo teclado.
+     Pedido do David (2026-10-20): "mais estático, sem ficar rolando pra cima e pra baixo". */
+  .auth {
+    position: fixed; left: 0; right: 0; top: var(--vvtop, 0px); height: var(--vvh, 100dvh);
+    overflow: hidden; overscroll-behavior: none;
+  }
+  .auth-form { display: block; height: 100%; padding: 0; overflow: hidden; }
   .auth-form > .float-mascotes { display: none; }
 
   /* voltar: só a seta, num botão redondo de vidro */
@@ -13,8 +19,10 @@
   .auth-back span { display: none; }
 
   .auth-form .card {
-    width: 100%; min-height: 100dvh; display: flex; flex-direction: column;
-    padding: calc(76px + env(safe-area-inset-top)) 24px calc(20px + env(safe-area-inset-bottom));
+    width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column;
+    /* cabe sem rolar; se um celular bem baixinho não comportar, só o formulário rola, e sem puxar a página junto */
+    overflow-y: auto; overscroll-behavior: contain;
+    padding: calc(64px + env(safe-area-inset-top)) 24px calc(16px + var(--sab));
     background: none; border: none; border-radius: 0; box-shadow: none;
   }
   /* o bloco fica um pouco acima do meio e o convite desce para o pé da tela */
@@ -40,4 +48,28 @@
 
   .auth-form .btn-primary, .auth-form .signup-actions .btn { min-height: 52px; font-size: 16px; }
   .auth-form .btn-primary { margin-top: 16px !important; }
+  /* Voltar e Continuar lado a lado, da mesma altura */
+  .auth-form .signup-actions { margin-top: 16px; }
+  .auth-form .signup-actions .btn { margin-top: 0 !important; }
+  .auth-form .signup-actions .btn:not(.btn-primary) { padding: 0 22px; }
+
+  /* celular baixinho (iPhone SE e parecidos): tudo um pouco mais junto para caber de uma vez */
+  @media (max-height: 720px) {
+    .auth-form .card { padding-top: calc(60px + env(safe-area-inset-top)); }
+    .auth-logo { margin-bottom: 10px; }
+    .auth-logo .stage-mascote { zoom: .56; }
+    .auth-form h1 { font-size: 26px; }
+    .auth-form h1 + p.muted { margin-bottom: 18px !important; }
+    .auth-form .field { margin-bottom: 10px; }
+    .auth-form .input { height: 48px; }
+    .auth-form .btn-primary, .auth-form .signup-actions .btn { min-height: 48px; }
+    .auth-form .signup-dots { margin-bottom: 12px; }
+  }
+
+  /* teclado aberto: o formulário sobe para o topo da área visível e sai o que não é campo
+     (seta, Bolinho, frase de apoio, pontinhos e o link do pé), então o campo e o botão ficam à vista */
+  html.pj-kb .auth-back, html.pj-kb .auth-logo, html.pj-kb .auth-form .signup-dots,
+  html.pj-kb .auth-form h1 + p.muted, html.pj-kb .auth-form .card > p.muted:last-child { display: none; }
+  html.pj-kb .auth-form .card { padding-top: calc(20px + var(--safe-top)); }
+  html.pj-kb .auth-form h1 { font-size: 24px; margin-bottom: 16px; }
 }

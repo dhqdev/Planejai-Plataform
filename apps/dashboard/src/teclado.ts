@@ -98,7 +98,9 @@ export function installKeyboardWatch() {
   vv.addEventListener("scroll", schedule);
   document.addEventListener("focusin", () => {
     clear();
-    fit();
+    // só liga na hora; desligar espera o próximo cálculo: tocar num botão com o teclado aberto dá foco a ele (Android) e,
+    // se a tela mudasse de forma no mesmo instante, o botão saía de baixo do dedo e o toque não valia (login no celular)
+    if (opensKeyboard(document.activeElement)) fit();
     // o iOS só avisa a altura nova no fim da subida do teclado
     later(schedule, 120, 400);
     later(reveal, 350);

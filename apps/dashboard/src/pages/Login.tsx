@@ -5,6 +5,7 @@ import { ErrorBox, Modal } from "../components";
 import { CampoSenha } from "../CampoSenha";
 import { Icon } from "../icons";
 import { haptic, isStandalone } from "../touch";
+import { useKeyboardShell } from "../teclado";
 import { Mascote, type Mood } from "../mascote/Mascote";
 import { FloatingMascotes, StageMascote, lookAt } from "../mascote/Parade";
 
@@ -55,6 +56,9 @@ const SAY: Record<Step, string> = {
 /** Cara do Mascote conforme o campo em foco: tímido na senha, curioso no WhatsApp. */
 const FIELD_MOOD: Record<string, Mood> = { code: "searching", name: "happy", phone: "curious", email: "thinking", password: "shy" };
 
+/** Foco automático só com mouse: no celular ele abria o teclado ao abrir a tela e empurrava tudo para cima. */
+const deskFocus = () => !window.matchMedia("(pointer: coarse)").matches;
+
 export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
   const [code, setCode] = useState<string | null>(inviteCode);
   const wantsSignup = Boolean(code) || new URLSearchParams(location.search).has("cadastro");
@@ -77,6 +81,9 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
   // navegador novo: depois da senha, código de 6 dígitos que chega no WhatsApp
   const [challenge, setChallenge] = useState<{ id: string; to: string } | null>(null);
   const [otp, setOtp] = useState("");
+  const [desk] = useState(deskFocus);
+  // celular: a tela fica presa na área visível e encolhe com o teclado em vez de rolar (login-celular.css)
+  useKeyboardShell();
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
   useEffect(() => {
     if (mode !== "register") return;
@@ -348,7 +355,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
                         autoCapitalize="characters"
                         autoComplete="one-time-code"
                         spellCheck={false}
-                        autoFocus
+                        autoFocus={desk}
                         required
                       />
                     </div>
@@ -359,7 +366,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
                     <p className="muted" style={{ marginTop: 0, marginBottom: 20 }}>
                       {invite?.inviter ? `${invite.inviter} te convidou. ` : ""}Use o mesmo WhatsApp que vai conversar com o assistente.
                     </p>
-                    <div className="field"><label>Nome completo</label><input className="input" value={form.name} onChange={set("name")} {...focusProps("name")} autoComplete="name" autoFocus required /></div>
+                    <div className="field"><label>Nome completo</label><input className="input" value={form.name} onChange={set("name")} {...focusProps("name")} autoComplete="name" autoFocus={desk} required /></div>
                     <div className="field">
                       <label>WhatsApp</label>
                       <input
@@ -429,7 +436,7 @@ export function AuthPage({ onLogin }: { onLogin: (me: Me) => void }) {
             <>
               <h1>Entrar</h1>
               <p className="muted" style={{ marginTop: 0, marginBottom: 20 }}>Acesse o painel do seu assistente.</p>
-              <div className="field"><label>E-mail</label><input className="input" type="email" value={form.email} onChange={set("email")} {...focusProps("email")} autoComplete="email" autoFocus required /></div>
+              <div className="field"><label>E-mail</label><input className="input" type="email" value={form.email} onChange={set("email")} {...focusProps("email")} autoComplete="email" autoFocus={desk} required /></div>
               <div className="field">
                 <label>Senha</label>
                 <CampoSenha className="input" value={form.password} onChange={set("password")} {...focusProps("password")} autoComplete="current-password" required />
