@@ -106,6 +106,11 @@ export class BaileysChannel implements Channel {
     await this.run((s) => s.sendMessage(jid, { pin: { remoteJid: jid, id: messageId, fromMe: true }, type: proto.PinInChat.Type.PIN_FOR_ALL, time }));
   }
 
+  async unpinMessage(jid: string, messageId: string) {
+    if (this.remote) return void (await callChannel({ op: "unpin", jid, messageId }, SEND_WAIT_MS));
+    await this.run((s) => s.sendMessage(jid, { pin: { remoteJid: jid, id: messageId, fromMe: true }, type: proto.PinInChat.Type.UNPIN_FOR_ALL }));
+  }
+
   /** Salva a pessoa na agenda do celular do assistente (sincroniza com o aparelho principal). */
   async saveContact(phone: string, name: string, lid?: string) {
     if (this.remote) return void (await callChannel({ op: "contact", phone, name, lid }, EXTRA_WAIT_MS * 2));

@@ -4,6 +4,7 @@ import { startTelegramPolling } from "../telegram.js";
 import { processConversation, summarizeConversation } from "../agent/orchestrator.js";
 import { one } from "../db/pool.js";
 import { purgeOld, summarizeDay } from "../maintenance.js";
+import { unpinExpired } from "../agent/pins.js";
 import { snapshotStorage } from "../resources.js";
 import { dailyImprovement, MEETING_HOUR } from "../improve.js";
 import { sendInvite } from "../social.js";
@@ -93,6 +94,7 @@ async function startChannelJobs(log: WorkerLog) {
 
   await boss.work(QUEUES.purge, { batchSize: 1, pollingIntervalSeconds: 30 }, async () => {
     await purgeOld(log);
+    await unpinExpired(log).catch((err) => log.error({ err }, "falha ao desafixar mensagens antigas"));
     await snapshotStorage().catch((err) => log.error({ err }, "falha na foto diária de armazenamento"));
   });
   // de hora em hora: resume e apaga mensagens com mais de 24h, logs e gravações antigas

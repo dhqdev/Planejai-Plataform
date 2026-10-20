@@ -98,6 +98,7 @@ export interface Channel {
   deleteMessage?(remoteJid: string, messageId: string): Promise<void>;
   /** fixa uma mensagem nossa no topo da conversa por 1, 7 ou 30 dias */
   pinMessage?(remoteJid: string, messageId: string, days: 1 | 7 | 30): Promise<void>;
+  unpinMessage?(remoteJid: string, messageId: string): Promise<void>;
   /** várias fotos (e vídeos) num álbum só; devolve o id de cada uma */
   sendAlbum?(remoteJid: string, items: OutboundImage[]): Promise<{ ids: (string | undefined)[] }>;
   /** só Baileys: posta um status do número para as pessoas da lista */

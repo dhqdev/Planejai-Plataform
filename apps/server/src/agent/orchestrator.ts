@@ -38,6 +38,7 @@ import { billingAccess, blockedMessage } from "../billing.js";
 import { basicPlanLine, COMPLETO_SPECIALISTS, planAccess } from "../plan-access.js";
 import { config } from "../config.js";
 import { rememberInboundMedia, rememberSentMedia } from "./tools/attach.js";
+import { recordPin, shoppingListNote } from "./pins.js";
 import { Outbox, type ConversationRow, type ToolContext, type UserRow } from "./tools/types.js";
 
 /** Mensagens recentes que entram no contexto do CTO (o resto vira resumo): menos token por resposta. */
@@ -425,6 +426,9 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
           "Não refaça isso aqui: responda só ao que chegou agora (msg_id acima). Se for sobre aquilo, diga que já está vendo.",
       });
     }
+    // lista de compras parada há horas: itens novos viram outra lista (pins.ts)
+    const listNote = await shoppingListNote(conversationId, fresh.map((e) => e.text).join(" ")).catch(() => null);
+    if (listNote) messages.push({ role: "system", content: listNote });
     // Só entra no time quem tem pelo menos uma ferramenta utilizável (menos token e nada de delegação inútil)
     // papel e instruções editados pelo dono no Mapa do time valem para todos
     const prompts = await promptOverrides();
@@ -811,7 +815,10 @@ export async function deliver(bubbles: Bubble[], o: { channel: Channel; conversa
         const r = await o.channel.sendText(jid, b.text);
         await save(b.text, r.id);
         // [[fixar]]: lista de compras, resumo do mês... fica no topo da conversa por 7 dias
-        if (b.pin && r.id && o.channel.pinMessage) await o.channel.pinMessage(jid, r.id, 7).catch(() => {});
+        if (b.pin && r.id && o.channel.pinMessage) {
+          const pinned = await o.channel.pinMessage(jid, r.id, 7).then(() => true, () => false);
+          if (pinned) await recordPin(o.conversation, r.id, b.text).catch(() => {});
+        }
         await step.ok(b.pin ? { ...r, fixada: Boolean(r.id && o.channel.pinMessage) } : r);
       } else {
         const img = m;

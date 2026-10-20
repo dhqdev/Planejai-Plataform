@@ -70,6 +70,9 @@ async function run(ch: BaileysChannel, req: WaRpcJob): Promise<WaRpcResult> {
     case "pin":
       await ch.pinMessage(req.jid, req.messageId, req.days);
       return {};
+    case "unpin":
+      await ch.unpinMessage(req.jid, req.messageId);
+      return {};
     case "contact":
       await ch.saveContact(req.phone, req.name, req.lid);
       return {};

@@ -54,6 +54,10 @@ function fakeOpenRouter(body: any) {
   const lastTool = last.role === "tool" ? JSON.parse(last.content) : null;
   const tools = (body.tools ?? []).map((t: any) => t.function.name);
   if (userText.includes("lista do mercado")) return completion("[[fixar]] 🛒 Lista do mercado: arroz, feijão e café");
+  if (userText.includes("sabão")) {
+    const stale = body.messages.some((m: any) => m.role === "system" && String(m.content).includes("ficou parada"));
+    return completion(stale ? "[[fixar]] 🛒 Lista de compras: sabão" : "[[fixar]] 🛒 Lista do mercado: arroz, feijão, café e sabão");
+  }
   if (userText.includes("dentista")) {
     if (lastTool) return completion("Marcado ✅");
     return completion(null, [call("schedule_reminder", { intent: "dentista", title: "Dentista", event_at: future, before_minutes: 60 })]);
@@ -144,6 +148,42 @@ describe.skipIf(!enabled)("WhatsApp: cartões, fixar, apagar e álbum (e2e)", ()
     const text = ch.sent.find((s: any) => s.type === "text");
     expect(text.text).toBe("🛒 Lista do mercado: arroz, feijão e café");
     expect(ch.log).toContain(`pin id-${ch.sent.indexOf(text) + 1} 7`);
+  });
+
+  it("lista parada há mais de 12h: itens novos viram outra lista; a versão antiga da mesma lista sai do topo", async () => {
+    const ch = new Rich();
+    await db.query("DELETE FROM pinned_messages");
+    await say("me manda a lista do mercado", ch);
+    await say("preciso comprar sabão também", ch);
+    expect(ch.sent.at(-1).text).toBe("🛒 Lista do mercado: arroz, feijão, café e sabão");
+    const rows = await db.many<any>("SELECT kind, unpinned_at FROM pinned_messages ORDER BY id");
+    expect(rows.map((r) => [r.kind, Boolean(r.unpinned_at)])).toEqual([["lista", true], ["lista", false]]);
+
+    await db.query("UPDATE pinned_messages SET pinned_at = now() - interval '13 hours'");
+    await say("preciso comprar sabão", ch);
+    expect(ch.sent.at(-1).text).toBe("🛒 Lista de compras: sabão");
+    // a lista parada continua fixada (é outra lista); só sai depois de 7 dias
+    expect((await db.many<any>("SELECT 1 FROM pinned_messages WHERE unpinned_at IS NULL")).length).toBe(2);
+  });
+
+  it("desafixa sozinho o que está fixado há mais de 7 dias", async () => {
+    const { unpinExpired } = await import("../src/agent/pins.js");
+    const play = channels.channels.playground as any;
+    const unpinned: string[] = [];
+    play.unpinMessage = async (_jid: string, id: string) => void unpinned.push(id);
+    try {
+      await db.query("DELETE FROM pinned_messages");
+      await db.query(
+        `INSERT INTO pinned_messages (conversation_id, external_id, kind, pinned_at) VALUES
+           ($1, 'velha', 'lista', now() - interval '8 days'), ($1, 'resumo', 'fixado', now() - interval '7 days 1 hour'), ($1, 'nova', 'lista', now() - interval '6 days')`,
+        [convId],
+      );
+      expect(await unpinExpired()).toBe(2);
+      expect(unpinned.sort()).toEqual(["resumo", "velha"]);
+      expect(await unpinExpired()).toBe(0);
+    } finally {
+      delete play.unpinMessage;
+    }
   });
 
   it("compromisso com hora leva o convite de evento; no canal sem cartão, nada a mais", async () => {
