@@ -215,6 +215,8 @@
 .errand-send:active:not(:disabled) { transform: scale(.94); }
 .errand-send:disabled { opacity: .35; cursor: default; }
 .errand-send svg { margin-left: -2px; }
+.errand-named { grid-column: 1 / -1; justify-self: start; padding: 0 0 0 16px; background: none; border: 0; font-size: 11.5px; color: var(--muted); text-decoration: underline; cursor: pointer; }
+.errand-named[aria-pressed="true"] { color: var(--text); }
 .errand-composer-hint { grid-column: 1 / -1; padding-left: 16px; font-size: 11.5px; color: var(--muted); }
 
 @media (min-width: 1024px) and (min-height: 680px) {

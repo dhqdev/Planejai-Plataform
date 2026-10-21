@@ -70,9 +70,9 @@ export function directText(message: string, sender: { full_name?: string | null;
   return redactSecrets(humanize(says ? t : introduce(t, first))).slice(0, 3000);
 }
 
-/** "*David:* chego às 8": a mensagem que a pessoa digitou no painel, com o nome dela para quem recebe saber quem fala. */
-export function personText(message: string, sender: { full_name?: string | null; name?: string | null }) {
-  const first = firstName(sender);
+/** A mensagem que a pessoa digitou no painel; com `named`, "*David:* chego às 8" (o nome dela na frente, para quem recebe saber quem fala). */
+export function personText(message: string, sender: { full_name?: string | null; name?: string | null }, named = false) {
+  const first = named ? firstName(sender) : "";
   const t = redactSecrets(message.trim()).slice(0, 3000);
   return first ? `*${first}:* ${t}` : t;
 }
@@ -89,6 +89,8 @@ export async function createDirect(opts: {
   attachment?: DirectAttachment | null;
   /** a própria pessoa escreveu no painel (Recados): sai com o nome dela na frente, sem a apresentação do assistente */
   fromPanel?: boolean;
+  /** só no painel: põe "*Nome:*" na frente (a pessoa escolhe; padrão sem) */
+  named?: boolean;
 }) {
   const phone = normalizePhone(opts.phone);
   if (phone.length < 12 || phone.length > 13) return { ok: false, error: `Telefone inválido: ${opts.phone}. Precisa do DDD.` };
@@ -97,7 +99,7 @@ export async function createDirect(opts: {
   if (isOwner(phone) && !isOwner(opts.user.phone)) return { ok: false, error: "Para falar com o dono do Planejai, use contact_owner." };
   if (await isOptedOut(phone)) return { ok: false, error: OPTED_OUT_ERROR };
   // assinatura combinada para esse número na tela Recados (mesmo texto que a pessoa vê depois)
-  const text = opts.fromPanel ? personText(opts.message, opts.user) : withSignature(directText(opts.message, opts.user), (await getPrefs(opts.user.id, phone))?.signature);
+  const text = opts.fromPanel ? personText(opts.message, opts.user, opts.named) : withSignature(directText(opts.message, opts.user), (await getPrefs(opts.user.id, phone))?.signature);
   if (!opts.message.trim()) return { ok: false, error: "Mensagem vazia" };
   const sendAt = opts.sendAt && opts.sendAt.getTime() > Date.now() + 30_000 ? opts.sendAt : null;
   if (sendAt && sendAt.getTime() > Date.now() + 90 * 86400_000) return { ok: false, error: "Dá para agendar até 90 dias à frente." };

@@ -321,16 +321,20 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
 
     // recado aberto: sai pelo nosso número com o nome dela e entra no histórico do recado, sem gastar o limite do agente
     expect(await replyFromPanel(david.id, OFICINA, "Pode ser amanhã às 15h?")).toEqual({ ok: true });
-    expect(sentTexts().at(-1)).toBe("*David:* Pode ser amanhã às 15h?");
+    expect(sentTexts().at(-1)).toBe("Pode ser amanhã às 15h?"); // sem assinatura por padrão
     const e = await db.one("SELECT sent, log FROM errands WHERE id = $1", [r.errand_id]);
     expect(e.sent).toBe(1);
     expect(e.log.at(-1)).toMatchObject({ from: "voce", text: "Pode ser amanhã às 15h?" });
     expect(errandMessages(e.log, "Oficina", "David")[0]!.content).toMatch(/David \(escreveu direto, não foi você\): Pode ser amanhã às 15h\?/);
 
+    // a pessoa pode escolher o nome na frente
+    expect(await replyFromPanel(david.id, OFICINA, "Com nome", { named: true })).toEqual({ ok: true });
+    expect(sentTexts().at(-1)).toBe("*David:* Com nome");
+
     // recado fechado: continua como mensagem avulsa dela (a resposta volta) e aparece como dela na tela
     await cancelErrand(r.errand_id, david.id);
     expect((await replyFromPanel(david.id, OFICINA, "Obrigado!")).ok).toBe(true);
-    expect(sentTexts().at(-1)).toBe("*David:* Obrigado!");
+    expect(sentTexts().at(-1)).toBe("Obrigado!");
     const chat = (await listContactChats(david.id)).find((c) => c.phone === OFICINA)!;
     expect(chat.log.at(-1)).toMatchObject({ from: "voce", text: "Obrigado!" });
     expect(chat.name).toBe("Oficina");

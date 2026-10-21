@@ -21,8 +21,8 @@ export function errandRoutes(base: FastifyInstance) {
     return { ...errands, contacts, prefs };
   });
   // a própria pessoa responde pela tela, numa conversa que o assistente já tem por ela
-  base.post<{ Params: { phone: string }; Body: { text?: string } }>("/api/errands/chats/:phone/mensagem", async (req, reply) => {
-    const r = await replyFromPanel(await self(req.account), req.params.phone, String(req.body?.text ?? ""));
+  base.post<{ Params: { phone: string }; Body: { text?: string; named?: boolean } }>("/api/errands/chats/:phone/mensagem", async (req, reply) => {
+    const r = await replyFromPanel(await self(req.account), req.params.phone, String(req.body?.text ?? ""), { named: req.body?.named === true });
     return r.ok ? r : reply.code(400).send({ error: r.error });
   });
   // personalizar a conversa ou mudar o acompanhamento (auto, on = sem prazo, off = parar)

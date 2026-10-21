@@ -181,8 +181,8 @@ export function ErrandsPage() {
   };
 
   // a pessoa responde pela tela: sai pelo número do Planejai com o nome dela na frente
-  const sendText = async (phone: string, text: string) => {
-    const r = await api<{ ok: boolean; tip?: string | null }>(`/api/errands/chats/${encodeURIComponent(phone)}/mensagem`, { method: "POST", json: { text } });
+  const sendText = async (phone: string, text: string, named: boolean) => {
+    const r = await api<{ ok: boolean; tip?: string | null }>(`/api/errands/chats/${encodeURIComponent(phone)}/mensagem`, { method: "POST", json: { text, named } });
     haptic(8);
     reload();
     if (r.tip) void alertDialog("Vai sair daqui a pouco", r.tip);
@@ -357,7 +357,7 @@ export function ErrandsPage() {
                 onSave={(patch) => save(sel.phone, patch)}
                 onFollow={(f) => setFollow(sel.phone, placeName(sel, pref(sel.phone)), f, OPEN.includes(sel.state))}
                 onRemove={() => removeFollow(sel.phone, placeName(sel, pref(sel.phone)))}
-                onSend={(text) => sendText(sel.phone, text)}
+                onSend={(text, named) => sendText(sel.phone, text, named)}
               />
             ) : selContact ? (
               <ContactView
@@ -369,7 +369,7 @@ export function ErrandsPage() {
                 onSave={(patch) => save(selContact.phone, patch)}
                 onFollow={(f) => setFollow(selContact.phone, contactName(selContact, pref(selContact.phone)), f, false)}
                 onRemove={() => removeFollow(selContact.phone, contactName(selContact, pref(selContact.phone)))}
-                onSend={(text) => sendText(selContact.phone, text)}
+                onSend={(text, named) => sendText(selContact.phone, text, named)}
               />
             ) : (
               <Empty>Escolha uma conversa para ver.</Empty>
@@ -404,7 +404,7 @@ function DraftView({ d, busy, onDiscard }: { d: Draft; busy: boolean; onDiscard:
   );
 }
 
-type ChatActions = { p?: Prefs; busy: boolean; compact: boolean; onSave: (patch: Partial<Prefs>) => void; onFollow: (f: Follow) => void; onRemove: () => void; onSend: (text: string) => Promise<void> };
+type ChatActions = { p?: Prefs; busy: boolean; compact: boolean; onSave: (patch: Partial<Prefs>) => void; onFollow: (f: Follow) => void; onRemove: () => void; onSend: (text: string, named: boolean) => Promise<void> };
 
 function ErrandView({ e, extra, p, busy, compact, onCancel, onSave, onFollow, onRemove, onSend }: { e: Errand; extra: Line[]; onCancel: () => void } & ChatActions) {
   const open = OPEN.includes(e.state);
@@ -858,8 +858,25 @@ function Bubble({ line, next }: { line: Line; next?: boolean }) {
  * Caixa para a pessoa escrever na conversa, como no WhatsApp. No notebook Enter envia e Shift+Enter quebra a
  * linha; no celular (toque) Enter quebra a linha e o botão envia. Cresce até umas 6 linhas e depois rola por dentro.
  */
-function Composer({ name, onSend }: { name: string; onSend: (text: string) => Promise<void> }) {
+const NAMED_KEY = "pj-recados-nome-na-frente";
+function Composer({ name, onSend }: { name: string; onSend: (text: string, named: boolean) => Promise<void> }) {
   const [text, setText] = useState("");
+  // escolha da pessoa: o nome dela na frente da mensagem (padrão: sem)
+  const [named, setNamed] = useState(() => {
+    try {
+      return localStorage.getItem(NAMED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleNamed = () => {
+    setNamed((v) => {
+      try {
+        localStorage.setItem(NAMED_KEY, v ? "0" : "1");
+      } catch {}
+      return !v;
+    });
+  };
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const touch = useMedia("(pointer: coarse)");
@@ -874,7 +891,7 @@ function Composer({ name, onSend }: { name: string; onSend: (text: string) => Pr
     if (!t || sending) return;
     setSending(true);
     try {
-      await onSend(t);
+      await onSend(t, named);
       setText("");
     } catch (err) {
       void alertDialog("Não deu para mandar", (err as Error).message);
@@ -912,7 +929,12 @@ function Composer({ name, onSend }: { name: string; onSend: (text: string) => Pr
       <button className="errand-send" type="submit" onPointerDown={(ev) => ev.preventDefault()} disabled={!text.trim() || sending} aria-label="Enviar" title="Enviar">
         <Icon name="send" size={17} />
       </button>
-      <span className="errand-composer-hint">Sai pelo número do Planejai com o seu nome na frente.{touch ? "" : " Enter envia, Shift+Enter pula linha."}</span>
+      <span className="errand-composer-hint">
+        Sai pelo número do Planejai.{touch ? "" : " Enter envia, Shift+Enter pula linha."}
+      </span>
+      <button type="button" className="errand-named" onClick={toggleNamed} aria-pressed={named}>
+        {named ? "Seu nome na frente: ligado" : "Seu nome na frente: desligado"}
+      </button>
     </form>
   );
 }
