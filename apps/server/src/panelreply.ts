@@ -1,7 +1,7 @@
 import { config } from "./config.js";
 import { many, one, query } from "./db/pool.js";
 import { createDirect, personText } from "./direct.js";
-import type { Errand } from "./errands.js";
+import { ERRAND_FOLLOW_HOURS, type Errand } from "./errands.js";
 import { isOwner, phoneVariants } from "./ingest.js";
 import { isOptedOut, OPTED_OUT_ERROR } from "./outreach.js";
 import { outboundChannel } from "./social.js";
@@ -25,10 +25,23 @@ export async function replyFromPanel(userId: string, phone: string, message: str
     [userId],
   );
   if (!user) return { ok: false as const, error: "Conta sem WhatsApp ligado." };
-  const [errand] = await many<Errand>(
+  let [errand] = await many<Errand>(
     "SELECT * FROM errands WHERE user_id = $1 AND phone = ANY($2) AND status IN ('waiting', 'asking') AND expires_at > now() ORDER BY updated_at DESC LIMIT 1",
     [userId, variants],
   );
+  if (!errand) {
+    // recado que já fechou (ou venceu) mas ainda está no acompanhamento (7 dias, ou 60 com "Sem prazo"): a pessoa continua a conversa dele,
+    // em vez de a mensagem virar uma avulsa que não aparece ali. As respostas deles voltam para este recado.
+    const [closed] = await many<Errand>(
+      `SELECT e.* FROM errands e WHERE e.user_id = $1 AND e.phone = ANY($2) AND e.kind = 'recado' AND e.status IN ('done', 'failed', 'expired')
+         AND e.updated_at > now() - make_interval(hours => CASE WHEN EXISTS (SELECT 1 FROM chat_prefs c WHERE c.user_id = e.user_id AND c.phone = ANY($2) AND c.follow = 'on') THEN 1440 ELSE $3::int END)
+       ORDER BY e.updated_at DESC LIMIT 1`,
+      [userId, variants, ERRAND_FOLLOW_HOURS],
+    );
+    if (closed) {
+      [errand] = await many<Errand>("UPDATE errands SET status = 'waiting', question = NULL, expires_at = now() + make_interval(hours => $2::int), updated_at = now() WHERE id = $1 RETURNING *", [closed.id, ERRAND_FOLLOW_HOURS]);
+    }
+  }
   if (errand) {
     if (await isOptedOut(errand.phone)) return { ok: false as const, error: OPTED_OUT_ERROR };
     const out = personText(text, user);

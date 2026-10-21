@@ -157,8 +157,10 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     expect(rem).toMatchObject({ title: "PetCamp", tag: "Pet", color: "#e8710a" });
     expect(rem.intent).toMatch(/PetCamp/);
     expect(sentTexts().at(-1)).toMatch(/Resultado da conversa com PetCamp[\s\S]*Banho marcado[\s\S]*lembrete/);
-    // recado fechado: nova mensagem do número volta a ser um contato desconhecido comum
-    expect((await petshopSays("Obrigado!")).reason).not.toBe("recado");
+    // recado fechado há pouco: se eles voltam a escrever (ex.: horário não disponível), reabre para o agente responder e avisar a pessoa
+    expect((await petshopSays("Obrigado!")).reason).toBe("recado");
+    expect(await db.one("SELECT status FROM errands WHERE id = $1", [e.id])).toEqual({ status: "waiting" });
+    await db.query("UPDATE errands SET status = 'done' WHERE id = $1", [e.id]);
     const exec = await db.one("SELECT status FROM executions WHERE trigger = 'errand' ORDER BY started_at DESC LIMIT 1");
     expect(exec.status).toBe("success");
   });
@@ -329,6 +331,18 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     expect(chat.name).toBe("Oficina");
     expect((await listErrands(david.id)).errands.find((x: any) => x.id === r.errand_id)?.log.at(-1)).toMatchObject({ from: "voce" });
   });
+  it("recado concluído: o que a pessoa escreve pelo painel entra no mesmo recado e ele volta a acompanhar", async () => {
+    const { startErrand, finishErrand } = await import("../src/errands.js");
+    const { replyFromPanel } = await import("../src/panelreply.js");
+    const CLINICA = "5519955557777";
+    const r: any = await startErrand({ user: { id: david.id, phone: david.phone, name: "David" }, conversationId: conv, place: "Clínica GK", phone: CLINICA, message: "Têm horário sexta?", goal: "avaliação", timezone: TZ });
+    await finishErrand(r.errand_id, { status: "done", outcome: "Sexta 16h", timezone: TZ });
+    expect(await replyFromPanel(david.id, CLINICA, "Pode ser às 14h então?")).toEqual({ ok: true });
+    const e = await db.one("SELECT status, log FROM errands WHERE id = $1", [r.errand_id]);
+    expect(e.status).toBe("waiting");
+    expect(e.log.at(-1)).toMatchObject({ from: "voce", text: "Pode ser às 14h então?" });
+  });
+
   it("ficha da conversa: guarda itens, limpa, atualiza o mesmo rótulo e chega ao agente", async () => {
     const { savePrefs, addFact, getPrefs, styleHint, notedHint, MAX_FACTS } = await import("../src/chatprefs.js");
     const FICHA = "5519977778888";

@@ -259,6 +259,17 @@ export async function sendToErrand(errandId: string, text: string, opts: { sameT
   return { ok: true, sent: clean, messages_left: limit - e.sent - 1 };
 }
 
+/** Reabre o recado fechado mais recente desse número dentro da janela de acompanhamento (7 dias), com folga para mais algumas mensagens. */
+async function reopenRecent(phone: string) {
+  return one<Errand>(
+    `UPDATE errands SET status = 'waiting', question = NULL, expires_at = now() + make_interval(hours => $2::int), sent = LEAST(sent, $3::int), updated_at = now()
+     WHERE id = (SELECT id FROM errands WHERE phone = ANY($1) AND kind = 'recado' AND status IN ('done', 'failed', 'expired')
+                   AND updated_at > now() - make_interval(hours => $2::int) ORDER BY updated_at DESC LIMIT 1)
+     RETURNING *`,
+    [phoneVariants(phone), ERRAND_FOLLOW_HOURS, MAX_ERRAND_MESSAGES - 3],
+  );
+}
+
 /**
  * Vários clientes podem falar com o mesmo estabelecimento: a resposta vai para o recado cuja mensagem eles citaram (responder em cima);
  * sem citação, para o que recebeu a mensagem nossa mais recente (quem perguntou por último é quem eles costumam responder).
@@ -280,8 +291,13 @@ export function routeErrand(open: Errand[], quotedId?: string) {
 export async function handleErrandInbound(msg: InboundMessage): Promise<boolean> {
   if (!msg.phone || msg.kind === "reaction") return false;
   const open = await many<Errand>(`SELECT * FROM errands WHERE phone = ANY($1) AND status = ANY($2) AND expires_at > now() ORDER BY updated_at DESC`, [phoneVariants(msg.phone), OPEN]);
-  const e = routeErrand(open, msg.quoted?.id);
-  if (!e) return false;
+  let e: Errand | undefined = routeErrand(open, msg.quoted?.id);
+  if (!e) {
+    // recado que já fechou (ou venceu) há pouco: eles voltaram a escrever (ex.: "o horário não está mais disponível"). Reabre e o agente decide,
+    // em vez de a mensagem se perder e a pessoa continuar achando que está tudo marcado.
+    e = await reopenRecent(msg.phone);
+    if (!e) return false;
+  }
   if (msg.externalId && (await markSeen(`errand:${msg.channel}:${msg.externalId}`, 48 * 3600)) === false) return true;
   const entry: ErrandLogEntry = { from: "eles", text: msg.text ?? "", at: new Date().toISOString(), kind: msg.kind, external_id: msg.externalId };
   if (msg.media && msg.kind !== "text") entry.media = msg.media;
