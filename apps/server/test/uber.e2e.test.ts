@@ -54,6 +54,10 @@ describe("uber: leitura de preço, código e escolha", () => {
     expect(pickOption(opts, "uberx")?.name).toBe("UberX");
     expect(pickOption(opts, "flash")?.name).toBe("Uber Flash");
     expect(pickOption(opts, "9")).toBeNull();
+    const { readCodeScreen } = await import("../src/agent/uber-robot.js");
+    expect(readCodeScreen("Insira o código de 4 dígitos enviado para d*****@prefeitura.sp.gov.br")).toMatchObject({ by: "email", dest: "d*****@prefeitura.sp.gov.br", rejected: false });
+    expect(readCodeScreen("Enviamos um código por SMS para +55 •• •••••-4444. Reenviar código")).toMatchObject({ by: "sms", rejected: false });
+    expect(readCodeScreen("Código incorreto. Tente novamente.").rejected).toBe(true);
     const { uberLink, optionsMessage } = await import("../src/uber.js");
     expect(uberLink("Plaza das Flores, Campinas", "Shopping Dom Pedro")).toContain("dropoff%5Bformatted_address%5D=Shopping+Dom+Pedro");
     expect(uberLink(null, "Dom Pedro")).toContain("pickup=my_location");
@@ -71,7 +75,7 @@ describe.skipIf(!enabled)("uber pelo WhatsApp (beta, e2e)", () => {
   let user: any;
   let conv: any;
   let price = "23,40";
-  let codeBy: "sms" | "email" = "sms";
+  let codeBy: "sms" | "email" | "sms+email" = "sms";
   let captchaOn = false;
   const typedPhones: string[] = [];
   let requests = 0;
@@ -92,10 +96,10 @@ function req(){fetch('/requested');document.body.innerHTML='<p>Procurando motori
 <div id="captcha-root"></div><iframe src="/captcha-frame" title="captcha" style="${captchaOn ? "width:300px;height:150px" : "width:0;height:0;border:0"}"></iframe>
 <h1>Qual é o seu número de celular ou e-mail?</h1><input type="tel" placeholder="Número de celular ou e-mail" id="ph"><button onclick="next()">Continuar</button>
 <script>
+function boxes(msg,stage){document.body.innerHTML='<p>'+msg+'</p>'+[0,1,2,3].map(()=>'<input maxlength="1" inputmode="numeric">').join('')+'<button onclick="check(\\''+stage+'\\')">Verificar</button>';}
 function next(){fetch('/send?ph='+encodeURIComponent(document.getElementById('ph').value));
-document.body.innerHTML='<p>Digite o código de 4 dígitos que enviamos ${codeBy === "sms" ? "por SMS para o seu celular" : "para o seu e-mail d***@gmail.com"}</p>'+[0,1,2,3].map(()=>'<input maxlength="1" inputmode="numeric" oninput="mv(this)">').join('')+'<button onclick="check()">Verificar</button>';}
-function mv(el){if(el.value&&el.nextElementSibling&&el.nextElementSibling.tagName==='INPUT')el.nextElementSibling.focus();}
-function check(){const c=[...document.querySelectorAll('input')].map(i=>i.value).join('');fetch('/verify?c='+c).then(r=>r.ok?location.reload():document.body.insertAdjacentHTML('beforeend','<p>código incorreto</p>'));}
+boxes('Digite o código de 4 dígitos que enviamos ${codeBy === "email" ? "para o seu e-mail d***@gmail.com" : "por SMS para +55 •• ••••-4444"}','${codeBy === "email" ? "email" : "sms"}');}
+function check(stage){const c=[...document.querySelectorAll('input')].map(i=>i.value).join('');fetch('/verify?s='+stage+'&c='+c).then(r=>r.status===202?boxes('Mais uma verificação: enviamos um código para d***@prefeitura.gov.br','email'):r.ok?location.reload():document.body.insertAdjacentHTML('beforeend','<p>Código incorreto. Tente novamente.</p>'));}
 </script>`;
 
   beforeAll(async () => {
@@ -107,7 +111,12 @@ function check(){const c=[...document.querySelectorAll('input')].map(i=>i.value)
           return res.end("ok");
         }
         if (u.pathname === "/verify") {
-          const ok = u.searchParams.get("c") === (codeBy === "sms" ? "1234" : "5678");
+          const stage = u.searchParams.get("s");
+          const ok = u.searchParams.get("c") === (stage === "sms" ? "1234" : "5678");
+          if (ok && stage === "sms" && codeBy === "sms+email") {
+            res.writeHead(202);
+            return res.end();
+          }
           res.writeHead(ok ? 200 : 400, ok ? { "set-cookie": "sid=ok; Path=/; Max-Age=86400" } : {});
           return res.end();
         }
@@ -223,6 +232,28 @@ function check(){const c=[...document.querySelectorAll('input')].map(i=>i.value)
     // não precisou pedir o código para a pessoa
     expect(sent.slice(before).some((t) => /e-mail/.test(t))).toBe(false);
   });
+
+  it("SMS errado pede de novo; SMS certo e depois e-mail fora do Gmail: pede o do e-mail como verificação nova", async () => {
+    await uber.forgetUber(user.id);
+    codeBy = "sms+email";
+    gmailCode = null;
+    const before = sent.length;
+    let sms = 0;
+    onSent = (text) => {
+      if (/e-mail/.test(text)) setTimeout(() => void uber.handleUberCode(user.id, "5678"), 300);
+      else if (/não passou/.test(text)) setTimeout(() => void uber.handleUberCode(user.id, "1234"), 300);
+      else if (/SMS/.test(text)) setTimeout(() => void uber.handleUberCode(user.id, sms++ === 0 ? "9999" : "1234"), 300);
+    };
+    await tools.uberQuote.run({ pickup: "Casa", dropoff: "Trabalho" }, ctx());
+    await uber.runUberJob({ rideId: (await latest()).id, action: "quote" });
+    onSent = null;
+    const out = sent.slice(before);
+    expect(out[0]).toContain("*SMS* (+55 •• ••••-4444)");
+    expect(out[1]).toContain("não passou");
+    expect(out[2]).toContain("O código do SMS passou. Agora a Uber pediu mais uma verificação");
+    expect(out[2]).toContain("d***@prefeitura.gov.br");
+    expect((await latest()).status).toBe("opcoes");
+  }, 120_000);
 
   it("captcha de verdade na tela: desiste, manda o link e o print só para o dono", async () => {
     await uber.forgetUber(user.id);

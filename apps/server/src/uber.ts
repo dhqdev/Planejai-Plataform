@@ -275,8 +275,9 @@ export async function runUberJob(job: UberJob, log?: Log) {
   if (!user) return;
   const tracer = ride.execution_id ? Tracer.attach(ride.execution_id, user.id) : await Tracer.start({ trigger: "uber", userId: user.id, input: "Uber" });
   const { notifyUser } = await import("./social.js");
-  const tell = (text: string) => notifyUser(user.id, text).catch((err) => log?.error({ err }, "aviso da Uber não saiu"));
-  const io = codeIO(user.id, tracer, tell);
+  const tell = (text: string, shot?: string | null) =>
+    notifyUser(user.id, text, shot ? { base64: shot, mimetype: "image/jpeg" } : undefined).catch((err) => log?.error({ err }, "aviso da Uber não saiu"));
+  const io = codeIO(user.id, tracer, tell, isOwner(user.phone));
   const { personOf } = await import("./agent/runner.js");
 
   await asPerson(personOf(user), async () => {
@@ -358,30 +359,37 @@ function failureMessage(reason: string, action: UberJob["action"], ride: Pick<Ri
 }
 
 /** Espera de código do robô: e-mail pelo Gmail ligado; senão (ou SMS) avisa no WhatsApp e espera a pessoa ou o Atalho. */
-function codeIO(userId: string, tracer: Tracer, tell: (t: string) => Promise<unknown>): RobotIO {
+function codeIO(userId: string, tracer: Tracer, tell: (t: string, shot?: string | null) => Promise<unknown>, owner: boolean): RobotIO {
+  // já pediu um código nesta entrada: o próximo é outra verificação (ex.: SMS passou, agora o e-mail)
+  let prior = false;
   return {
     async note(name, data) {
       const s = await tracer.step({ agent: "uber", type: "info", name, input: data ?? null });
       await s.ok(null);
     },
-    async waitCode(kind, attempt) {
+    async waitCode(kind, info) {
       const since = Date.now();
       await setWaiting(userId, kind);
       const shortcut = Boolean((await uberSessionInfo(userId))?.shortcut);
-      const gmail = kind === "email";
+      // e-mail num Gmail ligado: o robô lê sozinho; e-mail de outro provedor (ex.: .gov.br) só a pessoa vê
+      const gmail = kind === "email" && (!info.dest || /@(gmail|googlemail)\.com$/i.test(info.dest) || /@\*+/.test(info.dest));
+      const where = info.dest ? ` (${info.dest})` : "";
       let asked = false;
+      const wasPrior = prior;
+      prior = true;
       const ask = async () => {
         asked = true;
-        if (attempt > 0) return tell("Esse código não passou na Uber. Me manda o mais novo que chegou?");
-        if (kind === "email") return tell("A Uber mandou um código de 4 dígitos no seu *e-mail* (olha o spam também). Me manda aqui só os números.");
-        return tell(
-          shortcut
-            ? "A Uber mandou um código por *SMS*. Se o seu Atalho estiver ligado, ele chega sozinho; senão, me manda aqui só os números."
-            : "A Uber mandou um código por *SMS* para entrar na sua conta. Me manda aqui só os números.",
-        );
+        const text = info.retry
+          ? "Esse código não passou na Uber. Me manda o mais novo que chegou?"
+          : kind === "email"
+            ? `${wasPrior ? "O código do SMS passou. Agora a Uber pediu mais uma verificação: mandou" : "A Uber mandou"} um código no seu *e-mail*${where} (olha o spam também). Me manda aqui só os números.`
+            : shortcut
+              ? `A Uber mandou um código por *SMS*${where}. Se o seu Atalho estiver ligado, ele chega sozinho; senão, me manda aqui só os números.`
+              : `${wasPrior ? "Passou. Agora a Uber" : "A Uber"} mandou um código por *SMS*${where} para entrar na sua conta. Me manda aqui só os números.`;
+        // beta: o dono vê a tela junto, para conferir o que a Uber pediu
+        return tell(text, owner && info.shot ? info.shot : null);
       };
-      // e-mail com Gmail ligado: tenta sozinho por uns segundos antes de incomodar a pessoa
-      if (!gmail && !shortcut) await ask();
+      if (!gmail && !(kind === "sms" && shortcut)) await ask();
       while (Date.now() - since < CODE_WAIT_MS()) {
         const typed = await takeCode(userId);
         if (typed) {

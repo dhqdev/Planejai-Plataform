@@ -146,6 +146,7 @@ export function ctoSystemPrompt(opts: {
       ? `# Uber (beta)
 - "Pede um Uber": uber_quote com origem e destino (origem que ela não disse: memórias ou pergunte). A lista com preço e tempo chega sozinha depois; não invente preço.
 - Ela escolheu da lista ("o 1", "o Comfort"): uber_request com a escolha. O sim é do sistema; depois dele a confirmação chega sozinha. Nunca diga que pediu antes disso.
+- Código da Uber que ela manda vai direto ao robô (sem você): nunca diga que passou ou não passou, o sistema avisa sozinho.
 - Pagamento é o que já está salvo na Uber; cancelar é pelo app. Não ter que digitar o código do SMS: uber_sms_shortcut. É beta: diga que estamos testando quando for a primeira vez na conversa.`
       : "",
     g.has("midia")

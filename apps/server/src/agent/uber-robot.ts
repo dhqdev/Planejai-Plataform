@@ -34,9 +34,29 @@ export interface UberOption {
 
 export interface RobotIO {
   /** a Uber pediu um código: avisa a pessoa e espera (null = não chegou a tempo) */
-  waitCode(kind: "sms" | "email", attempt: number): Promise<string | null>;
+  waitCode(kind: "sms" | "email", info: CodeAsk): Promise<string | null>;
   /** registra o que o robô viu (Execuções) */
   note(name: string, data?: unknown): Promise<void>;
+}
+
+export interface CodeAsk {
+  /** o código anterior foi recusado nesta mesma tela (senão é uma verificação nova, ex.: SMS passou e agora é o e-mail) */
+  retry: boolean;
+  /** para onde a Uber mandou, como aparece na tela ("d***@x.gov.br", "•••• 1234") */
+  dest: string | null;
+  /** print da tela (o dono recebe junto, para ajustar a beta) */
+  shot: string | null;
+}
+
+/** Tela do código: por onde a Uber mandou, para onde, e se o último foi recusado. */
+export function readCodeScreen(text: string) {
+  const t = text.replace(/\s+/g, " ");
+  const email = t.match(/[\w*.+-]*\*[\w*.+-]*@[\w*.-]+\.[a-z]{2,}(?:\.[a-z]{2,})?|[\w.+-]+@[\w-]+(?:\.[\w-]+)+/i)?.[0] ?? null;
+  const phone = t.match(/(?:\+?\d{2}\s?)?[*•·x]{2,}[\s*•·x-]*\d{2,4}/i)?.[0] ?? null;
+  const lower = t.toLowerCase();
+  const by: "sms" | "email" = email || (/e-?mail/.test(lower) && !/sms|mensagem de texto|text message|whatsapp/.test(lower)) ? "email" : "sms";
+  const rejected = /incorret|inv[aá]lid|invalid|incorrect|errad|n[aã]o (está )?(correto|confere)|tente (de )?novo|try again|expirou|expired/.test(lower);
+  return { by, dest: by === "email" ? email : phone, rejected };
 }
 
 export type ScreenKind = "home" | "phone" | "code" | "password" | "captcha" | "continue" | "unknown";
@@ -231,6 +251,8 @@ export class UberRobot {
     let didLogin = false;
     let typedPhone = false;
     let codes = 0;
+    let stepCodes = 0;
+    let last: ReturnType<typeof readCodeScreen> | null = null;
     for (let round = 0; round < 12; round++) {
       const kind = await this.screen();
       if (kind === "home") return didLogin ? "login" : "sessao";
@@ -253,15 +275,17 @@ export class UberRobot {
         continue;
       }
       if (kind === "code") {
-        const page = (await this.text(800)).toLowerCase();
-        const by: "sms" | "email" = /e-?mail/.test(page) && !/sms|mensagem de texto|text message|whatsapp/.test(page) ? "email" : "sms";
-        if (codes >= 3) throw new UberScreenError("code", "Três códigos não passaram", await this.text());
-        const code = await io.waitCode(by, codes);
+        const screen = readCodeScreen(await this.text(1200));
+        // mesma tela de antes (mesmo canal e destino) ou aviso de erro = o código foi recusado; senão é a próxima verificação
+        const retry = Boolean(last) && (screen.rejected || (screen.by === last!.by && screen.dest === last!.dest));
+        stepCodes = retry ? stepCodes + 1 : 1;
+        if (stepCodes > 3 || codes >= 5) throw new UberScreenError("code", "Os códigos não passaram na Uber", await this.text());
+        const code = await io.waitCode(screen.by, { retry, dest: screen.dest, shot: await this.screenshot() });
         codes++;
+        last = screen;
         if (!code) throw new UberScreenError("code", "O código não chegou a tempo");
-        await io.note(`código por ${by === "email" ? "e-mail" : "SMS"} digitado`);
+        await io.note(`código por ${screen.by === "email" ? "e-mail" : "SMS"} digitado${retry ? " (de novo)" : ""}`, { dest: screen.dest });
         await this.typeCode(code);
-        await this.settle(10_000);
         continue;
       }
       if (kind === "continue") {
@@ -276,14 +300,36 @@ export class UberRobot {
   }
 
   private async typeCode(code: string) {
-    const boxes = await this.page.$$('input[autocomplete="one-time-code"], input[maxlength="1"]');
-    const first = boxes[0] ?? (await this.field(/code|c[oó]digo|otp|verification/i));
-    if (!first) throw new UberScreenError("code", "Não achei onde digitar o código", await this.text());
-    await first.click().catch(() => {});
-    // nas caixinhas de um dígito o foco anda sozinho; num campo só, entra tudo junto
-    await this.page.keyboard.type(code, { delay: 120 });
-    await human();
-    await this.click(/^(continuar|continue|próximo|verificar|verify|confirmar|next|enviar)$/i);
+    const boxes = (await this.page.$$('input[autocomplete="one-time-code"], input[maxlength="1"], input[inputmode="numeric"], input[type="tel"], input[type="number"]')) as import("puppeteer-core").ElementHandle<HTMLInputElement>[];
+    const visible: typeof boxes = [];
+    for (const b of boxes) if (await b.isVisible().catch(() => false)) visible.push(b);
+    const before = (await this.text(1200)).replace(/\s+/g, " ");
+    // código recusado deixa os dígitos velhos nas caixas
+    for (const b of visible) await b.evaluate((i) => {
+      i.value = "";
+      i.dispatchEvent(new Event("input", { bubbles: true }));
+    }).catch(() => {});
+    if (visible.length >= code.length) {
+      // caixinhas de um dígito: um dígito em cada, clicando em cada uma (não depende do foco andar sozinho)
+      for (let i = 0; i < code.length; i++) {
+        await visible[i]!.click().catch(() => {});
+        await visible[i]!.type(code[i]!, { delay: 80 });
+      }
+    } else {
+      const one = visible[0] ?? (await this.field(/code|c[oó]digo|otp|verification/i));
+      if (!one) throw new UberScreenError("code", "Não achei onde digitar o código", await this.text());
+      await one.click().catch(() => {});
+      await one.type(code, { delay: 120 });
+    }
+    // a Uber costuma enviar sozinha ao completar; só aperta o botão se ainda estiver na mesma tela
+    await sleep(2500);
+    await this.settle(8000);
+    // tela mudou (próxima verificação ou erro) = a Uber já enviou: clicar agora apertaria o botão da tela nova vazia
+    const now = (await this.text(1200)).replace(/\s+/g, " ");
+    if (now === before && (await this.screen()) === "code") {
+      await this.click(/^(continuar|continue|próximo|verificar|verify|confirmar|next|enviar)$/i);
+      await this.settle(10_000);
+    }
   }
 
   /** Preenche origem e destino com a primeira sugestão da Uber; devolve como ela entendeu. */
