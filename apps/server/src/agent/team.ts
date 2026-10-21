@@ -373,8 +373,8 @@ export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
     when: /(?<!\p{L})(contatos?|liber|compartilh|acesso|tira (o|a) )/iu,
     tools: [social.listContactsTool, social.shareScreen],
   },
-  // Uber (beta): "pede um uber", e a escolha que vem depois da lista (a última fala do assistente cita a Uber)
-  { id: "uber", when: /(?<!\p{L})(uber|t[aá]xi|99 ?pop|corrida (pra|para|at[eé])|chama(r)? um carro|me (leva|busca) (pra|para|at[eé]))/iu, tools: UBER_TOOLS },
+  // Uber e 99 (beta): "pede um uber", "chama uma 99", e a escolha que vem depois da lista (a última fala do assistente cita a Uber)
+  { id: "uber", when: /(?<!\p{L})(uber|t[aá]xi|99 ?pop|(uma|na|pela|da) 99(?!\d)|corrida (pra|para|at[eé])|chama(r)? um carro|me (leva|busca) (pra|para|at[eé]))/iu, tools: UBER_TOOLS },
   { id: "acompanhamentos", when: /(?<!\p{L})(de olho|acompanh|monitor|avis\w* quando)/iu, tools: [social.watchList, social.watchCancel, social.watchUpdate] },
   { id: "dinheiro", when: /(?<!\p{L})(limite|or[çc]amento|teto|no m[aá]ximo|fatura|cart[aã]o|cart[õo]es)/iu, tools: [finance.setBudget, cards.cardList, cards.cardInvoicePay] },
   { id: "dolar", when: /(?<!\p{L})(d[oó]lar(es)?|dollars?|USD|US\$)/iu, tools: [finance.convertCurrency] },

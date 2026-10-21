@@ -262,6 +262,15 @@ export function SettingsPage() {
               <div className="help">O assistente entra na conta da Uber da pessoa pelo número, mostra preço e tempo e só pede depois do sim. Uma corrida por vez na fila "Uber (beta)" para não pesar no servidor. Ainda em teste: a Uber pode pedir verificação ou mudar o site.</div>
             </div>
             <div className="field">
+              <label>Pedir 99 pelo WhatsApp (beta)</label>
+              <select className="select" value={form.ride99Access ?? "owner"} onChange={(e) => setForm({ ...form, ride99Access: e.target.value })}>
+                <option value="owner">Só eu, testando</option>
+                <option value="all">Todo mundo (Dia a dia e Completo)</option>
+                <option value="off">Desligado: manda só o link da 99</option>
+              </select>
+              <div className="help">O mesmo robô da Uber, na conta da 99 da pessoa, na mesma fila. A 99 quase não tem site para passageiro, então pode não passar do login: quando falha, você recebe o print da tela.</div>
+            </div>
+            <div className="field">
               <label>Mensagem para quem não é cliente</label>
               <textarea className="textarea" placeholder="Vazio: apresenta o Planejai e manda o link do site para assinar." value={form.strangerMessage ?? ""} onChange={(e) => setForm({ ...form, strangerMessage: e.target.value })} />
               <div className="help">Sai sem IA para quem manda mensagem sem ser cliente, uma vez por semana por número. Quem você pôs para conversar com um agente não recebe isso.</div>

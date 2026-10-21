@@ -105,6 +105,8 @@ const schema = z.object({
   UBER_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(1),
   // quanto o robô espera o código do SMS/e-mail antes de desistir (segura a vaga da fila nesse tempo)
   UBER_CODE_WAIT_SECONDS: z.coerce.number().int().min(30).max(600).default(180),
+  // 99 pelo WhatsApp (beta): página onde o robô entra na conta da 99 (mesma fila e mesmo jeito da Uber)
+  RIDE_99_URL: z.string().url().default("https://99app.com/"),
 
   // Serviço opcional de navegador headless (browserless) para screenshots de páginas.
   BROWSERLESS_URL: z.string().default(""),

@@ -59,6 +59,8 @@ export interface AgentSettings {
   keepLocalCopy: boolean;
   /** Uber pelo WhatsApp (beta): desligado, só o dono testando ou todo mundo (Dia a dia e Completo) */
   uberAccess: "off" | "owner" | "all";
+  /** 99 pelo WhatsApp (beta): mesmas opções da Uber */
+  ride99Access: "off" | "owner" | "all";
 }
 
 export interface BillingPlan {
@@ -230,6 +232,7 @@ const defaults = (): AgentSettings => ({
   legalCity: "",
   keepLocalCopy: true,
   uberAccess: "owner",
+  ride99Access: "owner",
 });
 
 let cache: { at: number; value: AgentSettings } | null = null;
@@ -253,6 +256,7 @@ export async function saveSettings(patch: Partial<AgentSettings>, opts: { unchec
   }
   if (rest.keepLocalCopy !== undefined) rest.keepLocalCopy = rest.keepLocalCopy === true || (rest.keepLocalCopy as unknown) === "true";
   if (rest.uberAccess !== undefined && !["off", "owner", "all"].includes(rest.uberAccess)) throw new Error("uberAccess precisa ser off, owner ou all");
+  if (rest.ride99Access !== undefined && !["off", "owner", "all"].includes(rest.ride99Access)) throw new Error("ride99Access precisa ser off, owner ou all");
   if (rest.billingPlans !== undefined) rest.billingPlans = cleanPlans(rest.billingPlans);
   if (rest.billingPacks !== undefined) rest.billingPacks = cleanPacks(rest.billingPacks);
   if (rest.strangerMessage !== undefined) rest.strangerMessage = String(rest.strangerMessage ?? "").trim().slice(0, 1000);

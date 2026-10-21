@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { brl } from "./agent/tools/finance.js";
 import { Tracer } from "./agent/trace.js";
-import { type RobotIO, type UberCookie, type UberOption, UberRobot, UberScreenError, extractCode } from "./agent/uber-robot.js";
+import { type RideApp, type RobotIO, SITES, type UberCookie, type UberOption, UberRobot, UberScreenError, extractCode } from "./agent/uber-robot.js";
 import { config } from "./config.js";
 import { decryptJson, encryptJson } from "./crypto.js";
 import { many, one, query } from "./db/pool.js";
@@ -21,13 +21,18 @@ import { getSettings } from "./settings.js";
  * o preço e só pede se não subiu mais de 10%) -> manda o motorista e a placa.
  * Código do login: e-mail sai sozinho pelo Gmail ligado; SMS chega pelo Atalho do iPhone (/api/uber/codigo) ou a pessoa
  * manda no WhatsApp, e o ingest entrega direto ao robô (handleUberCode), sem passar pelo modelo.
+ *
+ * 99 (beta): o mesmo fluxo, a mesma fila e o mesmo robô, com `provider = '99'` na sessão e na corrida
+ * (uber_quote com app "99"). Cada app tem o seu interruptor em Configurações.
  */
 
 export type UberJob = { rideId: string; action: "quote" | "request" };
 export type UberAccess = "off" | "owner" | "all";
 
 /** Avisos fixos da beta: a pessoa sempre sabe que é teste. */
-export const BETA_NOTE = "(Uber pelo Planejai ainda é beta, estamos testando)";
+export const betaNote = (app: RideApp = "uber") => `(${SITES[app].name} pelo Planejai ainda é beta, estamos testando)`;
+export const BETA_NOTE = betaNote("uber");
+const appName = (app: RideApp) => SITES[app].name;
 /** escolha velha: depois disso a cotação vale de novo antes de pedir */
 const OPTIONS_TTL_MIN = 10;
 /** subiu mais que isso desde a cotação: mostra o preço novo e pede outro sim */
@@ -35,13 +40,14 @@ export const PRICE_TOLERANCE = 0.1;
 /** quanto tempo o robô espera um código (o job segura uma vaga da fila nesse tempo) */
 const CODE_WAIT_MS = () => config.UBER_CODE_WAIT_SECONDS * 1000;
 
-export async function uberAccess(): Promise<UberAccess> {
-  return (await getSettings()).uberAccess;
+export async function uberAccess(app: RideApp = "uber"): Promise<UberAccess> {
+  const s = await getSettings();
+  return app === "99" ? (s.ride99Access ?? "owner") : s.uberAccess;
 }
 
-/** Liberado para esta pessoa? (beta: o dono escolhe em Configurações se é só ele ou todo mundo) */
-export async function uberAllowed(user: { phone: string }) {
-  const a = await uberAccess();
+/** Liberado para esta pessoa? (beta: o dono escolhe em Configurações se é só ele ou todo mundo, um interruptor por app) */
+export async function uberAllowed(user: { phone: string }, app: RideApp = "uber") {
+  const a = await uberAccess(app);
   return a === "all" || (a === "owner" && isOwner(user.phone));
 }
 
@@ -54,10 +60,18 @@ export function uberLink(pickup?: string | null, dropoff?: string | null) {
   return `https://m.uber.com/ul/?${q}`;
 }
 
+/**
+ * Plano B de cada app. A 99 não tem link público com o destino pronto (nenhum documentado): vai a página dela,
+ * que no celular com o app instalado abre o app, e a pessoa põe o destino.
+ */
+export function rideLink(app: RideApp, pickup?: string | null, dropoff?: string | null) {
+  return app === "99" ? "https://99app.com/" : uberLink(pickup, dropoff);
+}
+
 // ---------------- sessão ----------------
 
-async function loadCookies(userId: string): Promise<UberCookie[] | null> {
-  const row = await one<{ state_enc: string | null }>("SELECT state_enc FROM uber_sessions WHERE user_id = $1", [userId]);
+async function loadCookies(userId: string, app: RideApp): Promise<UberCookie[] | null> {
+  const row = await one<{ state_enc: string | null }>("SELECT state_enc FROM uber_sessions WHERE user_id = $1 AND provider = $2", [userId, app]);
   if (!row?.state_enc) return null;
   try {
     return decryptJson<{ cookies: UberCookie[] }>(row.state_enc).cookies ?? null;
@@ -66,25 +80,26 @@ async function loadCookies(userId: string): Promise<UberCookie[] | null> {
   }
 }
 
-async function saveCookies(userId: string, cookies: UberCookie[], logged: boolean) {
+async function saveCookies(userId: string, app: RideApp, cookies: UberCookie[], logged: boolean) {
   await query(
-    `INSERT INTO uber_sessions (user_id, state_enc, status, logged_at, last_used_at) VALUES ($1, $2, 'ok', CASE WHEN $3 THEN now() END, now())
-     ON CONFLICT (user_id) DO UPDATE SET state_enc = $2, status = 'ok', logged_at = CASE WHEN $3 THEN now() ELSE uber_sessions.logged_at END,
+    `INSERT INTO uber_sessions (user_id, state_enc, status, logged_at, last_used_at, provider) VALUES ($1, $2, 'ok', CASE WHEN $3 THEN now() END, now(), $4)
+     ON CONFLICT (user_id, provider) DO UPDATE SET state_enc = $2, status = 'ok', logged_at = CASE WHEN $3 THEN now() ELSE uber_sessions.logged_at END,
        last_used_at = now(), updated_at = now()`,
-    [userId, encryptJson({ cookies }), logged],
+    [userId, encryptJson({ cookies }), logged, app],
   );
 }
 
-/** "Esquece minha Uber": apaga os cookies e o Atalho. */
-export async function forgetUber(userId: string) {
-  const r = await query("DELETE FROM uber_sessions WHERE user_id = $1", [userId]);
+/** "Esquece minha Uber" (ou 99): apaga os cookies (e, na Uber, o Atalho). */
+export async function forgetUber(userId: string, app: RideApp = "uber") {
+  const r = await query("DELETE FROM uber_sessions WHERE user_id = $1 AND provider = $2", [userId, app]);
   return (r.rowCount ?? 0) > 0;
 }
 
-export async function uberSessionInfo(userId: string) {
+export async function uberSessionInfo(userId: string, app: RideApp = "uber") {
   return one<{ status: string; logged_at: string | null; last_used_at: string | null; shortcut: boolean }>(
-    "SELECT status, logged_at, last_used_at, shortcut_hash IS NOT NULL AS shortcut FROM uber_sessions WHERE user_id = $1",
-    [userId],
+    `SELECT status, logged_at, last_used_at, EXISTS (SELECT 1 FROM uber_sessions x WHERE x.user_id = s.user_id AND x.shortcut_hash IS NOT NULL) AS shortcut
+       FROM uber_sessions s WHERE user_id = $1 AND provider = $2`,
+    [userId, app],
   );
 }
 
@@ -92,12 +107,12 @@ export async function uberSessionInfo(userId: string) {
 
 const sha = (t: string) => createHash("sha256").update(t).digest("hex");
 
-/** Token do Atalho do iPhone/Android que encaminha o SMS da Uber. Um por pessoa: gerar de novo invalida o anterior. */
+/** Token do Atalho do iPhone/Android que encaminha o SMS da Uber e da 99. Um por pessoa (fica na linha da Uber): gerar de novo invalida o anterior. */
 export async function newShortcutToken(userId: string) {
   const token = randomBytes(24).toString("base64url");
   await query(
     `INSERT INTO uber_sessions (user_id, shortcut_hash) VALUES ($1, $2)
-     ON CONFLICT (user_id) DO UPDATE SET shortcut_hash = $2, updated_at = now()`,
+     ON CONFLICT (user_id, provider) DO UPDATE SET shortcut_hash = $2, updated_at = now()`,
     [userId, sha(token)],
   );
   return token;
@@ -107,15 +122,15 @@ export function shortcutUrl(token: string) {
   return `${config.PUBLIC_URL.replace(/\/$/, "")}/api/uber/codigo?t=${encodeURIComponent(token)}`;
 }
 
-async function setWaiting(userId: string, kind: "sms" | "email" | null) {
+async function setWaiting(userId: string, app: RideApp, kind: "sms" | "email" | null) {
   await query(
-    `INSERT INTO uber_sessions (user_id, waiting_code, waiting_since) VALUES ($1, $2, CASE WHEN $2::text IS NULL THEN NULL ELSE now() END)
-     ON CONFLICT (user_id) DO UPDATE SET waiting_code = $2, waiting_since = CASE WHEN $2::text IS NULL THEN NULL ELSE now() END, code_enc = NULL, updated_at = now()`,
-    [userId, kind],
+    `INSERT INTO uber_sessions (user_id, waiting_code, waiting_since, provider) VALUES ($1, $2, CASE WHEN $2::text IS NULL THEN NULL ELSE now() END, $3)
+     ON CONFLICT (user_id, provider) DO UPDATE SET waiting_code = $2, waiting_since = CASE WHEN $2::text IS NULL THEN NULL ELSE now() END, code_enc = NULL, updated_at = now()`,
+    [userId, kind, app],
   );
 }
 
-/** Guarda o código para o robô, se ele estiver esperando um (de 5 min para cá). */
+/** Guarda o código para o robô, se ele estiver esperando um (de 5 min para cá; uma corrida por pessoa, então é o app que está esperando). */
 async function deliverCode(userId: string, code: string) {
   const r = await query(
     `UPDATE uber_sessions SET code_enc = $2, updated_at = now()
@@ -125,11 +140,11 @@ async function deliverCode(userId: string, code: string) {
   return (r.rowCount ?? 0) > 0;
 }
 
-async function takeCode(userId: string): Promise<string | null> {
+async function takeCode(userId: string, app: RideApp): Promise<string | null> {
   const row = await one<{ code_enc: string | null }>(
-    `WITH old AS (SELECT user_id, code_enc FROM uber_sessions WHERE user_id = $1 AND code_enc IS NOT NULL FOR UPDATE)
-     UPDATE uber_sessions s SET code_enc = NULL FROM old WHERE s.user_id = old.user_id RETURNING old.code_enc`,
-    [userId],
+    `WITH old AS (SELECT user_id, provider, code_enc FROM uber_sessions WHERE user_id = $1 AND provider = $2 AND code_enc IS NOT NULL FOR UPDATE)
+     UPDATE uber_sessions s SET code_enc = NULL FROM old WHERE s.user_id = old.user_id AND s.provider = old.provider RETURNING old.code_enc`,
+    [userId, app],
   );
   if (!row?.code_enc) return null;
   try {
@@ -154,19 +169,19 @@ export async function handleShortcutCode(token: string, text: string) {
   if (!token || token.length < 20) return { ok: false as const, error: "token" };
   const row = await one<{ user_id: string }>("SELECT user_id FROM uber_sessions WHERE shortcut_hash = $1", [sha(token)]);
   if (!row) return { ok: false as const, error: "token" };
-  // o Atalho manda qualquer SMS que cita a Uber: só o que tem cara de código de verificação
-  const code = /uber/i.test(text) ? extractCode(text) : null;
+  // o Atalho manda qualquer SMS que cita a Uber ou a 99: só o que tem cara de código de verificação
+  const code = /uber|(?<![\d,.])99(?![\d,.])|didi/i.test(text) ? extractCode(text) : null;
   if (!code) return { ok: true as const, used: false };
   return { ok: true as const, used: await deliverCode(row.user_id, code) };
 }
 
-/** Código que a Uber mandou para o Gmail ligado da pessoa (null se não tem Gmail ou não chegou). */
-async function codeFromGmail(since: number): Promise<string | null> {
+/** Código que a Uber (ou a 99) mandou para o Gmail ligado da pessoa (null se não tem Gmail ou não chegou). */
+async function codeFromGmail(since: number, app: RideApp): Promise<string | null> {
   const { isConnected } = await import("./integrations/registry.js");
   if (!(await isConnected("google"))) return null;
   const { googleApi } = await import("./integrations/google.js");
   const { GMAIL, bodyText } = await import("./agent/tools/communication.js");
-  const list = await googleApi(`${GMAIL}/messages?q=${encodeURIComponent("from:uber.com newer_than:1d")}&maxResults=3`).catch(() => null);
+  const list = await googleApi(`${GMAIL}/messages?q=${encodeURIComponent(app === "99" ? "from:(99app.com OR didiglobal.com) newer_than:1d" : "from:uber.com newer_than:1d")}&maxResults=3`).catch(() => null);
   for (const m of list?.messages ?? []) {
     const full = await googleApi(`${GMAIL}/messages/${m.id}?format=full`).catch(() => null);
     if (!full || Number(full.internalDate) < since - 30_000) continue;
@@ -182,6 +197,7 @@ async function codeFromGmail(since: number): Promise<string | null> {
 export interface RideRow {
   id: string;
   user_id: string;
+  provider: RideApp;
   execution_id: string | null;
   status: string;
   pickup: string;
@@ -209,15 +225,16 @@ async function enqueue(job: UberJob, userId: string) {
 }
 
 /** uber_quote: guarda a corrida e entra na fila. */
-export async function startQuote(user: { id: string }, pickup: string, dropoff: string, conversationId?: string | null) {
+export async function startQuote(user: { id: string }, pickup: string, dropoff: string, conversationId?: string | null, app: RideApp = "uber") {
   const busy = await one<{ id: string }>("SELECT id FROM uber_rides WHERE user_id = $1 AND status IN ('cotando', 'pedindo') AND updated_at > now() - interval '10 minutes'", [user.id]);
   if (busy) return { ok: false as const, busy: true };
-  const tracer = await Tracer.start({ trigger: "uber", userId: user.id, conversationId, input: `Uber: ${pickup} -> ${dropoff}` });
-  const ride = await one<{ id: string }>("INSERT INTO uber_rides (user_id, execution_id, pickup, dropoff) VALUES ($1, $2, $3, $4) RETURNING id", [
+  const tracer = await Tracer.start({ trigger: "uber", userId: user.id, conversationId, input: `${appName(app)}: ${pickup} -> ${dropoff}` });
+  const ride = await one<{ id: string }>("INSERT INTO uber_rides (user_id, execution_id, pickup, dropoff, provider) VALUES ($1, $2, $3, $4, $5) RETURNING id", [
     user.id,
     tracer.executionId,
     pickup.slice(0, 300),
     dropoff.slice(0, 300),
+    app,
   ]);
   const ahead = await queueAhead();
   const jobId = await enqueue({ rideId: ride!.id, action: "quote" }, user.id);
@@ -252,13 +269,14 @@ export async function startRequest(ride: RideRow, option: UberOption) {
 export const priceLabel = (o: Pick<UberOption, "price_cents" | "price_max_cents" | "price_text">) =>
   o.price_cents == null ? o.price_text || "preço na hora" : o.price_max_cents ? `${brl(o.price_cents / 100)} a ${brl(o.price_max_cents / 100)}` : brl(o.price_cents / 100);
 
-export function optionsMessage(ride: Pick<RideRow, "pickup" | "dropoff" | "pickup_label" | "dropoff_label">, options: UberOption[]) {
+export function optionsMessage(ride: Pick<RideRow, "pickup" | "dropoff" | "pickup_label" | "dropoff_label"> & { provider?: RideApp }, options: UberOption[]) {
+  const app = ride.provider ?? "uber";
   const lines = options.map((o) => `${o.n}. *${o.name}* · ${priceLabel(o)}${o.eta ? ` · ${/min/i.test(o.eta) ? `chega em ${o.eta}` : `chegada ${o.eta}`}` : ""}`);
   return (
-    `🚗 *Opções da Uber*\n\n` +
+    `🚗 *Opções da ${appName(app)}*\n\n` +
     `De: ${ride.pickup_label ?? ride.pickup}\nPara: ${ride.dropoff_label ?? ride.dropoff}\n\n` +
     `${lines.join("\n")}\n\n` +
-    `Qual eu peço? Responde com o número ou o nome. Paga no que já está salvo na sua Uber.\n_${BETA_NOTE}_`
+    `Qual eu peço? Responde com o número ou o nome. Paga no que já está salvo na sua ${appName(app)}.\n_${betaNote(app)}_`
   );
 }
 
@@ -273,21 +291,23 @@ export async function runUberJob(job: UberJob, log?: Log) {
   if (job.action === "request" && ride.status !== "pedindo") return;
   const user = await one<{ id: string; phone: string; name: string | null }>("SELECT id, phone, name FROM users WHERE id = $1", [ride.user_id]);
   if (!user) return;
-  const tracer = ride.execution_id ? Tracer.attach(ride.execution_id, user.id) : await Tracer.start({ trigger: "uber", userId: user.id, input: "Uber" });
+  const app: RideApp = ride.provider ?? "uber";
+  const name = appName(app);
+  const tracer = ride.execution_id ? Tracer.attach(ride.execution_id, user.id) : await Tracer.start({ trigger: "uber", userId: user.id, input: name });
   const { notifyUser } = await import("./social.js");
   const tell = (text: string, shot?: string | null) =>
-    notifyUser(user.id, text, shot ? { base64: shot, mimetype: "image/jpeg" } : undefined).catch((err) => log?.error({ err }, "aviso da Uber não saiu"));
-  const io = codeIO(user.id, tracer, tell, isOwner(user.phone));
+    notifyUser(user.id, text, shot ? { base64: shot, mimetype: "image/jpeg" } : undefined).catch((err) => log?.error({ err, app }, "aviso da corrida não saiu"));
+  const io = codeIO(user.id, app, tracer, tell, isOwner(user.phone));
   const { personOf } = await import("./agent/runner.js");
 
   await asPerson(personOf(user), async () => {
     let robot: UberRobot | null = null;
-    const step = await tracer.step({ agent: "uber", type: "tool", name: job.action === "quote" ? "uber: ver opções" : "uber: pedir corrida", input: { pickup: ride.pickup, dropoff: ride.dropoff, chosen: ride.chosen?.name } });
+    const step = await tracer.step({ agent: "uber", type: "tool", name: `${app}: ${job.action === "quote" ? "ver opções" : "pedir corrida"}`, input: { pickup: ride.pickup, dropoff: ride.dropoff, chosen: ride.chosen?.name } });
     try {
-      robot = await UberRobot.open(await loadCookies(user.id));
+      robot = await UberRobot.open(await loadCookies(user.id, app), app);
       const how = await robot.ensureLogin(user.phone, io);
-      await saveCookies(user.id, await robot.cookies(), how === "login");
-      await io.note(how === "login" ? "entrou na Uber pelo número (sessão salva)" : "sessão salva ainda valia");
+      await saveCookies(user.id, app, await robot.cookies(), how === "login");
+      await io.note(how === "login" ? `entrou na ${name} pelo número (sessão salva)` : "sessão salva ainda valia");
       const route = await robot.setRoute(ride.pickup, ride.dropoff);
       const options = await robot.readOptions();
       await io.note("opções lidas", { route, options });
@@ -318,12 +338,12 @@ export async function runUberJob(job: UberJob, log?: Log) {
           return;
         }
         const r = await robot.request(now);
-        await saveCookies(user.id, await robot.cookies(), false);
+        await saveCookies(user.id, app, await robot.cookies(), false);
         await query("UPDATE uber_rides SET status = 'pedida', driver = $2, updated_at = now() WHERE id = $1", [ride.id, r.driver ? JSON.stringify(r.driver) : null]);
         await tell(
           r.driver
-            ? `✅ *Uber pedido!*\n\n${r.driver.car ? `Carro: ${r.driver.car}\n` : ""}Placa: *${r.driver.plate}*${r.driver.eta ? `\nChega em ${r.driver.eta}` : ""}\n\nO resto você acompanha no app da Uber. Para cancelar, é por lá também.`
-            : `✅ *Uber pedido!* (${now.name}, ${priceLabel(now)})\n\nA Uber está procurando o motorista. Quando achar, o app da Uber te avisa com a placa. Para cancelar, é pelo app.`,
+            ? `✅ *Corrida pedida na ${name}!*\n\n${r.driver.car ? `Carro: ${r.driver.car}\n` : ""}Placa: *${r.driver.plate}*${r.driver.eta ? `\nChega em ${r.driver.eta}` : ""}\n\nO resto você acompanha no app da ${name}. Para cancelar, é por lá também.`
+            : `✅ *Corrida pedida na ${name}!* (${now.name}, ${priceLabel(now)})\n\nA ${name} está procurando o motorista. Quando achar, o app da ${name} te avisa com a placa. Para cancelar, é pelo app.`,
         );
         await step.ok({ requested: true, driver: Boolean(r.driver) });
         await tracer.finish(`pedido: ${now.name}`);
@@ -333,44 +353,49 @@ export async function runUberJob(job: UberJob, log?: Log) {
       const reason = err instanceof UberScreenError ? err.reason : "erro";
       await step.fail(`${e.message}${err instanceof UberScreenError && err.pageText ? `\n\nTela:\n${err.pageText}` : ""}`);
       await tracer.finish(e.message, e.message);
-      log?.error({ err: e.message, reason }, "Uber (beta) falhou");
-      if (reason === "password" || reason === "captcha") await query("UPDATE uber_sessions SET status = 'vencida', state_enc = NULL, updated_at = now() WHERE user_id = $1", [user.id]);
+      log?.error({ err: e.message, reason, app }, "corrida (beta) falhou");
+      if (reason === "password" || reason === "captcha")
+        await query("UPDATE uber_sessions SET status = 'vencida', state_enc = NULL, updated_at = now() WHERE user_id = $1 AND provider = $2", [user.id, app]);
       await query("UPDATE uber_rides SET status = 'erro', error = $2, updated_at = now() WHERE id = $1", [ride.id, e.message.slice(0, 300)]);
-      await tell(failureMessage(reason, job.action, ride));
+      await tell(failureMessage(reason, job.action, { ...ride, provider: app }));
       // beta: o dono recebe o print da tela onde o robô parou (só dele, que é a conta dele), para ajustar o robô
       const shot = isOwner(user.phone) ? await robot?.screenshot().catch(() => null) : null;
-      if (shot) await notifyUser(user.id, `Print da tela da Uber onde parei (só pra você, para ajustar a beta). Motivo: ${e.message}`, { base64: shot, mimetype: "image/jpeg" }).catch(() => {});
+      if (shot) await notifyUser(user.id, `Print da tela da ${name} onde parei (só pra você, para ajustar a beta). Motivo: ${e.message}`, { base64: shot, mimetype: "image/jpeg" }).catch(() => {});
     } finally {
-      await setWaiting(user.id, null).catch(() => {});
+      await setWaiting(user.id, app, null).catch(() => {});
       await robot?.close().catch(() => {});
     }
   });
 }
 
-function failureMessage(reason: string, action: UberJob["action"], ride: Pick<RideRow, "pickup" | "dropoff">) {
+function failureMessage(reason: string, action: UberJob["action"], ride: Pick<RideRow, "pickup" | "dropoff" | "provider">) {
+  const app = ride.provider;
+  const n = appName(app);
   const why: Record<string, string> = {
-    captcha: "A Uber pediu uma verificação de robô que eu não consigo passar.",
-    password: "A Uber pediu a senha da conta, e senha eu não digito.",
+    captcha: `A ${n} pediu uma verificação de robô que eu não consigo passar.`,
+    password: `A ${n} pediu a senha da conta, e senha eu não digito.`,
     code: "O código de verificação não chegou a tempo.",
   };
-  const head = why[reason] ?? (action === "request" ? "Não consegui confirmar o pedido na Uber." : "Não consegui ver as opções na Uber.");
-  const safe = action === "request" ? " Confere no app da Uber se a corrida não ficou pedida antes de pedir de novo." : "";
-  return `${head}${safe}\n\nPelo link abre o app da Uber já com o destino, é só confirmar:\n${uberLink(ride.pickup, ride.dropoff)}\n\n_${BETA_NOTE}_`;
+  const head = why[reason] ?? (action === "request" ? `Não consegui confirmar o pedido na ${n}.` : `Não consegui ver as opções na ${n}.`);
+  const safe = action === "request" ? ` Confere no app da ${n} se a corrida não ficou pedida antes de pedir de novo.` : "";
+  const link = app === "99" ? `Pelo link abre a 99, é só colocar o destino:` : "Pelo link abre o app da Uber já com o destino, é só confirmar:";
+  return `${head}${safe}\n\n${link}\n${rideLink(app, ride.pickup, ride.dropoff)}\n\n_${betaNote(app)}_`;
 }
 
 /** Espera de código do robô: e-mail pelo Gmail ligado; senão (ou SMS) avisa no WhatsApp e espera a pessoa ou o Atalho. */
-function codeIO(userId: string, tracer: Tracer, tell: (t: string, shot?: string | null) => Promise<unknown>, owner: boolean): RobotIO {
+function codeIO(userId: string, app: RideApp, tracer: Tracer, tell: (t: string, shot?: string | null) => Promise<unknown>, owner: boolean): RobotIO {
+  const n = appName(app);
   // já pediu um código nesta entrada: o próximo é outra verificação (ex.: SMS passou, agora o e-mail)
   let prior = false;
   return {
     async note(name, data) {
-      const s = await tracer.step({ agent: "uber", type: "info", name, input: data ?? null });
+      const s = await tracer.step({ agent: app === "99" ? "99" : "uber", type: "info", name, input: data ?? null });
       await s.ok(null);
     },
     async waitCode(kind, info) {
       const since = Date.now();
-      await setWaiting(userId, kind);
-      const shortcut = Boolean((await uberSessionInfo(userId))?.shortcut);
+      await setWaiting(userId, app, kind);
+      const shortcut = Boolean((await uberSessionInfo(userId, app))?.shortcut);
       // e-mail num Gmail ligado: o robô lê sozinho; e-mail de outro provedor (ex.: .gov.br) só a pessoa vê
       const gmail = kind === "email" && (!info.dest || /@(gmail|googlemail)\.com$/i.test(info.dest) || /@\*+/.test(info.dest));
       const where = info.dest ? ` (${info.dest})` : "";
@@ -380,26 +405,26 @@ function codeIO(userId: string, tracer: Tracer, tell: (t: string, shot?: string 
       const ask = async () => {
         asked = true;
         const text = info.retry
-          ? "Esse código não passou na Uber. Me manda o mais novo que chegou?"
+          ? `Esse código não passou na ${n}. Me manda o mais novo que chegou?`
           : kind === "email"
-            ? `${wasPrior ? "O código do SMS passou. Agora a Uber pediu mais uma verificação: mandou" : "A Uber mandou"} um código no seu *e-mail*${where} (olha o spam também). Me manda aqui só os números.`
+            ? `${wasPrior ? `O código do SMS passou. Agora a ${n} pediu mais uma verificação: mandou` : `A ${n} mandou`} um código no seu *e-mail*${where} (olha o spam também). Me manda aqui só os números.`
             : shortcut
-              ? `A Uber mandou um código por *SMS*${where}. Se o seu Atalho estiver ligado, ele chega sozinho; senão, me manda aqui só os números.`
-              : `${wasPrior ? "Passou. Agora a Uber" : "A Uber"} mandou um código por *SMS*${where} para entrar na sua conta. Me manda aqui só os números.`;
+              ? `A ${n} mandou um código por *SMS*${where}. Se o seu Atalho estiver ligado, ele chega sozinho; senão, me manda aqui só os números.`
+              : `${wasPrior ? `Passou. Agora a ${n}` : `A ${n}`} mandou um código por *SMS*${where} para entrar na sua conta. Me manda aqui só os números.`;
         // beta: o dono vê a tela junto, para conferir o que a Uber pediu
         return tell(text, owner && info.shot ? info.shot : null);
       };
       if (!gmail && !(kind === "sms" && shortcut)) await ask();
       while (Date.now() - since < CODE_WAIT_MS()) {
-        const typed = await takeCode(userId);
+        const typed = await takeCode(userId, app);
         if (typed) {
-          await setWaiting(userId, null);
+          await setWaiting(userId, app, null);
           return typed;
         }
         if (gmail) {
-          const c = await codeFromGmail(since).catch(() => null);
+          const c = await codeFromGmail(since, app).catch(() => null);
           if (c) {
-            await setWaiting(userId, null);
+            await setWaiting(userId, app, null);
             return c;
           }
         }

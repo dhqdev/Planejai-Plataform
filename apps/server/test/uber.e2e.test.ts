@@ -136,6 +136,7 @@ function check(stage){const c=[...document.querySelectorAll('input')].map(i=>i.v
     await (await import("../src/db/migrate.js")).migrate(() => {});
     const robot = await import("../src/agent/uber-robot.js");
     robot.UBER.base = `http://127.0.0.1:${(server.address() as any).port}/go/home`;
+    robot.SITES["99"].base = `http://127.0.0.1:${(server.address() as any).port}/99`;
     uber = await import("../src/uber.js");
     tools = await import("../src/agent/tools/uber.js");
     const { upsertUser, upsertConversation } = await import("../src/ingest.js");
@@ -297,6 +298,33 @@ function check(stage){const c=[...document.querySelectorAll('input')].map(i=>i.v
     expect(await uber.handleShortcutCode(token, "Seu código Uber é 4821. Não compartilhe.")).toEqual({ ok: true, used: true });
   });
 
+  it("99: o mesmo robô com sessão própria, lista e pedido com o nome da 99", async () => {
+    codeBy = "sms";
+    const before = sent.length;
+    onSent = (text) => {
+      if (/SMS/.test(text)) setTimeout(() => void uber.handleUberCode(user.id, "1234"), 300);
+    };
+    const r: any = await tools.uberQuote.run({ pickup: "Casa", dropoff: "Trabalho", app: "99" }, ctx());
+    expect(r.message).toContain("99 pelo Planejai ainda é beta");
+    await uber.runUberJob({ rideId: (await latest()).id, action: "quote" });
+    onSent = null;
+    const ride = await latest();
+    expect(ride).toMatchObject({ provider: "99", status: "opcoes" });
+    const out = sent.slice(before);
+    expect(out[0]).toContain("A 99 mandou um código por *SMS*");
+    expect(out.at(-1)).toContain("*Opções da 99*");
+    const rows = await db.many<any>("SELECT provider, status FROM uber_sessions WHERE user_id = $1 ORDER BY provider", [user.id]);
+    expect(rows.find((x) => x.provider === "99")?.status).toBe("ok");
+    const wait: any = await tools.uberRequest.run({ option: "1" }, ctx());
+    expect(wait.needs_confirmation).toBe(true);
+    expect(await tools.uberRequest.run({ option: "1" }, ctx({ approvedAction: true }))).toMatchObject({ ok: true });
+    await uber.runUberJob({ rideId: ride.id, action: "request" });
+    expect(sent.at(-1)).toContain("Corrida pedida na 99!");
+    // esquecer a 99 não mexe na Uber
+    expect(await uber.forgetUber(user.id, "99")).toBe(true);
+    expect((await db.many<any>("SELECT provider FROM uber_sessions WHERE user_id = $1", [user.id])).map((x) => x.provider)).not.toContain("99");
+  }, 120_000);
+
   it("beta desligada (ou só para o dono): manda o link do app em vez de entrar na conta", async () => {
     const { saveSettings } = await import("../src/settings.js");
     await saveSettings({ uberAccess: "off" });
@@ -304,6 +332,9 @@ function check(stage){const c=[...document.querySelectorAll('input')].map(i=>i.v
     expect(r).toMatchObject({ ok: false, not_enabled: true });
     expect(r.link).toMatch(/^https:\/\/m\.uber\.com\/ul\/\?action=setPickup/);
     await expect(saveSettings({ uberAccess: "talvez" as any })).rejects.toThrow();
-    await saveSettings({ uberAccess: "owner" });
+    await saveSettings({ uberAccess: "owner", ride99Access: "off" });
+    const r99: any = await tools.uberQuote.run({ pickup: "Casa", dropoff: "Dom Pedro", app: "99" }, ctx());
+    expect(r99).toMatchObject({ ok: false, not_enabled: true, link: "https://99app.com/" });
+    await saveSettings({ ride99Access: "owner" });
   });
 });

@@ -86,7 +86,7 @@ export const QUEUE_LABELS: Record<string, string> = {
   [QUEUES.waStatus]: "Status do WhatsApp",
   [QUEUES.usageReport]: "Resumo de gasto de IA",
   [QUEUES.backup]: "Backup no bucket",
-  [QUEUES.uber]: "Uber (beta)",
+  [QUEUES.uber]: "Uber e 99 (beta)",
 };
 
 /**

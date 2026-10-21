@@ -1,16 +1,27 @@
 import type { Page } from "puppeteer-core";
+import { config } from "../config.js";
 import { BrowserSession } from "./browser.js";
 
 /**
- * Robô do m.uber.com (Uber pelo WhatsApp, beta). Código fixo, sem o modelo clicar: acha campos e botões pelo texto,
+ * Robô do m.uber.com e da 99 (corrida pelo WhatsApp, beta). Código fixo, sem o modelo clicar: acha campos e botões pelo texto,
  * pelo rótulo e pelo placeholder (não por classe CSS, que a Uber troca toda hora), então gasta zero token por tela.
  * Nunca digita senha nem cartão (a trava do browser.ts continua) e nunca mexe na forma de pagamento: vale a que já está na Uber.
  * Ponto fraco: foi escrito sem acesso ao site de verdade, então tela que ele não reconhece volta como UberScreenError
  * com o texto da página (vai para Execuções) para ajustar.
  */
 
-/** Página inicial do robô; os testes trocam por uma página falsa local. */
-export const UBER = { base: "https://m.uber.com/go/home" };
+export type RideApp = "uber" | "99";
+
+/**
+ * Apps que o robô sabe usar (o mesmo código: acha tudo por texto). Página inicial e domínio dos cookies de cada um;
+ * os testes trocam a base por uma página falsa local. A 99 quase não tem site de passageiro: a base vem de RIDE_99_URL
+ * e o primeiro teste de verdade (print da tela na falha) diz o que ajustar.
+ */
+export const SITES: Record<RideApp, { name: string; base: string; cookies: RegExp }> = {
+  uber: { name: "Uber", base: "https://m.uber.com/go/home", cookies: /(^|\.)uber\.com$/ },
+  "99": { name: "99", base: config.RIDE_99_URL, cookies: /(^|\.)(99app\.com|99taxis\.com|didiglobal\.com|didi-food\.com)$/ },
+};
+export const UBER = SITES.uber;
 
 export interface UberCookie {
   name: string;
@@ -118,16 +129,28 @@ export function pickOption(options: UberOption[], choice: string | number): Uber
 }
 
 export class UberRobot {
-  private constructor(private s: BrowserSession) {}
+  private constructor(
+    private s: BrowserSession,
+    readonly app: RideApp,
+  ) {}
+
+  private get site() {
+    return SITES[this.app];
+  }
+
+  /** "Uber" ou "99" nas mensagens de erro */
+  private get n() {
+    return this.site.name;
+  }
 
   get page(): Page {
     return this.s.page;
   }
 
   /** Abre o Chrome leve (sem imagem/fonte), no jeito de celular, com os cookies salvos da pessoa. */
-  static async open(cookies: UberCookie[] | null): Promise<UberRobot> {
+  static async open(cookies: UberCookie[] | null, app: RideApp = "uber"): Promise<UberRobot> {
     const s = await BrowserSession.open(false, { device: "mobile", lite: true });
-    const r = new UberRobot(s);
+    const r = new UberRobot(s, app);
     if (cookies?.length) {
       const cdp = await s.page.createCDPSession();
       await cdp.send("Network.setCookies", { cookies }).catch(() => {});
@@ -136,13 +159,13 @@ export class UberRobot {
     return r;
   }
 
-  /** Cookies da Uber para guardar (cifrados) e entrar de novo sem código. */
+  /** Cookies do app para guardar (cifrados) e entrar de novo sem código. */
   async cookies(): Promise<UberCookie[]> {
     const cdp = await this.page.createCDPSession();
     try {
       const { cookies } = (await cdp.send("Network.getAllCookies")) as { cookies: any[] };
       return cookies
-        .filter((c) => /(^|\.)uber\.com$/.test(String(c.domain).replace(/^\./, "")) || UBER.base.includes(String(c.domain).replace(/^\./, "")))
+        .filter((c) => this.site.cookies.test(String(c.domain).replace(/^\./, "")) || this.site.base.includes(String(c.domain).replace(/^\./, "")))
         .map((c) => ({ name: c.name, value: c.value, domain: c.domain, path: c.path, expires: c.expires > 0 ? c.expires : undefined, httpOnly: c.httpOnly, secure: c.secure, sameSite: c.sameSite }));
     } finally {
       await cdp.detach().catch(() => {});
@@ -246,7 +269,7 @@ export class UberRobot {
 
   /** Abre a Uber e, se precisar, entra pelo número da pessoa (códigos por SMS/e-mail via io). */
   async ensureLogin(phone: string, io: RobotIO): Promise<"sessao" | "login"> {
-    await this.s.goto(UBER.base);
+    await this.s.goto(this.site.base);
     await this.settle(10_000);
     let didLogin = false;
     let typedPhone = false;
@@ -258,7 +281,7 @@ export class UberRobot {
       const kind = await this.screen();
       if (kind === "home") return didLogin ? "login" : "sessao";
       didLogin = true;
-      if (kind === "captcha") throw new UberScreenError("captcha", "A Uber pediu para provar que não é robô", await this.text());
+      if (kind === "captcha") throw new UberScreenError("captcha", `A ${this.n} pediu para provar que não é robô`, await this.text());
       if (kind === "password") {
         // conta com senha (às vezes depois do SMS): senha a gente nunca digita; "Mais opções" abre a lista com "E-mail",
         // que manda um código para o e-mail da conta (teste real do David em 2026-10-21)
@@ -267,10 +290,10 @@ export class UberRobot {
           moreOptions++;
           continue;
         }
-        throw new UberScreenError("password", "A Uber pediu a senha da conta", await this.text());
+        throw new UberScreenError("password", `A ${this.n} pediu a senha da conta`, await this.text());
       }
       if (kind === "phone") {
-        if (typedPhone) throw new UberScreenError("unknown", "A Uber voltou para o número de celular", await this.text());
+        if (typedPhone) throw new UberScreenError("unknown", `A ${this.n} voltou para o número de celular`, await this.text());
         const f = await this.field(/phone|telefone|celular|e-?mail|PHONE_NUMBER/i);
         if (!f) throw new UberScreenError("unknown", "Não achei o campo do celular", await this.text());
         await this.typeInto(f, `+${phone.replace(/\D/g, "")}`);
@@ -285,7 +308,7 @@ export class UberRobot {
         // mesma tela de antes (mesmo canal e destino) ou aviso de erro = o código foi recusado; senão é a próxima verificação
         const retry = Boolean(last) && (screen.rejected || (screen.by === last!.by && screen.dest === last!.dest));
         stepCodes = retry ? stepCodes + 1 : 1;
-        if (stepCodes > 3 || codes >= 5) throw new UberScreenError("code", "Os códigos não passaram na Uber", await this.text());
+        if (stepCodes > 3 || codes >= 5) throw new UberScreenError("code", `Os códigos não passaram na ${this.n}`, await this.text());
         const code = await io.waitCode(screen.by, { retry, dest: screen.dest, shot: await this.screenshot() });
         codes++;
         last = screen;
@@ -300,9 +323,9 @@ export class UberRobot {
       }
       // tela sem campo conhecido: botão de entrar da página inicial, senão desiste com o texto para ajustar
       if (round === 0 && (await this.click(/^(entrar|fazer login|log ?in|sign ?in|login)$/i))) continue;
-      throw new UberScreenError("unknown", "Tela da Uber que eu não conheço", await this.text());
+      throw new UberScreenError("unknown", `Tela da ${this.n} que eu não conheço`, await this.text());
     }
-    throw new UberScreenError("unknown", "O login da Uber não terminou", await this.text());
+    throw new UberScreenError("unknown", `O login da ${this.n} não terminou`, await this.text());
   }
 
   private async typeCode(code: string) {
@@ -419,7 +442,7 @@ export class UberRobot {
       }
       await sleep(2000);
     }
-    throw new UberScreenError("options", "A Uber não mostrou as opções de corrida", await this.text());
+    throw new UberScreenError("options", `A ${this.n} não mostrou as opções de corrida`, await this.text());
   }
 
   /** Escolhe a opção e pede. Devolve o motorista se ele aparecer em até ~45 s. */
@@ -435,8 +458,8 @@ export class UberRobot {
     await human();
     const name = option.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const clicked =
-      (await this.click(new RegExp(`^(escolher|confirmar|solicitar|pedir|request|choose|confirm)\\s+${name}$`, "i"))) ||
-      (await this.click(/^(escolher|confirmar|solicitar|pedir|request|choose|confirm)( (a )?(corrida|viagem|uber|ride))?$/i));
+      (await this.click(new RegExp(`^(escolher|confirmar|solicitar|pedir|chamar|request|choose|confirm)\\s+${name}$`, "i"))) ||
+      (await this.click(/^(escolher|confirmar|solicitar|pedir|chamar|request|choose|confirm)( (a |um |uma )?(corrida|viagem|uber|99|carro|ride))?$/i));
     if (!clicked) throw new UberScreenError("request", "Não achei o botão de pedir", await this.text());
     // passo opcional de confirmar o ponto de embarque
     for (let i = 0; i < 3; i++) {
@@ -447,7 +470,7 @@ export class UberRobot {
     }
     const t = (await this.text(3000)).toLowerCase();
     const requested = /procurando|buscando|looking for|finding|conectando|connecting|a caminho|on the way|chega em|arriving|motorista|driver|cancelar (a )?(corrida|viagem)|cancel (ride|trip)/.test(t);
-    if (!requested) throw new UberScreenError("request", "Não vi a confirmação da Uber depois de pedir", await this.text());
+    if (!requested) throw new UberScreenError("request", `Não vi a confirmação da ${this.n} depois de pedir`, await this.text());
     let driver: Record<string, string> | null = null;
     for (let i = 0; i < 9 && !driver; i++) {
       driver = await this.page.evaluate(() => {
