@@ -205,7 +205,7 @@ export class UberRobot {
         return r.width > 0 && r.height > 0;
       };
       return (
-        Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"], a, [role="option"], li[tabindex], div[tabindex]'))
+        Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"], a, [role="option"], [role="menuitem"], [role="radio"], li, label, div[tabindex]'))
           .filter(vis)
           .find((el) => rx.test(((el.innerText || el.getAttribute("aria-label") || "") as string).replace(/\s+/g, " ").trim())) ?? null
       );
@@ -252,6 +252,7 @@ export class UberRobot {
     let typedPhone = false;
     let codes = 0;
     let stepCodes = 0;
+    let moreOptions = 0;
     let last: ReturnType<typeof readCodeScreen> | null = null;
     for (let round = 0; round < 12; round++) {
       const kind = await this.screen();
@@ -259,8 +260,13 @@ export class UberRobot {
       didLogin = true;
       if (kind === "captcha") throw new UberScreenError("captcha", "A Uber pediu para provar que não é robô", await this.text());
       if (kind === "password") {
-        // conta com senha: a Uber costuma oferecer entrar por código; senha a gente nunca digita
-        if (await this.click(/mais op[cç][oõ]es|more options|enviar c[oó]digo|send (me )?(a )?code|usar c[oó]digo|receber c[oó]digo|text me|sms/i)) continue;
+        // conta com senha (às vezes depois do SMS): senha a gente nunca digita; "Mais opções" abre a lista com "E-mail",
+        // que manda um código para o e-mail da conta (teste real do David em 2026-10-21)
+        if (await this.click(/^(e-?mail|enviar c[oó]digo (por|para o) e-?mail|send (a )?code (to|via) e-?mail|email me a code)$/i)) continue;
+        if (moreOptions < 2 && (await this.click(/^(mais op[cç][oõ]es|more options|outras op[cç][oõ]es|try another way|usar outro m[eé]todo)$/i))) {
+          moreOptions++;
+          continue;
+        }
         throw new UberScreenError("password", "A Uber pediu a senha da conta", await this.text());
       }
       if (kind === "phone") {
