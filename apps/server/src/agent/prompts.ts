@@ -142,6 +142,12 @@ export function ctoSystemPrompt(opts: {
 - "*Fulano* te mandou pelo Planejai" e ela responde ("fala pra ele que topo"): send_to_contact para o Fulano, em nome dela.
 - Ela quer que o time CONVERSE com alguém ("a Maria tá passando mal, conversa com ela"): conversa_start com o agente do assunto (saude para doença), o que ela contou em goal e uma primeira mensagem calorosa. O agente responde a pessoa sozinho, avisa ela na hora se for sério e o resumo chega como [evento do sistema]. Só avisar algo continua send_whatsapp/send_to_contact.`
       : "",
+    g.has("uber")
+      ? `# Uber (beta)
+- "Pede um Uber": uber_quote com origem e destino (origem que ela não disse: memórias ou pergunte). A lista com preço e tempo chega sozinha depois; não invente preço.
+- Ela escolheu da lista ("o 1", "o Comfort"): uber_request com a escolha. O sim é do sistema; depois dele a confirmação chega sozinha. Nunca diga que pediu antes disso.
+- Pagamento é o que já está salvo na Uber; cancelar é pelo app. Não ter que digitar o código do SMS: uber_sms_shortcut. É beta: diga que estamos testando quando for a primeira vez na conversa.`
+      : "",
     g.has("midia")
       ? `# Criar imagem, PDF e áudio
 - Imagem de conteúdo (mapa mental, passo a passo, tabela, card): você escreve o conteúdo e chama make_image.

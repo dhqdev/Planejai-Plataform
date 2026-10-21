@@ -103,6 +103,7 @@ apps/server/src/
     stickers.ts            figurinhas do mascote e GIFs ([[figurinha:nome]] e [[gif:busca]] viram balões)
     receipts.ts            comprovante vira lançamento antes do CTO
     browser.ts             "computador" dos agentes (browserless/CHROME_PATH), snapshot em texto, gravação MP4
+    uber-robot.ts          robô do m.uber.com (Uber pelo WhatsApp, beta): login por código, opções, pedido; fila em uber.ts
     errand-agent.ts        agente que conversa com o estabelecimento nos recados
     cache.ts  trace.ts     cache de ferramenta determinística; executions/execution_steps
     tools/*.ts             ferramentas por domínio (core, research, agenda, finance, bills, communication, productivity,
@@ -205,7 +206,7 @@ Leia só o do assunto que você vai mexer:
 | `painel.md` | permissões, telas particulares, abas, menu, visual, PWA, agenda e finanças no painel |
 | `compras.md` | compras (desligado em 2026-10-15, aba fora do painel): busca comparada (Mercado Livre + Shopee), lista de compras e aviso de preço |
 | `financas.md` | gastos automáticos, limites, gráficos, imagens, grãos, planos e pacotes do Asaas, indicação, contas fixas |
-| `integracoes.md` | WhatsApp (Baileys), Telegram, API interna, eventos e n8n, automações, notificações, documentos, código de login |
+| `integracoes.md` | WhatsApp (Baileys), Telegram, API interna, eventos e n8n, automações, notificações, documentos, código de login, Uber (beta) |
 | `deploy.md` | rodar e testar local, CI, imagem, stacks, versões, migrações |
 | `esteira.md` | esteira de desenvolvimento do dono: chamado vira branch, código, CI e PR sozinho; custos por etapa |
 | `blog.md` | blog público em /blog: post semanal escrito e ilustrado sozinho, SEO, tela Blog do dono; status do WhatsApp (wa-status.ts) |

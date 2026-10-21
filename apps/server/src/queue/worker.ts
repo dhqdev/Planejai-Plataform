@@ -169,6 +169,14 @@ async function startChannelJobs(log: WorkerLog) {
     if (job) await runMeetJob(job.data, log);
   });
 
+  // Uber (beta): só aqui (parte do canal, 1 réplica), então UBER_CONCURRENCY é o teto de Chromes da Uber no sistema todo
+  for (let i = 0; i < config.UBER_CONCURRENCY; i++) {
+    await boss.work<import("../uber.js").UberJob>(QUEUES.uber, { batchSize: 1, pollingIntervalSeconds: 2 }, async ([job]) => {
+      const { runUberJob } = await import("../uber.js");
+      if (job) await runUberJob(job.data, log);
+    });
+  }
+
   // mensagens pedidas pelo n8n / automações (API interna)
   await boss.work<OutboundJob>(QUEUES.outbound, { batchSize: 1, pollingIntervalSeconds: 2 }, async ([job]) => {
     if (job) await runOutboundJob(job.data);

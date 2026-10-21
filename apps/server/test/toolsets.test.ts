@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ctoGroups, CTO_TOOL_GROUPS, CTO_TOOLS, SPECIALISTS, TEAM_TOOLS_WHEN } from "../src/agent/team.js";
+import { UBER_TOOLS } from "../src/agent/tools/uber.js";
 
 const ids = (t: string) => ctoGroups(t).map((g) => g.id);
 
@@ -37,7 +38,8 @@ describe("ferramentas do CTO por assunto", () => {
     const team = new Set(SPECIALISTS.flatMap((s) => s.tools.map((t) => t.name)));
     // make_audio e send_gif não têm especialista: o grupo de mídia pega "áudio" e "gif" pela palavra
     // unsend_message apaga mensagem do próprio CTO na conversa: não tem por que passar por especialista
-    const own = new Set(["make_audio", "send_gif", "document_delete", "unsend_message"]);
+    // Uber (beta) é só do CTO: enfileira e a resposta chega sozinha, não tem o que um especialista somar
+    const own = new Set(["make_audio", "send_gif", "document_delete", "unsend_message", ...UBER_TOOLS.map((t) => t.name)]);
     for (const t of CTO_TOOL_GROUPS.flatMap((g) => g.tools)) {
       expect(core.has(t.name), `${t.name} não pode estar no núcleo e num grupo`).toBe(false);
       expect(team.has(t.name) || own.has(t.name), `${t.name} sem especialista`).toBe(true);

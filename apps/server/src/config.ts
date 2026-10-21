@@ -100,6 +100,11 @@ const schema = z.object({
   // conversas processadas ao mesmo tempo por worker (como o --concurrency do n8n em modo fila)
   // (até 16: cada conversa rodando segura uma conexão do banco; o pool cresce junto, ver db/pool.ts)
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(16).default(4),
+  // Uber pelo WhatsApp (beta): corridas com Chrome aberto ao mesmo tempo, no total (o resto espera na fila "Uber (beta)").
+  // Cada uma segura um Chrome do browserless (CONCURRENT da stack): suba os dois juntos.
+  UBER_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(1),
+  // quanto o robô espera o código do SMS/e-mail antes de desistir (segura a vaga da fila nesse tempo)
+  UBER_CODE_WAIT_SECONDS: z.coerce.number().int().min(30).max(600).default(180),
 
   // Serviço opcional de navegador headless (browserless) para screenshots de páginas.
   BROWSERLESS_URL: z.string().default(""),

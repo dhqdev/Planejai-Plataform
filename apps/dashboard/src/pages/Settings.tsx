@@ -253,6 +253,15 @@ export function SettingsPage() {
               <div className="help">Só por convite: a pessoa entra pelo link do convite ou respondendo SIM no WhatsApp. Quem entra vê só os próprios dados. Liberar na hora deixa qualquer número usar o assistente (gasta sua chave do OpenRouter).</div>
             </div>
             <div className="field">
+              <label>Pedir Uber pelo WhatsApp (beta)</label>
+              <select className="select" value={form.uberAccess ?? "owner"} onChange={(e) => setForm({ ...form, uberAccess: e.target.value })}>
+                <option value="owner">Só eu, testando</option>
+                <option value="all">Todo mundo (Dia a dia e Completo)</option>
+                <option value="off">Desligado: manda só o link do app da Uber</option>
+              </select>
+              <div className="help">O assistente entra na conta da Uber da pessoa pelo número, mostra preço e tempo e só pede depois do sim. Uma corrida por vez na fila "Uber (beta)" para não pesar no servidor. Ainda em teste: a Uber pode pedir verificação ou mudar o site.</div>
+            </div>
+            <div className="field">
               <label>Mensagem para quem não é cliente</label>
               <textarea className="textarea" placeholder="Vazio: apresenta o Planejai e manda o link do site para assinar." value={form.strangerMessage ?? ""} onChange={(e) => setForm({ ...form, strangerMessage: e.target.value })} />
               <div className="help">Sai sem IA para quem manda mensagem sem ser cliente, uma vez por semana por número. Quem você pôs para conversar com um agente não recebe isso.</div>

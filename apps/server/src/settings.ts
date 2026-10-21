@@ -57,6 +57,8 @@ export interface AgentSettings {
    * Desligado, vão só para o bucket. Interruptor do super admin na tela Armazenamento.
    */
   keepLocalCopy: boolean;
+  /** Uber pelo WhatsApp (beta): desligado, só o dono testando ou todo mundo (Dia a dia e Completo) */
+  uberAccess: "off" | "owner" | "all";
 }
 
 export interface BillingPlan {
@@ -227,6 +229,7 @@ const defaults = (): AgentSettings => ({
   privacyEmail: "",
   legalCity: "",
   keepLocalCopy: true,
+  uberAccess: "owner",
 });
 
 let cache: { at: number; value: AgentSettings } | null = null;
@@ -249,6 +252,7 @@ export async function saveSettings(patch: Partial<AgentSettings>, opts: { unchec
     if (rest.billingEnabled && !(await getSettings()).billingStartedAt) (rest as Partial<AgentSettings>).billingStartedAt = new Date().toISOString();
   }
   if (rest.keepLocalCopy !== undefined) rest.keepLocalCopy = rest.keepLocalCopy === true || (rest.keepLocalCopy as unknown) === "true";
+  if (rest.uberAccess !== undefined && !["off", "owner", "all"].includes(rest.uberAccess)) throw new Error("uberAccess precisa ser off, owner ou all");
   if (rest.billingPlans !== undefined) rest.billingPlans = cleanPlans(rest.billingPlans);
   if (rest.billingPacks !== undefined) rest.billingPacks = cleanPacks(rest.billingPacks);
   if (rest.strangerMessage !== undefined) rest.strangerMessage = String(rest.strangerMessage ?? "").trim().slice(0, 1000);

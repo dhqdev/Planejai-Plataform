@@ -27,6 +27,7 @@ import { settingsRoutes } from "./dashboard/settings.js";
 import { teamAdminRoutes, teamRoutes } from "./dashboard/team.js";
 import { studioRoutes } from "./dashboard/studio.js";
 import { whatsappRoutes } from "./dashboard/whatsapp.js";
+import { uberPublicRoutes } from "./dashboard/uber.js";
 
 /**
  * Rotas do painel, em três níveis de acesso. Cada domínio fica num módulo de dashboard/ e só registra rotas:
@@ -36,6 +37,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
   // Sem login: quem valida é o state assinado
   integrationCallbackRoutes(app);
   alarmActionRoutes(app);
+  uberPublicRoutes(app);
 
   await app.register(async (base) => {
     base.addHook("preHandler", requireAuth);

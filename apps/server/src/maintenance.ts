@@ -60,6 +60,8 @@ export async function purgeOld(log?: { info: (...a: any[]) => void; error: (...a
   await closeOrphanRuns();
   const { purgeMeets } = await import("./meet.js");
   await purgeMeets().catch((err) => log?.error({ err }, "falha na limpeza das reuniões"));
+  const { purgeUber } = await import("./uber.js");
+  await purgeUber().catch((err) => log?.error({ err }, "falha na limpeza das corridas da Uber"));
   const { expireErrands } = await import("./errands.js");
   await expireErrands().catch((err) => log?.error({ err }, "falha ao vencer recados"));
   const execs = await query("DELETE FROM executions WHERE started_at < now() - make_interval(days => $1)", [config.EXECUTION_RETENTION_DAYS]);

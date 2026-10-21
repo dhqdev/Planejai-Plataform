@@ -91,6 +91,15 @@ export async function ingest(msg: InboundMessage): Promise<{ queued: boolean; re
     if (await handleEraseRequest({ user, text: msg.text, channel: getChannel(msg.channel), remoteJid: msg.remoteJid })) return { queued: false, reason: "exclusão de dados" };
   }
 
+  // código da Uber (só dígitos) enquanto o robô espera: vai direto para ele, sem IA e sem ficar na conversa
+  if (msg.kind === "text" && /^\s*\d{4,6}\s*$/.test(msg.text ?? "")) {
+    const { handleUberCode } = await import("./uber.js");
+    if (await handleUberCode(user.id, msg.text)) {
+      if (msg.externalId) getChannel(msg.channel).react(msg.remoteJid, msg.externalId, "👍").catch(() => {});
+      return { queued: false, reason: "código da Uber" };
+    }
+  }
+
   // "para" / "cancela" enquanto o assistente ainda trabalha: para a execução na hora (não espera a fila)
   if (msg.kind === "text") {
     const { isStopCommand, stopConversationRuns } = await import("./agent/stop.js");

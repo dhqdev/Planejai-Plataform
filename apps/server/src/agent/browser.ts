@@ -96,6 +96,8 @@ export function looksLikeCard(text: string) {
   return sum % 10 === 0;
 }
 
+const LITE_SKIP = new Set(["image", "media", "font"]);
+
 export class BrowserSession {
   private frames: { data: Buffer; ts: number }[] = [];
   private cdp: CDPSession | null = null;
@@ -107,7 +109,8 @@ export class BrowserSession {
 
   private constructor(private browser: Browser, readonly page: Page) {}
 
-  static async open(record: boolean, opts: { device?: "desktop" | "mobile" } = {}): Promise<BrowserSession> {
+  /** lite: não baixa imagem, vídeo nem fonte (o robô da Uber só lê texto e gasta bem menos memória e banda) */
+  static async open(record: boolean, opts: { device?: "desktop" | "mobile"; lite?: boolean } = {}): Promise<BrowserSession> {
     const puppeteer = (await import("puppeteer-core")).default;
     const b = await getCredentials("browserless");
     let browser: Browser;
@@ -139,6 +142,7 @@ export class BrowserSession {
       } catch {
         return void req.abort("blockedbyclient").catch(() => {});
       }
+      if (opts.lite && LITE_SKIP.has(req.resourceType())) return void req.abort("blockedbyclient").catch(() => {});
       if (u.protocol === "data:" || u.protocol === "blob:" || u.protocol === "about:") return void req.continue().catch(() => {});
       if (u.protocol !== "http:" && u.protocol !== "https:") return void req.abort("blockedbyclient").catch(() => {});
       void isPublicHost(u.hostname).then(
