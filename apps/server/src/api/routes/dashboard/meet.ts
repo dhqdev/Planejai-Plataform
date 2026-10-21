@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import { billingAccess, blockedMessage } from "../../../billing.js";
+import { one } from "../../../db/pool.js";
 import { MEET_LIMITS, addChunk, deleteMeet, getMeet, listMeets, startMeet, stopMeet } from "../../../meet.js";
 import { selfUserId } from "../../../sharing.js";
 
@@ -13,7 +15,11 @@ export function meetRoutes(base: FastifyInstance) {
   });
   base.post<{ Body: { title?: string } }>("/api/meet", async (req, reply) => {
     const uid = await me(req);
-    return uid ? startMeet(uid, req.body?.title) : reply.code(400).send(noUser);
+    if (!uid) return reply.code(400).send(noUser);
+    // a ata usa IA: sem grãos (período livre acabou e o saldo zerou) não começa, igual ao WhatsApp
+    const user = await one("SELECT * FROM users WHERE id = $1", [uid]);
+    if (user && !(await billingAccess(user)).allowed) return reply.code(402).send({ error: await blockedMessage(uid) });
+    return startMeet(uid, req.body?.title);
   });
   base.get<{ Params: { id: string } }>("/api/meet/:id", async (req, reply) => {
     const uid = await me(req);
