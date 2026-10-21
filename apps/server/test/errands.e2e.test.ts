@@ -160,6 +160,11 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     // recado fechado há pouco: se eles voltam a escrever (ex.: horário não disponível), reabre para o agente responder e avisar a pessoa
     expect((await petshopSays("Obrigado!")).reason).toBe("recado");
     expect(await db.one("SELECT status FROM errands WHERE id = $1", [e.id])).toEqual({ status: "waiting" });
+    // e o agente roda de novo nele (entra o aviso do resultado antigo no prompt)
+    const reopened = await db.one("SELECT * FROM errands WHERE id = $1", [e.id]);
+    expect((await import("../src/agent/errand-agent.js")).errandPrompt(reopened, "David", TZ)).toMatch(/já tinha sido fechado com "Banho marcado na PetCamp amanhã às 18h"/);
+    const { runErrandTurn: again } = await import("../src/agent/errand-agent.js");
+    await expect(again(e.id)).resolves.toBeDefined();
     await db.query("UPDATE errands SET status = 'done' WHERE id = $1", [e.id]);
     const exec = await db.one("SELECT status FROM executions WHERE trigger = 'errand' ORDER BY started_at DESC LIMIT 1");
     expect(exec.status).toBe("success");
