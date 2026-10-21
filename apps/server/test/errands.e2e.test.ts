@@ -42,6 +42,11 @@ function fakeOpenRouter(body: any) {
     }
     if (userText.includes("PetCamp: Me xinga")) return completion(null, [call("errand_reply", { message: "Seus idiotas, respondam direito" })]);
     if (userText.includes("PetCamp: Só tenho às 19h")) return completion(null, [call("errand_ask_person", { question: "Eles só têm às 19h. Pode ser?" })]);
+    // primeira tentativa muda (texto solto), a segunda, com o aviso, responde
+    if (userText.includes("PetCamp: Surgiu um horário")) {
+      return system.includes("você ainda não respondeu") ? completion(null, [call("errand_reply", { message: "Consegue sim! Pode confirmar o horário das 16h30?" })]) : completion("vou ver isso");
+    }
+    if (userText.includes("PetCamp: Silêncio total")) return completion("nada a fazer");
     return completion("aguardando");
   }
   if (system.includes("Você é o Recados")) {
@@ -249,7 +254,10 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     const { runErrandTurn } = await import("../src/agent/errand-agent.js");
     const sentBefore = sentTexts().length;
     await runErrandTurn(r.errand_id);
-    expect(sentTexts().length).toBe(sentBefore);
+    // nada sai para eles; a pessoa é avisada de que o agente não conseguiu responder (nunca fica mudo)
+    expect(sentTexts().length).toBe(sentBefore + 1);
+    expect(sentTexts().at(-1)).toMatch(/PetCamp escreveu: "Me xinga aí"[\s\S]*preciso de você/);
+    expect(sentTexts().join(" ")).not.toMatch(/Seus idiotas/);
     expect((await db.one("SELECT sent FROM errands WHERE id = $1", [r.errand_id])).sent).toBe(1);
 
     // cancelar pela tela: não manda nada e o "sim" que estava pendente morre junto
@@ -258,7 +266,7 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     expect(await db.one("SELECT status FROM errands WHERE id = $1", [r.errand_id])).toEqual({ status: "cancelled" });
     expect(await db.one("SELECT COUNT(*)::int AS n FROM pending_actions WHERE status = 'pending'")).toEqual({ n: 0 });
     expect((await listErrands(david.id)).errands.find((e: any) => e.id === r.errand_id)?.state).toBe("cancelled");
-    expect(sentTexts().length).toBe(before + 1); // só a primeira mensagem do startErrand
+    expect(sentTexts().length).toBe(before + 2); // a primeira mensagem do startErrand e o aviso à pessoa de que o agente não conseguiu responder
   });
   it("pedido claro sai sem pedir o sim de novo; dinheiro e lugar desconhecido pedem", async () => {
     const { errandStart, errandContinue } = await import("../src/agent/tools/errands.js");
@@ -379,6 +387,26 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     const log = (await db.one("SELECT log FROM errands WHERE id = $1", [r2.errand_id])).log;
     expect(log.filter((l: any) => l.from === "voce")).toHaveLength(1);
     expect(log.at(-1)).toMatchObject({ from: "voce", text: "Oi, é o David, pode ser às 16h?" });
+  });
+
+  it("nunca fica mudo: se o agente não responde, tenta de novo; se ainda não, avisa a pessoa", async () => {
+    const { startErrand } = await import("../src/errands.js");
+    const { runErrandTurn } = await import("../src/agent/errand-agent.js");
+    const u = { id: david.id, phone: david.phone, name: "David" };
+    await db.query("UPDATE errands SET status = 'cancelled' WHERE user_id = $1 AND status IN ('waiting', 'asking')", [david.id]);
+    const a: any = await startErrand({ user: u, conversationId: conv, place: "PetCamp", phone: PET, message: "Tem horário?", goal: "banho", allowed: "se for depois das 16h, confirmar", timezone: TZ });
+    expect(a.ok).toBe(true);
+    await petshopSays("Surgiu um horário amanhã às 16:30, ele consegue vir?");
+    const before = sentTexts().length;
+    await runErrandTurn(a.errand_id);
+    expect(sentTexts().slice(before).join(" ")).toMatch(/Consegue sim!/);
+    expect((await db.one("SELECT status FROM errands WHERE id = $1", [a.errand_id])).status).toBe("waiting");
+
+    // sem resposta nenhuma mesmo na segunda tentativa: a pessoa é avisada e o recado espera por ela
+    await petshopSays("Silêncio total");
+    await runErrandTurn(a.errand_id);
+    expect(sentTexts().at(-1)).toMatch(/PetCamp escreveu: "Silêncio total"[\s\S]*preciso de você/);
+    expect((await db.one("SELECT status FROM errands WHERE id = $1", [a.errand_id])).status).toBe("asking");
   });
 
   it("ficha da conversa: guarda itens, limpa, atualiza o mesmo rótulo e chega ao agente", async () => {

@@ -291,20 +291,48 @@ export async function runErrandTurn(errandId: string) {
       guard: new Guard({ maxExecutionMinutes: 3, maxToolCalls: conversa ? 8 : 6 }),
     };
     const prefs = await getPrefs(user.id, e.phone);
-    try {
-      await runToolLoop({
+    const sentBefore = e.sent;
+    const system = (conversa ? conversaPrompt : errandPrompt)(e, person, timezone, styleHint(prefs), notedHint(prefs));
+    const loop = (extra: string, maxSteps: number, guardCalls: number) =>
+      runToolLoop({
         agent: "recados",
         task: "agent:recados",
-        ctx,
+        ctx: { ...ctx, guard: new Guard({ maxExecutionMinutes: 3, maxToolCalls: guardCalls }) },
         tools: conversa ? conversaTools(e, outcome) : errandTools(e, timezone, outcome),
-        maxSteps: conversa ? 5 : 4,
-        messages: [
-          { role: "system", content: (conversa ? conversaPrompt : errandPrompt)(e, person, timezone, styleHint(prefs), notedHint(prefs)) },
-          ...errandMessages(e.log, e.place, person, conversa ? 24 : 0),
-        ],
+        maxSteps,
+        messages: [{ role: "system", content: system + extra }, ...errandMessages(e.log, e.place, person, conversa ? 24 : 0)],
       });
+    let first: Awaited<ReturnType<typeof runToolLoop>> | undefined;
+    try {
+      first = await loop("", conversa ? 5 : 4, conversa ? 8 : 6);
     } finally {
       ctx.guard?.dispose();
+    }
+    // nunca fica mudo: eles escreveram, nada foi respondido nem fechado nem levado à pessoa (o modelo gastou os passos na ficha, escreveu texto solto,
+    // a trava barrou...). Segunda tentativa só com a resposta; se ainda assim nada sair, a pessoa é avisada em vez de ficar esperando para sempre.
+    const answered = async () => {
+      const now = await one<{ sent: number; status: string }>("SELECT sent, status FROM errands WHERE id = $1", [e.id]);
+      return Boolean(outcome.kind) || (now?.sent ?? 0) > sentBefore || !["waiting", "asking"].includes(now?.status ?? "");
+    };
+    const theirLast = e.log.at(-1);
+    const justWaiting = /^\s*aguardando\.?\s*$/i.test(first?.text ?? "");
+    if (theirLast?.from === "eles" && !justWaiting && !(await answered())) {
+      await tracer.step({ agent: "recados", type: "info", name: "sem resposta: tenta de novo" }).then((st) => st.ok({ ultima: theirLast.text.slice(0, 200) }));
+      try {
+        await loop(
+          "\nATENÇÃO: eles escreveram e você ainda não respondeu. Responda AGORA com errand_reply (texto solto não é enviado). Se precisar de uma decisão da pessoa, errand_ask_person; se acabou, errand_done.",
+          2,
+          4,
+        );
+      } catch {}
+      if (!(await answered())) {
+        const { notifyUser } = await import("../social.js");
+        await query("UPDATE errands SET status = 'asking', question = $2, updated_at = now() WHERE id = $1 AND status = 'waiting'", [e.id, `${e.place} escreveu e eu não consegui responder sozinho`]);
+        await notifyUser(
+          e.user_id,
+          `${e.place} escreveu: "${theirLast.text.slice(0, 300)}"\nNão consegui responder sozinho, então preciso de você: responda por aqui ou pelo Recados (${followUrl()}).`,
+        ).catch(() => {});
+      }
     }
     await tracer.finish(outcome.kind ? `${outcome.kind}: ${outcome.text}` : "[aguardando eles]");
 
