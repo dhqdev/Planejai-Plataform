@@ -19,10 +19,99 @@ import { tzOffsetMs } from "./time.js";
  */
 
 export const UPDATES_CATEGORY = "Novidades do Planejai";
-export const BLOG_CATEGORIES = ["Dicas de produtividade", "Dinheiro e finanças", "Comparações", "Inteligência artificial", UPDATES_CATEGORY] as const;
+export const BLOG_CATEGORIES = [
+  "Dicas de produtividade",
+  "Dinheiro e finanças",
+  "Organização e rotina",
+  "Casa e família",
+  "Bem-estar",
+  "Comparações",
+  "Inteligência artificial",
+  UPDATES_CATEGORY,
+] as const;
 /** categorias do post semanal (novidades só sai das mudanças do sistema) */
 const TOPIC_CATEGORIES = BLOG_CATEGORIES.filter((c) => c !== UPDATES_CATEGORY);
 export const BLOG_AUTHOR = "Equipe Planejai";
+
+/**
+ * Pontos de partida por categoria (pedido do David em 2026-10-21: temas gerais, não só o Planejai toda semana).
+ * O redator recebe 4 sorteados da categoria da semana como inspiração e pode escolher outro tema parecido.
+ */
+const TOPIC_IDEAS: Record<string, string[]> = {
+  "Dicas de produtividade": [
+    "como montar uma lista de tarefas que funciona",
+    "técnica pomodoro na prática",
+    "como parar de procrastinar tarefas chatas",
+    "como planejar a semana no domingo em 20 minutos",
+    "como lidar com excesso de mensagens e notificações",
+    "como dizer não sem culpa no trabalho",
+    "foco no home office",
+    "como priorizar quando tudo parece urgente",
+  ],
+  "Dinheiro e finanças": [
+    "como montar uma reserva de emergência",
+    "regra 50-30-20 adaptada à realidade brasileira",
+    "como sair do cheque especial e do rotativo do cartão",
+    "como organizar as contas do mês",
+    "como economizar no mercado sem passar vontade",
+    "como conversar sobre dinheiro com o parceiro",
+    "como planejar as despesas de começo de ano",
+    "como usar o cartão de crédito sem se enrolar",
+    "como juntar dinheiro para uma viagem",
+  ],
+  "Organização e rotina": [
+    "rotina matinal simples para quem não é de acordar cedo",
+    "como organizar a casa em 15 minutos por dia",
+    "como guardar e achar documentos importantes",
+    "como organizar a volta das férias",
+    "checklist de mudança de casa",
+    "como criar hábitos que duram",
+    "como organizar a rotina com filhos pequenos",
+    "como planejar refeições da semana",
+  ],
+  "Casa e família": [
+    "como dividir as tarefas de casa de forma justa",
+    "como organizar o aniversário das crianças sem estresse",
+    "como cuidar da agenda de pais idosos",
+    "como planejar a lista de compras do mês",
+    "como organizar a volta às aulas",
+    "como receber visitas sem correria",
+    "manutenção da casa que não pode ser esquecida",
+  ],
+  "Bem-estar": [
+    "como encaixar atividade física numa rotina corrida",
+    "como dormir melhor com uma rotina de noite",
+    "pausas durante o dia que fazem diferença",
+    "como desconectar do celular no fim de semana",
+    "como lidar com a sobrecarga mental do dia a dia",
+    "como lembrar de beber água e tomar remédios na hora",
+    "como tirar um tempo para você sem culpa",
+  ],
+  Comparações: [
+    "agenda de papel ou digital",
+    "planilha ou aplicativo para controlar gastos",
+    "débito, crédito ou Pix: quando usar cada um",
+    "lista de tarefas no papel ou no celular",
+    "poupança ou reserva em conta digital",
+  ],
+  "Inteligência artificial": [
+    "como usar inteligência artificial no dia a dia sem complicação",
+    "o que é um assistente de IA e o que ele não faz",
+    "cuidados com privacidade ao usar IA",
+    "como pedir as coisas para uma IA e ter respostas melhores",
+    "IA para estudar e aprender coisas novas",
+  ],
+};
+
+/** Quatro ideias sorteadas da categoria, para o tema variar de uma semana para outra. */
+export function topicIdeas(category: string, rand = Math.random) {
+  const pool = [...(TOPIC_IDEAS[category] ?? [])];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+  }
+  return pool.slice(0, 4);
+}
 
 /**
  * Estilo único das ilustrações (guache com textura, cena cheia de ponta a ponta): todas as capas parecem da mesma revista.
@@ -208,7 +297,8 @@ const WRITER_SYSTEM =
   "informações; guarda documentos e notas; lê PDFs; manda recados para contatos e estabelecimentos só depois do \"sim\" da pessoa. Tem um painel no navegador.\n" +
   "Escreva em português do Brasil, tom de revista leve e prático, frases curtas, falando com \"você\". Público: brasileiros comuns que querem organizar a rotina e o dinheiro.\n" +
   "Regras: texto 100% original; não invente números, estatísticas, pesquisas, preços, leis ou datas (prefira conselhos práticos; contas de exemplo podem, com valores redondos e certos); " +
-  "não fale mal de marcas; o Planejai aparece em no máximo 2 trechos, de forma natural e útil, nunca como propaganda pesada; sem emojis; sem travessão (use vírgula ou dois-pontos).\n" +
+  "não fale mal de marcas; o post é sobre o tema, não sobre o Planejai: só cite o Planejai quando o pedido da semana disser que pode, e aí em 1 trecho curto, natural e útil, " +
+  "nunca como propaganda; sem emojis; sem travessão (use vírgula ou dois-pontos).\n" +
   "Formato do body (markdown simples): 2 parágrafos de abertura; de 4 a 6 seções com '## ' cujos títulos respondem perguntas que as pessoas buscam no Google; " +
   "parágrafos curtos; pelo menos uma lista com '- ' ou '1. ' (item pode começar com **negrito**); uma tabela simples com '|' quando ajudar a comparar; " +
   "uma dica destacada numa linha começando com '> **Dica:** '; a linha [[imagem]] sozinha entre a segunda e a terceira seção; termine com '## Perguntas frequentes' " +
@@ -248,6 +338,8 @@ async function nextCategory() {
 export async function writePost(source: "auto" | "manual", log?: { info: (...a: any[]) => void }, updates?: Novidade[]) {
   if (!config.OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY não configurada");
   const category = updates ? UPDATES_CATEGORY : await nextCategory();
+  // um post semanal em cada três pode citar o Planejai; os outros ficam só no tema
+  const mentionApp = Math.random() < 1 / 3;
   const existing = await many<{ title: string }>("SELECT title FROM blog_posts ORDER BY published_at DESC LIMIT 60");
   const tracer = await Tracer.start({
     trigger: "blog",
@@ -268,7 +360,10 @@ export async function writePost(source: "auto" | "manual", log?: { info: (...a: 
             updates.map((u) => `- ${u.date.slice(0, 10)}: ${u.subject}`).join("\n")
           : `Categorias: ${TOPIC_CATEGORIES.join(", ")}.\nCategoria desta semana: ${category}.\nHoje é ${today}.\n` +
             `Posts que já existem (não repita o tema nem o ângulo):\n${existing.map((e) => `- ${e.title}`).join("\n") || "- nenhum"}\n` +
-            "Escolha um tema novo, útil e com cara de busca real no Google, e escreva o post.",
+            `Ideias de tema (pode usar uma ou outra do mesmo tipo): ${topicIdeas(category).join("; ")}.\n` +
+            "É um tema geral do dia a dia, útil para qualquer pessoa, com cara de busca real no Google. " +
+            (mentionApp ? "Neste post pode citar o Planejai uma vez, se encaixar." : "Neste post não cite o Planejai nem assistente de WhatsApp nenhum.") +
+            " Escreva o post.",
       },
     ];
     let draft: PostDraft | null = null;

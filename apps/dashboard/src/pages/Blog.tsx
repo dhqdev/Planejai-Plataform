@@ -34,6 +34,9 @@ const fmtDate = (iso: string) => new Intl.DateTimeFormat("pt-BR", { day: "numeri
 const TINT: Record<string, string> = {
   "Dicas de produtividade": "#ffd9e2",
   "Dinheiro e finanças": "#d7f2df",
+  "Organização e rotina": "#fff1c7",
+  "Casa e família": "#ffe3cf",
+  "Bem-estar": "#d4f3ef",
   Comparações: "#e6dcff",
   "Inteligência artificial": "#d6ebff",
 };

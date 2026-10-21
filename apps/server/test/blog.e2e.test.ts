@@ -47,6 +47,17 @@ describe("blog: conferência do redator", () => {
     expect(excerptOf("## Título\n\nPrimeiro **parágrafo** de verdade.")).toBe("Primeiro parágrafo de verdade.");
   });
 
+  it("cada categoria do post semanal tem ideias de tema gerais para sortear", async () => {
+    const { BLOG_CATEGORIES, UPDATES_CATEGORY, topicIdeas } = await import("../src/blog.js");
+    for (const c of BLOG_CATEGORIES.filter((c) => c !== UPDATES_CATEGORY)) {
+      const ideas = topicIdeas(c);
+      expect(ideas.length, c).toBe(4);
+      expect(new Set(ideas).size).toBe(4);
+      expect(ideas.join(" ").toLowerCase()).not.toContain("planejai");
+    }
+    expect(topicIdeas(UPDATES_CATEGORY)).toEqual([]);
+  });
+
   it("os posts de partida passam na mesma conferência", async () => {
     const { cleanDraft } = await import("../src/blog.js");
     const { SEED_POSTS } = await import("../src/blog-seed.js");
