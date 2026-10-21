@@ -1,5 +1,5 @@
-import { one, query } from "../../db/pool.js";
-import { finishErrand, messageLimit, openErrands, sendToErrand, startErrand } from "../../errands.js";
+import { many, one, query } from "../../db/pool.js";
+import { ERRAND_FOLLOW_HOURS, type Errand, finishErrand, messageLimit, reopenErrand, openErrands, sendToErrand, startErrand } from "../../errands.js";
 import { CONVERSA_AGENTS, conversaAgent } from "../conversa.js";
 import { blockedResult, checkErrandText, quickCheck } from "../errand-check.js";
 import { normalizePhone } from "../../accounts.js";
@@ -124,6 +124,8 @@ export const errandContinue = defineTool<{ errand_id: string; message: string; a
   async run(args, ctx) {
     const e = await one("SELECT place, goal, log, status FROM errands WHERE id::text = $1 AND user_id = $2", [args.errand_id, ctx.user.id]);
     if (!e) return { ok: false, error: "Recado não encontrado" };
+    // recado já fechado: a pessoa quer voltar a falar com o estabelecimento, então ele reabre ao enviar (abaixo, depois do sim)
+    const closed = ["done", "failed", "expired"].includes(e.status);
     if (!ctx.approvedAction) {
       const previous = [...(e.log as { from: string; text: string }[])].reverse().find((l) => l.from === "nos")?.text;
       const check = await checkErrandText({ place: e.place, goal: e.goal, message: args.message, previous }, ctx.tracer, ctx.agent);
@@ -133,6 +135,7 @@ export const errandContinue = defineTool<{ errand_id: string; message: string; a
     const decided = e.status === "asking" && !ctx.proactive && !!ctx.typedText?.trim() && !RISKY_TEXT.test(norm(`${args.message} ${args.allowed ?? ""}`));
     const gate = decided ? null : await requireConfirmation(args, `responder para ${e.place}: "${args.message}"`, ctx);
     if (gate) return gate;
+    if (closed && !(await reopenErrand(args.errand_id, ctx.user.id))) return { ok: false, error: "Esse recado já terminou há muito tempo. Comece um novo com errand_start." };
     await query(
       `UPDATE errands SET allowed = COALESCE($2, allowed), log = log || $3::jsonb, updated_at = now() WHERE id::text = $1`,
       [args.errand_id, args.allowed ?? null, JSON.stringify([{ from: "pessoa", text: args.allowed ?? args.message, at: new Date().toISOString() }])],
@@ -147,7 +150,12 @@ export const errandList = defineTool<Record<string, never>>({
   parameters: obj({}),
   async run(_args, ctx) {
     const list = await openErrands(ctx.user.id);
+    const recent = await many<Errand>(
+      `SELECT * FROM errands WHERE user_id = $1 AND kind = 'recado' AND status IN ('done', 'failed', 'expired') AND updated_at > now() - make_interval(hours => $2::int) ORDER BY updated_at DESC LIMIT 5`,
+      [ctx.user.id, ERRAND_FOLLOW_HOURS],
+    );
     return {
+      recently_closed: recent.map((e) => ({ id: e.id, place: e.place, result: e.outcome, note: "Já fechado; se a pessoa quiser falar com eles de novo, use errand_continue com este id (reabre)." })),
       errands: list.map((e) => ({
         id: e.id,
         kind: e.kind,

@@ -259,6 +259,15 @@ export async function sendToErrand(errandId: string, text: string, opts: { sameT
   return { ok: true, sent: clean, messages_left: limit - e.sent - 1 };
 }
 
+/** Reabre um recado fechado ou vencido (cliente pediu para voltar a falar com o estabelecimento), por mais 7 dias e com folga de 3 mensagens. */
+export async function reopenErrand(id: string, userId?: string) {
+  return one<Errand>(
+    `UPDATE errands SET status = 'waiting', question = NULL, expires_at = now() + make_interval(hours => $2::int), sent = LEAST(sent, $3::int), updated_at = now()
+     WHERE id::text = $1 AND kind = 'recado' AND status IN ('done', 'failed', 'expired') AND ($4::text IS NULL OR user_id::text = $4) RETURNING *`,
+    [id, ERRAND_FOLLOW_HOURS, MAX_ERRAND_MESSAGES - 3, userId ?? null],
+  );
+}
+
 /** Reabre o recado fechado mais recente desse número dentro da janela de acompanhamento (7 dias), com folga para mais algumas mensagens. */
 async function reopenRecent(phone: string) {
   return one<Errand>(

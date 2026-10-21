@@ -348,6 +348,21 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     expect(e.log.at(-1)).toMatchObject({ from: "voce", text: "Pode ser às 14h então?" });
   });
 
+  it("o cliente pede para falar de novo com um recado fechado: errand_continue reabre e manda", async () => {
+    const { startErrand, finishErrand } = await import("../src/errands.js");
+    const { errandContinue, errandList } = await import("../src/agent/tools/errands.js");
+    const { Tracer } = await import("../src/agent/trace.js");
+    const tracer = await Tracer.start({ trigger: "message", userId: david.id, conversationId: conv });
+    const r: any = await startErrand({ user: { id: david.id, phone: david.phone, name: "David" }, conversationId: conv, place: "Clínica Sorriso", phone: "5519955558888", message: "Têm horário sexta?", goal: "avaliação", timezone: TZ });
+    await finishErrand(r.errand_id, { status: "done", outcome: "Sexta 16h", timezone: TZ });
+    const ctx = (args: any) => ({ user: david, conversation: { id: conv }, tracer, timezone: TZ, agent: "recados", typedText: "pergunta se pode ser às 14h", toolCall: { name: "errand_continue", args }, approvedAction: true }) as any;
+    const list: any = await errandList.run({} as any, ctx({}));
+    expect(list.recently_closed.map((x: any) => x.id)).toContain(r.errand_id);
+    const args = { errand_id: r.errand_id, message: "Poderia ser às 14h no mesmo dia?" };
+    expect(((await errandContinue.run(args, ctx(args))) as any).ok).toBe(true);
+    expect((await db.one("SELECT status FROM errands WHERE id = $1", [r.errand_id])).status).toBe("waiting");
+  });
+
   it("ficha da conversa: guarda itens, limpa, atualiza o mesmo rótulo e chega ao agente", async () => {
     const { savePrefs, addFact, getPrefs, styleHint, notedHint, MAX_FACTS } = await import("../src/chatprefs.js");
     const FICHA = "5519977778888";
