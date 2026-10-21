@@ -336,6 +336,9 @@ export async function runUberJob(job: UberJob, log?: Log) {
       if (reason === "password" || reason === "captcha") await query("UPDATE uber_sessions SET status = 'vencida', state_enc = NULL, updated_at = now() WHERE user_id = $1", [user.id]);
       await query("UPDATE uber_rides SET status = 'erro', error = $2, updated_at = now() WHERE id = $1", [ride.id, e.message.slice(0, 300)]);
       await tell(failureMessage(reason, job.action, ride));
+      // beta: o dono recebe o print da tela onde o robô parou (só dele, que é a conta dele), para ajustar o robô
+      const shot = isOwner(user.phone) ? await robot?.screenshot().catch(() => null) : null;
+      if (shot) await notifyUser(user.id, `Print da tela da Uber onde parei (só pra você, para ajustar a beta). Motivo: ${e.message}`, { base64: shot, mimetype: "image/jpeg" }).catch(() => {});
     } finally {
       await setWaiting(user.id, null).catch(() => {});
       await robot?.close().catch(() => {});

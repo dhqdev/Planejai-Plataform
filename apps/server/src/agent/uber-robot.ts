@@ -133,6 +133,11 @@ export class UberRobot {
     await this.s.close();
   }
 
+  /** Print da tela (sem imagens, que o modo leve não baixa) para entender onde o robô parou. */
+  async screenshot(): Promise<string | null> {
+    return (await this.page.screenshot({ type: "jpeg", quality: 60, encoding: "base64" }).catch(() => null)) as string | null;
+  }
+
   async text(max = 1500) {
     return (await this.page.evaluate(() => document.body?.innerText ?? "").catch(() => "")).replace(/\s+\n/g, "\n").slice(0, max);
   }
@@ -153,7 +158,12 @@ export class UberRobot {
         const inputs = Array.from(document.querySelectorAll<HTMLInputElement>("input, textarea")).filter(vis);
         const label = (el: HTMLInputElement) => `${el.placeholder} ${el.getAttribute("aria-label") ?? ""} ${el.name} ${el.id} ${el.autocomplete}`.toLowerCase();
         const text = (document.body?.innerText ?? "").toLowerCase();
-        if (document.querySelector('iframe[src*="captcha" i], iframe[src*="arkose" i], iframe[src*="funcaptcha" i], [id*="captcha" i]') || /não sou um robô|verify you are human|i'm not a robot|prove you're human/.test(text)) return "captcha";
+        // o login da Uber carrega o script do captcha (invisível) em toda página: só conta desafio que aparece de verdade na tela
+        const challenge = Array.from(document.querySelectorAll('iframe[src*="captcha" i], iframe[src*="arkose" i], iframe[src*="funcaptcha" i], iframe[title*="captcha" i], iframe[title*="desafio" i], iframe[title*="challenge" i]')).some((f) => {
+          const r = f.getBoundingClientRect();
+          return vis(f) && r.width >= 120 && r.height >= 60;
+        });
+        if (challenge || /não sou um robô|verify you are human|i'm not a robot|prove you're human|resolva (o|este) (desafio|quebra-cabe[cç]a)|solve (the|this) puzzle/.test(text)) return "captcha";
         if (inputs.some((i) => i.type === "password")) return "password";
         const otp = inputs.filter((i) => i.autocomplete === "one-time-code" || i.maxLength === 1 || /code|c[oó]digo|otp|verification/.test(label(i)));
         if (otp.length) return "code";

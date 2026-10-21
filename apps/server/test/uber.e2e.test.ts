@@ -72,6 +72,7 @@ describe.skipIf(!enabled)("uber pelo WhatsApp (beta, e2e)", () => {
   let conv: any;
   let price = "23,40";
   let codeBy: "sms" | "email" = "sms";
+  let captchaOn = false;
   const typedPhones: string[] = [];
   let requests = 0;
 
@@ -88,6 +89,7 @@ function req(){fetch('/requested');document.body.innerHTML='<p>Procurando motori
 </script>`;
 
   const login = () => `<!doctype html><meta name="viewport" content="width=device-width">
+<div id="captcha-root"></div><iframe src="/captcha-frame" title="captcha" style="${captchaOn ? "width:300px;height:150px" : "width:0;height:0;border:0"}"></iframe>
 <h1>Qual é o seu número de celular ou e-mail?</h1><input type="tel" placeholder="Número de celular ou e-mail" id="ph"><button onclick="next()">Continuar</button>
 <script>
 function next(){fetch('/send?ph='+encodeURIComponent(document.getElementById('ph').value));
@@ -220,6 +222,20 @@ function check(){const c=[...document.querySelectorAll('input')].map(i=>i.value)
     expect((await latest()).status).toBe("opcoes");
     // não precisou pedir o código para a pessoa
     expect(sent.slice(before).some((t) => /e-mail/.test(t))).toBe(false);
+  });
+
+  it("captcha de verdade na tela: desiste, manda o link e o print só para o dono", async () => {
+    await uber.forgetUber(user.id);
+    captchaOn = true;
+    const before = sent.length;
+    await tools.uberQuote.run({ pickup: "Casa", dropoff: "Trabalho" }, ctx());
+    await uber.runUberJob({ rideId: (await latest()).id, action: "quote" });
+    captchaOn = false;
+    expect((await latest()).status).toBe("erro");
+    const out = sent.slice(before);
+    expect(out[0]).toContain("verificação de robô");
+    expect(out[0]).toContain("m.uber.com/ul/");
+    expect(out[1]).toContain("Print da tela");
   });
 
   it("Atalho do iPhone: token pessoal entrega o código do SMS; token errado não", async () => {
