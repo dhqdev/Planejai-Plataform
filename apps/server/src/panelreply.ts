@@ -45,9 +45,9 @@ export async function replyFromPanel(userId: string, phone: string, message: str
   if (errand) {
     if (await isOptedOut(errand.phone)) return { ok: false as const, error: OPTED_OUT_ERROR };
     const out = personText(text, user);
-    await outboundChannel().sendText(errand.jid, out);
+    const sentMsg = await outboundChannel().sendText(errand.jid, out);
     // não conta no limite do agente: quem escreveu foi a pessoa
-    await query("UPDATE errands SET log = log || $2::jsonb, updated_at = now() WHERE id = $1", [errand.id, JSON.stringify([{ from: "voce", text, at: new Date().toISOString() }])]);
+    await query("UPDATE errands SET log = log || $2::jsonb, updated_at = now() WHERE id = $1", [errand.id, JSON.stringify([{ from: "voce", text, at: new Date().toISOString(), external_id: sentMsg?.id }])]);
     return { ok: true as const };
   }
   const known = await one<{ phone: string; name: string | null }>(

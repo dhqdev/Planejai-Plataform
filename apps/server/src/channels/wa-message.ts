@@ -5,9 +5,10 @@ import type { InboundKind, InboundMessage } from "./types.js";
  * Converte uma WAMessage (formato do Baileys, usado também pela Evolution API) em InboundMessage.
  * Retorna null para grupos, status, canais e mensagens enviadas por nós.
  */
-export function parseWAMessage(d: any, channel: string): InboundMessage | null {
+/** own: lê também a mensagem que a própria conta escreveu (digitada no celular do número), com o telefone de quem recebeu. */
+export function parseWAMessage(d: any, channel: string, opts: { own?: boolean } = {}): InboundMessage | null {
   const key = d?.key;
-  if (!key || key.fromMe) return null;
+  if (!key || (key.fromMe && !opts.own)) return null;
   const jid: string = key.remoteJid ?? "";
   if (!jid || jid.endsWith("@g.us") || jid === "status@broadcast" || jid.endsWith("@newsletter") || jid.endsWith("@broadcast")) return null;
   // Contas com LID: o número real vem em remoteJidAlt/senderPn

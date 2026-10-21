@@ -363,6 +363,20 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     expect((await db.one("SELECT status FROM errands WHERE id = $1", [r.errand_id])).status).toBe("waiting");
   });
 
+  it("mensagem digitada no celular do número do Planejai entra no recado como da pessoa, sem contar duas vezes", async () => {
+    const { startErrand, logOwnMessage } = await import("../src/errands.js");
+    const NUM = "5519955559999";
+    await db.query("UPDATE errands SET status = 'cancelled' WHERE user_id = $1 AND status IN ('waiting', 'asking')", [david.id]);
+    const r2: any = await startErrand({ user: { id: david.id, phone: david.phone, name: "David" }, conversationId: conv, place: "Clínica Dente", phone: NUM, message: "Têm horário?", goal: "avaliação", timezone: TZ });
+    expect(r2.ok).toBe(true);
+    expect(await logOwnMessage(NUM, "Oi, é o David, pode ser às 16h?", "OWN1")).toBe(true);
+    expect(await logOwnMessage(NUM, "Oi, é o David, pode ser às 16h?", "OWN1")).toBe(false); // mesmo id: já registrada
+    expect(await logOwnMessage("5519900009999", "oi", "OWN2")).toBe(false); // número sem recado
+    const log = (await db.one("SELECT log FROM errands WHERE id = $1", [r2.errand_id])).log;
+    expect(log.filter((l: any) => l.from === "voce")).toHaveLength(1);
+    expect(log.at(-1)).toMatchObject({ from: "voce", text: "Oi, é o David, pode ser às 16h?" });
+  });
+
   it("ficha da conversa: guarda itens, limpa, atualiza o mesmo rótulo e chega ao agente", async () => {
     const { savePrefs, addFact, getPrefs, styleHint, notedHint, MAX_FACTS } = await import("../src/chatprefs.js");
     const FICHA = "5519977778888";

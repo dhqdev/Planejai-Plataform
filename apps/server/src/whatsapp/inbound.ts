@@ -16,6 +16,16 @@ export async function handleIncoming(sock: WASocket, raw: WAMessage, log: Log) {
     if (!text) return;
     raw = { ...raw, message: { conversation: text } };
   }
+  // o que a própria conta escreveu direto no celular do número (não saiu pelo Planejai): entra no recado que está com esse número
+  if (raw.key.fromMe) {
+    const own = parseWAMessage(raw, "baileys", { own: true });
+    if (own?.kind === "text" && own.text.trim()) {
+      const { logOwnMessage } = await import("../errands.js");
+      // espera o envio nosso (pelo Planejai) gravar o id no recado, para não contar duas vezes
+      setTimeout(() => void logOwnMessage(own.phone, own.text, own.externalId).catch((err) => log.warn({ err }, "falha ao registrar mensagem digitada no número")), 4000);
+    }
+    return;
+  }
   const msg = parseWAMessage(raw, "baileys");
   if (!msg) return;
   void query("UPDATE wa_sessions SET last_message_at = now() WHERE id = $1", [SESSION_ID]).catch(() => {});

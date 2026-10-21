@@ -259,6 +259,22 @@ export async function sendToErrand(errandId: string, text: string, opts: { sameT
   return { ok: true, sent: clean, messages_left: limit - e.sent - 1 };
 }
 
+/**
+ * Mensagem que a pessoa digitou no celular do número do Planejai, direto para o estabelecimento: entra no recado como dela ("voce"),
+ * para a conversa da tela e o agente não perderem o que foi dito. Ignora o que saiu pelo próprio Planejai (id já no log).
+ */
+export async function logOwnMessage(phone: string, text: string, externalId?: string) {
+  const variants = phoneVariants(phone);
+  if (externalId && (await one("SELECT 1 FROM errands WHERE phone = ANY($1) AND log @> $2::jsonb LIMIT 1", [variants, JSON.stringify([{ external_id: externalId }])]))) return false;
+  const e =
+    (await many<Errand>(`SELECT * FROM errands WHERE phone = ANY($1) AND status = ANY($2) AND expires_at > now() ORDER BY updated_at DESC LIMIT 1`, [variants, OPEN]))[0] ??
+    (await reopenRecent(phone));
+  if (!e) return false;
+  const entry: ErrandLogEntry = { from: "voce", text: text.slice(0, 1000), at: new Date().toISOString(), external_id: externalId };
+  await query("UPDATE errands SET log = log || $2::jsonb, updated_at = now() WHERE id = $1", [e.id, JSON.stringify([entry])]);
+  return true;
+}
+
 /** Reabre um recado fechado ou vencido (cliente pediu para voltar a falar com o estabelecimento), por mais 7 dias e com folga de 3 mensagens. */
 export async function reopenErrand(id: string, userId?: string) {
   return one<Errand>(
