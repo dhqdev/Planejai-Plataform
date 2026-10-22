@@ -70,6 +70,9 @@ const BlogAdminPage = page(() => load.blogAdmin().then((m) => m.BlogAdminPage));
 const loadAuth = () => import("./pages/Login");
 const AuthPage = page(() => loadAuth().then((m) => m.AuthPage));
 const PrivacyPage = page(() => import("./pages/Privacy").then((m) => m.PrivacyPage));
+/** Link público de agendamento (/agendar/<slug> e /agendar/horario/<token>): sempre sem a moldura do app. */
+const AgendarPage = page(() => import("./pages/Agendar").then((m) => m.AgendarPage));
+const MeuHorarioPage = page(() => import("./pages/Agendar").then((m) => m.MeuHorarioPage));
 const OnboardingFlow = page(() => import("./pages/Onboarding").then((m) => m.OnboardingFlow));
 
 function PageUnavailable() {
@@ -465,6 +468,14 @@ export function App() {
 
   // termos e privacidade abrem sem login (link do cadastro e do convite no WhatsApp)
   if (loc.pathname === "/privacidade") return <Suspense fallback={<BlockLoader />}><PrivacyPage /></Suspense>;
+  // link de agendamento (bio do Instagram): o cliente de quem usa o Planejai, com ou sem login
+  const agendar = loc.pathname.match(/^\/agendar\/(horario\/)?([^/]+)\/?$/);
+  if (agendar)
+    return (
+      <Suspense fallback={<BlockLoader />}>
+        {agendar[1] ? <MeuHorarioPage token={decodeURIComponent(agendar[2]!)} /> : <AgendarPage slug={decodeURIComponent(agendar[2]!)} />}
+      </Suspense>
+    );
   // página de preços: aberta pelo "Planos" da landing, com ou sem login
   if (loc.pathname === "/precos") return <Suspense fallback={<BlockLoader />}><Pricing /></Suspense>;
   // sem login o blog abre sozinho; logado, ele abre dentro da moldura do app (rota /blog/* mais abaixo)

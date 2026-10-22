@@ -8,6 +8,7 @@ import { DateField, TimeField } from "../pickers";
 import { haptic } from "../touch";
 import { PhoneAgenda } from "./CalendarPhone";
 import { Vazio } from "../Vazio";
+import { BookingCard } from "./BookingLink";
 import { GoogleSync } from "./GoogleSync";
 import { justDragged, useDrag } from "./arrastar";
 
@@ -309,6 +310,7 @@ export function CalendarPage({ isSuper }: { isSuper: boolean }) {
             <Icon name="plus" size={20} /> Criar
           </button>
           <GoogleSync isSuper={isSuper} variant="side" />
+          <BookingCard variant="side" />
           <MiniMonth selected={selected} onPick={pick} />
           <CalendarList title="Agendas" items={calendars} hidden={hidden} onToggle={toggleCal} />
           <CalendarList title="Tags" items={tagItems(tags)} hidden={hidden} onToggle={toggleCal} />

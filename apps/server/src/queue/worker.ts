@@ -57,6 +57,15 @@ async function startConversations(log: WorkerLog, concurrency: number) {
     if (!reminder || reminder.status !== "scheduled") return;
     let ok = false;
     try {
+      // compromisso de um agendamento pelo link público: aviso pronto, sem IA
+      const { ownerReminderText } = await import("../booking.js");
+      const fixed = await ownerReminderText(reminder.id);
+      if (fixed) {
+        const { notifyUser } = await import("../social.js");
+        await notifyUser(reminder.user_id, fixed);
+        ok = true;
+        return;
+      }
       await processConversation(reminder.conversation_id, {
         trigger: "reminder",
         event:
@@ -180,6 +189,13 @@ async function startChannelJobs(log: WorkerLog) {
   // mensagens pedidas pelo n8n / automações (API interna)
   await boss.work<OutboundJob>(QUEUES.outbound, { batchSize: 1, pollingIntervalSeconds: 2 }, async ([job]) => {
     if (job) await runOutboundJob(job.data);
+  });
+
+  // link público de agendamento: aviso do cliente perto do horário (confere se ainda vale antes de mandar)
+  await boss.work<{ bookingId: string; start: string }>(QUEUES.booking, { batchSize: 1, pollingIntervalSeconds: 5 }, async ([job]) => {
+    if (!job) return;
+    const { runClientReminder } = await import("../booking.js");
+    await runClientReminder(job.data);
   });
 
   // envios pedidos pelas réplicas de conversa (ROLE=conversations) a quem segura o WhatsApp

@@ -29,6 +29,7 @@ import {
 } from "./Calendar";
 import "../styles/agenda-celular.css";
 import "../styles/agenda-celular-chips.css";
+import { BookingCard } from "./BookingLink";
 import { GoogleSync } from "./GoogleSync";
 import { useDrag } from "./arrastar";
 import { PhoneWeek, WIN, winStartFor } from "./SemanaCelular";
@@ -301,6 +302,7 @@ export function PhoneAgenda({ isSuper, hidden, onToggle, owners, person, onPerso
           />
         )}
         {tab === "cal" && <GoogleSync isSuper={isSuper} variant="phone" />}
+        {tab === "cal" && <BookingCard variant="phone" />}
         {owners.length > 0 && (
           <div ref={ownerTabs} className="pc-owner-chips" role="tablist" aria-label="De quem">
             <button role="tab" aria-selected={!person} className={!person ? "on" : ""} onClick={() => onPerson("")}>

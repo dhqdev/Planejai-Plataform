@@ -23,6 +23,7 @@ import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { registerInternalRoutes } from "./routes/internal.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { blogPage, registerBlogRoutes } from "./routes/blog.js";
+import { bookingPageHtml, registerBookingRoutes } from "./routes/booking.js";
 import { registerSecurity, trustProxySetting } from "./security.js";
 import { DEVICE_COOKIE, isTrustedDevice, startChallenge, startReset, startSignupChallenge, trustDevice, verifyChallenge, verifyReset, verifySignup, whatsappReady } from "../logincode.js";
 import { emailFields, emitEvent } from "../events.js";
@@ -378,6 +379,7 @@ export async function buildServer() {
   await registerDashboardRoutes(app);
   await registerNotificationRoutes(app);
   await registerBlogRoutes(app);
+  await registerBookingRoutes(app);
 
   // Dashboard (SPA) servido pelo mesmo container
   if (existsSync(publicDir)) {
@@ -398,6 +400,9 @@ export async function buildServer() {
         // blog: o mesmo index, com título, descrição e imagem do post no <head> (Google e prévia do link)
         const blog = await blogPage(publicDir, req.url).catch(() => null);
         if (blog) return reply.type("text/html; charset=utf-8").header("Cache-Control", "no-cache").send(blog);
+        // link de agendamento: nome da agenda no <head> (prévia na bio do Instagram e no WhatsApp)
+        const booking = await bookingPageHtml(publicDir, req.url).catch(() => null);
+        if (booking) return reply.type("text/html; charset=utf-8").header("Cache-Control", "no-cache").send(booking);
         return reply.sendFile("index.html");
       }
       return reply.code(404).send({ error: "não encontrado" });

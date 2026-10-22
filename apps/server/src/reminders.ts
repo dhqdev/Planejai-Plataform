@@ -33,6 +33,10 @@ export async function createReminder(opts: {
   eventAt?: Date | null;
   tag?: string | null;
   color?: string | null;
+  /** duração do compromisso na agenda (sem valor, 1 h) */
+  eventMinutes?: number | null;
+  /** agendamento pelo link público: não conta no limite de lembretes ativos (uma agenda cheia de clientes passa de 30) */
+  skipLimit?: boolean;
 }) {
   if (!opts.dueAt && !opts.cron) throw new Error("Informe due_at ou cron");
   if (opts.cron) {
@@ -43,10 +47,10 @@ export async function createReminder(opts: {
   const first = opts.dueAt ?? nextCronDate(opts.cron!, opts.timezone);
   if (first.getTime() < Date.now() - 60_000) throw new Error(`O horário ${formatLocal(first, opts.timezone)} já passou`);
   const active = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM reminders WHERE user_id = $1 AND status = 'scheduled'", [opts.userId]);
-  if ((active?.n ?? 0) >= MAX_ACTIVE_REMINDERS) throw new Error(`Já são ${MAX_ACTIVE_REMINDERS} lembretes ativos. Peça para cancelar algum antes de criar outro.`);
+  if (!opts.skipLimit && (active?.n ?? 0) >= MAX_ACTIVE_REMINDERS) throw new Error(`Já são ${MAX_ACTIVE_REMINDERS} lembretes ativos. Peça para cancelar algum antes de criar outro.`);
   const row = await one<{ id: string }>(
-    `INSERT INTO reminders (user_id, conversation_id, intent, due_at, cron, timezone, title, event_at, tag, color)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+    `INSERT INTO reminders (user_id, conversation_id, intent, due_at, cron, timezone, title, event_at, tag, color, event_minutes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
     [
       opts.userId,
       opts.conversationId,
@@ -58,6 +62,7 @@ export async function createReminder(opts: {
       opts.cron ? null : opts.eventAt ?? null,
       opts.tag ?? null,
       opts.color ?? null,
+      opts.eventMinutes ?? null,
     ],
   );
   await enqueue(row!.id, first);
@@ -74,6 +79,8 @@ export async function cancelReminder(id: string, userId?: string) {
   if (!r) return false;
   if (r.job_id) await (await getBoss()).cancel(QUEUES.reminder, r.job_id).catch(() => {});
   await quietly(unsyncReminder(r));
+  // agendamento pelo link público: o cliente fica sabendo que foi desmarcado
+  await quietly(import("./booking.js").then((m) => m.onReminderCancelled(id)));
   return true;
 }
 
@@ -106,6 +113,8 @@ export async function retimeReminder(id: string, userId: string | undefined, ch:
   const eventAt = lead > 0 ? event : null;
   await query("UPDATE reminders SET event_at = $2 WHERE id = $1", [id, eventAt]);
   await quietly(syncReminder(id));
+  // agendamento pelo link público: o horário do cliente anda junto e ele é avisado
+  await quietly(import("./booking.js").then((m) => m.onReminderMoved(id, event)));
   return { eventAt: eventAt ?? due, dueAt: due, beforeMin: eventAt ? Math.round((eventAt.getTime() - due.getTime()) / 60_000) : 0 };
 }
 
@@ -136,7 +145,7 @@ export async function updateReminderLook(id: string, userId: string, look: { tit
  */
 export async function reminderOccurrences(from: Date, to: Date, userId?: string | null) {
   const rows = await many(
-    `SELECT r.id, r.intent, r.title, r.tag, r.color, r.due_at, r.event_at, r.cron, r.timezone, u.name AS user_name, u.phone
+    `SELECT r.id, r.intent, r.title, r.tag, r.color, r.due_at, r.event_at, r.event_minutes, r.cron, r.timezone, u.name AS user_name, u.phone
        FROM reminders r JOIN users u ON u.id = r.user_id
       WHERE r.status = 'scheduled' AND ($1::uuid IS NULL OR r.user_id = $1)
         AND (r.cron IS NOT NULL OR COALESCE(r.event_at, r.due_at) BETWEEN $2 AND $3)`,
@@ -167,10 +176,11 @@ export async function reminderOccurrences(from: Date, to: Date, userId?: string 
       person: r.user_name ?? (r.phone ? `+${r.phone}` : null),
     };
     if (!r.cron) {
-      // compromisso: o bloco fica no horário dele (1h) e o aviso aparece no detalhe
+      // compromisso: o bloco fica no horário dele (1h, ou a duração do agendamento) e o aviso aparece no detalhe
       if (r.event_at) {
         const s = new Date(r.event_at);
-        out.push({ ...base, id: r.id, start: s.toISOString(), end: new Date(s.getTime() + 3600_000).toISOString(), remindAt: new Date(r.due_at).toISOString() });
+        const end = new Date(s.getTime() + (r.event_minutes ?? 60) * 60_000);
+        out.push({ ...base, id: r.id, start: s.toISOString(), end: end.toISOString(), remindAt: new Date(r.due_at).toISOString() });
       } else out.push({ ...base, id: r.id, start: new Date(r.due_at).toISOString() });
       continue;
     }

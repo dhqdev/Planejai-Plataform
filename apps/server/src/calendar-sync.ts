@@ -12,7 +12,7 @@ const CAL = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 const gone = (err: unknown) => /Google API (404|410)/.test(String((err as Error)?.message ?? err));
 
 /** Roda com a conta Google da pessoa (o dono usa a da plataforma); sem Google conectado devolve null. */
-async function withGoogle<T>(userId: string, fn: () => Promise<T>): Promise<T | null> {
+export async function withGoogle<T>(userId: string, fn: () => Promise<T>): Promise<T | null> {
   const u = await one<{ phone: string }>("SELECT phone FROM users WHERE id = $1", [userId]);
   if (!u) return null;
   const { isOwner } = await import("./ingest.js");
@@ -26,6 +26,7 @@ interface Row {
   title: string | null;
   due_at: Date;
   event_at: Date | null;
+  event_minutes: number | null;
   timezone: string;
   cron: string | null;
   status: string;
@@ -34,8 +35,8 @@ interface Row {
 
 function eventBody(r: Row) {
   const start = new Date(r.event_at ?? r.due_at);
-  // compromisso ocupa 1h, como no calendário do painel; aviso simples, 30 min
-  const end = new Date(start.getTime() + (r.event_at ? 60 : 30) * 60_000);
+  // compromisso ocupa 1h (ou a duração do agendamento), como no calendário do painel; aviso simples, 30 min
+  const end = new Date(start.getTime() + (r.event_at ? (r.event_minutes ?? 60) : 30) * 60_000);
   const intent = r.intent.replace(/\s*\(criado pelo painel\)$/, "");
   return {
     summary: (r.title || intent).slice(0, 120),
@@ -51,7 +52,7 @@ const send = (url: string, method: string, body?: unknown) =>
 
 /** Cria ou atualiza no Google o evento de um lembrete único agendado. */
 export async function syncReminder(id: string) {
-  const r = await one<Row>("SELECT id, user_id, intent, title, due_at, event_at, timezone, cron, status, google_event_id FROM reminders WHERE id = $1", [id]);
+  const r = await one<Row>("SELECT id, user_id, intent, title, due_at, event_at, event_minutes, timezone, cron, status, google_event_id FROM reminders WHERE id = $1", [id]);
   if (!r || r.cron || r.status !== "scheduled") return null;
   return withGoogle(r.user_id, async () => {
     const body = eventBody(r);

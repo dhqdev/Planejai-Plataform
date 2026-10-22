@@ -6,6 +6,7 @@ import { googleApi } from "../../../integrations/google.js";
 import { asPerson } from "../../../integrations/person.js";
 import { isConnected } from "../../../integrations/registry.js";
 import { isColor, listTags, resolveTag } from "../../../agenda-tags.js";
+import { cancelByOwner, ensurePage, LEAD_CHOICES, listBookings, pageUrl, savePage } from "../../../booking.js";
 import { cancelReminder, createReminder, listReminders, reminderOccurrences, retimeReminder, updateReminderLook } from "../../../reminders.js";
 import { NOBODY, personalUsers, selfUserId, sharedWithMe } from "../../../sharing.js";
 import { parseLocalDateTime } from "../../../time.js";
@@ -87,6 +88,28 @@ export function agendaRoutes(base: FastifyInstance) {
     }
   });
 
+  // ---------- Link público de agendamento (bio do Instagram): configuração e os horários marcados ----------
+  base.get("/api/booking", async (req, reply) => {
+    const uid = await selfUserId(req.account);
+    if (!uid) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil para ter um link de agendamento" });
+    const page = await ensurePage(uid);
+    const google = await asPerson({ userId: uid, owner: req.account.owner }, () => isConnected("google")).catch(() => false);
+    return { page, url: pageUrl(page.slug), base: pageUrl(""), google, leads: LEAD_CHOICES, bookings: await listBookings(uid) };
+  });
+  base.put<{ Body: Record<string, unknown> }>("/api/booking", async (req, reply) => {
+    const uid = await selfUserId(req.account);
+    if (!uid) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil para ter um link de agendamento" });
+    try {
+      const page = await savePage(uid, req.body ?? {});
+      return { page, url: pageUrl(page.slug) };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+  base.delete<{ Params: { id: string } }>("/api/booking/bookings/:id", async (req, reply) =>
+    (await cancelByOwner(await self(req.account), req.params.id)) ? { ok: true } : reply.code(404).send({ error: "Esse horário já foi desmarcado" }),
+  );
+
   // ---------- Agenda (calendário): lembretes + Google Agenda conectado (de cada um, só na própria agenda) ----------
   base.get<{ Querystring: { from?: string; to?: string; user?: string } }>("/api/calendar", async (req, reply) => {
     const from = new Date(req.query.from ?? "");
@@ -115,6 +138,28 @@ export function agendaRoutes(base: FastifyInstance) {
       }
     }
 
+    // agendamento pelo link cujo aviso já saiu (o lembrete some depois de avisar): continua no calendário, só para ver
+    for (const uid of uids) {
+      const rows = await many(
+        `SELECT id, service, minutes, start_at, end_at, client_name, client_phone, client_email, note FROM bookings
+          WHERE user_id = $1 AND status = 'confirmado' AND reminder_id IS NULL AND start_at < $3 AND end_at > $2 ORDER BY start_at LIMIT 200`,
+        [uid, from, to],
+      );
+      for (const b of rows)
+        events.push({
+          id: `b:${b.id}`,
+          kind: "reminder",
+          title: `${b.client_name} · ${b.service}`,
+          intent: `Agendamento pelo link: ${b.service} com ${b.client_name} (WhatsApp +${b.client_phone}${b.client_email ? `, e-mail ${b.client_email}` : ""})${b.note ? `. Recado: ${b.note}` : ""}`,
+          start: new Date(b.start_at).toISOString(),
+          end: new Date(b.end_at).toISOString(),
+          tag: "Agendamento",
+          color: "#5b45e8",
+          ownerId: uid,
+          ownerName: uid === me ? undefined : (nameMap.get(uid) ?? undefined),
+        });
+    }
+
     // Google Agenda só na própria agenda: o dono vê a da plataforma, o cliente a que ele conectou em Minha conta
     const person = { userId: me, owner: req.account.owner };
     if (uids.includes(me) && (await asPerson(person, () => isConnected("google")).catch(() => false))) {
@@ -123,8 +168,11 @@ export function agendaRoutes(base: FastifyInstance) {
         const j = await asPerson(person, () => googleApi(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`));
         // evento que o próprio Planejai mandou para o Google já aparece como lembrete: não duplica
         const mirrored = new Set(events.map((e) => e.reminderId));
+        // agendamento cujo aviso já saiu: o evento do Google ficou, mas o lembrete não existe mais
+        const booked = new Set(events.filter((e) => String(e.id).startsWith("b:")).map((e) => `${e.title}|${e.start}`));
         for (const e of j.items ?? []) {
           if (mirrored.has(e.extendedProperties?.private?.planejai)) continue;
+          if (e.extendedProperties?.private?.planejai && e.start?.dateTime && booked.has(`${e.summary}|${new Date(e.start.dateTime).toISOString()}`)) continue;
           const allDay = !e.start?.dateTime;
           events.push({
             id: `g:${e.id}`,
