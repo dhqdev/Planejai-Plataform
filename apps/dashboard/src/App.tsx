@@ -19,6 +19,7 @@ import { PullToRefresh } from "./PullToRefresh";
 import { useInstallAction } from "./Install";
 import { haptic, isStandalone } from "./touch";
 import { applyUpdate, onUpdateAvailable } from "./update";
+import { liquidGlass } from "./vidro-liquido";
 import "./styles/impersonacao.css";
 
 // Cada tela é um pedaço à parte: baixa só quando abre (o app inicia leve no celular)
@@ -644,7 +645,7 @@ export function App() {
       )}
 
       <nav className="tabbar" aria-label="Navegação">
-        <div className="tabbar-pill" style={{ ["--i" as any]: tabIndex }}>
+        <div className="tabbar-pill" ref={liquidGlass} style={{ ["--i" as any]: tabIndex }}>
           {/* fundo que desliza até a aba ativa */}
           <span className="tab-glider" aria-hidden />
           <div className="tabbar-scroll" ref={tabsRef}>

@@ -1,0 +1,20 @@
+/* ---------- Lente do vidro líquido (vidro-liquido.ts; pedido do David, 2026-10-22) ----------
+   A luz calculada (brilho, Fresnel e fio da borda) vem numa imagem por cima da peça, em todo navegador.
+   No Chrome/Android o fundo que passa atrás ainda refrata na borda (filtro SVG no backdrop-filter); com a
+   lente o desfoque cai, para a curva do vidro aparecer. iPhone segue com o desfoque de styles/vidro.css.
+   A lente vem antes do desfoque: depois dele o Chrome desloca o mapa (a borda do desfoque muda a origem). */
+:where(.lg-lens) { position: relative; }
+.lg-lens::after {
+  content: ""; position: absolute; inset: 0; z-index: 4; border-radius: inherit; pointer-events: none;
+  background: var(--lg-light) center / 100% 100% no-repeat;
+}
+@media (max-width: 767px) {
+  :root .tabbar-pill.lg-refract { backdrop-filter: var(--lg-refract) blur(4px) saturate(210%) brightness(1.04); }
+  :root[data-theme="dark"] .tabbar-pill.lg-refract { backdrop-filter: var(--lg-refract) blur(4px) saturate(230%) brightness(1.15); }
+}
+:root .hc-composer.lg-refract { backdrop-filter: var(--lg-refract) blur(10px) saturate(180%); }
+:root .hc-icon.lg-refract:not(.ghost), :root .hc-top .icon-btn.lg-refract { backdrop-filter: var(--lg-refract) blur(3px) saturate(180%); }
+:root[data-theme="dark"] .hc-composer.lg-refract { backdrop-filter: var(--lg-refract) blur(10px) saturate(230%) brightness(1.08); }
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .lg-lens::after { display: none; }
+}

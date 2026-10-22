@@ -12,6 +12,7 @@ import { haptic } from "../touch";
 import { useKeyboardShell } from "../teclado";
 import { ChatCard, type ChatCardData } from "./ChatCards";
 import { InviteForm } from "./Invites";
+import { liquidGlass } from "../vidro-liquido";
 import "../styles/chat-inicio.css";
 
 /**
@@ -690,7 +691,7 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
   const page = (
     <div className={`hc${wide ? " hc-wide" : ""}`} ref={root}>
       <header className="hc-top">
-        <button className="hc-icon" aria-label="Ver painel" title="Ver painel" onClick={() => { haptic(); nav(wide ? "/" : "/?painel=1"); }}>
+        <button className="hc-icon" ref={liquidGlass} aria-label="Ver painel" title="Ver painel" onClick={() => { haptic(); nav(wide ? "/" : "/?painel=1"); }}>
           <Icon name="layout" size={20} />
         </button>
         <div className="hc-crew">
@@ -719,7 +720,7 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
         {wide ? (
           <span />
         ) : (
-          <button className="hc-icon" aria-label="Convidar alguém" title="Convidar alguém" onClick={() => { haptic(); setInviting(true); }}>
+          <button className="hc-icon" ref={liquidGlass} aria-label="Convidar alguém" title="Convidar alguém" onClick={() => { haptic(); setInviting(true); }}>
             <Icon name="user-plus" size={20} />
           </button>
         )}
@@ -815,7 +816,7 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
             </div>
           )
         )}
-        <div className={`hc-composer${recorder.secs !== null ? " rec" : ""}`}>
+        <div className={`hc-composer${recorder.secs !== null ? " rec" : ""}`} ref={liquidGlass}>
           {recorder.secs !== null ? (
             <>
               <button className="hc-icon ghost" aria-label="Cancelar gravação" onClick={() => recorder.stop(true)}><Icon name="trash" size={20} /></button>
