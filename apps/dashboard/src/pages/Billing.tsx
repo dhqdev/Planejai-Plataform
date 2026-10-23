@@ -4,7 +4,7 @@ import { api, brl } from "../api";
 import { ErrorBox, Loading, Modal, confirmDialog } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
-import { grainUse, pct } from "../plano";
+import { grainUse, ownPayPath, pct } from "../plano";
 import { haptic } from "../touch";
 
 interface Plan {
@@ -67,13 +67,6 @@ interface Billing {
   };
 }
 
-/** 000.000.000-00 ou 00.000.000/0000-00 enquanto digita. */
-function maskDoc(v: string) {
-  const d = v.replace(/\D/g, "").slice(0, 14);
-  if (d.length <= 11) return d.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-  return d.replace(/^(\d{2})(\d)/, "$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\d{4})(\d{1,2})$/, "$1-$2");
-}
-
 const nf = new Intl.NumberFormat("pt-BR");
 const grainsText = (n: number) => `${nf.format(Math.max(0, Math.round(n)))} ${Math.round(n) === 1 ? "grão" : "grãos"}`;
 /** Dia de calendário (AAAA-MM-DD) como 07/10, sem mexer com fuso. */
@@ -84,24 +77,15 @@ const shortDate = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { d
 const ASAAS_MIN_CHARGE = 5;
 const NO_LINK = "O pedido foi registrado, mas o link de pagamento ainda não chegou. Atualize a página em instantes para pagar.";
 
-/**
- * Abre a página de pagamento numa aba nova. A aba é aberta no clique (senão o navegador bloqueia) e recebe o link depois.
- * Devolve false quando o link não veio (a aba é fechada e quem chamou avisa a pessoa).
- */
-async function payIn(run: () => Promise<string | null | undefined>) {
-  const tab = window.open("", "_blank");
-  // a página de pagamento não ganha acesso a esta aba
-  if (tab) tab.opener = null;
-  try {
-    const url = await run();
-    if (url && tab) tab.location.href = url;
-    else tab?.close();
-    return Boolean(url);
-  } catch (e) {
-    tab?.close();
-    throw e;
-  }
+/** Abre o pagamento: o nosso checkout aqui mesmo; link antigo do Asaas numa aba nova. */
+function goPay(url: string, nav: (to: string) => void) {
+  const path = ownPayPath(url);
+  if (path) nav(path);
+  else window.open(url, "_blank", "noopener,noreferrer");
 }
+
+/** Link de pagamento na tela: o nosso abre aqui mesmo, o antigo do Asaas numa aba nova. */
+const payAttrs = (url: string) => (ownPayPath(url) ? { href: ownPayPath(url)! } : { href: url, target: "_blank", rel: "noopener noreferrer" });
 
 /** Rola até os planos (no celular ficam embaixo da carteira; no notebook, ao lado). */
 function toPlans() {
@@ -135,12 +119,9 @@ function UsageDays({ ledger }: { ledger: { delta: number; reason: string; day: s
   );
 }
 
-type Checkout = { kind: "plan"; plan: Plan } | { kind: "pack"; pack: Pack };
-
-/** Plano e grãos: saldo, planos, pacotes avulsos, desconto por indicação e extrato. O pagamento acontece na página do Asaas. */
+/** Plano e grãos: saldo, planos, pacotes avulsos, desconto por indicação e extrato. O pagamento acontece no nosso checkout (pages/Checkout.tsx). */
 export function BillingPage() {
   const { data, error, reload } = useApi<Billing>("/api/billing");
-  const [checkout, setCheckout] = useState<Checkout | null>(null);
   const [ledger, setLedger] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const nav = useNavigate();
@@ -182,8 +163,9 @@ export function BillingPage() {
     setErr(null);
     try {
       if (up) {
-        const opened = await payIn(async () => (await api<{ invoiceUrl: string | null }>("/api/billing/change-plan", { method: "POST", json: { planId: plan.id } })).invoiceUrl);
-        if (!opened) setErr(NO_LINK);
+        const r = await api<{ invoiceUrl: string | null }>("/api/billing/change-plan", { method: "POST", json: { planId: plan.id } });
+        if (r.invoiceUrl) return goPay(r.invoiceUrl, nav);
+        setErr(NO_LINK);
       } else await api("/api/billing/change-plan", { method: "POST", json: { planId: plan.id } });
       await reload();
     } catch (e) {
@@ -316,7 +298,7 @@ export function BillingPage() {
               <ul className="grain-facts">
                 {sub.status === "overdue" && sub.invoiceUrl ? (
                   <li>
-                    <a className="btn btn-primary bill-cta" href={sub.invoiceUrl} target="_blank" rel="noopener noreferrer">Pagar a mensalidade</a>
+                    <a className="btn btn-primary bill-cta" {...payAttrs(sub.invoiceUrl)}>Pagar a mensalidade</a>
                   </li>
                 ) : (
                   <li>
@@ -355,14 +337,14 @@ export function BillingPage() {
                 )}
                 {sub.status === "trial" && sub.invoiceUrl && (
                   <li>
-                    <a className="btn btn-primary bill-cta" href={sub.invoiceUrl} target="_blank" rel="noopener noreferrer">Pagar a primeira mensalidade</a>
+                    <a className="btn btn-primary bill-cta" {...payAttrs(sub.invoiceUrl)}>Pagar a primeira mensalidade</a>
                   </li>
                 )}
               </ul>
             )}
             {live &&
               data.pending?.filter((p) => p.invoiceUrl).map((p) => (
-                <a key={p.invoiceUrl} className="grain-pending" href={p.invoiceUrl!} target="_blank" rel="noopener noreferrer">
+                <a key={p.invoiceUrl} className="grain-pending" {...payAttrs(p.invoiceUrl!)}>
                   {p.kind === "pack" ? `Pacote de ${grainsText(p.grains)}` : "Troca de plano"} esperando pagamento ({brl(p.value)})
                 </a>
               ))}
@@ -455,7 +437,7 @@ export function BillingPage() {
                       </ul>
                     )}
                     {!data.ready ? null : !sub ? (
-                      <button className={`btn ${p.highlight ? "btn-primary" : ""}`} onClick={() => setCheckout({ kind: "plan", plan: p })}>Assinar</button>
+                      <button className={`btn ${p.highlight ? "btn-primary" : ""}`} onClick={() => nav(`/pagar/plano/${encodeURIComponent(p.id)}`)}>Assinar</button>
                     ) : mine && !sub.nextPlan ? (
                       <button className="btn" disabled>Plano atual</button>
                     ) : (
@@ -473,7 +455,7 @@ export function BillingPage() {
                 <p className="muted grain-lead">Pacotes avulsos entram na hora em que o pagamento cai e não vencem.</p>
                 <div className="grain-packs">
                   {pricing.packs.map((p) => (
-                    <button key={p.id} className="grain-pack" disabled={!data.ready} onClick={() => setCheckout({ kind: "pack", pack: p })}>
+                    <button key={p.id} className="grain-pack" disabled={!data.ready} onClick={() => nav(`/pagar/pacote/${encodeURIComponent(p.id)}`)}>
                       <b>{grainsText(p.grains)}</b>
                       <span>{brl(p.price)}</span>
                     </button>
@@ -485,21 +467,6 @@ export function BillingPage() {
         )}
       </div>
 
-      {checkout && (
-        <CheckoutModal
-          checkout={checkout}
-          needsDoc={!data.hasCustomer}
-          savedCard={data.savedCard ?? null}
-          defaultName={data.name ?? ""}
-          price={checkout.kind === "plan" ? priceOf(checkout.plan) : checkout.pack.price}
-          onClose={() => setCheckout(null)}
-          onDone={async (message) => {
-            setCheckout(null);
-            setErr(message ?? null);
-            await reload();
-          }}
-        />
-      )}
       {ledger && data.ledger && (
         <Modal title="Extrato de grãos" onClose={() => setLedger(false)}>
           <ul className="grain-ledger">
@@ -520,114 +487,5 @@ export function BillingPage() {
         </Modal>
       )}
     </div>
-  );
-}
-
-/** Assinar um plano ou comprar um pacote: forma de pagamento e, na primeira vez, nome e CPF/CNPJ para o Asaas. */
-function CheckoutModal({ checkout, needsDoc, savedCard, defaultName, price, onClose, onDone }: { checkout: Checkout; needsDoc: boolean; savedCard: { brand: string | null; last4: string } | null; defaultName: string; price: number; onClose: () => void; onDone: (message?: string) => void }) {
-  const [method, setMethod] = useState<"card" | "pix">("card");
-  // pacote com cartão guardado: cobra na hora, sem abrir a página do Asaas
-  const [useSaved, setUseSaved] = useState(Boolean(savedCard) && checkout.kind === "pack");
-  const [name, setName] = useState(defaultName);
-  const [doc, setDoc] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const plan = checkout.kind === "plan" ? checkout.plan : null;
-
-  const submit = async () => {
-    setErr(null);
-    setBusy(true);
-    try {
-      if (useSaved && checkout.kind === "pack") {
-        haptic();
-        const r = await api<{ paid?: boolean; invoiceUrl: string | null }>("/api/billing/pack", { method: "POST", json: { packId: checkout.pack.id, savedCard: true } });
-        onDone(r.paid ? undefined : "O cartão está sendo conferido pelo Asaas. Os grãos entram assim que ele confirmar.");
-        return;
-      }
-      const who = needsDoc ? { name, cpfCnpj: doc } : {};
-      const opened = await payIn(async () =>
-        plan
-          ? (await api<{ invoiceUrl: string | null }>("/api/billing/subscribe", { method: "POST", json: { planId: plan.id, method, ...who } })).invoiceUrl
-          : (await api<{ invoiceUrl: string | null }>("/api/billing/pack", { method: "POST", json: { packId: checkout.kind === "pack" ? checkout.pack.id : "", ...who } })).invoiceUrl,
-      );
-      // a cobrança existe, só o link não veio: a tela avisa em vez de fechar calada
-      onDone(opened ? undefined : NO_LINK);
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal
-      title={plan ? `Assinar o ${plan.name}` : `Pacote de ${grainsText(checkout.kind === "pack" ? checkout.pack.grains : 0)}`}
-      onClose={onClose}
-      footer={(close) => (
-        <>
-          <button className="btn btn-ghost" onClick={close}>Voltar</button>
-          <button className="btn btn-primary" form="grain-checkout" disabled={busy}>{useSaved ? (busy ? "Cobrando no cartão…" : `Pagar ${brl(price)}`) : busy ? "Abrindo o pagamento…" : "Ir para o pagamento"}</button>
-        </>
-      )}
-    >
-      <form
-        id="grain-checkout"
-        className="grain-checkout"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit();
-        }}
-      >
-        <p className="grain-total">
-          <b>{brl(price)}</b>
-          <span>{plan ? `por mês, com ${grainsText(plan.grains)}` : "uma vez, os grãos não vencem"}</span>
-        </p>
-        {plan && (
-          <fieldset className="grain-methods">
-            <legend>Como prefere pagar?</legend>
-            <label className={method === "card" ? "on" : ""}>
-              <input type="radio" name="method" value="card" checked={method === "card"} onChange={() => setMethod("card")} />
-              <b>Cartão de crédito</b>
-              <span>Renova sozinho todo mês. O cartão fica com o Asaas, não com a gente.</span>
-            </label>
-            <label className={method === "pix" ? "on" : ""}>
-              <input type="radio" name="method" value="pix" checked={method === "pix"} onChange={() => setMethod("pix")} />
-              <b>Pix ou boleto</b>
-              <span>Você paga cada mês. Eu lembro antes de vencer.</span>
-            </label>
-          </fieldset>
-        )}
-        {!plan && savedCard && (
-          <fieldset className="grain-methods">
-            <legend>Como prefere pagar?</legend>
-            <label className={useSaved ? "on" : ""}>
-              <input type="radio" name="pack-method" checked={useSaved} onChange={() => setUseSaved(true)} />
-              <b>{savedCard.brand ?? "Cartão"} final {savedCard.last4}</b>
-              <span>O mesmo cartão do seu plano. Cobra agora e os grãos entram na hora.</span>
-            </label>
-            <label className={!useSaved ? "on" : ""}>
-              <input type="radio" name="pack-method" checked={!useSaved} onChange={() => setUseSaved(false)} />
-              <b>Outro jeito</b>
-              <span>Pix, boleto ou outro cartão, na página de pagamento do Asaas.</span>
-            </label>
-          </fieldset>
-        )}
-        {!plan && !savedCard && <p className="help">Pix, cartão ou boleto, na página de pagamento do Asaas.</p>}
-        {needsDoc && !useSaved && (
-          <>
-            <div className="field">
-              <label htmlFor="grain-name">Nome completo</label>
-              <input id="grain-name" className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} required />
-            </div>
-            <div className="field">
-              <label htmlFor="grain-doc">CPF ou CNPJ</label>
-              <input id="grain-doc" className="input" inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" value={doc} onChange={(e) => setDoc(maskDoc(e.target.value))} required />
-              <div className="help">Exigido pelo Asaas para emitir a cobrança. Não fica guardado no Planejai.</div>
-            </div>
-          </>
-        )}
-        {err && <ErrorBox error={err} />}
-      </form>
-    </Modal>
   );
 }

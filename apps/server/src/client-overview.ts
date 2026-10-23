@@ -2,6 +2,7 @@ import { getSubscription, hasPlan, savedCardOf } from "./billing.js";
 import { dailyBurn, grainsExempt, ledgerOf, planById, trialEndsAt } from "./credits.js";
 import { config } from "./config.js";
 import { many, one } from "./db/pool.js";
+import { isPayUrl } from "./paylink.js";
 import { INTEGRATIONS } from "./integrations/registry.js";
 import { getSettings } from "./settings.js";
 
@@ -76,7 +77,7 @@ export async function clientBilling(userId: string) {
           paidUntil: sub.paid_until,
           lastPaymentAt: sub.last_payment_at,
           since: (sub as { created_at?: string | Date }).created_at ?? null,
-          invoiceUrl: /^https:\/\/([a-z0-9-]+\.)*asaas\.com\//i.test(String(sub.invoice_url ?? "")) ? sub.invoice_url : null,
+          invoiceUrl: isPayUrl(sub.invoice_url) ? sub.invoice_url : null,
         }
       : null,
     packs: { count: packs?.n ?? 0, value: packs?.v ?? 0 },

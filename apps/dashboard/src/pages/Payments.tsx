@@ -83,7 +83,7 @@ export function PaymentsPage() {
         <div className="pay-alert">
           <span>{open.length === 1 ? "Uma cobrança está em aberto." : `${open.length} cobranças estão em aberto.`}</span>
           {open[0]!.invoiceUrl && (
-            <a className="btn btn-primary btn-sm" href={open[0]!.invoiceUrl} target="_blank" rel="noopener noreferrer">Pagar agora</a>
+            <a className="btn btn-primary btn-sm" href={open[0]!.invoiceUrl}>Pagar agora</a>
           )}
         </div>
       )}
@@ -113,7 +113,7 @@ export function PaymentsPage() {
               <b className="pay-value">{brl(p.value)}</b>
               <span className="pay-act">
                 {p.open && p.invoiceUrl ? (
-                  <a href={p.invoiceUrl} target="_blank" rel="noopener noreferrer">Pagar</a>
+                  <a href={p.invoiceUrl}>Pagar</a>
                 ) : p.receiptUrl ? (
                   <a href={p.receiptUrl} target="_blank" rel="noopener noreferrer">Comprovante</a>
                 ) : p.invoiceUrl ? (

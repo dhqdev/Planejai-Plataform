@@ -31,3 +31,14 @@ export function grainUse(b: BillingLite | null | undefined): GrainUse | null {
 
 /** 40,4% → "40%"; abaixo de 1% mostra uma casa. */
 export const pct = (v: number) => `${(v * 100 < 1 && v > 0 ? (v * 100).toFixed(1) : Math.round(v * 100)).toString().replace(".", ",")}%`;
+
+/** Link de pagamento do nosso checkout (/pagar/...): devolve o caminho para abrir aqui mesmo; página do Asaas dá null. */
+export function ownPayPath(url: string | null | undefined) {
+  if (!url) return null;
+  try {
+    const u = new URL(url, location.origin);
+    return u.pathname.startsWith("/pagar/") ? u.pathname : null;
+  } catch {
+    return null;
+  }
+}

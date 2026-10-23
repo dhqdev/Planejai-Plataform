@@ -17,10 +17,12 @@ import {
   subscribe,
   withDiscount,
 } from "../../../billing.js";
+import { CheckoutError, cardCharge, cardRefusal, checkoutCard, checkoutItem, payerOf } from "../../../checkout.js";
 import { config } from "../../../config.js";
 import { creditGrains, dailyBurn, ensureWallet, grainsExempt, hasPaid, ledgerOf, planById } from "../../../credits.js";
 import { many, one, query } from "../../../db/pool.js";
 import { isConnected } from "../../../integrations/registry.js";
+import { payToken } from "../../../paylink.js";
 import { getSettings } from "../../../settings.js";
 import { isUuid } from "./shared.js";
 
@@ -157,6 +159,71 @@ export function billingRoutes(base: FastifyInstance) {
       return fail(reply, err);
     }
   });
+
+  // checkout próprio (pages/Checkout.tsx): o que está sendo comprado e quem precisa preencher nome e CPF
+  base.get<{ Querystring: { kind?: string; id?: string } }>("/api/checkout/item", async (req, reply) => {
+    const user = await me(req);
+    if (!user) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil antes de assinar." });
+    try {
+      const s = await getSettings();
+      const kind = req.query.kind === "plan" ? "plan" : "pack";
+      const [sub, referral] = await Promise.all([getSubscription(user.id), referralDiscount(user.id, s)]);
+      if (kind === "plan" && hasPlan(sub) && (sub.last_payment_at || sub.status === "active")) return reply.code(409).send({ error: "Você já tem um plano. Para trocar, use Meu plano." });
+      const item = await checkoutItem(kind, String(req.query.id ?? ""), kind === "plan" ? referral.percent : 0);
+      return {
+        ...item,
+        ready: await isConnected("asaas"),
+        needsDoc: !sub?.asaas_customer_id,
+        name: user.full_name ?? user.name ?? "",
+        email: user.email ?? req.account.email ?? "",
+        // pacote com o cartão que já pagou: um toque
+        savedCard: kind === "pack" ? savedCardOf(sub) : null,
+      };
+    } catch (err) {
+      if (err instanceof CheckoutError) return reply.code(err.status).send({ error: err.message });
+      return fail(reply, err);
+    }
+  });
+
+  /**
+   * Começa o pagamento no checkout. Pix ou boleto: cria a cobrança (assinatura ou pacote) e devolve o token dela, que a
+   * tela usa para mostrar o QR ou o boleto. Cartão: plano assina já no cartão (renova sozinho); pacote cobra na hora.
+   */
+  base.post<{ Body: { kind?: string; id?: string; method?: string; name?: string; cpfCnpj?: string; card?: Record<string, string>; savedCard?: boolean } }>(
+    "/api/checkout/start",
+    async (req, reply) => {
+      const user = await me(req);
+      if (!user) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil antes de assinar." });
+      const b = req.body ?? {};
+      const id = String(b.id ?? "");
+      const email = user.email ?? req.account.email;
+      const card = b.method === "card";
+      try {
+        if (b.kind === "plan") {
+          const charge = card ? cardCharge({ ...b.card, email: b.card?.email || email }, { email, phone: user.phone }, req.ip) : undefined;
+          const sub = await subscribe(user, { planId: id, method: card ? "card" : "pix", name: b.name, cpfCnpj: b.cpfCnpj, email, card: charge }).catch((err: Error) => {
+            throw card && !(err instanceof CheckoutError) && !/nome completo|CPF ou CNPJ|já tem um plano|não encontrado|não está ligada/i.test(err.message) ? new CheckoutError(cardRefusal(err)) : err;
+          });
+          return { ok: true, paid: sub.paid, token: sub.payment_id ? payToken(sub.payment_id) : null };
+        }
+        if (b.savedCard) {
+          const p = await buyPack(user, id, { savedCard: true, remoteIp: req.ip });
+          return { ok: true, paid: p.status === "paid", token: p.asaas_payment_id ? payToken(p.asaas_payment_id) : null };
+        }
+        // cartão de pacote: confere o cartão antes de criar a cobrança, para erro de digitação não deixar cobrança aberta
+        if (card) cardCharge({ ...b.card, email: b.card?.email || email }, (await payerOf(user.id)) ?? {}, req.ip);
+        const p = await buyPack(user, id, { name: b.name, cpfCnpj: b.cpfCnpj, email });
+        if (!p.asaas_payment_id) return reply.code(400).send({ error: "O Asaas não criou a cobrança. Tente de novo." });
+        const token = payToken(p.asaas_payment_id);
+        if (!card) return { ok: true, paid: false, token };
+        const r = await checkoutCard(token, { ...b.card, email: b.card?.email || email }, req.ip);
+        return { ok: true, paid: r.paid, token };
+      } catch (err) {
+        if (err instanceof CheckoutError) return reply.code(err.status).send({ error: err.message });
+        return fail(reply, err);
+      }
+    },
+  );
 
   base.delete("/api/billing/card", async (req, reply) => {
     const uid = req.account.userId;

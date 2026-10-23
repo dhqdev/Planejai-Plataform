@@ -74,6 +74,8 @@ const PrivacyPage = page(() => import("./pages/Privacy").then((m) => m.PrivacyPa
 /** Link público de agendamento (/agendar/<slug> e /agendar/horario/<token>): sempre sem a moldura do app. */
 const AgendarPage = page(() => import("./pages/Agendar").then((m) => m.AgendarPage));
 const MeuHorarioPage = page(() => import("./pages/Agendar").then((m) => m.MeuHorarioPage));
+/** Checkout próprio: /pagar/<token> abre sem login (link do WhatsApp); /pagar/plano|pacote/<id> pede login. */
+const CheckoutPage = page(() => import("./pages/Checkout").then((m) => m.CheckoutPage));
 const OnboardingFlow = page(() => import("./pages/Onboarding").then((m) => m.OnboardingFlow));
 
 function PageUnavailable() {
@@ -477,6 +479,9 @@ export function App() {
         {agendar[1] ? <MeuHorarioPage token={decodeURIComponent(agendar[2]!)} /> : <AgendarPage slug={decodeURIComponent(agendar[2]!)} />}
       </Suspense>
     );
+  // checkout de uma cobrança que já existe: o link vai no WhatsApp e abre sem login
+  const payToken = loc.pathname.match(/^\/pagar\/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\/?$/);
+  if (payToken) return <Suspense fallback={<BlockLoader />}><CheckoutPage token={payToken[1]!} /></Suspense>;
   // página de preços: aberta pelo "Planos" da landing, com ou sem login
   if (loc.pathname === "/precos") return <Suspense fallback={<BlockLoader />}><Pricing /></Suspense>;
   // sem login o blog abre sozinho; logado, ele abre dentro da moldura do app (rota /blog/* mais abaixo)
@@ -484,6 +489,9 @@ export function App() {
   if (me === undefined) return <BlockLoader />;
   if (!me && loc.pathname === "/" && !isStandalone()) return <Suspense fallback={<BlockLoader />}><Landing /></Suspense>;
   if (!me) return <Suspense fallback={<BlockLoader />}><AuthPage onLogin={setMe} /></Suspense>;
+  // assinar um plano ou comprar um pacote no nosso checkout (sem a moldura do app)
+  const buy = loc.pathname.match(/^\/pagar\/(plano|pacote)\/([^/]+)\/?$/);
+  if (buy) return <Suspense fallback={<BlockLoader />}><CheckoutPage key={loc.pathname} kind={buy[1] === "plano" ? "plan" : "pack"} id={decodeURIComponent(buy[2]!)} /></Suspense>;
 
   // Plataforma (só o super admin) vai para a barra de cima; Avisos e Minha conta descem para o pé do trilho
   const platform = sectionsOf(NAV).find((sec) => sec.title === "Plataforma")?.items ?? [];

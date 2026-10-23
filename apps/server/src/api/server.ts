@@ -24,6 +24,7 @@ import { registerInternalRoutes } from "./routes/internal.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { blogPage, registerBlogRoutes } from "./routes/blog.js";
 import { bookingPageHtml, registerBookingRoutes } from "./routes/booking.js";
+import { registerCheckoutRoutes } from "./routes/checkout.js";
 import { registerSecurity, trustProxySetting } from "./security.js";
 import { DEVICE_COOKIE, isTrustedDevice, startChallenge, startReset, startSignupChallenge, trustDevice, verifyChallenge, verifyReset, verifySignup, whatsappReady } from "../logincode.js";
 import { emailFields, emitEvent } from "../events.js";
@@ -380,6 +381,7 @@ export async function buildServer() {
   await registerNotificationRoutes(app);
   await registerBlogRoutes(app);
   await registerBookingRoutes(app);
+  await registerCheckoutRoutes(app);
 
   // Dashboard (SPA) servido pelo mesmo container
   if (existsSync(publicDir)) {

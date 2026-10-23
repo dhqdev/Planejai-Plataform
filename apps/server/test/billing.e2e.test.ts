@@ -65,6 +65,7 @@ const enabled = Boolean(process.env.TEST_DATABASE_URL);
 describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
   let db: typeof import("../src/db/pool.js");
   let billing: typeof import("../src/billing.js");
+  let payLink: (id: string) => string;
   let credits: typeof import("../src/credits.js");
   let settings: typeof import("../src/settings.js");
   let user: any;
@@ -122,6 +123,7 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     await db.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
     await (await import("../src/db/migrate.js")).migrate(() => {});
     billing = await import("../src/billing.js");
+    payLink = (await import("../src/paylink.js")).payLink;
     credits = await import("../src/credits.js");
     settings = await import("../src/settings.js");
     const { saveCredentials } = await import("../src/integrations/registry.js");
@@ -313,7 +315,7 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     const sub = await billing.subscribe(user, { planId: "dia-a-dia", method: "card" });
     expect(asaasCalls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /subscriptions", "GET /subscriptions/sub_1/payments"]);
     expect(asaasCalls[0]!.body).toMatchObject({ customer: "cus_1", billingType: "CREDIT_CARD", cycle: "MONTHLY", value: 39.9, description: "Planejai Dia a dia (5.500 grãos por mês)" });
-    expect(sub).toMatchObject({ status: "trial", plan_id: "dia-a-dia", pay_method: "card", invoice_url: "https://sandbox.asaas.com/i/pay_1" });
+    expect(sub).toMatchObject({ status: "trial", plan_id: "dia-a-dia", pay_method: "card", invoice_url: payLink("pay_1") });
 
     const due = new Date().toISOString().slice(0, 10);
     const card = { creditCardNumber: "4242", creditCardBrand: "VISA" };
@@ -369,22 +371,22 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     const row = () => db.one("SELECT status, invoice_url, to_char(paid_until, 'YYYY-MM-DD') AS paid_until FROM subscriptions WHERE user_id = $1", [user.id]);
     await hook({ id: "l1", event: "PAYMENT_CREATED", payment: { id: "pay_4", subscription: "sub_1", status: "PENDING", value: 19.9, dueDate: d1, invoiceUrl: "https://sandbox.asaas.com/i/pay_4" } });
     await hook({ id: "l2", event: "PAYMENT_OVERDUE", payment: { id: "pay_4", subscription: "sub_1", status: "OVERDUE", value: 19.9, dueDate: d1, invoiceUrl: "https://sandbox.asaas.com/i/pay_4" } });
-    expect(await row()).toEqual({ status: "overdue", invoice_url: "https://sandbox.asaas.com/i/pay_4", paid_until: d1 });
+    expect(await row()).toEqual({ status: "overdue", invoice_url: payLink("pay_4"), paid_until: d1 });
     await db.query("UPDATE wallets SET plan_grains = 100 WHERE user_id = $1", [user.id]);
     // o cartão do mês passado liquida (RECEIVED) só agora: já foi creditado no CONFIRMED, nada muda
     expect((await hook({ id: "l3", event: "PAYMENT_RECEIVED", payment: { id: "pay_3", subscription: "sub_1", value: 19.9, billingType: "CREDIT_CARD" } })).json()).toMatchObject({ status: "overdue" });
-    expect(await row()).toEqual({ status: "overdue", invoice_url: "https://sandbox.asaas.com/i/pay_4", paid_until: d1 });
+    expect(await row()).toEqual({ status: "overdue", invoice_url: payLink("pay_4"), paid_until: d1 });
     expect((await wallet()).plan_grains).toBe(100);
     // a cobrança seguinte nasce antes de a atrasada ser paga: o link novo fica
     await hook({ id: "l4", event: "PAYMENT_CREATED", payment: { id: "pay_5", subscription: "sub_1", status: "PENDING", value: 19.9, dueDate: d2, invoiceUrl: "https://sandbox.asaas.com/i/pay_5" } });
     await hook({ id: "l5", event: "PAYMENT_RECEIVED", payment: { id: "pay_4", subscription: "sub_1", value: 19.9, dueDate: d1, billingType: "PIX", invoiceUrl: "https://sandbox.asaas.com/i/pay_4" } });
-    expect(await row()).toEqual({ status: "active", invoice_url: "https://sandbox.asaas.com/i/pay_5", paid_until: d2 });
+    expect(await row()).toEqual({ status: "active", invoice_url: payLink("pay_5"), paid_until: d2 });
     expect((await wallet()).plan_grains).toBe(2500);
     // mensalidade de um mês que já passou, paga agora: não volta a data nem recarrega de novo
     await db.query("UPDATE wallets SET plan_grains = 100 WHERE user_id = $1", [user.id]);
     const old = new Date(Date.now() - 40 * 86_400_000).toISOString().slice(0, 10);
     await hook({ id: "l6", event: "PAYMENT_RECEIVED", payment: { id: "pay_0", subscription: "sub_1", value: 19.9, dueDate: old, billingType: "PIX" } });
-    expect(await row()).toEqual({ status: "active", invoice_url: "https://sandbox.asaas.com/i/pay_5", paid_until: d2 });
+    expect(await row()).toEqual({ status: "active", invoice_url: payLink("pay_5"), paid_until: d2 });
     expect((await wallet()).plan_grains).toBe(100);
     await db.query("UPDATE wallets SET plan_grains = 2500 WHERE user_id = $1", [user.id]);
   });
@@ -448,7 +450,7 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     await db.query("DELETE FROM pgboss.job WHERE name = 'outbound.send'");
     asaasCalls.length = 0;
     const sub = await billing.subscribe(user, { planId: "leve", method: "pix" });
-    expect(sub).toMatchObject({ status: "trial", asaas_subscription_id: "sub_2", invoice_url: "https://sandbox.asaas.com/i/pay_sub_2", pay_method: "pix" });
+    expect(sub).toMatchObject({ status: "trial", asaas_subscription_id: "sub_2", invoice_url: payLink("pay_sub_2"), pay_method: "pix" });
     expect(await db.one("SELECT last_payment_at, last_billing_type, card_brand, card_last4, reminded_on FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({
       last_payment_at: null,
       last_billing_type: null,
@@ -460,20 +462,20 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     await hook({ id: "n1", event: "PAYMENT_OVERDUE", payment: { id: "pay_sub_2", subscription: "sub_2", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_sub_2" } });
     await hook({ id: "n2", event: "PAYMENT_OVERDUE", payment: { id: "pay_sub_2b", subscription: "sub_2", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_sub_2b" } });
     expect((await outbox()).filter((m: any) => /venceu/.test(m.text))).toHaveLength(1);
-    expect(await db.one("SELECT status, invoice_url FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ status: "overdue", invoice_url: "https://sandbox.asaas.com/i/pay_sub_2b" });
+    expect(await db.one("SELECT status, invoice_url FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ status: "overdue", invoice_url: payLink("pay_sub_2b") });
     // cartão recusado: avisa com o link para pagar de outro jeito, sem mudar a situação
     await hook({ id: "n2r", event: "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED", payment: { id: "pay_sub_2b", subscription: "sub_2", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_sub_2b" } });
     await hook({ id: "n2s", event: "PAYMENT_REPROVED_BY_RISK_ANALYSIS", payment: { id: "pay_sub_2b", subscription: "sub_2", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_sub_2b" } });
     const refused = (await outbox()).filter((m: any) => /cartão não passou/.test(m.text));
     expect(refused).toHaveLength(2);
-    expect(refused[0].text).toMatch(/Pix ou boleto aqui: https:\/\/sandbox.asaas.com\/i\/pay_sub_2b$/);
+    expect(refused[0].text).toMatch(new RegExp(`Pix ou boleto aqui: ${payLink("pay_sub_2b").replace(/[.]/g, "\\.")}$`));
     expect(await db.one("SELECT status FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ status: "overdue" });
     // nunca pagou: pode assinar de novo; a assinatura velha sai do Asaas (e o Asaas pode demorar um instante para gerar a cobrança)
     asaasCalls.length = 0;
     paymentsEmptyOnce = true;
     const again = await billing.subscribe(user, { planId: "dia-a-dia", method: "card" });
     expect(asaasCalls.map((c) => `${c.method} ${c.path}`)).toEqual(["DELETE /subscriptions/sub_2", "POST /subscriptions", "GET /subscriptions/sub_3/payments", "GET /subscriptions/sub_3/payments"]);
-    expect(again).toMatchObject({ status: "trial", asaas_subscription_id: "sub_3", plan_id: "dia-a-dia", invoice_url: "https://sandbox.asaas.com/i/pay_sub_3" });
+    expect(again).toMatchObject({ status: "trial", asaas_subscription_id: "sub_3", plan_id: "dia-a-dia", invoice_url: payLink("pay_sub_3") });
     // o Asaas avisa que apagou a velha: não é mais a nossa, nada muda
     expect((await hook({ id: "n3", event: "SUBSCRIPTION_DELETED", subscription: { id: "sub_2" } })).json()).toMatchObject({ handled: false });
     // depois de pagar a primeira, assinar de novo volta a ser recusado

@@ -6,6 +6,7 @@ import { many, one, query } from "./db/pool.js";
 import { isOwner } from "./ingest.js";
 import { getCredentials } from "./integrations/registry.js";
 import { notify } from "./notifications.js";
+import { linkFor, payLink } from "./paylink.js";
 import { PLAN_FEATURES } from "./plan-features.js";
 import { type AgentSettings, type BillingPlan, getSettings, perksOf } from "./settings.js";
 
@@ -19,9 +20,12 @@ import { type AgentSettings, type BillingPlan, getSettings, perksOf } from "./se
  * - Indicação: cada amigo convidado que paga um plano dá billingReferralStep% de desconto na mensalidade de quem convidou,
  *   até billingReferralMax%. O desconto acompanha: amigo que para de pagar tira a parte dele.
  *
- * Dados de cartão nunca passam por aqui: a pessoa paga na página do Asaas. Depois do primeiro pagamento no cartão o Asaas
- * devolve um token (creditCardToken); ele fica cifrado em subscriptions.saved_card_token e compra pacote com um toque. O CPF/CNPJ vai para o Asaas e não fica no nosso banco.
- * O Asaas avisa pelo webhook (/webhooks/asaas), que é quem credita os grãos.
+ * A pessoa paga no nosso checkout (/pagar/<token>, checkout.ts): Pix com QR, cartão ou boleto, tudo pela API do Asaas.
+ * Os dados do cartão passam pelo servidor só a caminho do Asaas e nunca são gravados nem logados. Depois do primeiro
+ * pagamento no cartão o Asaas devolve um token (creditCardToken); ele fica cifrado em subscriptions.saved_card_token e
+ * compra pacote com um toque. O CPF/CNPJ vai para o Asaas e não fica no nosso banco.
+ * O Asaas avisa pelo webhook (/webhooks/asaas), que é quem credita os grãos (o checkout também confere na hora e chama
+ * o mesmo handleAsaasEvent; o crédito entra uma vez só).
  */
 
 export type SubStatus = "trial" | "active" | "overdue" | "canceled";
@@ -191,8 +195,18 @@ async function ensureCustomer(user: any, input?: { name?: string; cpfCnpj?: stri
 
 export type PayMethod = "card" | "pix";
 
-/** Assina um plano. A primeira cobrança é hoje; os grãos do plano entram quando o Asaas confirmar o pagamento. */
-export async function subscribe(user: any, input: { planId: string; method?: PayMethod; name?: string; cpfCnpj?: string; email?: string | null }) {
+/** Cartão digitado no checkout: vai direto para o Asaas (nunca gravado). */
+export interface CardCharge {
+  creditCard: { holderName: string; number: string; expiryMonth: string; expiryYear: string; ccv: string };
+  creditCardHolderInfo: { name: string; email: string; cpfCnpj: string; postalCode: string; addressNumber: string; mobilePhone?: string };
+  remoteIp: string;
+}
+
+/**
+ * Assina um plano. A primeira cobrança é hoje; os grãos do plano entram quando o Asaas confirmar o pagamento.
+ * Com `card` (checkout no cartão) o Asaas cobra a primeira na hora e as próximas no mesmo cartão; passou, credita já.
+ */
+export async function subscribe(user: any, input: { planId: string; method?: PayMethod; name?: string; cpfCnpj?: string; email?: string | null; card?: CardCharge }) {
   const s = await getSettings();
   if (!s.billingEnabled) throw new Error("A cobrança ainda não está ligada.");
   const plan = planById(s, input.planId);
@@ -202,32 +216,47 @@ export async function subscribe(user: any, input: { planId: string; method?: Pay
   const unpaid = hasPlan(existing) && !existing.last_payment_at && (existing.status === "trial" || existing.status === "overdue");
   if (hasPlan(existing) && !unpaid) throw new Error("Você já tem um plano. Use a troca de plano.");
   const customerId = await ensureCustomer(user, input);
-  const method: PayMethod = input.method === "pix" ? "pix" : "card";
+  const method: PayMethod = input.card ? "card" : input.method === "pix" ? "pix" : "card";
   // a assinatura velha sai do Asaas antes, senão ele continua gerando uma cobrança vencida por mês
   if (unpaid) await deleteAsaasSubscription(existing.asaas_subscription_id!);
   const { percent } = await referralDiscount(user.id, s);
   const value = withDiscount(plan.price, percent);
   const created = await asaas("POST", "/subscriptions", {
     customer: customerId,
-    // cartão: a pessoa paga a primeira na página do Asaas e as próximas saem sozinhas no mesmo cartão
+    // cartão: a primeira sai agora (no checkout) e as próximas saem sozinhas no mesmo cartão
     billingType: method === "card" ? "CREDIT_CARD" : "UNDEFINED",
     value,
     nextDueDate: isoDay(new Date()),
     cycle: "MONTHLY",
     description: `Planejai ${plan.name} (${grains(plan.grains)} por mês)`,
     externalReference: user.id,
+    ...(input.card ?? {}),
   });
-  const first = await firstOpenPayment(String(created.id));
+  const first = input.card ? await firstPayment(String(created.id)) : await firstOpenPayment(String(created.id));
+  const paid = Boolean(first && PAID.has(`PAYMENT_${first.status}`));
   // assinatura nova começa do zero: nada do plano anterior (pagamento, cartão, lembrete) fica valendo
   const row = await one<SubscriptionRow>(
     `UPDATE subscriptions SET asaas_subscription_id = $2, status = 'trial', value = $3, base_value = $4, discount_percent = $5, plan_id = $6,
             next_plan_id = NULL, pay_method = $7, next_due_date = $8, invoice_url = $9, paid_until = NULL, last_payment_at = NULL,
             last_billing_type = NULL, card_brand = NULL, card_last4 = NULL, reminded_on = NULL, updated_at = now()
       WHERE user_id = $1 RETURNING ${SUB_COLS}`,
-    [user.id, String(created.id), value, plan.price, percent, plan.id, method, isoDay(new Date()), first?.invoiceUrl ?? null],
+    [user.id, String(created.id), value, plan.price, percent, plan.id, method, isoDay(new Date()), paid ? null : linkFor(first)],
   );
   await notify({ userId: null, kind: "assinatura", title: `${user.full_name ?? user.name ?? "+" + user.phone} assinou o plano ${plan.name}`, link: "/settings" });
-  return row!;
+  // cartão aprovado na hora: credita sem esperar o webhook (que depois encontra o pagamento já creditado)
+  if (paid) await handleAsaasEvent({ event: `PAYMENT_${first.status}`, payment: { ...first, subscription: String(created.id) } });
+  return { ...row!, payment_id: first?.id ? String(first.id) : null, paid };
+}
+
+/** Primeira cobrança da assinatura, em qualquer situação (no cartão ela já pode ter sido paga). */
+async function firstPayment(subscriptionId: string) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const list: any[] = (await asaas("GET", `/subscriptions/${subscriptionId}/payments`).catch(() => null))?.data ?? [];
+    const sorted = list.filter(Boolean).sort((a, b) => String(a.dueDate ?? "").localeCompare(String(b.dueDate ?? "")));
+    if (sorted[0]) return sorted[0];
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
+  }
+  return null;
 }
 
 /**
@@ -341,7 +370,7 @@ async function createCharge(user: any, customerId: string, item: { kind: "pack" 
     description: item.description,
     externalReference: `grains:${row.id}`,
   });
-  return one("UPDATE grain_purchases SET asaas_payment_id = $2, invoice_url = $3 WHERE id = $1 RETURNING *", [row.id, String(payment.id), payment.invoiceUrl ?? null]);
+  return one("UPDATE grain_purchases SET asaas_payment_id = $2, invoice_url = $3 WHERE id = $1 RETURNING *", [row.id, String(payment.id), linkFor(payment)]);
 }
 
 /**
@@ -404,9 +433,9 @@ async function chargeSavedCard(user: any, item: { kind: "pack"; itemId: string; 
     });
   } catch (err) {
     await query("UPDATE grain_purchases SET status = 'canceled' WHERE id = $1", [row.id]);
-    throw new Error(`O cartão ${card.brand ?? ""} final ${card.last4} não passou. Tente pela página de pagamento (Pix, boleto ou outro cartão).`.replace("  ", " "), { cause: err });
+    throw new Error(`O cartão ${card.brand ?? ""} final ${card.last4} não passou. Tente por Pix, boleto ou outro cartão.`.replace("  ", " "), { cause: err });
   }
-  const saved = await one("UPDATE grain_purchases SET asaas_payment_id = $2, invoice_url = $3 WHERE id = $1 RETURNING *", [row.id, String(payment.id), payment.invoiceUrl ?? null]);
+  const saved = await one("UPDATE grain_purchases SET asaas_payment_id = $2, invoice_url = $3 WHERE id = $1 RETURNING *", [row.id, String(payment.id), linkFor(payment)]);
   if (PAID.has(`PAYMENT_${String(payment.status ?? "")}`)) {
     await handleAsaasEvent({ event: "PAYMENT_CONFIRMED", payment: { ...payment, externalReference: `grains:${row.id}` } });
     return { ...saved, status: "paid", invoice_url: null };
@@ -468,7 +497,10 @@ export async function handleAsaasEvent(body: any): Promise<{ handled: boolean; s
   return r;
 }
 
-const PAID = new Set(["PAYMENT_CONFIRMED", "PAYMENT_RECEIVED", "PAYMENT_RECEIVED_IN_CASH"]);
+/** O link guardado é o desta cobrança (o nosso checkout ou, em cobrança antiga, a página do Asaas)? */
+const sameLink = (p: any, stored: string) => (p?.id && payLink(String(p.id)) === stored) || (p?.invoiceUrl && p.invoiceUrl === stored);
+
+export const PAID = new Set(["PAYMENT_CONFIRMED", "PAYMENT_RECEIVED", "PAYMENT_RECEIVED_IN_CASH"]);
 /** O cartão foi recusado (pela operadora ou pela análise de risco do Asaas): a cobrança segue aberta para pagar de outro jeito. */
 const CARD_REFUSED = new Set(["PAYMENT_CREDIT_CARD_CAPTURE_REFUSED", "PAYMENT_REPROVED_BY_RISK_ANALYSIS"]);
 
@@ -498,7 +530,7 @@ async function applyPurchaseEvent(event: string, p: any, purchase: any) {
     return { handled: true, status: "paid" };
   }
   if (CARD_REFUSED.has(event)) {
-    await tellPerson(purchase.user_id, BILLING_TEXT.cardRefused(p.invoiceUrl ?? purchase.invoice_url ?? billingLink()));
+    await tellPerson(purchase.user_id, BILLING_TEXT.cardRefused(linkFor(p) ?? purchase.invoice_url ?? billingLink()));
     return { handled: true, status: purchase.status };
   }
   if (event === "PAYMENT_OVERDUE" || event === "PAYMENT_DELETED") {
@@ -547,7 +579,7 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
     const plan = planById(s, planId);
     const card = p.creditCard ?? {};
     // o link guardado pode já ser o da cobrança seguinte (PAYMENT_CREATED chegou antes): só apaga o desta
-    const ownLink = !sub.invoice_url || !p.invoiceUrl || p.invoiceUrl === sub.invoice_url;
+    const ownLink = !sub.invoice_url || (!p.id && !p.invoiceUrl) || sameLink(p, sub.invoice_url);
     const r = await set(status, {
       paid_until: next,
       next_due_date: next,
@@ -571,8 +603,8 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
     return r;
   }
   if (CARD_REFUSED.has(event)) {
-    const link = p.invoiceUrl ?? sub.invoice_url ?? billingLink();
-    if (p.invoiceUrl) await query("UPDATE subscriptions SET invoice_url = $2, updated_at = now() WHERE user_id = $1", [sub.user_id, p.invoiceUrl]);
+    const link = linkFor(p) ?? sub.invoice_url ?? billingLink();
+    if (linkFor(p)) await query("UPDATE subscriptions SET invoice_url = $2, updated_at = now() WHERE user_id = $1", [sub.user_id, linkFor(p)]);
     await tellPerson(sub.user_id, BILLING_TEXT.cardRefused(link));
     return { handled: true, status: sub.status };
   }
@@ -582,11 +614,11 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
     case "PAYMENT_RESTORED":
       // a próxima cobrança do mês: guarda o link para a pessoa pagar
       if (p.status === "PENDING" || p.status === "OVERDUE") {
-        await query("UPDATE subscriptions SET invoice_url = $2, next_due_date = COALESCE($3, next_due_date), updated_at = now() WHERE user_id = $1", [sub.user_id, p.invoiceUrl ?? null, p.dueDate ?? null]);
+        await query("UPDATE subscriptions SET invoice_url = $2, next_due_date = COALESCE($3, next_due_date), updated_at = now() WHERE user_id = $1", [sub.user_id, linkFor(p), p.dueDate ?? null]);
       }
       return { handled: true, status: sub.status };
     case "PAYMENT_OVERDUE": {
-      const link = p.invoiceUrl ?? sub.invoice_url ?? billingLink();
+      const link = linkFor(p) ?? sub.invoice_url ?? billingLink();
       // nunca pagou nada e já foi avisada do atraso: o Asaas gera uma cobrança vencida por mês, mas o aviso sai uma vez só
       if (!sub.last_payment_at && sub.status === "overdue") return set("overdue", { invoice_url: link });
       const r = await set("overdue", { invoice_url: link });
@@ -597,7 +629,7 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
     }
     case "PAYMENT_DELETED":
       // cobrança apagada no Asaas: o link dela não serve mais
-      if (p.invoiceUrl && p.invoiceUrl === sub.invoice_url) await query("UPDATE subscriptions SET invoice_url = NULL, updated_at = now() WHERE user_id = $1", [sub.user_id]);
+      if (sub.invoice_url && sameLink(p, sub.invoice_url)) await query("UPDATE subscriptions SET invoice_url = NULL, updated_at = now() WHERE user_id = $1", [sub.user_id]);
       await notify({ userId: null, kind: "assinatura", title: "Cobrança apagada no Asaas", body: `${brl(value)}${p.dueDate ? `, vencimento ${ddmm(p.dueDate)}` : ""}.`, link: "/settings" });
       return { handled: true, status: sub.status };
     case "PAYMENT_REFUND_REQUESTED":
@@ -728,7 +760,7 @@ export async function billingOverview() {
   return { counts, mrr, packsMonth: packs?.v ?? 0, people };
 }
 
-const PAYMENT_STATUS: Record<string, string> = {
+export const PAYMENT_STATUS: Record<string, string> = {
   PENDING: "Aguardando pagamento",
   RECEIVED: "Pago",
   CONFIRMED: "Pago",
@@ -763,8 +795,8 @@ export async function paymentsOf(userId: string) {
         paid: ["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"].includes(status),
         open: status === "PENDING" || status === "OVERDUE",
         method: PAYMENT_METHOD[String(p.billingType ?? "")] ?? null,
-        // só links do próprio Asaas vão para a tela
-        invoiceUrl: /^https:\/\/([a-z0-9-]+\.)*asaas\.com\//i.test(String(p.invoiceUrl ?? "")) ? String(p.invoiceUrl) : null,
+        // em aberto: paga no nosso checkout
+        invoiceUrl: (status === "PENDING" || status === "OVERDUE") && p.id ? payLink(String(p.id)) : null,
         receiptUrl: /^https:\/\/([a-z0-9-]+\.)*asaas\.com\//i.test(String(p.transactionReceiptUrl ?? "")) ? String(p.transactionReceiptUrl) : null,
       };
     })

@@ -65,6 +65,8 @@ const P: Record<string, string> = {
   ticket: "M3 8a2 2 0 0 0 0 4v4h18v-4a2 2 0 0 0 0-4V4H3zM14 4v16",
   repeat: "M17 3l3 3-3 3M4 11V9a3 3 0 0 1 3-3h13M7 21l-3-3 3-3M20 13v2a3 3 0 0 1-3 3H4",
   receipt: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3",
+  // Pix: o losango com as pontas cortadas
+  pix: "M9.2 5.2l1.4-1.4a2 2 0 0 1 2.8 0l1.4 1.4M14.8 18.8l-1.4 1.4a2 2 0 0 1-2.8 0l-1.4-1.4M5.2 9.2L3.8 10.6a2 2 0 0 0 0 2.8l1.4 1.4M18.8 14.8l1.4-1.4a2 2 0 0 0 0-2.8l-1.4-1.4M7 7l3.6 3.6a2 2 0 0 0 2.8 0L17 7M7 17l3.6-3.6a2 2 0 0 1 2.8 0L17 17",
   plane: "M10 14 3 11l1-2 8 1 4-5a2 2 0 0 1 3 3l-5 4 1 8-2 1-3-7-3 3v2l-2 1-1-3-3-1 1-2h2z",
   briefcase: "M4 7h16v12H4zM9 7V5h6v2M4 12h16",
   trend: "M3 17l6-6 4 4 8-8M15 7h6v6",
