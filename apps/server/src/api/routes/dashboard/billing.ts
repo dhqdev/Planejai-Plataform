@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { planAccess } from "../../../plan-access.js";
 import {
   asaasMode,
   billingAccess,
@@ -73,8 +72,6 @@ export function billingRoutes(base: FastifyInstance) {
       wallet,
       burnPerDay: Math.round(burn),
       access: { allowed: access.allowed, state: access.state, until: access.state === "trial" ? access.until : null },
-      // o que o plano libera agora (plan-access.ts): básico = só gastos e agenda
-      features: await planAccess(user, s),
       // já pagou alguma vez: o menu mostra a aba Pagamentos
       paid,
       ledger,

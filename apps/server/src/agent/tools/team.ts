@@ -51,9 +51,6 @@ export const teamCreateAgent = defineTool<{
     const tools = pickTools(args.tools);
     const instructions = String(args.instructions ?? "").trim();
     if (!slug) return { ok: false, error: "Dê um nome ao agente" };
-    // agente sob medida é do Completo (plan-access.ts)
-    if (ctx.plan && ctx.plan !== "completo")
-      return { ok: false, error: "Agente sob medida é do plano Completo e o plano dela não inclui. Diga isso em uma frase gentil, com o link do plano, e atenda o pedido com o time de agora." };
     if (SPECIALISTS.some((s) => s.id === slug)) return { ok: false, error: `Já existe ${slug} no time fixo. Para ajustar como ele atende esta pessoa, use team_adjust_agent.` };
     if (!tools.length) return { ok: false, error: `Escolha ao menos uma ferramenta válida: ${TOOL_NAMES.join(", ")}` };
     if (instructions.length < 40) return { ok: false, error: "Instruções curtas demais: escreva o que a pessoa costuma querer e como atender" };

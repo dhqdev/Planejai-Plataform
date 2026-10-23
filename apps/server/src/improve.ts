@@ -6,7 +6,6 @@ import { chatCompletion } from "./llm/openrouter.js";
 import { resolveModel } from "./llm/router.js";
 import { MEMORY_CATEGORIES, normalizeCategory, rememberFact } from "./memories.js";
 import { notify } from "./notifications.js";
-import { planAccess } from "./plan-access.js";
 
 /**
  * Reunião noturna (19h): o CTO revisa o dia de cada cliente com o time e todo mundo melhora para ele.
@@ -194,10 +193,7 @@ export async function improveUser(userId: string): Promise<Result> {
     topics: [] as string[],
   };
   const active = (await one("SELECT COUNT(*)::int AS n FROM client_agents WHERE user_id = $1 AND active", [userId])).n as number;
-  // agente sob medida nasce só para quem tem o Completo (plan-access.ts)
-  const owner = await one("SELECT * FROM users WHERE id = $1", [userId]);
-  const canCreate = owner ? (await planAccess(owner)).customAgents : false;
-  for (const c of canCreate ? (plan.create ?? []).slice(0, 1) : []) {
+  for (const c of (plan.create ?? []).slice(0, 1)) {
     if (active + created >= MAX_AGENTS) break;
     const topic = await one("SELECT days FROM user_topics WHERE user_id = $1 AND topic = $2", [userId, String(c.topic ?? "").toLowerCase().trim()]);
     if (!topic || topic.days < MIN_DAYS) continue; // a IA não decide sozinha: o assunto tem que se repetir de verdade

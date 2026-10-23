@@ -32,8 +32,7 @@ export const makeAudio = defineTool<{ text?: string; brief?: string; caprichado?
       text = cut.slice(0, Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? ")) + 1) || cut;
     }
     const fundo = BACKGROUNDS.includes(args.fundo as Background) ? (args.fundo as Background) : undefined;
-    // voz caprichada (ElevenLabs) é do plano Completo (plan-access.ts)
-    const s = await synthesize(text, { caprichado: args.caprichado === true && (!ctx.plan || ctx.plan === "completo"), fundo });
+    const s = await synthesize(text, { caprichado: args.caprichado === true, fundo });
     const id = ctx.outbox.addMedia({ kind: "audio", base64: s.base64, mimetype: s.mimetype, ptt: s.ptt, seconds: s.seconds, spoken: text });
     return {
       media_id: id,

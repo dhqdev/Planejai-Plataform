@@ -36,8 +36,6 @@ export class Outbox {
 
 export interface ToolContext {
   user: UserRow;
-  /** o que o plano da pessoa libera (plan-access.ts); sem valor = tudo */
-  plan?: import("../../settings.js").PlanLevel;
   conversation: ConversationRow;
   channel: Channel;
   tracer: Tracer;

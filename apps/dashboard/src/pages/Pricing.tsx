@@ -3,15 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { Mascote } from "../mascote/Mascote";
 import { CountUp } from "../reactbits/CountUp";
-import { featureAt, Lacks, type PlanFeature } from "../planFeatures";
+import { Includes, type PlanFeature } from "../planFeatures";
 import "../pricing.css";
 
 /**
  * Página de preços pública (/precos), aberta pelo "Planos" da landing. No jeito da página de preços do Toki (pedido do
  * David): fundo escuro com aurora no topo, selos, chave Planos/Pacotes, cartões com o destaque de borda viva e a lista de
  * benefícios, comparação, como subir de plano e perguntas. Tudo vem de /api/auth/config (o que o dono configura em
- * Configurações > Grãos e planos), então nada aqui promete o que o produto não faz: o que cada plano libera vem do
- * servidor (pricing.features, plan-features.ts) e aparece em cada cartão ("Não inclui") e na tabela de comparação.
+ * Configurações > Grãos e planos), então nada aqui promete o que o produto não faz: todo plano libera tudo e muda só no
+ * preço e nos grãos; a lista do que vem em todos vem do servidor (pricing.features, plan-features.ts).
  */
 
 interface Plan {
@@ -22,7 +22,6 @@ interface Plan {
   blurb: string;
   highlight?: boolean;
   perks?: string[];
-  level?: string;
 }
 interface Pack {
   id: string;
@@ -71,7 +70,6 @@ const Check = () => (
 );
 
 /** Célula da tabela: marca, texto ("até 2") ou traço quando o plano não tem. */
-const FeatCell = ({ v }: { v: boolean | string }) => (v === true ? <Check /> : v ? <>{v}</> : <span className="pr-no" aria-label="Não inclui">–</span>);
 
 /** Ramo de louro dos selos do topo (espelhado do outro lado). */
 function Laurel({ flip }: { flip?: boolean }) {
@@ -312,7 +310,6 @@ export function PricingPage() {
                   ))}
                   <li style={{ ["--k" as string]: (p.perks?.length ?? 1) } as CSSProperties}><PerkIcon i={3} />{per1000(p.price, p.grains)} por 1.000 grãos</li>
                 </ul>
-                <Lacks features={pricing?.features} level={p.level} />
               </article>
             ))}
           </div>
@@ -341,7 +338,8 @@ export function PricingPage() {
             })}
           </div>
         )}
-        <p className="pr-foot" data-reveal>O que cada plano libera está na tabela abaixo. Grãos são o combustível: quanto mais você usa, mais gasta.</p>
+        <Includes features={pricing?.features} className="pr-foot" />
+        <p className="pr-foot" data-reveal>A diferença entre os planos é só a quantidade de grãos: quanto maior o plano, mais barato sai cada grão.</p>
       </section>
 
       {plans.length > 0 && (
@@ -382,8 +380,8 @@ export function PricingPage() {
                 {(pricing?.features ?? []).map((f) => (
                   <tr key={f.label}>
                     <th scope="row">{f.label}</th>
-                    {welcome > 0 && <td><FeatCell v={featureAt(f, "basico")} /></td>}
-                    {plans.map((p) => <td key={p.id} className={p.highlight ? "hi" : ""}><FeatCell v={featureAt(f, p.level)} /></td>)}
+                    {welcome > 0 && <td><Check /></td>}
+                    {plans.map((p) => <td key={p.id} className={p.highlight ? "hi" : ""}><Check /></td>)}
                   </tr>
                 ))}
                 <tr>

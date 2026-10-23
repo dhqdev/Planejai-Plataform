@@ -1,4 +1,3 @@
-import { changeNote, Lacks, Adds, type PlanFeature } from "../planFeatures";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api, brl } from "../api";
@@ -16,7 +15,6 @@ interface Plan {
   blurb: string;
   highlight?: boolean;
   perks?: string[];
-  level?: string;
 }
 interface Pack {
   id: string;
@@ -26,7 +24,6 @@ interface Pack {
 interface Pricing {
   enabled: boolean;
   plans: Plan[];
-  features?: PlanFeature[];
   packs: Pack[];
   welcome: number;
   trialDays?: number;
@@ -165,8 +162,6 @@ export function BillingPage() {
   const discount = referral?.percent ?? 0;
   const priceOf = (p: Plan) => referral?.prices.find((x) => x.id === p.id)?.withDiscount ?? p.price;
 
-  const accessNote = (plan: Plan) => changeNote(pricing.features, pricing.plans.find((x) => x.id === current)?.level, plan.level);
-
   const changePlan = async (plan: Plan) => {
     // primeira mensalidade ainda não paga: só troca o plano dela, sem cobrança de diferença
     const firstUnpaid = !sub?.lastPaymentAt;
@@ -180,7 +175,7 @@ export function BillingPage() {
           ? `Você paga hoje só a diferença deste mês (${brl(difference)}) e ganha ${grainsText(plan.grains - (sub?.plan?.grains ?? 0))} assim que o pagamento cair. Depois a mensalidade passa a ser ${brl(priceOf(plan))}.`
           : plan.id === current
             ? "A troca agendada é desfeita e a mensalidade continua a mesma."
-            : `Vale a partir da próxima mensalidade (${ddmm(sub?.nextDueDate)}), que passa a ser ${brl(priceOf(plan))}. Os grãos deste mês continuam com você.`}${accessNote(plan)}`,
+            : `Vale a partir da próxima mensalidade (${ddmm(sub?.nextDueDate)}), que passa a ser ${brl(priceOf(plan))}. Os grãos deste mês continuam com você.`}`,
       confirmLabel: up ? "Ir para o pagamento" : "Confirmar",
     });
     if (!ok) return;
@@ -459,7 +454,6 @@ export function BillingPage() {
                         {p.perks.map((x) => <li key={x}>{x}</li>)}
                       </ul>
                     )}
-                    <Lacks features={pricing.features} level={p.level} className="grain-lacks" />
                     {!data.ready ? null : !sub ? (
                       <button className={`btn ${p.highlight ? "btn-primary" : ""}`} onClick={() => setCheckout({ kind: "plan", plan: p })}>Assinar</button>
                     ) : mine && !sub.nextPlan ? (
@@ -493,7 +487,6 @@ export function BillingPage() {
 
       {checkout && (
         <CheckoutModal
-          features={pricing.features}
           checkout={checkout}
           needsDoc={!data.hasCustomer}
           savedCard={data.savedCard ?? null}
@@ -531,7 +524,7 @@ export function BillingPage() {
 }
 
 /** Assinar um plano ou comprar um pacote: forma de pagamento e, na primeira vez, nome e CPF/CNPJ para o Asaas. */
-function CheckoutModal({ features, checkout, needsDoc, savedCard, defaultName, price, onClose, onDone }: { features?: PlanFeature[]; checkout: Checkout; needsDoc: boolean; savedCard: { brand: string | null; last4: string } | null; defaultName: string; price: number; onClose: () => void; onDone: (message?: string) => void }) {
+function CheckoutModal({ checkout, needsDoc, savedCard, defaultName, price, onClose, onDone }: { checkout: Checkout; needsDoc: boolean; savedCard: { brand: string | null; last4: string } | null; defaultName: string; price: number; onClose: () => void; onDone: (message?: string) => void }) {
   const [method, setMethod] = useState<"card" | "pix">("card");
   // pacote com cartão guardado: cobra na hora, sem abrir a página do Asaas
   const [useSaved, setUseSaved] = useState(Boolean(savedCard) && checkout.kind === "pack");
@@ -589,13 +582,6 @@ function CheckoutModal({ features, checkout, needsDoc, savedCard, defaultName, p
           <b>{brl(price)}</b>
           <span>{plan ? `por mês, com ${grainsText(plan.grains)}` : "uma vez, os grãos não vencem"}</span>
         </p>
-        {plan && (
-          <div className="grain-scope">
-            <b>O que vem no {plan.name}</b>
-            <Adds features={features} level={plan.level} />
-            <Lacks features={features} level={plan.level} />
-          </div>
-        )}
         {plan && (
           <fieldset className="grain-methods">
             <legend>Como prefere pagar?</legend>

@@ -20,13 +20,8 @@ type Item = {
   active: boolean;
   mine: boolean;
   face: Face;
-  /** ligado, mas parado até a pessoa subir de plano */
-  paused?: boolean;
-  /** o plano dela não libera ligar este: nome do plano que libera */
-  locked?: string | null;
 };
-type Plan = { level: "basico" | "time" | "completo"; storeMax: number; storeUsed: number; upgrade: string | null };
-type Store = { items: Item[]; used: number; max: number; assistant: string | null; plan?: Plan };
+type Store = { items: Item[]; used: number; max: number; assistant: string | null };
 
 /** Liga ou desliga um especialista; recarrega as telas abertas (o menu ganha ou perde a aba dele). */
 function useToggle(reload: () => Promise<unknown>) {
@@ -95,16 +90,7 @@ function Rail({ label, children }: { label: string; children: ReactNode }) {
 
 /** Chave de ligar e desligar (no lugar dos botões Ligar/Desligar). */
 function Switch({ it, full, t }: { it: Item; full: boolean; t: ReturnType<typeof useToggle> }) {
-  if (it.mine) return <span className="sp-switch-row muted">{it.paused ? "Pausado no seu plano" : "Já vem no seu time"}</span>;
-  if (it.locked && !it.active)
-    return (
-      <Link to="/plano" className="sp-switch-row sp-locked" onClick={() => haptic(5)}>
-        <span className="sp-switch" aria-hidden="true">
-          <i />
-        </span>
-        <span>No plano {it.locked}</span>
-      </Link>
-    );
+  if (it.mine) return <span className="sp-switch-row muted">Já vem no seu time</span>;
   const busy = t.busy === it.slug;
   const blocked = !it.active && full;
   return (
@@ -120,7 +106,7 @@ function Switch({ it, full, t }: { it: Item; full: boolean; t: ReturnType<typeof
       <span className={`sp-switch ${it.active ? "on" : ""}`} aria-hidden="true">
         <i />
       </span>
-      <span>{busy ? (it.active ? "Desligando" : "Ligando") : it.active ? (it.paused ? "Pausado no seu plano" : "No time") : blocked ? "Time cheio" : "Fora do time"}</span>
+      <span>{busy ? (it.active ? "Desligando" : "Ligando") : it.active ? "No time" : blocked ? "Time cheio" : "Fora do time"}</span>
     </button>
   );
 }
@@ -132,20 +118,6 @@ function Portrait({ it, size }: { it: Item; size: number }) {
     <span className="sp-art" style={{ "--tint": tint(it.face) } as CSSProperties}>
       <Mascote still={!on} mood={on ? "happy" : "idle"} outfit={outfitFor(it.face)} size={size} title={it.persona} />
     </span>
-  );
-}
-
-/** O que o plano dela libera na loja, com o caminho para subir (some no Completo). */
-function PlanNote({ plan }: { plan: Plan }) {
-  if (plan.level === "completo" || !plan.upgrade) return null;
-  const text =
-    plan.storeMax === 0
-      ? `No seu plano o assistente cuida dos seus gastos e da sua agenda. Os especialistas entram a partir do plano ${plan.upgrade}.`
-      : `Seu plano libera ${plan.storeMax} especialistas da loja ao mesmo tempo. No ${plan.upgrade} são até 6, com a Secretária de reuniões.`;
-  return (
-    <p className="muted sp-note sp-plan-note">
-      {text} <Link to="/plano">Ver planos</Link>
-    </p>
   );
 }
 
@@ -174,7 +146,6 @@ export function SpecialistsPage() {
         }
       />
       <ErrorBox error={error ?? t.error} />
-      {data?.plan && <PlanNote plan={data.plan} />}
       {data && (
         <>
 
@@ -282,18 +253,14 @@ export function SpecialistPage() {
           ) : (
             <section className="card store-asks">
               <h3>Ainda não está no seu time</h3>
-              <p className="muted">{it.locked ? `${it.persona} entra no plano ${it.locked} e cuida de ${it.focus}.` : `Ligue para ${it.persona} cuidar de ${it.focus}.`}</p>
+              <p className="muted">Ligue para {it.persona} cuidar de {it.focus}.</p>
             </section>
           )}
           <div className="store-actions">
             <button className="btn" onClick={() => { haptic(5); nav("/especialistas"); }}>
               <Icon name="chevron-left" size={16} /> Todos os especialistas
             </button>
-            {!it.mine && it.locked && !it.active ? (
-              <Link to="/plano" className="btn btn-primary" onClick={() => haptic(5)}>
-                Ver o plano {it.locked}
-              </Link>
-            ) : !it.mine && (
+            {!it.mine && (
               <button className={`btn ${it.active ? "" : "btn-primary"}`} disabled={t.busy === it.slug || (!it.active && data!.used >= data!.max)} onClick={() => void t.toggle(it)}>
                 {t.busy === it.slug ? "…" : it.active ? `Desligar ${it.persona}` : `Ligar ${it.persona}`}
               </button>

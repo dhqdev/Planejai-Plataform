@@ -312,23 +312,23 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     await expect(billing.subscribe(user, { planId: "nao-existe" })).rejects.toThrow(/Plano não encontrado/);
     const sub = await billing.subscribe(user, { planId: "dia-a-dia", method: "card" });
     expect(asaasCalls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /subscriptions", "GET /subscriptions/sub_1/payments"]);
-    expect(asaasCalls[0]!.body).toMatchObject({ customer: "cus_1", billingType: "CREDIT_CARD", cycle: "MONTHLY", value: 39.9, description: "Planejai Dia a dia (4.000 grãos por mês)" });
+    expect(asaasCalls[0]!.body).toMatchObject({ customer: "cus_1", billingType: "CREDIT_CARD", cycle: "MONTHLY", value: 39.9, description: "Planejai Dia a dia (5.500 grãos por mês)" });
     expect(sub).toMatchObject({ status: "trial", plan_id: "dia-a-dia", pay_method: "card", invoice_url: "https://sandbox.asaas.com/i/pay_1" });
 
     const due = new Date().toISOString().slice(0, 10);
     const card = { creditCardNumber: "4242", creditCardBrand: "VISA" };
     expect((await hook({ id: "s1", event: "PAYMENT_CONFIRMED", payment: { id: "pay_1", subscription: "sub_1", value: 39.9, dueDate: due, billingType: "CREDIT_CARD", creditCard: card } })).json()).toEqual({ ok: true, handled: true, status: "active" });
     await hook({ id: "s2", event: "PAYMENT_RECEIVED", payment: { id: "pay_1", subscription: "sub_1", value: 39.9, dueDate: due, billingType: "CREDIT_CARD" } });
-    expect(await wallet()).toEqual({ plan_grains: 4000, extra_grains: 500 });
+    expect(await wallet()).toEqual({ plan_grains: 5500, extra_grains: 500 });
     expect(await db.one("SELECT status, card_brand, card_last4 FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ status: "active", card_brand: "VISA", card_last4: "4242" });
-    expect((await outbox()).at(-1).text).toMatch(/obrigado por assinar o Dia a dia! Já coloquei 4.000 grãos/);
+    expect((await outbox()).at(-1).text).toMatch(/obrigado por assinar o Dia a dia! Já coloquei 5.500 grãos/);
     // o uso sai primeiro do plano
     await credits.chargeUsage(user.id, 1);
-    expect(await wallet()).toEqual({ plan_grains: 3000, extra_grains: 500 });
-    // mês seguinte: o plano volta para 4.000 (o que sobrou não acumula); os extras ficam
+    expect(await wallet()).toEqual({ plan_grains: 4500, extra_grains: 500 });
+    // mês seguinte: o plano volta para 5.500 (o que sobrou não acumula); os extras ficam
     await hook({ id: "s3", event: "PAYMENT_CONFIRMED", payment: { id: "pay_2", subscription: "sub_1", value: 39.9, dueDate: due, billingType: "CREDIT_CARD" } });
-    expect(await wallet()).toEqual({ plan_grains: 4000, extra_grains: 500 });
-    expect((await outbox()).at(-1).text).toMatch(/Recebi a mensalidade[\s\S]*4.000 grãos/);
+    expect(await wallet()).toEqual({ plan_grains: 5500, extra_grains: 500 });
+    expect((await outbox()).at(-1).text).toMatch(/Recebi a mensalidade[\s\S]*5.500 grãos/);
   });
 
   it("subir de plano paga a diferença e ganha os grãos na hora; descer vale da próxima mensalidade", async () => {
@@ -336,10 +336,10 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     const up = await billing.changePlan(user, "completo");
     expect(up.kind).toBe("upgrade");
     const charge = asaasCalls.find((c) => c.path === "/payments");
-    expect(charge?.body).toMatchObject({ value: 40, description: expect.stringContaining("+6.000 grãos") });
+    expect(charge?.body).toMatchObject({ value: 40, description: expect.stringContaining("+7.000 grãos") });
     const purchase = await db.one("SELECT id FROM grain_purchases WHERE kind = 'upgrade'");
     await hook({ id: "u1", event: "PAYMENT_CONFIRMED", payment: { id: "pay_av_2", externalReference: `grains:${purchase.id}` } });
-    expect(await wallet()).toEqual({ plan_grains: 10000, extra_grains: 500 });
+    expect(await wallet()).toEqual({ plan_grains: 12500, extra_grains: 500 });
     expect(await db.one("SELECT plan_id, value::float AS value FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ plan_id: "completo", value: 79.9 });
     expect(asaasCalls.at(-1)).toMatchObject({ method: "POST", path: "/subscriptions/sub_1", body: { value: 79.9, updatePendingPayments: true } });
 
@@ -347,7 +347,7 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     expect(down.kind).toBe("downgrade");
     expect(await db.one("SELECT plan_id, next_plan_id, value::float AS value FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ plan_id: "completo", next_plan_id: "leve", value: 19.9 });
     // os grãos deste mês ficam; na próxima mensalidade entra o plano leve
-    expect((await wallet()).plan_grains).toBe(10000);
+    expect((await wallet()).plan_grains).toBe(12500);
     await hook({ id: "s4", event: "PAYMENT_CONFIRMED", payment: { id: "pay_3", subscription: "sub_1", value: 19.9, billingType: "CREDIT_CARD" } });
     expect(await wallet()).toEqual({ plan_grains: 2500, extra_grains: 500 });
     expect(await db.one("SELECT plan_id, next_plan_id FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ plan_id: "leve", next_plan_id: null });

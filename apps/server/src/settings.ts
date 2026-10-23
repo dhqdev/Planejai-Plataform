@@ -76,18 +76,7 @@ export interface BillingPlan {
   highlight?: boolean;
   /** benefícios mostrados na página de preços e na tela de grãos (um por linha, até 5) */
   perks?: string[];
-  /** o que o plano libera (plan-access.ts); sem valor, o do plano padrão de mesmo id */
-  level?: PlanLevel;
 }
-
-/**
- * O que cada plano libera (escolha do David em 2026-10-20):
- * - basico: o Juvenal sozinho, só gastos e agenda (uma chamada de IA a menos por mensagem);
- * - time: o time inteiro e até 2 especialistas da loja;
- * - completo: tudo, com agentes sob medida, Secretária de reuniões, Notion/GitHub/n8n e voz caprichada.
- */
-export type PlanLevel = "basico" | "time" | "completo";
-export const PLAN_LEVELS: PlanLevel[] = ["basico", "time", "completo"];
 
 export interface BillingPack {
   id: string;
@@ -95,35 +84,36 @@ export interface BillingPack {
   price: number;
 }
 
-/** Vitrine padrão: o grão sai mais barato no plano do que no avulso, para valer a pena assinar. */
+/**
+ * Vitrine padrão (pedido do David em 2026-10-23): todo plano libera tudo e muda só no tamanho. Quanto maior, mais barato
+ * sai o grão (Leve R$ 7,96 o milhar, Dia a dia 7,25, Completo 6,39), e o do plano sai mais barato que o avulso.
+ * A margem de cada degrau está em revisao/planos-por-valor-2026-10-23.md.
+ */
 export const DEFAULT_PLANS: BillingPlan[] = [
   {
     id: "leve",
     name: "Leve",
     price: 19.9,
     grains: 2500,
-    blurb: "Seus gastos e sua agenda pelo WhatsApp.",
-    level: "basico",
-    perks: ["Gastos, cartões e contas fixas pelo WhatsApp", "Lembretes e Google Agenda", "Áudio, foto e comprovante viram anotação", "Agenda e finanças no painel"],
+    blurb: "Para quem fala com ele algumas vezes por dia.",
+    perks: ["Tudo liberado: time inteiro, especialistas e recados", "2.500 grãos por mês"],
   },
   {
     id: "dia-a-dia",
     name: "Dia a dia",
     price: 39.9,
-    grains: 4000,
-    blurb: "O time inteiro trabalhando no seu dia.",
+    grains: 5500,
+    blurb: "Para quem usa todo dia, o dia inteiro.",
     highlight: true,
-    level: "time",
-    perks: ["Tudo do Leve, com o time inteiro", "Pesquisa na internet, resumos, imagens e PDFs", "Mensagens e recados para outras pessoas", "Até 2 especialistas da loja"],
+    perks: ["Tudo liberado, com mais que o dobro de grãos do Leve", "Grão 9% mais barato que no Leve"],
   },
   {
     id: "completo",
     name: "Completo",
     price: 79.9,
-    grains: 10000,
-    blurb: "Tudo liberado, com agentes feitos para você.",
-    level: "completo",
-    perks: ["2,5 vezes os grãos do Dia a dia", "Até 6 especialistas, Secretária de reuniões inclusa", "Agentes criados sob medida para você", "Notion, GitHub e n8n conectados", "Voz caprichada nos áudios"],
+    grains: 12500,
+    blurb: "Para quem usa muito: imagens, áudios e reuniões.",
+    perks: ["Tudo liberado, com 5 vezes os grãos do Leve", "Grão 20% mais barato que no Leve"],
   },
 ];
 
@@ -132,16 +122,10 @@ export function perksOf(plan: BillingPlan): string[] {
   if (plan.perks?.length) return plan.perks;
   return DEFAULT_PLANS.find((d) => d.id === plan.id)?.perks ?? [];
 }
-
-/** O que o plano libera: o que o dono escolheu ou, sem nada, o do plano padrão de mesmo id (plano novo sem escolha = time). */
-export function levelOf(plan: BillingPlan): PlanLevel {
-  if (plan.level && PLAN_LEVELS.includes(plan.level)) return plan.level;
-  return DEFAULT_PLANS.find((d) => d.id === plan.id)?.level ?? "time";
-}
 export const DEFAULT_PACKS: BillingPack[] = [
   { id: "p500", grains: 500, price: 9.9 },
-  { id: "p2000", grains: 2000, price: 34.9 },
-  { id: "p5000", grains: 5000, price: 79.9 },
+  { id: "p2000", grains: 2000, price: 29.9 },
+  { id: "p5000", grains: 5000, price: 59.9 },
 ];
 
 const slug = (v: unknown, i: number) =>
@@ -163,7 +147,6 @@ export function cleanPlans(raw: unknown): BillingPlan[] {
         .map((x: unknown) => String(x ?? "").trim().slice(0, 80))
         .filter(Boolean)
         .slice(0, 5),
-      ...(PLAN_LEVELS.includes(p?.level) ? { level: p.level as PlanLevel } : {}),
     };
     if (!plan.name) throw new Error("Todo plano precisa de nome.");
     if (!(plan.price >= 1 && plan.price <= 100_000)) throw new Error(`Preço do plano ${plan.name} precisa ficar entre R$ 1 e R$ 100.000.`);

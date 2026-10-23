@@ -1,7 +1,5 @@
 import { many, one } from "../db/pool.js";
 import { notify } from "../notifications.js";
-import { accessFor, allowedClientRows, COMPLETO_STORE, planAccess, planFor, type PlanAccess } from "../plan-access.js";
-import { type AgentSettings, getSettings, type PlanLevel } from "../settings.js";
 import { MAX_CLIENT_AGENTS, type Face } from "./team.js";
 
 /**
@@ -153,47 +151,17 @@ const COLORS: Record<string, number> = { treino: 7, estudos: 5, pet: 0, saude: 1
 /** Carinha fixa: cada especialista veste a roupa dele (skin:<slug>, desenhada no painel), igual para todo mundo. */
 export const storeFace = (slug: string): Face => ({ color: COLORS[slug] ?? 5, eyes: "happy", mouth: "smile", extra: `skin:${slug}` });
 
-/** Quem a pessoa é e o que o plano dela libera na loja. */
-async function storeAccess(userId: string) {
-  const [user, s] = await Promise.all([one("SELECT * FROM users WHERE id = $1", [userId]), getSettings()]);
-  return { access: user ? await planAccess(user, s) : accessFor("completo"), s };
-}
-
-/** Plano que libera este especialista (o mais barato), para o cadeado e o aviso. */
-function needFor(slug: string, access: PlanAccess, s: AgentSettings) {
-  const need: PlanLevel = COMPLETO_STORE.has(slug) || access.level === "time" ? "completo" : "time";
-  return planFor(s, need)?.name ?? null;
-}
-
-/**
- * Catálogo com o que esta pessoa já ligou (e quantas vagas de agente ainda tem). Com o plano: `locked` diz que o plano dela
- * não libera ligar este (e qual libera) e `paused`, que ele está ligado mas parado até ela subir de plano.
- */
+/** Catálogo com o que esta pessoa já ligou (e quantas vagas de agente ainda tem). */
 export async function listStore(userId: string) {
-  const rows = await many("SELECT slug, active, origin FROM client_agents WHERE user_id = $1 ORDER BY created_at", [userId]);
+  const rows = await many("SELECT slug, active, origin FROM client_agents WHERE user_id = $1", [userId]);
   const used = rows.filter((r) => r.active).length;
-  const { access, s } = await storeAccess(userId);
-  const working = new Set(allowedClientRows(rows.filter((r) => r.active), access).map((r) => r.slug));
-  const storeUsed = rows.filter((r) => r.active && r.origin === "loja").length;
-  const storeFull = storeUsed >= access.storeMax;
   return {
-    items: STORE.map((it) => {
-      const r = rows.find((x) => x.slug === it.slug);
-      const active = Boolean(r?.active);
-      // o limite geral de vagas (MAX_CLIENT_AGENTS) não é do plano: esse continua como "time cheio"
-      const planBlocked = !active && ((COMPLETO_STORE.has(it.slug) && access.level !== "completo") || (storeFull && access.storeMax < MAX_CLIENT_AGENTS));
-      return {
-        ...it,
-        active,
-        face: storeFace(it.slug),
-        mine: Boolean(r && r.origin !== "loja"),
-        paused: active && !working.has(it.slug),
-        locked: planBlocked ? (needFor(it.slug, access, s) ?? "outro plano") : null,
-      };
+    items: STORE.map((s) => {
+      const r = rows.find((x) => x.slug === s.slug);
+      return { ...s, active: Boolean(r?.active), face: storeFace(s.slug), mine: Boolean(r && r.origin !== "loja") };
     }),
     used,
     max: MAX_CLIENT_AGENTS,
-    plan: { level: access.level, storeMax: access.storeMax, storeUsed, upgrade: access.level === "completo" ? null : (planFor(s, access.level === "basico" ? "time" : "completo")?.name ?? null) },
   };
 }
 
@@ -211,14 +179,6 @@ export async function activateStore(userId: string, slug: string): Promise<{ ok:
   if (existing?.active) return { ok: true };
   const n = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM client_agents WHERE user_id = $1 AND active", [userId]);
   if ((n?.n ?? 0) >= MAX_CLIENT_AGENTS) return { ok: false, error: `Seu time já tem ${MAX_CLIENT_AGENTS} agentes. Desligue um para ligar outro.`, status: 409 };
-  // o plano decide quantos da loja valem e quais (plan-access.ts)
-  const { access, s } = await storeAccess(userId);
-  const fromStore = await one<{ n: number }>("SELECT COUNT(*)::int AS n FROM client_agents WHERE user_id = $1 AND active AND origin = 'loja'", [userId]);
-  if ((COMPLETO_STORE.has(slug) && access.level !== "completo") || (fromStore?.n ?? 0) >= access.storeMax) {
-    const need = needFor(slug, access, s);
-    const why = access.storeMax === 0 ? "Seu plano não inclui especialistas da loja." : `Seu plano libera ${access.storeMax} especialista${access.storeMax > 1 ? "s" : ""} da loja.`;
-    return { ok: false, error: COMPLETO_STORE.has(slug) && access.level !== "completo" ? `${item.persona} entra no plano ${need ?? "Completo"}.` : `${why}${need ? ` Para ligar ${item.persona}, suba para o plano ${need}.` : ""}`, status: 402 };
-  }
   await one(
     `INSERT INTO client_agents (user_id, slug, name, focus, instructions, tools, persona, face, origin) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'loja')
      ON CONFLICT (user_id, slug) DO UPDATE SET active = true, name = $3, focus = $4, instructions = $5, tools = $6, persona = $7, face = $8, origin = 'loja', updated_at = now()

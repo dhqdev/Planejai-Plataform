@@ -113,12 +113,10 @@ export function ctoSystemPrompt(opts: {
   groups?: Set<string>;
   /** CTO_RULES editado pelo dono (agent_prompts "cto"); vazio = padrão */
   rules?: string | null;
-  /** plano básico: ele atende sozinho (no lugar da linha do time) */
-  planLine?: string | null;
 }) {
   const now = new Date();
   const { settings, user } = opts;
-  const team = opts.planLine ?? `- Time desta pessoa: ${opts.specialists.map((s) => `ask_${s.id} (${s.persona ?? s.name})`).join(", ")}.`;
+  const team = `- Time desta pessoa: ${opts.specialists.map((s) => `ask_${s.id} (${s.persona ?? s.name})`).join(", ")}.`;
   const memories = opts.memories.length
     ? opts.memories.map((m) => `- ${m.content} (id ${m.id})`).join("\n")
     : "- (nada guardado ainda)";
