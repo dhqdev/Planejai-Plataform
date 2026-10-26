@@ -262,7 +262,7 @@ export function BillingPage() {
               {pricing.plans.slice(0, 3).map((p) => <i key={p.id}>{p.name}</i>)}
             </span>
             <b>Planos Planejai</b>
-            <span>Compare o que cada plano faz e escolha o seu</span>
+            <span>Tudo liberado em todos: escolha quantos grãos quer por mês</span>
           </Link>
         </div>
       )}

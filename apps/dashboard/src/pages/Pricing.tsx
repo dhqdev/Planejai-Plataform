@@ -165,12 +165,11 @@ export function PricingPage() {
         ? `Não. Toda conta nova ${trial > 0 ? `usa à vontade por ${trialTxt} e depois ainda tem` : "ganha"} ${grainsTxt(welcome)} de presente, sem cartão. Quando acabarem, a IA pausa (o painel continua) até você assinar um plano ou comprar um pacote.`
         : "Você escolhe um plano ou um pacote avulso e já começa.",
     ],
-    ["O que cada plano libera?", "Todos têm gastos, cartões, lembretes e agenda, no WhatsApp e no painel. O Dia a dia soma o time de agentes: pesquisa, menor preço, mensagens e recados, PDF, imagem e áudio, e até 2 especialistas da loja. O Completo libera tudo: até 6 especialistas, a Secretária de reuniões, Notion, GitHub e n8n, agentes feitos sob medida e voz caprichada. A tabela Compare os planos mostra item por item."],
-    ["O que acontece se eu pedir algo que meu plano não tem?", "O assistente avisa com jeito, diz em qual plano aquilo entra e manda o link. Nada é cobrado nem fica pela metade."],
+    ["O que muda de um plano para outro?", "Só a quantidade de grãos e o preço. Todos os planos, e também a conta grátis, têm tudo liberado: o time de agentes, pesquisa e menor preço, mensagens e recados, PDF, imagem e áudio com voz caprichada, os especialistas da loja, a Secretária de reuniões, Notion, GitHub e n8n e agentes feitos sob medida. Quanto maior o plano, mais barato sai cada grão."],
     ["Posso subir de plano no meio do mês?", "Pode. Você paga hoje só a diferença do mês e os grãos a mais entram assim que o pagamento cai. A partir daí a mensalidade é a do plano novo."],
-    ["E descer de plano?", "Também. A troca vale a partir da próxima mensalidade e os grãos deste mês continuam com você. Quem usa um especialista que o plano novo não inclui fica pausado, e volta sozinho se você subir de novo."],
+    ["E descer de plano?", "Também. A troca vale a partir da próxima mensalidade e os grãos deste mês continuam com você. Nada some: todos os planos têm as mesmas funções."],
     ["O que sobra no fim do mês acumula?", "Os grãos do plano recarregam todo mês para a quantidade do plano, então o que sobrou não acumula. Os grãos de presente e os de pacotes avulsos não vencem."],
-    ["Como eu pago?", "Cartão de crédito (renova sozinho), Pix ou boleto, na página de pagamento do Asaas. O cartão fica com o Asaas, não com a gente. Cancele quando quiser."],
+    ["Como eu pago?", "Cartão de crédito (renova sozinho), Pix ou boleto, na nossa página de pagamento. Os dados do cartão vão direto para o Asaas, que processa o pagamento, e não ficam com a gente. Cancele quando quiser."],
   ];
 
   return (
@@ -231,9 +230,9 @@ export function PricingPage() {
           <div className="pr-badge" style={{ ["--i" as string]: 1 } as CSSProperties}>
             <Laurel />
             <div>
-              <small>cada plano mostra</small>
-              <b>o que libera</b>
-              <small>e o que não inclui</small>
+              <small>todo plano tem</small>
+              <b>tudo liberado</b>
+              <small>muda só a quantidade de grãos</small>
             </div>
             <Laurel flip />
           </div>
