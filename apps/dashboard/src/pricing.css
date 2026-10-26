@@ -139,12 +139,11 @@
 
 .pr-free { font-size: 40px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; margin-bottom: 30px; }
 .pr-chip {
-  align-self: flex-start; padding: 4px 12px; border-radius: 9px; font-size: 21px; font-weight: 900; font-style: italic;
-  letter-spacing: -.01em; text-transform: uppercase; color: #1a0a33; margin-bottom: 14px;
-  background: linear-gradient(120deg, #e9ddff, #c9a8ff);
+  align-self: flex-start; padding: 4px 12px; border-radius: 9px; font-size: 20px; font-weight: 750;
+  letter-spacing: -.01em; color: #1a0a33; margin-bottom: 14px; background: #dccbff;
 }
-.pr-chip.c1 { background: linear-gradient(120deg, #ffb3d9, #b48cff); }
-.pr-chip.c2 { background: linear-gradient(120deg, #ffd59e, #ff8fb1); }
+.pr-chip.c1 { background: #f2c4e4; }
+.pr-chip.c2 { background: #ffd8b0; }
 .pr-price { display: flex; align-items: baseline; gap: 4px; font-size: 34px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .pr-price span:last-child { font-size: 14px; font-weight: 500; color: var(--pr-muted); }
 .pr-amount { font-weight: 600; font-size: 15px; font-variant-numeric: tabular-nums; }
@@ -155,11 +154,12 @@
   transition: transform .25s var(--pr-spring), box-shadow .25s;
 }
 .pr-cta.big { height: 56px; padding: 0 34px; font-size: 17px; margin: 22px 0 0; display: inline-flex; }
-.pr-cta.glow { box-shadow: 0 10px 40px -12px rgba(139, 77, 255, .8); }
+/* o plano recomendado é o único botão roxo da fileira (Von Restorff): o olho acha a escolha sugerida de primeira */
+.pr-cta.glow { background: var(--pr-violet); color: #fff !important; box-shadow: 0 10px 40px -12px rgba(139, 77, 255, .8); }
 /* reflexo que passa pelo botão de tempos em tempos */
 .pr-cta.glow::after {
   content: ""; position: absolute; inset: 0; transform: translateX(-120%) skewX(-20deg);
-  background: linear-gradient(90deg, transparent, rgba(139, 77, 255, .28), transparent); animation: pr-sweep 3.6s var(--pr-ease) 1.2s infinite;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .26), transparent); animation: pr-sweep 3.6s var(--pr-ease) 1.2s infinite;
 }
 @keyframes pr-sweep { 0% { transform: translateX(-120%) skewX(-20deg); } 45%, 100% { transform: translateX(120%) skewX(-20deg); } }
 .pr-cta:active { transform: scale(.97); }

@@ -78,7 +78,7 @@
 }
 .pc-chip:active { transform: scale(.95); filter: brightness(.96); }
 /* como no Toki: o primeiro do dia em até 2 linhas com a hora, os outros numa linha; o texto corta seco, sem "..." */
-.pc-chip-t { font-size: 13px; line-height: 1.24; font-weight: 500; display: block; max-height: 2.48em; overflow: hidden; width: 100%; word-break: break-word; }
+.pc-chip-t { font-size: 13px; line-height: 1.24; font-weight: 500; display: block; max-height: 2.48em; overflow: hidden; width: 100%; hyphens: auto; -webkit-hyphens: auto; }
 .pc-chip.line { padding: 3px 4px; }
 .pc-chip.line .pc-chip-t { white-space: nowrap; max-height: none; }
 .pc-chip small { font-size: 11.5px; font-weight: 600; color: color-mix(in srgb, var(--ev) 88%, var(--text)); font-variant-numeric: tabular-nums; }

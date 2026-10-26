@@ -346,7 +346,7 @@ function Plans({ pricing, cta, go, closed }: { pricing: Pricing; cta: (p: Plan) 
             <div key={p.id} className={`lv-plan-wrap ${p.highlight ? "hi" : ""}`} data-reveal style={{ ["--d" as string]: i }}>
               <GlareHover className={`lv-plan ${p.highlight ? "hi" : ""}`} glareColor="#ffffff" glareOpacity={p.highlight ? 0.18 : 0.6} playOnce>
                 <h3>{p.name}</h3>
-                {p.highlight && <span className="lv-plan-tag">Recomendado</span>}
+                {p.highlight && <span className="lv-plan-tag">Mais escolhido</span>}
                 <p className="lv-plan-price">
                   <b>{brl(p.price)}</b>
                   <span>/mês</span>

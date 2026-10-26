@@ -1,0 +1,15 @@
+/*
+ * Ajustes da revisão das leis de UX (David, 2026-10-26; relatório em revisao/leis-ux-2026-10-26.md).
+ * Fitts: no toque, todo alvo pequeno ganha uma área invisível de pelo menos 44px, sem mudar o desenho.
+ * Prägnanz: no celular, o título que a barra de cima já mostra não se repete logo embaixo (PageHead com BarTitle).
+ */
+@media (pointer: coarse) {
+  .hc-mini, .pc-ico.sm, .ag-icon, .conta-edit { position: relative; }
+  .hc-mini::before, .pc-ico.sm::before, .ag-icon::before, .conta-edit::before { content: ""; position: absolute; inset: -5px; border-radius: inherit; }
+  .sp-switch-row { min-height: 44px; }
+}
+
+@media (max-width: 767px) {
+  .page-head.same-bar h1 { display: none; }
+  .page-head.same-bar:not(:has(p, .row)) { display: none; }
+}

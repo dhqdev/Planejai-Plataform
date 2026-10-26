@@ -57,3 +57,10 @@
 - Jeito do Kody (David, 2026-10-16): um mascote só no meio, balão de fala em cima com as palavras entrando uma a uma, cena ou opções embaixo, botão grande escuro (`--ink`) com a resposta da pessoa. Celular em tela cheia; notebook/iPad em cartão de 600 px sobre o painel desfocado. Arrastar para o lado, setas, Esc e voltar funcionam; movimento reduzido deixa tudo parado.
 - Ordem (encurtada pelo David em 2026-10-20, "está muito demorado"): oi, WhatsApp, calendário de Finanças (`FinanceScene`), Conexões (`ConnectScene`), "nada sai sem o seu sim", convite ("Topa?"/"Agora não"), perguntas (`onboarding.ts`: só o que quer primeiro, no máximo uma a mais por assunto e o jeito de falar; 2 a 5 perguntas) e "Prontinho" com até 4 cartões tirados das respostas (`personalCards`). Dados das cenas são de exemplo. Respostas gravam ao sair da última pergunta; Pular grava o que tinha (ou `skipped`).
 - Boas-vindas no WhatsApp: ao fechar a primeira conversa (fim ou Pular, só quando é o tour do primeiro login) o painel chama `POST /api/me/welcome`, que manda pelo `notifyUser` um texto fixo (`welcomeText`, sem IA) com exemplos pelo que a pessoa escolheu. Uma vez por pessoa (`users.profile.welcome_sent_at`) e só para conta com até 30 dias; se o WhatsApp falhar, a marca sai.
+
+## Leis de UX (revisão de 2026-10-26)
+- Relatório por lei em `/mnt/project-files/revisao/leis-ux-2026-10-26.md`; ajustes de CSS em `styles/leis-ux.css`.
+- Um botão roxo (`btn-brand`) por área: o resto é `btn` neutro (Início: só "Conversar"; Finanças: só "Lançamento", "Criar meta"/"Adicionar cartão" do lado são neutros). Em /precos só o plano `highlight` tem o botão roxo e o selo é "Mais escolhido" em todo lugar (landing, /precos, Meu plano).
+- Toque: alvo menor que 44px ganha área invisível em `leis-ux.css` (`pointer: coarse`); peça nova pequena entra lá.
+- Celular: `PageHead` com o mesmo título da barra de cima (`BarTitle`, dado pelo `App.tsx`) esconde o h1 repetido. Nome da tela = nome do menu (ex.: "De olho").
+- Lembrete no Início sem "(criado pelo painel)" e sem segundos ("ter., 27/10 às 14:00").

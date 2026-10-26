@@ -320,8 +320,8 @@ export function WatchesPage() {
   return (
     <div className="page watches-page">
       <PageHead
-        title="Acompanhamentos"
-        actions={<button className="btn btn-brand" onClick={() => setEditing("new")}><Icon name="plus" size={16} /> Novo</button>}
+        title="De olho"
+        actions={data.length > 0 && <button className="btn btn-brand" onClick={() => setEditing("new")}><Icon name="plus" size={16} /> Novo</button>}
       />
 
       {!data.length ? (

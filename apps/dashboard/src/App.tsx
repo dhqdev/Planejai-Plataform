@@ -4,7 +4,7 @@ import { inViewTransition, screenDrawn } from "./transicao";
 import { createPortal, flushSync } from "react-dom";
 import { api } from "./api";
 import { BlockLoader } from "./BlockLoader";
-import { Empty, Loading } from "./components";
+import { BarTitle, Empty, Loading } from "./components";
 import { Guard } from "./Guard";
 import { clearApiCache, prefetchApi, useApi } from "./hooks";
 import { AgentFace, type Face } from "./faces";
@@ -211,7 +211,7 @@ const MY_DAY: NavItem[] = [
   { to: "/", label: "Início", icon: "home" },
   { to: "/agenda", label: "Agenda", icon: "calendar" },
   { to: "/finance", label: "Finanças", icon: "wallet" },
-  { to: "/watches", label: "Acompanhamentos", icon: "eye", short: "De olho" },
+  { to: "/watches", label: "De olho", icon: "eye", short: "De olho" },
   { to: "/recados", label: "Recados", icon: "send" },
   { to: "/contatos", label: "Contatos", icon: "users" },
   { to: "/documentos", label: "Documentos", icon: "file" },
@@ -507,7 +507,9 @@ export function App() {
   const phoneTabs = links.filter((t) => PHONE_TABS.includes(t.to));
   const here = phoneTabs.findIndex((t) => t.to === "/" + (loc.pathname.split("/")[1] ?? "") || groupOf(loc.pathname)?.[0]?.to === t.to);
   const tabIndex = here < 0 ? phoneTabs.length : here;
+  const barTitle = titleFor(loc.pathname, NAV);
   return (
+    <BarTitle.Provider value={barTitle}>
     <UnreadProvider>
     <div className={`layout${me?.impersonating ? " impersonating" : ""}`}>
       <a className="skip-link" href="#conteudo" onClick={(e) => { e.preventDefault(); mainRef.current?.focus(); }}>Pular para o conteúdo</a>
@@ -517,7 +519,7 @@ export function App() {
         ) : (
           <MascoteButton size={50} />
         )}
-        <strong className="topbar-title">{titleFor(loc.pathname, NAV)}</strong>
+        <strong className="topbar-title">{barTitle}</strong>
         <span className="spacer" />
         <BellButton />
         <button className="icon-btn" onClick={toggleTheme} aria-label="Trocar tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button>
@@ -674,6 +676,7 @@ export function App() {
       {install.sheet}
     </div>
     </UnreadProvider>
+    </BarTitle.Provider>
   );
 }
 

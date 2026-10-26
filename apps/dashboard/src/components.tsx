@@ -1,13 +1,18 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { AgentFace, CORE_FACES } from "./faces";
 import { Icon } from "./icons";
 import { haptic } from "./touch";
 
+/** Título da barra de cima do celular: o PageHead com o mesmo nome não repete o título logo embaixo dela. */
+export const BarTitle = createContext("");
+
 export function PageHead({ title, subtitle, actions }: { title?: string; subtitle?: string; actions?: ReactNode }) {
+  const bar = useContext(BarTitle);
+  const same = Boolean(title) && bar === title;
   return (
-    <div className="page-head">
+    <div className={same ? "page-head same-bar" : "page-head"}>
       {(title || subtitle) && (
         <div>
           {title && <h1>{title}</h1>}

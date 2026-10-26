@@ -145,7 +145,7 @@ export function InvoicesCard({ user, readonly, onOpen }: { user: string; readonl
       {data && !cards.length && (
         <div className="fin-empty-side">
           <p className="muted">Cadastre seus cartões e eu separo as compras por fatura, lembro do vencimento e mostro o limite que sobra.</p>
-          {!readonly && <button className="btn btn-brand btn-sm" onClick={() => setEditing(true)}><Icon name="plus" size={14} /> Adicionar cartão</button>}
+          {!readonly && <button className="btn btn-sm" onClick={() => setEditing(true)}><Icon name="plus" size={14} /> Adicionar cartão</button>}
         </div>
       )}
       {editing && <CardForm initial={null} onClose={() => { setEditing(false); void reload(); }} />}

@@ -1,6 +1,6 @@
 import { memo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api, ago, brl, ms, usd, when } from "../api";
+import { api, ago, brl, ms, usd } from "../api";
 import type { Me } from "../App";
 import { AgentTag, CATEGORY_COLORS, Donut, Empty, Modal, PageHead, Status } from "../components";
 import { FIT_QUERY, useApi, useMedia } from "../hooks";
@@ -9,6 +9,11 @@ import { TeamMap } from "../TeamMap";
 import { haptic } from "../touch";
 import { HomeChat } from "./HomeChat";
 import { InviteForm } from "./Invites";
+
+// lembrete na lista do Início: "ter., 27/10 às 14:00" (sem segundos, com o dia da semana para achar rápido)
+const DUE = new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
+const DUE_HM = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
+const dueText = (iso: string) => `${DUE.format(new Date(iso))} às ${DUE_HM.format(new Date(iso))}`;
 
 const PHONE_QUERY = "(max-width: 767px)";
 
@@ -215,8 +220,8 @@ const WIDGETS: Record<string, WidgetDef> = {
       <Box title="Próximos lembretes" icon="bell" to="/agenda">
         {(mine?.nextReminders ?? []).map((r: any) => (
           <div key={r.id} className="line-item">
-            <span className="ellipsis" style={{ flex: 1 }}>{r.intent}</span>
-            <span className="muted" style={{ fontSize: 12 }}>{r.cron ? "recorrente" : when(r.due_at)}</span>
+            <span className="ellipsis" style={{ flex: 1 }}>{String(r.intent).replace(/\s*\(criado pelo painel\)$/, "")}</span>
+            <span className="muted" style={{ fontSize: 12 }}>{r.cron ? "recorrente" : dueText(r.due_at)}</span>
           </div>
         ))}
         {mine && !mine.nextReminders.length && <Empty>Diga "me lembra de pagar a luz dia 10".</Empty>}
@@ -361,12 +366,12 @@ const WIDGETS: Record<string, WidgetDef> = {
     ),
   },
   watches: {
-    title: "Acompanhamentos",
+    title: "De olho",
     desc: "Preços e notícias que o agente vigia",
     icon: "eye",
     sizes: ["m", "l"],
     render: () => (
-      <Box title="Acompanhamentos" icon="eye" to="/watches">
+      <Box title="De olho" icon="eye" to="/watches">
         <WatchesList />
       </Box>
     ),
@@ -544,7 +549,7 @@ function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onThe
               <button className="btn" onClick={() => setEditing(true)}>
                 <Icon name="layout" size={16} /> Editar<span className="hide-phone"> painel</span>
               </button>
-              <button className={`btn btn-brand ${fit ? "" : "phone-only"}`} onClick={() => setModal("invite")}>
+              <button className={`btn ${fit ? "" : "phone-only"}`} onClick={() => setModal("invite")}>
                 <Icon name="user-plus" size={16} /> Convidar
               </button>
             </div>

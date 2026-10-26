@@ -64,7 +64,7 @@ export function GoalsCard({ user, readonly }: { user: string; readonly: boolean 
       {data && !goals.length && (
         <div className="fin-empty-side">
           <p className="muted">Viagem, reserva, carro novo. Diga o valor e o prazo que o Moacir mostra quanto guardar por mês e acompanha com você.</p>
-          {!readonly && <button className="btn btn-brand btn-sm" onClick={() => setEditing("new")}><Icon name="plus" size={14} /> Criar meta</button>}
+          {!readonly && <button className="btn btn-sm" onClick={() => setEditing("new")}><Icon name="plus" size={14} /> Criar meta</button>}
         </div>
       )}
       {editing && (
