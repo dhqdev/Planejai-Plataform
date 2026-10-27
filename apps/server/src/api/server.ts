@@ -13,8 +13,8 @@ import { safeEqual, signSession, verifySession } from "../crypto.js";
 import { bumpSession, hashPassword, loadAccount, normalizePhone, ownerAccount, toAccount, verifyPassword, type Account } from "../accounts.js";
 import { hit, peek } from "../ratelimit.js";
 import { one, pool, query } from "../db/pool.js";
-import { phoneVariants } from "../ingest.js";
-import { cleanInviteCode } from "../social.js";
+import { isOwner, phoneVariants } from "../ingest.js";
+import { cleanInviteCode, PERSONAL_SIGNUPS_PER_DAY } from "../social.js";
 import { pricingOf } from "../billing.js";
 import { grainsPerMessage } from "../credits.js";
 import { getSettings } from "../settings.js";
@@ -242,16 +242,16 @@ export async function buildServer() {
     // limitar por IP impede varrer códigos atrás de convites válidos
     if ((await hit(`invite:ip:${req.ip}`, 15 * 60)) > 60) return tooMany(reply);
     const inv = await one(
-      `SELECT i.name, i.phone, i.email, i.status, i.expires_at, COALESCE(u.full_name, u.name, a.name) AS inviter
+      `SELECT i.name, i.phone, i.email, i.status, i.expires_at, i.multi, COALESCE(u.full_name, u.name, a.name) AS inviter
          FROM invites i LEFT JOIN users u ON u.id = i.inviter_user_id LEFT JOIN accounts a ON a.id = i.inviter_account_id WHERE i.code = $1`,
       [cleanInviteCode(req.params.code)],
     );
     if (!inv || inv.status === "declined" || inv.status === "expired") return reply.code(404).send({ error: "Não achei esse convite. Confira o código." });
     // convite por código serve uma vez só
     if (!inv.phone && inv.status !== "pending") return reply.code(410).send({ error: "Esse convite já foi usado. Peça um novo a quem te convidou." });
-    if (new Date(inv.expires_at) < new Date()) return reply.code(410).send({ error: "Esse convite expirou. Os códigos valem 24 horas: peça um novo a quem te convidou." });
+    if (new Date(inv.expires_at) < new Date()) return reply.code(410).send({ error: "Esse convite expirou. Peça o link de novo a quem te convidou." });
     const used = inv.phone ? await one("SELECT 1 FROM accounts WHERE phone = ANY($1)", [phoneVariants(inv.phone)]) : null;
-    return { name: inv.name, email: inv.email, phone: inv.phone, inviter: inv.inviter, used: Boolean(used), expires_at: inv.expires_at };
+    return { name: inv.name, email: inv.email, phone: inv.phone, inviter: inv.inviter, used: Boolean(used), expires_at: inv.multi ? null : inv.expires_at };
   });
 
   // Cadastro: no modo convite (padrão) só entra quem tem o código; vira admin da própria conta, ligado ao WhatsApp
@@ -263,10 +263,19 @@ export async function buildServer() {
     const found = code
       ? await one("SELECT * FROM invites WHERE code = $1 AND status IN ('pending', 'accepted') AND expires_at > now()", [code])
       : null;
-    // convite por código (sem telefone) serve um cadastro só
-    const invite = found && (found.phone || found.status === "pending") ? found : null;
+    // convite por código (sem telefone) serve um cadastro só; o link pessoal (multi) serve para vários
+    const invite = found && (found.phone || found.multi || found.status === "pending") ? found : null;
     if (code && !invite) return reply.code(400).send({ error: found ? "Esse convite já foi usado. Peça um novo a quem te convidou." : "Convite inválido ou expirado" });
     if (signupMode === "invite" && !invite) return reply.code(403).send({ error: "O Planejai é só por convite. Peça um convite a quem já usa." });
+    if (invite?.multi && invite.inviter_user_id) {
+      // link pessoal: quem foi bloqueado não traz mais ninguém, e um link vazado não enche o sistema num dia só
+      const inviter = await one("SELECT phone, status FROM users WHERE id = $1", [invite.inviter_user_id]);
+      if (!inviter || inviter.status === "blocked") return reply.code(400).send({ error: "Convite inválido ou expirado" });
+      if (!isOwner(inviter.phone)) {
+        const today = await one("SELECT COUNT(*)::int AS n FROM users WHERE invited_by = $1 AND created_at > now() - interval '24 hours'", [invite.inviter_user_id]);
+        if (today.n >= PERSONAL_SIGNUPS_PER_DAY) return reply.code(429).send({ error: "Muita gente entrou por esse convite hoje. Tente de novo amanhã ou peça outro link." });
+      }
+    }
     const name = String(req.body?.name ?? invite?.name ?? "").trim().slice(0, 80);
     const email = String(req.body?.email ?? "").trim().toLowerCase();
     const password = String(req.body?.password ?? "");
@@ -303,7 +312,7 @@ export async function buildServer() {
       const ok = await verifySignup(String(req.body.challenge), String(req.body?.verify_code ?? ""), phone, email);
       if (!ok.ok) return reply.code(401).send({ error: ok.error });
     }
-    if (invite && !invite.phone) {
+    if (invite && !invite.phone && !invite.multi) {
       // marca o código como usado antes de criar a conta: dois cadastros ao mesmo tempo não usam o mesmo convite
       const claimed = await one("UPDATE invites SET status = 'accepted', responded_at = now() WHERE id = $1 AND status = 'pending' RETURNING id", [invite.id]);
       if (!claimed) return reply.code(400).send({ error: "Esse convite já foi usado. Peça um novo a quem te convidou." });
@@ -328,7 +337,10 @@ export async function buildServer() {
       );
     }
     if (invite && invite.status === "pending") {
-      await query("UPDATE invites SET status = 'accepted', responded_at = COALESCE(responded_at, now()), invitee_user_id = $2 WHERE id = $1", [invite.id, user.id]);
+      // o link pessoal segue aberto para os próximos; quem entrou fica marcado em users.invited_by
+      if (!invite.multi) {
+        await query("UPDATE invites SET status = 'accepted', responded_at = COALESCE(responded_at, now()), invitee_user_id = $2 WHERE id = $1", [invite.id, user.id]);
+      }
       if (invite.inviter_user_id) {
         await query("INSERT INTO contacts (user_id, contact_id) VALUES ($1, $2), ($2, $1) ON CONFLICT DO NOTHING", [invite.inviter_user_id, user.id]);
       }

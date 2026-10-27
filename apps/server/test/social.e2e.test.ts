@@ -380,7 +380,7 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     await app.close();
   });
 
-  it("convite por código: vale 24h, serve uma vez e o telefone vem no cadastro", async () => {
+  it("link de convite pessoal: o mesmo link serve para várias pessoas e cada uma aparece para quem convidou", async () => {
     const { config } = await import("../src/config.js");
     const owners = config.OWNER_PHONES;
     config.OWNER_PHONES = ["5519911110000"]; // o dono é o David: o convite dele liga os dois como contatos
@@ -389,46 +389,63 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     const owner = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } });
     const sup = String(owner.headers["set-cookie"]).split(";")[0]!;
     const sentBefore = channels.playground.sent.length;
-    const created = (await app.inject({ method: "POST", url: "/api/invites", headers: { cookie: sup }, payload: { name: "Rafa Lima" } })).json();
+    const created = (await app.inject({ method: "POST", url: "/api/invites", headers: { cookie: sup }, payload: {} })).json();
     expect(created.code).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
     expect(created.link).toMatch(new RegExp(`/convite/${created.code}$`));
-    const hours = (new Date(created.expires_at).getTime() - Date.now()) / 3_600_000;
-    expect(hours).toBeGreaterThan(23.9);
-    expect(hours).toBeLessThanOrEqual(24);
+    // pedir de novo devolve o mesmo link
+    expect((await app.inject({ method: "POST", url: "/api/invites", headers: { cookie: sup }, payload: {} })).json().code).toBe(created.code);
     // digitado na landing com minúscula e hífen
     const typed = `${created.code.slice(0, 3).toLowerCase()}-${created.code.slice(3)}`;
-    expect((await app.inject({ method: "GET", url: `/api/invite/${typed}` })).json()).toMatchObject({ name: "Rafa Lima", phone: null, used: false });
+    expect((await app.inject({ method: "GET", url: `/api/invite/${typed}` })).json()).toMatchObject({ phone: null, used: false, expires_at: null });
 
     const reg = await app.inject({ method: "POST", url: "/api/auth/register", payload: { code: typed, name: "Rafa Lima", email: "rafa@x.com", password: "senha-forte", phone: "19 94444-5555", accept_terms: true } });
     expect(reg.json()).toMatchObject({ role: "admin", pending: false });
     const rafa = await db.one("SELECT id, status, invited_by FROM users WHERE phone = '5519944445555'");
     expect(rafa).toMatchObject({ status: "active", invited_by: david.id });
     expect(await db.one("SELECT 1 AS ok FROM contacts WHERE user_id = $1 AND contact_id = $2", [david.id, rafa.id])).toEqual({ ok: 1 });
-    expect(channels.playground.sent.length).toBe(sentBefore); // código não manda nada no WhatsApp
+    expect(channels.playground.sent.length).toBe(sentBefore); // link não manda nada no WhatsApp
 
-    // uso único
-    const again = await app.inject({ method: "POST", url: "/api/auth/register", payload: { code: created.code, name: "Outra Pessoa", email: "outra@x.com", password: "senha-forte", phone: "19 96666-7777", accept_terms: true } });
-    expect(again.statusCode).toBe(400);
-    expect(again.json().error).toContain("já foi usado");
-    expect((await app.inject({ method: "GET", url: `/api/invite/${created.code}` })).statusCode).toBe(410);
+    // o mesmo link serve para a próxima pessoa
+    const again = await app.inject({ method: "POST", url: "/api/auth/register", payload: { code: created.code, name: "Bia Costa", email: "bia@x.com", password: "senha-forte", phone: "19 96666-7777", accept_terms: true } });
+    expect(again.json()).toMatchObject({ role: "admin", pending: false });
+    const bia = await db.one("SELECT id, invited_by FROM users WHERE phone = '5519966667777'");
+    expect(bia.invited_by).toBe(david.id);
+    expect((await app.inject({ method: "GET", url: `/api/invite/${created.code}` })).statusCode).toBe(200);
 
-    // passou de 24h
-    const old = (await app.inject({ method: "POST", url: "/api/invites", headers: { cookie: sup }, payload: {} })).json();
-    await db.query("UPDATE invites SET expires_at = now() - interval '1 minute' WHERE id = $1", [old.id]);
-    const late = await app.inject({ method: "GET", url: `/api/invite/${old.code}` });
-    expect(late.statusCode).toBe(410);
-    expect(late.json().error).toContain("24 horas");
-
-    // aba Convites: cada um vê só quem entrou pelo convite dele; o aceito vira amigo e sai da lista de convites
+    // aba Convites: quem entrou pelo link aparece para quem convidou; o link pessoal não vira "convite em aberto"
     const mine = (await app.inject({ method: "GET", url: "/api/me/convites", headers: { cookie: sup } })).json();
-    expect(mine.friends).toEqual(expect.arrayContaining([expect.objectContaining({ id: rafa.id, name: "Rafa", paying: false })]));
-    expect(mine.invites.map((i: any) => i.id)).toContain(old.id);
+    expect(mine.friends.map((f: any) => f.id)).toEqual(expect.arrayContaining([rafa.id, bia.id]));
+    expect(mine.personal).toMatchObject({ code: created.code, link: created.link });
     expect(mine.invites.some((i: any) => i.code === created.code)).toBe(false);
-    expect(mine.discount).toMatchObject({ percent: 0 });
     const rafaLogin = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "rafa@x.com", password: "senha-forte" } });
     const rafaCookie = String(rafaLogin.headers["set-cookie"]).split(";")[0]!;
     const hers = (await app.inject({ method: "GET", url: "/api/me/convites", headers: { cookie: rafaCookie } })).json();
     expect(hers).toMatchObject({ linked: true, friends: [], invites: [] });
+    expect(hers.personal.code).not.toBe(created.code); // cada pessoa tem o próprio link
+
+    // trocar o link: o antigo para de valer
+    const fresh = (await app.inject({ method: "POST", url: "/api/invites", headers: { cookie: sup }, payload: { fresh: true } })).json();
+    expect(fresh.code).not.toBe(created.code);
+    expect((await app.inject({ method: "GET", url: `/api/invite/${created.code}` })).statusCode).toBe(404);
+    const late = await app.inject({ method: "POST", url: "/api/auth/register", payload: { code: created.code, name: "Caio", email: "caio@x.com", password: "senha-forte", phone: "19 97777-1212", accept_terms: true } });
+    expect(late.statusCode).toBe(400);
+
+    // limite por dia no link de quem não é o dono (link vazado em grupo grande)
+    const { PERSONAL_SIGNUPS_PER_DAY } = await import("../src/social.js");
+    await db.query(
+      `INSERT INTO users (phone, name, status, invited_by) SELECT '55199' || lpad(g::text, 8, '0'), 'X', 'active', $1 FROM generate_series(1, $2) g`,
+      [rafa.id, PERSONAL_SIGNUPS_PER_DAY],
+    );
+    const full = await app.inject({ method: "POST", url: "/api/auth/register", payload: { code: hers.personal.code, name: "Duda", email: "duda@x.com", password: "senha-forte", phone: "19 98888-1313", accept_terms: true } });
+    expect(full.statusCode).toBe(429);
+    await db.query("DELETE FROM users WHERE invited_by = $1", [rafa.id]);
+
+    // código antigo de uso único (de antes do link pessoal) continua valendo uma vez só
+    await db.query("INSERT INTO invites (code, inviter_user_id, expires_at) VALUES ('ANTG23', $1, now() + interval '1 hour')", [david.id]);
+    const once = await app.inject({ method: "POST", url: "/api/auth/register", payload: { code: "ANTG23", name: "Edu", email: "edu@x.com", password: "senha-forte", phone: "19 98888-1414", accept_terms: true } });
+    expect(once.json()).toMatchObject({ pending: false });
+    const twice = await app.inject({ method: "POST", url: "/api/auth/register", payload: { code: "ANTG23", name: "Fê", email: "fe@x.com", password: "senha-forte", phone: "19 98888-1515", accept_terms: true } });
+    expect(twice.json().error).toContain("já foi usado");
     config.OWNER_PHONES = owners;
     await app.close();
   });

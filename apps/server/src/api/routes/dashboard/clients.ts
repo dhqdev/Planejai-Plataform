@@ -22,8 +22,8 @@ export function clientRoutes(api: FastifyInstance) {
   api.get("/api/clients", async () =>
     withOutfits(await many(`SELECT u.id, u.phone, u.name, u.full_name, u.email, u.status, u.created_at, u.last_seen_at,
                  COALESCE(inv.full_name, inv.name) AS invited_by_name,
-                 (SELECT COUNT(*)::int FROM invites i WHERE i.inviter_user_id = u.id) AS invites_sent,
-                 (SELECT COUNT(*)::int FROM invites i WHERE i.inviter_user_id = u.id AND i.status = 'accepted') AS invites_accepted,
+                 (SELECT COUNT(*)::int FROM invites i WHERE i.inviter_user_id = u.id AND NOT i.multi) AS invites_sent,
+                 (SELECT COUNT(*)::int FROM users f WHERE f.invited_by = u.id AND f.id <> u.id) AS invites_accepted,
                  (SELECT COUNT(*)::int FROM contacts c WHERE c.user_id = u.id) AS contacts,
                  (SELECT COUNT(*)::int FROM client_agents ca WHERE ca.user_id = u.id AND ca.active) AS agents,
                  a.id AS account_id, a.email AS account_email, a.status AS account_status, a.role AS account_role

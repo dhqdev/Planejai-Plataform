@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { ago, api, brl, phoneFmt } from "../api";
-import { Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
+import { CopyField, Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
 import { useApi } from "../hooks";
 import { Icon } from "../icons";
 import type { Outfit } from "../mascote/Mascote";
 import { UserMascote } from "../mascote/UserMascote";
-import { InviteForm } from "./Invites";
-import { Vazio } from "../Vazio";
+import { InviteForm, inviteText } from "./Invites";
 import "../styles/convites.css";
 
 interface Data {
@@ -16,6 +15,7 @@ interface Data {
   friends: { id: string; name: string; joinedAt: string; paying: boolean; outfit: Outfit | null }[];
   invites: { id: string; code: string; name: string | null; phone: string | null; status: string; created_at: string; expires_at: string; link: string }[];
   subscription: { plan: string; price: number; value: number } | null;
+  personal: { id: string; code: string; link: string } | null;
 }
 
 const open = (i: Data["invites"][number]) => i.status === "pending" && new Date(i.expires_at) > new Date();
@@ -27,9 +27,12 @@ const left = (iso: string) => {
 };
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** Convites de cada pessoa: quem entrou pelo convite dela, quem já assina e quanto isso tira da mensalidade. */
+const WEEK = 7 * 86_400_000;
+
+/** Convites de cada pessoa: o link dela (serve para várias pessoas), quem entrou por ele, quem já assina e o desconto. */
 export function ConvitesPage() {
-  const { data, error, reload } = useApi<Data>("/api/me/convites");
+  // quem entra pelo link vai aparecendo sem recarregar a página
+  const { data, error, reload } = useApi<Data>("/api/me/convites", { poll: 30000 });
   const [inviting, setInviting] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   if (!data) return error ? <ErrorBox error={error} /> : <Loading />;
@@ -109,20 +112,12 @@ export function ConvitesPage() {
             <dd>{friends.filter((f) => f.paying).length}</dd>
           </div>
           <div>
-            <dt>Em aberto</dt>
-            <dd>{pending.length}</dd>
+            <dt>Na semana</dt>
+            <dd>{friends.filter((f) => Date.now() - new Date(f.joinedAt).getTime() < WEEK).length}</dd>
           </div>
         </dl>
       </section>
 
-      {!friends.length && !pending.length && !old.length ? (
-        <Vazio
-          img="convites"
-          title="Chame quem você gosta"
-          text="Mande um convite para um amigo ou alguém da família. Quem entra ganha o próprio assistente, e vocês podem compartilhar agenda e finanças se quiserem."
-          actions={data.linked ? [{ label: "Convidar alguém", icon: "user-plus", onClick: () => setInviting(true) }] : []}
-        />
-      ) : (
       <div className="conv-cols">
         <section className="card conv-list" aria-label="Quem entrou">
           <header>
@@ -147,17 +142,28 @@ export function ConvitesPage() {
               ))}
             </ul>
           ) : (
-            <Empty>Ninguém entrou pelo seu convite ainda. Gere um convite e mande para alguém.</Empty>
+            <Empty>Ninguém entrou pelo seu link ainda. Quando alguém se cadastrar por ele, aparece aqui.</Empty>
           )}
         </section>
 
-        <section className="card conv-list" aria-label="Convites em aberto">
+        <section className="card conv-list" aria-label="Seu link de convite">
           <header>
-            <h3>Convites em aberto</h3>
-            <span className="muted">Cada um serve para uma pessoa</span>
+            <h3>Seu link de convite</h3>
+            <span className="muted">Serve para quantas pessoas você quiser</span>
           </header>
-          {pending.length ? (
-            <ul>
+          {data.personal ? (
+            <div className="conv-link">
+              <span className="invite-chip mono">{spaced(data.personal.code)}</span>
+              <CopyField value={data.personal.link} />
+              <a className="btn" href={`https://wa.me/?text=${encodeURIComponent(inviteText(data.personal))}`} target="_blank" rel="noreferrer">
+                <Icon name="send" size={16} /> Mandar no WhatsApp
+              </a>
+            </div>
+          ) : (
+            <Empty>Ligue seu WhatsApp ao perfil para ter seu link.</Empty>
+          )}
+          {pending.length > 0 && (
+            <ul className="conv-pending">
               {pending.map((i) => (
                 <li key={i.id}>
                   <span className="conv-ico">
@@ -179,8 +185,6 @@ export function ConvitesPage() {
                 </li>
               ))}
             </ul>
-          ) : (
-            <Empty>Nenhum convite esperando cadastro.</Empty>
           )}
           {old.length > 0 && (
             <details className="conv-old">
@@ -201,7 +205,6 @@ export function ConvitesPage() {
           )}
         </section>
       </div>
-      )}
 
       {inviting && (
         <Modal title="Convidar alguém" icon={<Icon name="user-plus" />} onClose={() => (setInviting(false), reload())}>

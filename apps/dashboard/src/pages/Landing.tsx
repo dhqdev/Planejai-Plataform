@@ -422,7 +422,7 @@ export function LandingPage() {
     [
       "Como eu começo?",
       invite
-        ? "É só por convite: quem já usa gera um código para você, que vale 24 horas. Toque em Tenho um convite."
+        ? "É só por convite: peça o link ou o código de quem já usa e toque em Tenho um convite."
         : closed
           ? "Os cadastros estão fechados agora. Se você já tem conta, é só entrar."
           : "Crie a conta com nome, e-mail e WhatsApp. Em um minuto ele já está te respondendo.",

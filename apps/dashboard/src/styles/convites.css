@@ -23,6 +23,10 @@
 .conv-list ul { list-style: none; margin: 0; padding: 0 8px 8px; }
 .conv-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
 .conv-list li + li { border-top: 1px solid var(--border); }
+.conv-link { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 4px 20px 18px; }
+.conv-link .copy { align-self: stretch; }
+.conv-link .invite-chip { margin: 0; font-size: 15px; padding: 6px 12px; border-radius: 10px; }
+.conv-pending { border-top: 1px solid var(--border); }
 .conv-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .conv-who strong, .conv-who > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .conv-who .muted { font-size: 12px; }

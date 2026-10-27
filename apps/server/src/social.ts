@@ -141,34 +141,41 @@ export async function createInvite(input: InviteInput) {
 
 /** Letras e números sem os que confundem (0/O, 1/I/L): o código é digitado na landing. */
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-export const INVITE_CODE_HOURS = 24;
+const newCode = () => Array.from(randomBytes(6), (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
 
 /** Deixa o código digitado comparável: sem espaço, hífen ou minúscula. */
 export const cleanInviteCode = (raw: unknown) => String(raw ?? "").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 16);
 
+/** Quantas pessoas podem entrar pelo link pessoal de alguém em 24h (o dono não tem limite): segura link vazado em grupo grande. */
+export const PERSONAL_SIGNUPS_PER_DAY = 30;
+
 /**
- * Convite por código (botão Convidar do painel): gera um link e um código de 6 caracteres que valem 24h e servem
- * para um cadastro só. Não manda nada no WhatsApp; quem convidou compartilha como quiser e o telefone vem no cadastro.
+ * Link de convite pessoal: um código por pessoa, sem prazo, que serve para quantos cadastros vierem.
+ * Quem entra por ele fica com `invited_by` de quem convidou e aparece em "Quem entrou". `fresh` troca o código
+ * (o antigo para de valer), para quando o link foi parar onde não devia.
  */
-export async function createInviteCode(input: { inviterUserId?: string | null; inviterAccountId?: string | null; name?: string | null }) {
-  if (input.inviterUserId) {
-    const me = await one("SELECT phone FROM users WHERE id = $1", [input.inviterUserId]);
-    if (me && !isOwner(me.phone)) {
-      const today = await one("SELECT COUNT(*)::int AS n FROM invites WHERE inviter_user_id = $1 AND created_at > now() - interval '24 hours'", [input.inviterUserId]);
-      if (today.n >= INVITES_PER_PERSON_DAY) throw new Error(`Limite de ${INVITES_PER_PERSON_DAY} convites por dia atingido. Amanhã dá para gerar mais.`);
-    }
+export async function personalInvite(input: { inviterUserId?: string | null; inviterAccountId?: string | null }, fresh = false) {
+  const byUser = Boolean(input.inviterUserId);
+  const id = byUser ? input.inviterUserId : input.inviterAccountId;
+  if (!id) throw new Error("Ligue seu WhatsApp ao perfil antes de convidar.");
+  const where = byUser ? "inviter_user_id = $1" : "inviter_user_id IS NULL AND inviter_account_id = $1";
+  if (fresh) await query(`UPDATE invites SET status = 'expired' WHERE ${where} AND multi AND status = 'pending'`, [id]);
+  else {
+    const current = await one(`SELECT * FROM invites WHERE ${where} AND multi AND status = 'pending'`, [id]);
+    if (current) return current;
   }
   for (let attempt = 0; attempt < 5; attempt++) {
-    const bytes = randomBytes(6);
-    const code = Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
     const invite = await one(
-      `INSERT INTO invites (code, inviter_user_id, inviter_account_id, name, expires_at)
-       VALUES ($1, $2, $3, $4, now() + make_interval(hours => $5)) ON CONFLICT (code) DO NOTHING RETURNING *`,
-      [code, input.inviterUserId ?? null, input.inviterAccountId ?? null, input.name?.trim().slice(0, 80) || null, INVITE_CODE_HOURS],
+      `INSERT INTO invites (code, inviter_user_id, inviter_account_id, multi, expires_at)
+       VALUES ($1, $2, $3, true, now() + interval '100 years') ON CONFLICT DO NOTHING RETURNING *`,
+      [newCode(), input.inviterUserId ?? null, input.inviterAccountId ?? null],
     );
     if (invite) return invite;
+    // duas abas pedindo ao mesmo tempo: a outra já criou
+    const current = await one(`SELECT * FROM invites WHERE ${where} AND multi AND status = 'pending'`, [id]);
+    if (current) return current;
   }
-  throw new Error("Não deu para gerar o código agora. Tente de novo.");
+  throw new Error("Não deu para gerar o link agora. Tente de novo.");
 }
 
 export function inviteLink(code: string) {
@@ -342,8 +349,10 @@ export async function findContact(userId: string, name: string) {
 
 export async function inviteStats(userId: string | null) {
   return one(
-    `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE status = 'accepted')::int AS accepted,
-            COUNT(*) FILTER (WHERE status = 'pending' AND expires_at > now())::int AS pending,
+    // "aceitaram" conta quem entrou (users.invited_by), que inclui quem veio pelo link pessoal
+    `SELECT COUNT(*) FILTER (WHERE NOT multi)::int AS total,
+            (SELECT COUNT(*) FROM users f WHERE f.invited_by IS NOT NULL AND f.id <> f.invited_by AND ($1::uuid IS NULL OR f.invited_by = $1))::int AS accepted,
+            COUNT(*) FILTER (WHERE status = 'pending' AND NOT multi AND expires_at > now())::int AS pending,
             COUNT(*) FILTER (WHERE status = 'declined')::int AS declined
        FROM invites WHERE ($1::uuid IS NULL OR inviter_user_id = $1)`,
     [userId],

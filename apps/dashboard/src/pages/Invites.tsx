@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, ago, phoneFmt } from "../api";
 import { CopyField, Empty, ErrorBox, Loading, Modal, PageHead } from "../components";
 import { useApi } from "../hooks";
@@ -15,87 +15,90 @@ const left = (iso: string) => {
   return h >= 1 ? `vale por mais ${Math.floor(h)}h` : `vale por mais ${Math.max(1, Math.round(h * 60))} min`;
 };
 
-interface Created {
+interface Personal {
   code: string;
   link: string;
-  name: string | null;
-  expires_at: string;
 }
 
-/** Gera um convite: link e código que valem 24h e servem para um cadastro. Quem convida manda como quiser. */
-export function InviteForm({ onDone }: { onDone?: (link: string) => void }) {
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [made, setMade] = useState<Created | null>(null);
+/** Texto pronto para o WhatsApp (*negrito*, _itálico_ e ```mono``` para o código ficar fácil de copiar). */
+export const inviteText = (p: Personal) =>
+  [
+    "Oi! 👋✨",
+    "",
+    "Te convidei pro *Planejai* 🎉, um assistente no WhatsApp que organiza a vida por você:",
+    "",
+    "💸 Anota seus gastos e mostra para onde vai o dinheiro",
+    "🗓️ Cuida da agenda e dos compromissos",
+    "⏰ Lembra do que importa na hora certa",
+    "",
+    "👉 *Entre por aqui:*",
+    p.link,
+    "",
+    `🔑 Ou use o código \`\`\`${p.code}\`\`\` em *"Tenho um convite"*`,
+  ].join("\n");
 
-  const make = async () => {
+/**
+ * Link de convite pessoal: o mesmo link e código servem para quantas pessoas a pessoa quiser e não vencem.
+ * Quem entra por ele aparece em "Quem entrou" na aba Convites. "Trocar link" faz o antigo parar de valer.
+ */
+export function InviteForm({ onDone }: { onDone?: (link: string) => void }) {
+  const [made, setMade] = useState<Personal | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [swap, setSwap] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const load = async (fresh = false) => {
     setBusy(true);
     setError(null);
     try {
-      const r = await api<Created>("/api/invites", { method: "POST", json: { name: name.trim() || undefined } });
+      const r = await api<Personal>("/api/invites", { method: "POST", json: fresh ? { fresh: true } : {} });
       setMade(r);
-      setName("");
-      onDone?.(r.link);
+      setSwap(false);
+      if (fresh) onDone?.(r.link);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   };
+  useEffect(() => {
+    void load();
+  }, []);
 
-  if (made) {
-    const first = made.name?.split(" ")[0];
-    // formatação do WhatsApp: *negrito*, _itálico_ e ```mono``` (o código fica fácil de copiar)
-    const text = [
-      `${first ? `Oi, ${first}!` : "Oi!"} 👋✨`,
-      "",
-      "Te convidei pro *Planejai* 🎉, um assistente no WhatsApp que organiza a vida por você:",
-      "",
-      "💸 Anota seus gastos e mostra para onde vai o dinheiro",
-      "🗓️ Cuida da agenda e dos compromissos",
-      "⏰ Lembra do que importa na hora certa",
-      "",
-      "👉 *Entre por aqui:*",
-      made.link,
-      "",
-      `🔑 Ou use o código \`\`\`${made.code}\`\`\` em *"Tenho um convite"*`,
-      "",
-      "⏳ _Vale por 24 horas e serve para um cadastro._",
-    ].join("\n");
-    return (
-      <div className="invite-made">
-        <span className="invite-code mono" aria-label={`Código ${made.code.split("").join(" ")}`}>
-          {spaced(made.code)}
-        </span>
-        <p className="muted invite-made-note">Vale por 24 horas e serve para um cadastro. A pessoa abre o link ou digita o código em "Tenho um convite".</p>
-        <CopyField value={made.link} />
-        <div className="invite-made-actions">
-          <a className="btn btn-primary" href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">
-            <Icon name="send" size={16} /> Mandar no WhatsApp
-          </a>
-          <button className="btn" onClick={() => setMade(null)}>
-            Gerar outro
-          </button>
-        </div>
-      </div>
-    );
-  }
-
+  if (!made) return error ? <ErrorBox error={error} /> : <Loading />;
   return (
-    <div>
+    <div className="invite-made">
       <ErrorBox error={error} />
-      <p className="muted" style={{ marginTop: 0, fontSize: 13.5 }}>
-        O Planejai gera um link e um código para a pessoa entrar. Ela preenche o próprio nome, WhatsApp e senha no cadastro.
+      <span className="invite-code mono" aria-label={`Código ${made.code.split("").join(" ")}`}>
+        {spaced(made.code)}
+      </span>
+      <p className="muted invite-made-note">
+        Esse é o seu link. Mande para quantas pessoas quiser: ele não vence, e cada um que entrar aparece na sua aba Convites.
       </p>
-      <div className="field">
-        <label>Para quem é (opcional)</label>
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Giovani Souza" onKeyDown={(e) => e.key === "Enter" && make()} />
-        <span className="help">Só para você saber de quem é cada convite e para dar oi pelo nome.</span>
+      <CopyField value={made.link} />
+      <div className="invite-made-actions">
+        <a className="btn btn-primary" href={`https://wa.me/?text=${encodeURIComponent(inviteText(made))}`} target="_blank" rel="noreferrer">
+          <Icon name="send" size={16} /> Mandar no WhatsApp
+        </a>
+        {!swap && (
+          <button className="btn" onClick={() => setSwap(true)}>
+            Trocar link
+          </button>
+        )}
       </div>
-      <button className="btn btn-primary" style={{ width: "100%" }} disabled={busy} onClick={make}>
-        <Icon name="link" size={16} /> {busy ? "Gerando…" : "Gerar convite"}
-      </button>
+      {swap && (
+        <div className="invite-swap">
+          <p className="muted">O link e o código de agora param de valer. Quem já entrou continua com você.</p>
+          <div className="invite-made-actions">
+            <button className="btn" onClick={() => setSwap(false)}>
+              Manter
+            </button>
+            <button className="btn btn-danger" disabled={busy} onClick={() => void load(true)}>
+              {busy ? "Trocando…" : "Trocar"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -111,7 +114,7 @@ export function InvitesPage({ isSuper }: { isSuper: boolean }) {
     <div className="page">
       <PageHead
         title="Convites"
-        subtitle="O Planejai só entra por convite. Cada convite é um link com código que vale 24 horas e serve para uma pessoa."
+        subtitle="O Planejai só entra por convite. Cada pessoa tem um link que serve para quantos amigos ela quiser chamar."
         actions={
           <button className="btn btn-primary" onClick={() => setOpen(true)}>
             <Icon name="user-plus" size={16} /> Convidar
