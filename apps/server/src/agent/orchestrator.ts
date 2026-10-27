@@ -195,6 +195,9 @@ export function isTransientError(err: unknown) {
   return /^(ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|UND_ERR_\w+)$/.test(code) || /fetch failed/i.test(e?.message ?? "");
 }
 
+/** Resposta antiga que negava função por plano ("é do plano *Dia a dia*, e o seu tá no *Leve*"). */
+const OLD_PLAN_REFUSAL = /(do|no|ao|para o|de outro) plano \*?(Dia a dia|Completo)\*?|plano \*?(Dia a dia|Completo)\*?[^.\n]{0,80}(segue|tá|está|fica) no \*?Leve|regra da conta/i;
+
 async function processLocked(conversationId: string, opts: ProcessOpts): Promise<ProcessResult> {
   const conversation = await one<ConversationRow>("SELECT * FROM conversations WHERE id = $1", [conversationId]);
   if (!conversation) throw new Error(`Conversa ${conversationId} não existe`);
@@ -406,7 +409,13 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
 
     const messages: ChatMessage[] = [];
     let afterEvent = false;
+    let droppedRefusal = false;
     for (const m of history) {
+      // recusa antiga "isso é do plano X" (planos por recurso, desfeitos em 23/out): o modelo copiaria a negativa
+      if (m.role === "assistant" && OLD_PLAN_REFUSAL.test(m.text)) {
+        droppedRefusal = true;
+        continue;
+      }
       if (m.role === "assistant") messages.push({ role: "assistant", content: m.text });
       else if (m.role === "event") messages.push({ role: "user", content: `[evento do sistema] ${m.text}` });
       else {
@@ -416,6 +425,12 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
         messages.push({ role: "user", content: `${prefix}${m.text}` });
       }
       afterEvent = m.role === "event";
+    }
+    if (droppedRefusal) {
+      messages.push({
+        role: "system",
+        content: "Todo plano e a conta grátis têm todas as funções liberadas (pesquisa, menor preço, recados, mídia, especialistas). Nunca diga que algo é de outro plano: atenda o pedido anterior que ficou sem resposta.",
+      });
     }
     if (inFlight.length) {
       messages.push({
