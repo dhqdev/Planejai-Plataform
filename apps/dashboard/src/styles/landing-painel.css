@@ -30,7 +30,7 @@
 .hn-cta .lp-btn.big { height: 52px; padding: 0 26px; font-size: 16.5px; }
 
 /* ---------- janela do painel ---------- */
-.hn-stage { margin-top: 64px; }
+.hn-stage { margin-top: 112px; }
 .np { animation: np-in 1.1s var(--lp-ease) both .45s; }
 @keyframes np-in { from { opacity: 0; transform: translateY(48px) scale(.97); } }
 .np-win {
@@ -78,12 +78,17 @@
 .np-meter { display: block; height: 6px; margin: 8px 0 8px; border-radius: 6px; background: #e4e4e4; overflow: hidden; }
 .np-meter i { display: block; height: 100%; border-radius: 6px; background: var(--lp-violet); transition: width 1.1s var(--lp-ease); }
 
-/* a conversa encaixada à direita; o Mascote dela espia por cima da janela */
+/* o Bolinho anda na borda de cima da janela (LandingPanel.tsx, Walker) */
+.np-walk { position: absolute; z-index: 4; left: 18px; right: 18px; bottom: 100%; height: 0; pointer-events: none; }
+.np-walk-body { position: absolute; left: 0; bottom: -46px; will-change: transform; filter: drop-shadow(0 10px 10px rgba(0, 0, 0, .12)); }
+.np-walk-in { display: block; pointer-events: auto; cursor: pointer; -webkit-user-select: none; user-select: none; animation: np-walk-in .7s var(--lp-spring) both 1.1s; }
+@keyframes np-walk-in { from { opacity: 0; transform: translateY(30px) scale(.6); } }
+
+/* a conversa encaixada à direita */
 .np-chat { padding: 18px 20px 14px; border-left: 1px solid var(--lp-line); background: #fafafa; border-bottom-right-radius: 16px; }
-.np .hc { width: 100%; }
-.np .hc-mascote { right: -40px; top: -104px; }
-.np .hc-win { border-radius: 20px; box-shadow: 0 24px 40px -30px rgba(0, 0, 0, .35); }
-.np .hc-tabs { margin-top: 12px; }
+.np .lh { width: 100%; }
+.np .lh-win { border-radius: 20px; box-shadow: 0 24px 40px -30px rgba(0, 0, 0, .35); }
+.np .lh-tabs { margin-top: 12px; }
 
 /* ---------- faixa de marcas ---------- */
 .la-strip { margin-top: 72px; text-align: center; }
@@ -113,7 +118,7 @@
   .hn-cta { flex-direction: column; align-self: stretch; margin-top: 28px; }
   .hn-cta .rb-spark { display: flex; }
   .hn-cta .lp-btn.big { width: 100%; }
-  .hn-stage { margin-top: 72px; }
+  .hn-stage { margin-top: 92px; }
   .np-win { border-radius: 22px; }
   .np-url { display: none; }
   .np-bar { height: 34px; }
@@ -127,7 +132,6 @@
   .np[data-scene="cinema"] .np-card[data-k="cinema"],
   .np[data-scene="gasto"] .np-card[data-k="gasto"],
   .np[data-scene="lembrete"] .np-card[data-k="lembrete"] { display: block; animation: lp-rise .5s var(--lp-ease) both; }
-  .np .hc-mascote { right: -6px; top: -86px; }
   .la-strip { margin-top: 48px; }
   .la-strip p { font-size: 14px; }
   .la-strip-row { gap: 30px; padding-right: 30px; }

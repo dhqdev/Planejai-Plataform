@@ -37,12 +37,12 @@ export const SCENES: Scene[] = [
     mood: "happy",
     reply: () => (
       <>
-        <span className="hc-card">
-          <span className="hc-poster" aria-hidden="true" />
+        <span className="lh-card">
+          <span className="lh-poster" aria-hidden="true" />
           <span>
             <b>Duna</b>
             <small>Iguatemi, hoje</small>
-            <span className="hc-times">
+            <span className="lh-times">
               {["16h30", "19h10", "21h50"].map((t, i) => (
                 <i key={t} className={i === 1 ? "on" : ""} style={{ ["--i" as string]: i }}>
                   {t}
@@ -66,15 +66,15 @@ export const SCENES: Scene[] = [
     mood: "finished",
     reply: (play) => (
       <>
-        <span className="hc-card hc-money">
-          <span className="hc-row">
+        <span className="lh-card lh-money">
+          <span className="lh-row">
             <span>
               <b>Mercado</b>
               <small>Alimentação</small>
             </span>
             <b>R$ 42,90</b>
           </span>
-          <span className="hc-limit">
+          <span className="lh-limit">
             <small>No mês</small>
             <b>
               <CountUp from={569.5} to={612.4} duration={1.2} delay={0.35} replay={play} format={brl} /> <small>de R$ 800,00</small>
@@ -94,9 +94,9 @@ export const SCENES: Scene[] = [
     verb: "te lembra.",
     word: "lembra",
     me: (
-      <span className="hc-audio">
-        <span className="hc-play" aria-hidden="true" />
-        <span className="hc-wave" aria-hidden="true">
+      <span className="lh-audio">
+        <span className="lh-play" aria-hidden="true" />
+        <span className="lh-wave" aria-hidden="true">
           {Array.from({ length: 16 }, (_, i) => (
             <i key={i} style={{ ["--h" as string]: `${30 + ((i * 37) % 70)}%`, ["--i" as string]: i }} />
           ))}
@@ -109,8 +109,8 @@ export const SCENES: Scene[] = [
     mood: "wink",
     reply: () => (
       <>
-        <span className="hc-card hc-bell">
-          <span className="hc-bell-ico" aria-hidden="true">
+        <span className="lh-card lh-bell">
+          <span className="lh-bell-ico" aria-hidden="true">
             <svg viewBox="0 0 40 40" width={20} height={20}>
               <path d="M12.5 26 C13 24 13.4 21.5 13.5 18.5 C13.7 13.5 16.4 10.5 20 10.5 C23.6 10.5 26.3 13.5 26.5 18.5 C26.6 21.5 27 24 27.5 26 Z" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinejoin="round" />
               <circle cx={20} cy={30} r={2.4} fill="currentColor" />
@@ -130,6 +130,8 @@ export const SCENES: Scene[] = [
 /** Passos de cada cena: chega a mensagem, o Mascote reage, digita, responde, segura e some. Duração de cada um (ms). */
 const STEPS = [260, 900, 650, 1150, 4300, 460];
 const MOOD_AT: Mood[] = ["idle", "curious", "surprised", "thinking"];
+/** Cara do Mascote em cada passo da cena: chega a mensagem, ele se espanta, pensa e fica com a cara da cena. */
+export const moodAt = (scene: number, step: number): Mood => (step >= 4 ? SCENES[scene]!.mood : (MOOD_AT[step] ?? "idle"));
 
 const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -155,8 +157,8 @@ function useLive<T extends Element>() {
   return [ref, live] as const;
 }
 
-/** onDone: a resposta da cena apareceu (o painel do lado usa para mostrar o item novo). */
-export function HeroChat({ scene, onScene, onDone }: { scene: number; onScene: (i: number) => void; onDone?: (i: number) => void }) {
+/** onStep: o passo da cena (o painel usa para mostrar o item novo e o Bolinho que anda em cima, para reagir). */
+export function HeroChat({ scene, onScene, onStep }: { scene: number; onScene: (i: number) => void; onStep?: (step: number) => void }) {
   const [box, live] = useLive<HTMLDivElement>();
   const still = reduced();
   const [step, setStep] = useState(still ? 4 : 0);
@@ -175,8 +177,8 @@ export function HeroChat({ scene, onScene, onDone }: { scene: number; onScene: (
   }, [step, live, still, scene, onScene]);
 
   useEffect(() => {
-    if (step === 4) onDone?.(scene);
-  }, [step, scene, onDone]);
+    onStep?.(step);
+  }, [step, onStep]);
 
   const pick = (i: number) => {
     onScene(i);
@@ -184,19 +186,13 @@ export function HeroChat({ scene, onScene, onDone }: { scene: number; onScene: (
     setStep(still ? 4 : 1);
   };
 
-  const mood = step >= 4 ? s.mood : (MOOD_AT[step] ?? "idle");
   const leaving = step === 5;
 
   return (
-    <div className="hc" ref={box}>
-      <div className="hc-mascote" aria-hidden="true">
-        <span className="hc-mascote-in" key={s.id}>
-          <Mascote size={120} mood={mood} outfit={s.outfit} />
-        </span>
-      </div>
-      <div className="hc-win" role="img" aria-label={`Exemplo de conversa no WhatsApp: você pede e ele ${s.verb}`}>
-        <div className="hc-top" aria-hidden="true">
-          <span className="hc-avatar">
+    <div className="lh" ref={box}>
+      <div className="lh-win" role="img" aria-label={`Exemplo de conversa no WhatsApp: você pede e ele ${s.verb}`}>
+        <div className="lh-top" aria-hidden="true">
+          <span className="lh-avatar">
             <Mascote size={28} still mood="happy" />
           </span>
           <span>
@@ -204,29 +200,29 @@ export function HeroChat({ scene, onScene, onDone }: { scene: number; onScene: (
             <small>{step === 3 ? "digitando…" : "online"}</small>
           </span>
         </div>
-        <div className={`hc-chat ${leaving ? "out" : ""}`} aria-hidden="true" key={`${s.id}-${play}`}>
+        <div className={`lh-chat ${leaving ? "out" : ""}`} aria-hidden="true" key={`${s.id}-${play}`}>
           {step >= 1 && (
-            <div className="hc-b me">
+            <div className="lh-b me">
               {s.me}
-              {step >= 2 && <span className="hc-react">{s.react}</span>}
-              <span className="hc-tick">✓✓</span>
+              {step >= 2 && <span className="lh-react">{s.react}</span>}
+              <span className="lh-tick">✓✓</span>
             </div>
           )}
           {step === 3 && (
-            <div className="hc-b bot hc-typing">
+            <div className="lh-b bot lh-typing">
               <i />
               <i />
               <i />
             </div>
           )}
-          {step >= 4 && <div className="hc-b bot">{s.reply(play)}</div>}
+          {step >= 4 && <div className="lh-b bot">{s.reply(play)}</div>}
         </div>
       </div>
-      <div className="hc-tabs" role="tablist" aria-label="Escolha um exemplo">
+      <div className="lh-tabs" role="tablist" aria-label="Escolha um exemplo">
         {SCENES.map((x, i) => (
           <button key={x.id} type="button" role="tab" aria-selected={i === scene} className={i === scene ? "on" : ""} onClick={() => pick(i)}>
             {x.tab}
-            {i === scene && live && !still && <i className="hc-tab-bar" key={play} />}
+            {i === scene && live && !still && <i className="lh-tab-bar" key={play} />}
           </button>
         ))}
       </div>
