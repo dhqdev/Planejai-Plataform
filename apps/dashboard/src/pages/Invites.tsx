@@ -23,18 +23,21 @@ interface Personal {
 /** Texto pronto para o WhatsApp (*negrito*, _itálico_ e ```mono``` para o código ficar fácil de copiar). */
 export const inviteText = (p: Personal) =>
   [
-    "Oi! 👋✨",
+    "✨ *Te chamei pro Planejai!*",
+    "_Um assistente no WhatsApp que resolve a vida por você_ 💜",
     "",
-    "Te convidei pro *Planejai* 🎉, um assistente no WhatsApp que organiza a vida por você:",
+    "> É só mandar mensagem ou áudio, ele faz o resto:",
     "",
-    "💸 Anota seus gastos e mostra para onde vai o dinheiro",
-    "🗓️ Cuida da agenda e dos compromissos",
-    "⏰ Lembra do que importa na hora certa",
+    "💸 *Dinheiro* · anota gastos e mostra pra onde vai",
+    "🗓️ *Agenda* · marca compromissos e te lembra na hora",
+    "👀 *De olho* · acompanha preço, entrega e o que você pedir",
+    "🛒 *Compras* · compara preços antes de você comprar",
+    "📍 *Lugares* · acha restaurante, farmácia, o que tiver perto",
     "",
-    "👉 *Entre por aqui:*",
+    "👉 *Entra pelo meu link:*",
     p.link,
     "",
-    `🔑 Ou use o código \`\`\`${p.code}\`\`\` em *"Tenho um convite"*`,
+    `🔑 Ou toque em _"Tenho um convite"_ e use o código \`\`\`${p.code}\`\`\``,
   ].join("\n");
 
 /**
