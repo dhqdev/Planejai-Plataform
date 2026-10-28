@@ -42,20 +42,7 @@
 .lt-acts li.on .lt-b.bot { animation-delay: .55s; }
 @keyframes lt-pop { from { opacity: 0; transform: translateY(8px) scale(.9); } }
 
-/* ---------- fileira de marcas no topo ---------- */
-.la-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 40px; animation: lp-rise .8s var(--lp-ease) both .65s; }
-.la-row small { font-size: 13.5px; color: var(--lp-muted); }
-.la-row-logos { display: flex; flex-wrap: wrap; gap: 6px; }
-.la-row-app {
-  display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: #fff; border: 1px solid var(--lp-line);
-  box-shadow: 0 6px 14px -10px rgba(0, 0, 0, .3); animation: la-pop .5s var(--lp-spring) both; animation-delay: calc(.8s + var(--i) * 45ms);
-  transition: translate .3s var(--lp-spring);
-}
-.la-row-app svg { width: 18px; height: 18px; }
-@media (hover: hover) and (pointer: fine) { .la-row:hover .la-row-app { translate: 0 -3px; } }
-
 /* ---------- apps (logo abaixo do topo) ---------- */
-.lp-section.la-sec { padding-top: 24px; }
 .la-wrap { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 48px; align-items: center; }
 .la-orbit { position: relative; width: min(560px, 100%); aspect-ratio: 1; margin: 0 auto; container-type: inline-size; }
 .la-lines { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -161,13 +148,6 @@
   .lt-who { display: none; }
   .lt-acts h3 { font-size: 30px; }
   .lt-chat { max-width: none; }
-  .lp-section.la-sec { padding-top: 8px; }
-  .la-row { margin-top: 22px; gap: 8px; }
-  .la-row small { display: none; }
-  /* as 11 marcas numa linha só, encolhendo em tela estreita em vez de alargar o topo */
-  .la-row-logos { display: grid; grid-template-columns: repeat(11, minmax(0, 29px)); gap: 3px; width: 100%; }
-  .la-row-app { width: 100%; height: auto; aspect-ratio: 1; }
-  .la-row-app svg { width: 52%; height: 52%; }
   .la-wrap { grid-template-columns: 1fr; gap: 28px; }
   .la-orbit { width: min(440px, 100%); }
   .la-app { width: 13.5cqw; }

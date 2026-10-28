@@ -34,30 +34,44 @@ const MLIVRE = (
   </>
 );
 
-/** A marca do app, na cor dela. */
-export function Glyph({ id }: { id: string }) {
+/** A marca do app, na cor dela (mono: na cor do texto). */
+export function Glyph({ id, mono }: { id: string; mono?: boolean }) {
   const b = BRANDS[id];
   return (
     <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-      {b ? <path d={b.path} fill={b.hex} /> : id === "mlivre" ? MLIVRE : null}
+      {b ? <path d={b.path} fill={mono ? "currentColor" : b.hex} /> : id === "mlivre" ? mono ? <ellipse cx="12" cy="12" rx="11" ry="8.2" fill="none" stroke="currentColor" strokeWidth="1.6" /> : MLIVRE : null}
     </svg>
   );
 }
 
 
-/** Fileira de marcas no topo da página, embaixo dos botões: o que ele usa, já na primeira tela. */
-export function AppsRow() {
+/**
+ * Faixa de marcas embaixo da janela do topo (como a dos clientes no Notion): logo e nome em tinta, correndo devagar de
+ * lado. Duas cópias seguidas para a volta não ter emenda; só corre enquanto aparece e para no mouse. Com movimento
+ * reduzido, fica parada e quebra em linhas.
+ */
+export function AppsStrip() {
+  const [ref, on] = usePlay<HTMLDivElement>();
+  const row = (copy: boolean) => (
+    <ul className="la-strip-row" aria-hidden={copy || undefined}>
+      {APPS.map((a) => (
+        <li key={a.id}>
+          <Glyph id={a.id} mono />
+          {a.name}
+        </li>
+      ))}
+    </ul>
+  );
   return (
-    <a className="la-row" href="#apps" aria-label={`Conecta com ${APPS.map((a) => a.name).join(", ")}`}>
-      <small>Conecta com</small>
-      <span className="la-row-logos">
-        {APPS.map((a, i) => (
-          <span key={a.id} className="la-row-app" title={a.name} style={{ ["--i" as string]: i }}>
-            <Glyph id={a.id} />
-          </span>
-        ))}
-      </span>
-    </a>
+    <div className="la-strip" data-reveal>
+      <p>Ele usa os apps do seu dia a dia</p>
+      <div ref={ref} className={`la-strip-track ${on ? "on" : ""}`}>
+        <div className="la-strip-move">
+          {row(false)}
+          {row(true)}
+        </div>
+      </div>
+    </div>
   );
 }
 

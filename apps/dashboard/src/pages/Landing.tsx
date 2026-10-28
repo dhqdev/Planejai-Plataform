@@ -7,16 +7,16 @@ import { Mascote, type Mood } from "../mascote/Mascote";
 import { ClickSpark } from "../reactbits/ClickSpark";
 import { CountUp } from "../reactbits/CountUp";
 import { GlareHover } from "../reactbits/GlareHover";
-import { ShinyText } from "../reactbits/ShinyText";
-import { Spotlight } from "../reactbits/Spotlight";
 import "../landing.css";
-import { AppScenes, AppsOrbit, AppsRow } from "./LandingApps";
-import { HeroChat, HeroTitle } from "./LandingHero";
+import { AppScenes, AppsOrbit, AppsStrip } from "./LandingApps";
+import { HeroTitle } from "./LandingHero";
+import { HeroPanel } from "./LandingPanel";
 import { TeamScroll } from "./LandingTeam";
 import { Includes, type PlanFeature } from "../planFeatures";
 
 /**
- * Landing pública (quem abre "/" sem estar logado). Curta e minimalista (pedido do David): a conversa do topo,
+ * Landing pública (quem abre "/" sem estar logado). Curta e minimalista (pedido do David), com o topo no estilo do
+ * Notion: título no meio com o verbo numa pílula, a janela do painel com a conversa mexendo e a faixa de marcas; depois
  * três cartões do que ele faz, a fila do time, um "sim" que dá para tocar com os apps embaixo, planos e perguntas. O movimento vem da rolagem: títulos palavra por palavra, blocos subindo, itens em cascata. Tudo aqui é verdade do produto: só cita o que um cliente comum já usa.
  * Efeitos do React Bits em ../reactbits (aviso de licença lá).
  */
@@ -477,30 +477,22 @@ export function LandingPage() {
 
       <main>
         <section className="lp-hero">
-          <Spotlight className="lp-hero-bg">
-            <div className="lp-wrap lp-hero-grid">
-              <div className="lp-hero-copy">
-                <span className="lp-eyebrow">
-                  <i className="lp-live" aria-hidden="true" />
-                  <ShinyText>Um time de assistentes no seu WhatsApp</ShinyText>
-                </span>
-                <HeroTitle scene={scene} />
-                <p className="lp-lead">
-                  Anota seus gastos, lembra dos compromissos, pesquisa e fala com lojas por você. <span>É só mandar mensagem.</span>
-                </p>
-                <div className="lp-hero-cta">
-                  {primary(true)}
-                  <a className="lp-link" href="/login" onClick={go}>
-                    Já tenho conta
-                  </a>
-                </div>
-                <AppsRow />
-              </div>
-              <div className="lp-hero-stage">
-                <HeroChat scene={scene} onScene={setScene} />
-              </div>
+          <div className="lp-wrap hn">
+            <HeroTitle scene={scene} />
+            <p className="hn-lead">Anota seus gastos, lembra dos compromissos, pesquisa e fala com lojas por você. É só mandar mensagem no WhatsApp.</p>
+            <div className="hn-cta">
+              {primary(true)}
+              <a className="lp-btn ghost big" href="/login" onClick={go}>
+                Já tenho conta
+              </a>
             </div>
-          </Spotlight>
+          </div>
+          <div className="lp-wrap hn-stage">
+            <HeroPanel scene={scene} onScene={setScene} />
+          </div>
+          <div className="lp-wrap">
+            <AppsStrip />
+          </div>
         </section>
 
         <section id="apps" className="lp-section la-sec">

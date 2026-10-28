@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Mascote, type Mood, type Outfit } from "../mascote/Mascote";
-import { BlurText } from "../reactbits/BlurText";
 import { CountUp } from "../reactbits/CountUp";
 import { RotatingText } from "../reactbits/RotatingText";
 
 /**
- * Topo da landing: título curto com o verbo girando (RotatingText) junto com uma conversa de WhatsApp que se
+ * Topo da landing: título com o verbo girando numa pílula (RotatingText) e uma conversa de WhatsApp que se
  * repete em três cenas (cinema, gasto, lembrete). Em cada uma a mensagem chega, o Mascote reage com um emoji,
  * digita e responde com um cartão. Os botões embaixo pulam para a cena. Para fora da tela e com a aba escondida;
  * com movimento reduzido, mostra a cena pronta.
@@ -15,6 +14,8 @@ interface Scene {
   id: string;
   tab: string;
   verb: string;
+  /** verbo da pílula do título: "Um time que <word> por você." */
+  word: string;
   me: ReactNode;
   react: string;
   outfit: Outfit;
@@ -29,6 +30,7 @@ export const SCENES: Scene[] = [
     id: "cinema",
     tab: "Cinema",
     verb: "acha o cinema.",
+    word: "pesquisa",
     me: "tem Duna hoje no Iguatemi?",
     react: "🍿",
     outfit: { eyes: "sunglasses" },
@@ -57,6 +59,7 @@ export const SCENES: Scene[] = [
     id: "gasto",
     tab: "Gasto",
     verb: "anota o gasto.",
+    word: "anota",
     me: "gastei 42,90 no mercado",
     react: "🛒",
     outfit: { eyes: "monocle", neck: "bowtie" },
@@ -89,6 +92,7 @@ export const SCENES: Scene[] = [
     id: "lembrete",
     tab: "Lembrete",
     verb: "te lembra.",
+    word: "lembra",
     me: (
       <span className="hc-audio">
         <span className="hc-play" aria-hidden="true" />
@@ -151,7 +155,8 @@ function useLive<T extends Element>() {
   return [ref, live] as const;
 }
 
-export function HeroChat({ scene, onScene }: { scene: number; onScene: (i: number) => void }) {
+/** onDone: a resposta da cena apareceu (o painel do lado usa para mostrar o item novo). */
+export function HeroChat({ scene, onScene, onDone }: { scene: number; onScene: (i: number) => void; onDone?: (i: number) => void }) {
   const [box, live] = useLive<HTMLDivElement>();
   const still = reduced();
   const [step, setStep] = useState(still ? 4 : 0);
@@ -168,6 +173,10 @@ export function HeroChat({ scene, onScene }: { scene: number; onScene: (i: numbe
     }, STEPS[step]);
     return () => clearTimeout(t);
   }, [step, live, still, scene, onScene]);
+
+  useEffect(() => {
+    if (step === 4) onDone?.(scene);
+  }, [step, scene, onDone]);
 
   const pick = (i: number) => {
     onScene(i);
@@ -225,14 +234,34 @@ export function HeroChat({ scene, onScene }: { scene: number; onScene: (i: numbe
   );
 }
 
+/**
+ * Título no estilo do Notion: frase grande no meio e o verbo da cena numa pílula lilás com um ponto roxo. A pílula
+ * acompanha a largura do verbo que entra (mede o texto e anima a largura), então não pula quando a palavra muda.
+ */
 export function HeroTitle({ scene }: { scene: number }) {
+  const inner = useRef<HTMLSpanElement>(null);
+  const [w, setW] = useState<number | null>(null);
+  useEffect(() => {
+    const el = inner.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setW(el.offsetWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const verb = SCENES[scene]!.word;
   return (
-    <h1 className="hc-title" aria-label="Você manda no WhatsApp. Ele resolve.">
-      <span className="hc-l1" aria-hidden="true">
-        <BlurText text="Você manda." delay={0.12} start={0.05} />
+    <h1 className="hn-title" aria-label={`Um time que ${verb} por você.`}>
+      <span className="hn-l1" aria-hidden="true">
+        Um time que
       </span>
-      <span className="hc-l2" aria-hidden="true">
-        Ele <RotatingText texts={SCENES.map((x) => x.verb)} index={scene} staggerDuration={0.02} />
+      <span className="hn-l2" aria-hidden="true">
+        <span className="hn-pill" style={w ? { width: `calc(${w}px + 1.02em)` } : undefined}>
+          <i className="hn-dot" />
+          <span ref={inner} className="hn-pill-in">
+            <RotatingText texts={SCENES.map((x) => x.word)} index={scene} staggerDuration={0.02} />
+          </span>
+        </span>{" "}
+        por você.
       </span>
     </h1>
   );

@@ -56,34 +56,7 @@
 .lp-links a:hover { color: var(--lp-ink); }
 .lp-nav-cta { margin-left: auto; display: flex; gap: 8px; }
 
-/* ---------- hero ---------- */
-.lp-hero { padding: 0; }
-.lp-hero-bg { padding: 56px 0 64px; --rb-dot: rgba(17, 17, 17, .08); }
-/* brilho lilás atrás da conversa, no lugar da bola cinza */
-.lp-hero-bg::after {
-  content: ""; position: absolute; z-index: -2; right: 4%; top: 6%; width: min(620px, 52vw); aspect-ratio: 1; border-radius: 50%; pointer-events: none;
-  background: radial-gradient(circle at 40% 40%, rgba(193, 160, 255, .38), rgba(101, 16, 224, .08) 45%, transparent 68%); filter: blur(8px);
-  animation: lp-aura 14s ease-in-out infinite alternate;
-}
-@keyframes lp-aura { to { transform: translate(-30px, 24px) scale(1.08); } }
-.lp-eyebrow {
-  display: inline-flex; align-items: center; gap: 9px; margin-bottom: 26px; padding: 7px 14px 7px 11px; border-radius: 999px;
-  background: #fff; border: 1px solid var(--lp-line); box-shadow: 0 6px 18px -12px rgba(0, 0, 0, .25); font-size: 14px; font-weight: 500; color: #3a3a3a;
-}
-.lp-live { width: 8px; height: 8px; border-radius: 50%; background: #25d366; box-shadow: 0 0 0 0 rgba(37, 211, 102, .5); animation: lp-live 2s ease-out infinite; }
-@keyframes lp-live { 70% { box-shadow: 0 0 0 7px rgba(37, 211, 102, 0); } 100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); } }
-.lp-hero-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr); gap: 72px; align-items: center; min-height: min(640px, calc(100vh - 200px)); }
-.hc-title { display: flex; flex-direction: column; font-size: clamp(44px, 6vw, 84px); line-height: 1.02; letter-spacing: -0.048em; font-weight: 600; }
-.hc-l2 { white-space: nowrap; }
-.hc-l2 .rb-rot { color: var(--lp-violet); }
-.lp-lead { margin-top: 26px; max-width: 520px; font-size: 19.5px; line-height: 1.5; color: #4a4a4a; text-wrap: pretty; }
-.lp-lead span { color: var(--lp-ink); font-weight: 600; }
-.lp-hero-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-top: 34px; }
-.lp-hero-stage { position: relative; display: grid; place-items: center; padding: 72px 0 8px; }
-.lp-hero-stage::before {
-  display: none; content: ""; position: absolute; width: min(540px, 110%); aspect-ratio: 1; border-radius: 50%; top: 50%; left: 50%; translate: -50% -52%;
-  background: radial-gradient(circle, var(--lp-sand-2) 0%, var(--lp-sand) 52%, transparent 70%);
-}
+/* ---------- hero: título, janela do painel e faixa de marcas em styles/landing-painel.css ---------- */
 
 /* conversa do topo (HeroChat) */
 .hc { position: relative; z-index: 1; width: min(460px, 100%); }
@@ -260,18 +233,7 @@
   .lp-nav-row { height: 60px; gap: 12px; }
   .lp-nav-cta .lp-btn { height: 38px; padding: 0 16px; font-size: 14px; }
   .lp-nav-main { display: none !important; }
-  .lp-hero-bg { padding: 36px 0 40px; }
-  .lp-hero-bg::after { width: 90vw; right: -20%; top: 40%; }
-  /* topo no celular: só o título, o botão e as marcas (pedido do David: menos texto, mais limpo) */
-  .lp-eyebrow, .lp-lead, .lp-hero-cta .lp-link { display: none; }
-  .lp-hero-grid, .lp-safe, .lp-faq-wrap { grid-template-columns: 1fr; }
-  .lp-hero-grid { gap: 8px; min-height: 0; }
-  .hc-title { font-size: clamp(36px, 10.4vw, 52px); }
-  .lp-lead { font-size: 17px; margin-top: 12px; }
-  .lp-hero-cta { margin-top: 28px; gap: 10px 20px; }
-  .lp-hero-cta .rb-spark { flex: 1 1 auto; }
-  .lp-hero-cta .lp-btn { width: 100%; height: 52px; }
-  .lp-hero-stage { padding: 44px 0 0; }
+  .lp-safe, .lp-faq-wrap { grid-template-columns: 1fr; }
   .hc { width: 100%; max-width: 420px; }
   .hc-mascote { right: 4px; top: -52px; }
   .hc-mascote svg { width: 76px; height: 76px; }
@@ -297,7 +259,6 @@
   .lp-buddy-say { margin-bottom: 42px; font-size: 13px; }
 }
 @media (max-width: 370px) {
-  .hc-title { font-size: 34px; }
   .hc-chat { height: 240px; }
 }
 
@@ -309,15 +270,7 @@
   transform-origin: left; transform: scaleX(var(--sp, 0)); pointer-events: none;
 }
 
-.lp-hero-copy > :not(h1) { animation: lp-rise .8s var(--lp-ease) both; }
-.hc-l2 { animation: lp-rise .9s var(--lp-ease) both .3s; }
-.lp-hero-copy > .lp-lead { animation-delay: .42s; }
-.lp-hero-copy > .lp-hero-cta { animation-delay: .52s; }
 @keyframes lp-rise { from { opacity: 0; transform: translateY(.5em); } }
-.lp-hero-stage::before { animation: lp-grow 1.4s var(--lp-ease) both .1s; scale: calc(1 + var(--hero, 0) * .25); }
-@keyframes lp-grow { from { opacity: 0; transform: scale(.55); } }
-.hc { animation: lp-chat-in 1s var(--lp-ease) both .2s; translate: 0 calc(var(--hero, 0) * -40px); }
-@keyframes lp-chat-in { from { opacity: 0; transform: translateY(50px) rotate(3deg) scale(.96); } }
 
 /* blocos que aparecem ao rolar (só com JS ligado: classe reveal-on no .lp) */
 .lp.reveal-on [data-reveal] {
