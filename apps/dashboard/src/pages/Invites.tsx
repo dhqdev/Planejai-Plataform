@@ -30,6 +30,7 @@ export const inviteText = (p: Personal) =>
     "",
     "💸 *Dinheiro* · anota gastos e mostra pra onde vai",
     "🗓️ *Agenda* · marca compromissos e te lembra na hora",
+    "📞 *Por você* · fala com salão, clínica e loja, marca consulta e te conta a resposta",
     "👀 *De olho* · acompanha preço, entrega e o que você pedir",
     "🛒 *Compras* · compara preços antes de você comprar",
     "📍 *Lugares* · acha restaurante, farmácia, o que tiver perto",
