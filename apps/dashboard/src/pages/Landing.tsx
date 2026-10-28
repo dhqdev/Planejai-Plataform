@@ -154,7 +154,7 @@ function Buddy({ root }: { root: RefObject<HTMLDivElement | null> }) {
     const el = root.current;
     const b = box.current;
     if (!el || !b) return;
-    const end = el.querySelector(".lp-foot");
+    const end = el.querySelector(".lp-final") ?? el.querySelector(".lp-foot");
     const check = () => {
       const past = el.scrollTop > el.clientHeight * 0.7;
       const ending = end ? end.getBoundingClientRect().top < el.clientHeight - 20 : false;
@@ -295,6 +295,16 @@ function Words({ text, className }: { text: string; className?: string }) {
   );
 }
 
+/** Rótulo pequeno em cima do título da seção, com o mesmo ponto roxo da pílula do topo (fio que amarra a página). */
+function Kicker({ children }: { children: ReactNode }) {
+  return (
+    <p className="lp-kicker" data-reveal>
+      <i aria-hidden="true" />
+      {children}
+    </p>
+  );
+}
+
 /** Um recurso: a cena animada em cima e o nome embaixo. A cena roda só enquanto aparece. */
 function Feature({ title, label, children, d = 0 }: { title: string; label: string; children: ReactNode; d?: number }) {
   const [ref, inView] = useInView<HTMLDivElement>("-10% 0px");
@@ -334,9 +344,8 @@ function Plans({ pricing, cta, go, closed }: { pricing: Pricing; cta: (p: Plan) 
   return (
     <section id="planos" className="lp-section lv-plans-sec">
       <div className="lp-wrap">
-        <h2 className="lp-h2" data-reveal>
-          Pague pelo que usa.
-        </h2>
+        <Kicker>Planos</Kicker>
+        <Words className="lp-h2" text="Pague pelo que usa." />
         <p className="lp-sub" data-reveal style={{ ["--d" as string]: 1 }}>
           Todo plano tem tudo liberado. Grão é o crédito: cada pedido gasta um pouquinho, e quanto maior o plano, mais barato sai.
         </p>
@@ -451,9 +460,9 @@ export function LandingPage() {
             <span>Planejai</span>
           </a>
           <nav className="lp-links" aria-label="Seções">
-            <a href="#apps">Apps</a>
             <a href="#como-funciona">Como funciona</a>
             <a href="#time">O time</a>
+            <a href="#apps">Apps</a>
             {pricing && (
               <a href="/precos" onClick={go}>
                 Planos
@@ -495,25 +504,9 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section id="apps" className="lp-section la-sec">
-          <div className="lp-wrap la-wrap">
-            <div className="la-head">
-              <Words className="lp-h2" text="Conecta com o que você já usa." />
-              <p className="lp-sub" data-reveal style={{ ["--d" as string]: 2 }}>
-                Você conecta uma vez. Ele usa quando precisa.
-              </p>
-            </div>
-            <div data-reveal style={{ ["--d" as string]: 1 }}>
-              <AppsOrbit />
-            </div>
-          </div>
-          <div className="lp-wrap">
-            <AppScenes />
-          </div>
-        </section>
-
         <section id="como-funciona" className="lp-section">
           <div className="lp-wrap">
+            <Kicker>Como funciona</Kicker>
             <Words className="lp-h2" text="Fala do seu jeito. Ele organiza." />
 
             <div className="lp-feats">
@@ -577,6 +570,7 @@ export function LandingPage() {
 
         <section id="time" className="lp-section">
           <div className="lp-wrap">
+            <Kicker>O time</Kicker>
             <Words className="lp-h2" text={`Um time de ${MASCOTES} por trás.`} />
             <p className="lp-sub" data-reveal style={{ ["--d" as string]: 2 }}>
               Você fala com o {cto}. Ele chama quem precisa.
@@ -585,9 +579,28 @@ export function LandingPage() {
           </div>
         </section>
 
+        <section id="apps" className="lp-section la-sec">
+          <div className="lp-wrap la-wrap">
+            <div className="la-head">
+              <Kicker>Apps</Kicker>
+              <Words className="lp-h2" text="Conecta com o que você já usa." />
+              <p className="lp-sub" data-reveal style={{ ["--d" as string]: 2 }}>
+                Você conecta uma vez. Ele usa quando precisa.
+              </p>
+            </div>
+            <div data-reveal style={{ ["--d" as string]: 1 }}>
+              <AppsOrbit />
+            </div>
+          </div>
+          <div className="lp-wrap">
+            <AppScenes />
+          </div>
+        </section>
+
         <section id="seguranca" className="lp-section">
           <div className="lp-wrap lp-safe">
             <div>
+              <Kicker>Segurança</Kicker>
               <Words className="lp-h2" text="Nada sai sem o seu sim." />
               <ul className="lp-safe-list" data-reveal style={{ ["--d" as string]: 2 }}>
                 <li>Seus dados são só seus</li>
@@ -605,9 +618,10 @@ export function LandingPage() {
 
         <section id="perguntas" className="lp-section">
           <div className="lp-wrap lp-faq-wrap">
-            <h2 className="lp-h2" data-reveal>
-              Perguntas rápidas
-            </h2>
+            <div>
+              <Kicker>Dúvidas</Kicker>
+              <Words className="lp-h2" text="Perguntas rápidas" />
+            </div>
             <div className="lp-faq" data-reveal style={{ ["--d" as string]: 1 }}>
               {faq.map(([q, a], i) => (
                 <div key={q} className={`lp-q ${open === i ? "open" : ""}`}>
@@ -623,7 +637,23 @@ export function LandingPage() {
             </div>
           </div>
         </section>
-
+        <section className="lp-final">
+          <div className="lp-wrap lp-final-in">
+            <span className="lp-final-mascote" data-reveal aria-hidden="true">
+              <Mascote size={112} mood="greeting" />
+            </span>
+            <Words className="lp-h2" text="Comece hoje, no seu WhatsApp." />
+            <p className="lp-sub" data-reveal style={{ ["--d" as string]: 2 }}>
+              Manda um oi e ele já começa a ajudar.
+            </p>
+            <div className="lp-final-cta" data-reveal style={{ ["--d" as string]: 3 }}>
+              {primary(true)}
+              <a className="lp-btn ghost big" href="/login" onClick={go}>
+                Já tenho conta
+              </a>
+            </div>
+          </div>
+        </section>
       </main>
 
       <footer className="lp-foot">
@@ -665,7 +695,10 @@ function LandingBlog() {
     <section id="blog" className="lp-section">
       <div className="lp-wrap">
         <div className="lp-blog-head">
-          <Words className="lp-h2" text="Do nosso blog." />
+          <div>
+            <Kicker>Blog</Kicker>
+            <Words className="lp-h2" text="Do nosso blog." />
+          </div>
           <a className="lp-btn ghost" href="/blog">
             Ver o blog
           </a>

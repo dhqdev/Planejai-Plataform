@@ -144,3 +144,28 @@
   .la-strip-row { flex-wrap: wrap; justify-content: center; gap: 14px 30px; padding: 0; width: 100%; }
   .la-strip-row[aria-hidden] { display: none; }
 }
+
+/* ---------- o resto da página no mesmo tom ---------- */
+/* rótulo da seção com o ponto roxo da pílula do topo */
+.lp-kicker { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 15px; font-weight: 500; color: var(--lp-muted); }
+.lp-kicker i { width: 7px; height: 7px; border-radius: 50%; background: var(--lp-violet); }
+.lp-h2 { font-weight: 700; }
+
+/* fecho da página: título grande no meio, o Bolinho e os dois botões, como o "experimente hoje" do Notion */
+.lp-final { padding: 140px 0 0; }
+.lp-final-in { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.lp-final-in .lp-h2 { max-width: 14ch; font-size: clamp(38px, 5.4vw, 72px); }
+.lp-final-mascote { display: block; margin-bottom: 18px; filter: drop-shadow(0 18px 18px rgba(0, 0, 0, .14)); }
+.lp-final-cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 30px; }
+.lp-final-cta .lp-btn.big { height: 52px; padding: 0 26px; font-size: 16.5px; }
+
+@media (max-width: 820px) {
+  .lp-kicker { font-size: 14px; margin-bottom: 10px; }
+  .lp-final { padding-top: 96px; }
+  .lp-final-mascote svg { width: 88px; height: 88px; }
+  .lp-final-cta { flex-direction: column; align-self: stretch; }
+  .lp-final-cta .rb-spark { display: flex; }
+  .lp-final-cta .lp-btn.big { width: 100%; }
+  /* o balão do Bolinho que acompanha cobria o texto no celular: lá ele só acompanha */
+  .lp-buddy-say { display: none; }
+}

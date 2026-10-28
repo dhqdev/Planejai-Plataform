@@ -25,7 +25,7 @@
 
 .lt-acts { margin: 0; padding: 0; list-style: none; }
 .lt-acts li {
-  min-height: min(78vh, 720px); display: flex; flex-direction: column; justify-content: center; gap: 14px;
+  min-height: min(60vh, 560px); display: flex; flex-direction: column; justify-content: center; gap: 14px;
   opacity: .22; transition: opacity .5s var(--lp-ease);
 }
 .lt-acts li.on { opacity: 1; }
@@ -144,7 +144,7 @@
   .lt-tag b { text-align: left; font-size: 21px; line-height: 30px; }
   .lt-dots { gap: 4px; }
   .lt-dots i.on { width: 14px; }
-  .lt-acts li { min-height: 56vh; gap: 10px; }
+  .lt-acts li { min-height: 46vh; gap: 10px; }
   .lt-who { display: none; }
   .lt-acts h3 { font-size: 30px; }
   .lt-chat { max-width: none; }
