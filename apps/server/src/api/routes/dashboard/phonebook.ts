@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { withSignature, getPrefs } from "../../../chatprefs.js";
 import { config } from "../../../config.js";
 import { one } from "../../../db/pool.js";
+import { phoneVariants } from "../../../ingest.js";
 import { createDirect, directText } from "../../../direct.js";
 import { isNewContact, isOptedOut, OPT_OUT_HINT, OPTED_OUT_ERROR } from "../../../outreach.js";
 import { clearPhonebook, deleteContact, importContacts, listPhonebook, parseVcf, renameContact, saveContact } from "../../../phonebook.js";
@@ -76,7 +77,7 @@ export function phonebookRoutes(base: FastifyInstance) {
     const name = /[\p{L}\p{N}]/u.test(c.name) ? c.name : null;
     if (!req.body?.confirm) {
       const text = withSignature(directText(message, user), (await getPrefs(uid, c.phone))?.signature);
-      const firstTime = (await isNewContact(c.phone)) && !(await one("SELECT 1 FROM users WHERE phone = $1 AND status = 'active'", [c.phone]));
+      const firstTime = (await isNewContact(c.phone)) && !(await one("SELECT 1 FROM users WHERE phone = ANY($1) AND status = 'active'", [phoneVariants(c.phone)]));
       return { preview: firstTime ? `${text}\n\n${OPT_OUT_HINT}` : text, to: name ?? `+${c.phone}` };
     }
     const r: any = await createDirect({ user, phone: c.phone, name, message, timezone: user.timezone ?? config.DEFAULT_TIMEZONE });

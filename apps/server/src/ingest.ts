@@ -21,6 +21,21 @@ export function isOwner(phone: string) {
 
 export async function upsertUser(phone: string, name?: string) {
   const status = isOwner(phone) || config.ALLOW_UNKNOWN_CONTACTS ? "active" : "pending";
+  // o mesmo celular pode estar gravado com ou sem o nono dígito (cadastro no painel x número que o WhatsApp entrega):
+  // acha a pessoa por qualquer das duas formas, senão quem acabou de se cadastrar vira um segundo usuário "aguardando aprovação"
+  const existing = await one(
+    `SELECT id FROM users WHERE phone = ANY($1)
+     ORDER BY (status = 'blocked') DESC, (status = 'active') DESC, (phone = $2) DESC, created_at LIMIT 1`,
+    [phoneVariants(phone), phone],
+  );
+  if (existing) {
+    return one(
+      `UPDATE users SET name = COALESCE(name, $2), last_seen_at = now(),
+         status = CASE WHEN status = 'pending' AND $3 = 'active' THEN 'active' ELSE status END
+       WHERE id = $1 RETURNING *`,
+      [existing.id, name ?? null, status],
+    );
+  }
   return one(
     `INSERT INTO users (phone, name, status, last_seen_at) VALUES ($1, $2, $3, now())
      ON CONFLICT (phone) DO UPDATE SET name = COALESCE(users.name, EXCLUDED.name), last_seen_at = now(),
@@ -33,7 +48,7 @@ export async function upsertUser(phone: string, name?: string) {
 export async function upsertConversation(userId: string, channel: string, remoteJid: string) {
   return one(
     `INSERT INTO conversations (user_id, channel, remote_jid) VALUES ($1, $2, $3)
-     ON CONFLICT (channel, remote_jid) DO UPDATE SET updated_at = now() RETURNING *`,
+     ON CONFLICT (channel, remote_jid) DO UPDATE SET user_id = EXCLUDED.user_id, updated_at = now() RETURNING *`,
     [userId, channel, remoteJid],
   );
 }

@@ -56,7 +56,7 @@ apps/server/src/
   index.ts                 entrada; ROLE=all|api|worker|channel|conversations (roles.ts, ver deploy.md)
   config.ts                variáveis de ambiente (zod) — toda env nova entra aqui e no .env.example
   settings.ts              ajustes do painel (travas GUARD_LIMITS, assinatura, cadastro) com faixa permitida
-  ingest.ts                webhook -> usuário/conversa/mensagem -> fila (debounce por conversa)
+  ingest.ts                webhook -> usuário/conversa/mensagem -> fila (debounce por conversa); acha o usuário com ou sem o nono dígito (phoneVariants)
   accounts.ts              contas do painel: dono (.env) = super admin; cadastro = admin (scopeUserId limita os dados)
   sharing.ts               telas particulares e o que um contato liberou (selfUserId, personalUser)
   shortmem.ts              memória curta no Redis (pj:conv:<id>:msgs, TTL = MESSAGE_RETENTION_HOURS); cai pro Postgres se o Redis sumir
