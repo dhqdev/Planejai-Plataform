@@ -353,6 +353,14 @@ describe("compactOldToolResults", () => {
 });
 
 describe("trava: dizer que fez sem ter feito", () => {
+  it("especialista sob medida: registrado vale com o caderno, não com o quadro do time", async () => {
+    const { unbackedClaim } = await import("../src/agent/claims.js");
+    // 03/11: diárias do Rico "registradas" pelo Ponto só no quadro do time (que some) viraram "nada foi feito"
+    const said = "Tudo registrado no controle de ponto ✅\n\n💰 *Diárias*\n• Cláudio: *R$ 250*\n• João: *R$ 200*";
+    expect(unbackedClaim(said, new Set(["ask_c_ponto", "share_with_team"]))).toBe("lançar gasto ou receita");
+    expect(unbackedClaim(said, new Set(["ask_c_ponto", "share_with_team", "notebook_save"]))).toBeNull();
+    expect(unbackedClaim("Salvei a presença de hoje ✅", new Set(["notebook_save"]))).toBeNull();
+  });
   it("salvar contato pelo chat: o salvei vale com contact_save e o pedido cobra o salvamento", async () => {
     const { unbackedClaim, unmetRequest } = await import("../src/agent/claims.js");
     // 14/10: "19 99672-6445 guarde esse contato como marcos" salvou e mesmo assim caiu em "nada foi feito"

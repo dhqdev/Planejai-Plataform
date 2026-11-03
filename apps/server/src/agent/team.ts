@@ -22,6 +22,7 @@ import * as research from "./tools/research.js";
 import * as shopping from "./tools/shopping.js";
 import * as social from "./tools/social.js";
 import { UBER_TOOLS } from "./tools/uber.js";
+import { notebookRead, notebookSave } from "./tools/notebook.js";
 import { many } from "../db/pool.js";
 import type { Tool } from "./tools/types.js";
 
@@ -469,7 +470,8 @@ export function clientAgentDef(r: any): AgentDef {
     clientAgentId: r.id,
     role: `${r.focus} (especialista criado só para esta pessoa)`,
     instructions: r.instructions,
-    tools: (r.tools as string[]).map((n) => CLIENT_AGENT_TOOLS[n]).filter(Boolean) as Tool[],
+    // caderno sempre junto: é o único registro dele que dura entre conversas (o quadro do time some no fim da tarefa)
+    tools: [...((r.tools as string[]).map((n) => CLIENT_AGENT_TOOLS[n]).filter(Boolean) as Tool[]), notebookSave, notebookRead],
   };
 }
 

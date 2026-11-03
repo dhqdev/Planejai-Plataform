@@ -537,7 +537,15 @@ describe.skipIf(!enabled)("convites, contatos e proatividade (e2e)", () => {
     expect(notes).toEqual([{ agent: "pesquisador" }]);
     const { clientAgents } = await import("../src/agent/team.js");
     const defs = await clientAgents(david.id);
-    expect(defs.map((d) => [d.id, d.task, d.tools.map((t) => t.name)])).toEqual([["c_cinema", "agent:cliente", ["web_search", "fetch_url"]]]);
+    expect(defs.map((d) => [d.id, d.task, d.tools.map((t) => t.name)])).toEqual([["c_cinema", "agent:cliente", ["web_search", "fetch_url", "notebook_save", "notebook_read"]]]);
+    // caderno: o que o agente grava fica para a próxima conversa (o quadro do time some no fim da tarefa)
+    const { notebookSave, notebookRead } = await import("../src/agent/tools/notebook.js");
+    const nctx: any = { user: david, agent: "c_cinema", timezone: "America/Sao_Paulo" };
+    expect(await notebookSave.run({ note: "Viu Duna 3 no Iguatemi", day: "2026-11-01" }, nctx)).toMatchObject({ ok: true, day: "2026-11-01" });
+    await notebookSave.run({ note: "Quer ver o próximo do Nolan" }, nctx);
+    expect((await notebookRead.run({ from: "2026-11-01", to: "2026-11-01" }, nctx)) as any).toMatchObject({ ok: true, notes: [{ day: "2026-11-01", note: "Viu Duna 3 no Iguatemi" }] });
+    expect(((await notebookRead.run({}, nctx)) as any).notes).toHaveLength(2);
+    expect(await notebookSave.run({ note: "x" }, { ...nctx, agent: "financeiro" })).toMatchObject({ ok: false });
   });
 
   it("reunião noturna não apaga o que a pessoa pediu", async () => {

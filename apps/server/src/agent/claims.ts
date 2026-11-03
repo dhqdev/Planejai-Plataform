@@ -46,7 +46,8 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; sameSentence?: boole
     what: "lançar gasto ou receita",
     says: /\b(anotei|registrei|lancei|lan[cç]ad[oa]s?|anotad[oa]s?|registrad[oa]s?)\b/i,
     about: /R\$|\bgastos?\b|\breceitas?\b|\bdespesas?\b|\blan[cç]amentos?\b/i,
-    tools: ["add_transaction", "update_transaction", "bill_pay"],
+    // notebook_save: especialista sob medida gravou no caderno dele ("diária do Cláudio R$ 250 registrada", 2026-11-03)
+    tools: ["add_transaction", "update_transaction", "bill_pay", "notebook_save"],
   },
   {
     what: "corrigir lançamento",
@@ -121,7 +122,7 @@ const CLAIMS: { what: string; says: RegExp; about?: RegExp; sameSentence?: boole
   {
     what: "guardar documento ou nota",
     says: /\b(salvei|guardei)\b/i,
-    tools: ["document_save", "save_memory", "contact_save", "shop_save", "set_budget", "add_transaction", "bill_save", "bill_pay", "card_save"],
+    tools: ["document_save", "save_memory", "contact_save", "shop_save", "set_budget", "add_transaction", "bill_save", "bill_pay", "card_save", "notebook_save"],
   },
   {
     what: "enviar mensagem",

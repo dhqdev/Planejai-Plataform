@@ -9,6 +9,7 @@ import { isOwner } from "../ingest.js";
 import { noteTeamTalk } from "../channels/app.js";
 import { SPECIALISTS, type AgentDef } from "./team.js";
 import { defineTool, obj, type Tool, type ToolContext } from "./tools/types.js";
+import { notebookNotes } from "./tools/notebook.js";
 
 /** Profundidade máxima de conversa: CTO -> especialista -> colega. */
 const MAX_CHAIN = 3;
@@ -151,6 +152,23 @@ async function toolsFor(def: AgentDef, chain: string[], ctx: ToolContext, reques
   return { own, hidden, all: [...own, ...(peers.length ? [consultTool(peers)] : []), shareTool()] };
 }
 
+/**
+ * Caderno do agente sob medida no prompt: as notas mais recentes já vão junto (poupa um passo de leitura),
+ * mais a regra de que "registrado" só vale depois do notebook_save.
+ */
+async function notebookText(userId: string, clientAgentId: string) {
+  const notes = await notebookNotes(userId, clientAgentId, { limit: 15 });
+  const list = notes.length
+    ? `\nÚltimas notas (mais novas primeiro):\n${notes.map((n) => `- ${n.day ?? "?"}: ${n.note.slice(0, 300)}`).join("\n")}`
+    : "\nCaderno vazio por enquanto.";
+  return (
+    "\n\n# Seu caderno\nÉ o único lugar seu que dura entre uma conversa e outra; o quadro do time some no fim da tarefa. " +
+    "O que ela pedir para registrar (presença, valores, pagamentos, combinados): notebook_save antes de dizer que registrou. " +
+    "Para o resumo de um período, notebook_read com from/to." +
+    list
+  );
+}
+
 /** "Pedido dela: ... Aprendido nas reuniões: ..." (o que existir), para prompt e listas. */
 export function noteText(n?: { note?: string | null; user_note?: string | null } | null) {
   if (!n) return null;
@@ -172,7 +190,8 @@ async function systemFor(def: AgentDef, ctx: ToolContext, own: Tool[]) {
       teamRules: (await promptOverrides()).get("_time")?.instructions,
       note: noteText(await one("SELECT note, user_note FROM agent_notes WHERE user_id = $1 AND agent = $2", [ctx.user.id, def.id]).catch(() => null)),
     }) +
-    (missing.length ? `\n\n(Integrações não conectadas para você: ${missing.join(", ")})` : "")
+    (missing.length ? `\n\n(Integrações não conectadas para você: ${missing.join(", ")})` : "") +
+    (def.clientAgentId ? await notebookText(ctx.user.id, def.clientAgentId).catch(() => "") : "")
   );
 }
 

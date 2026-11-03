@@ -27,7 +27,7 @@ describe("automações no n8n", () => {
     const treino = clientAgentDef({ id: "x", slug: "treino", name: "Treino", persona: "Fit", face: null, focus: "treinos dela", instructions: "...", tools: ["web_search", "gmail_send", "schedule_reminder"] });
     expect(treino.id).toBe("c_treino");
     expect(treino.task).toBe("agent:cliente");
-    expect(treino.tools.map((t) => t.name)).toEqual(["web_search", "schedule_reminder"]);
+    expect(treino.tools.map((t) => t.name)).toEqual(["web_search", "schedule_reminder", "notebook_save", "notebook_read"]);
 
     const room = new TeamRoom([...SPECIALISTS, treino]);
     expect(room.nameOf("c_treino")).toBe("Treino");

@@ -554,7 +554,9 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
               (claim === CARD_CLAIM
                 ? "O gasto NÃO está nesse cartão. Se ele já foi lançado, mova com update_transaction (ids, ou last=true) e card; não lance de novo. "
                 : "Se ela pediu para ajustar algo já feito (cartão, valor, categoria), corrija com update_transaction; não crie de novo. ") +
-              "Faça a ação agora com a ferramenta certa (ou peça ao especialista) e responda de novo. Se não der, diga com honestidade o que não foi feito.",
+              "Faça a ação agora com a ferramenta certa (ou peça ao especialista) e responda de novo. " +
+              "Se ela não pediu essa ação (ex.: passou valores para um especialista guardar, não um gasto), não invente uma: reescreva sem dizer que fez. " +
+              "Se não der, diga com honestidade o que não foi feito.",
           },
         ],
       }).catch(() => null);
@@ -567,7 +569,10 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
           ? retry.text
           : claim === CARD_CLAIM && ctx.room.done.has("add_transaction")
             ? "Anotei o gasto, mas não consegui colocar no cartão. Me fala de novo em qual cartão foi que eu acerto?"
-            : `Não consegui concluir isso agora (${claim}), então nada foi feito. Pode me pedir de novo?`;
+            : sideEffectsDone(ctx.room.done).length
+              ? // outra coisa já rodou (lembrete, caderno): "nada foi feito" seria mentira
+                `Não consegui confirmar uma parte disso agora (${claim}). Pode me pedir de novo?`
+              : `Não consegui concluir isso agora (${claim}), então nada foi feito. Pode me pedir de novo?`;
     }
     // resposta vazia (passos só com ferramentas, ou o modelo devolveu nada) não pode virar silêncio: mais uma rodada, sem ferramentas
     if (opts.trigger === "message" && !result.timedOut && !guard.expired && !result.text.trim()) {
@@ -587,6 +592,26 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
         result.text = "Me perdi aqui no meio. Pode me falar de novo o que você precisa?";
         ctx.room.partial = "O modelo não escreveu resposta";
       }
+    }
+    // [[silencio]] é para "ok", "valeu", emoji. "Deixa quieto por enquanto, depois te mando" (Rico, 2026-11-03) ficou sem resposta nenhuma
+    const said = (ctx.inboundText ?? "").replace(/\[[^\]]*\]\s*/g, "").trim();
+    if (opts.trigger === "message" && !proactive && !guard.expired && /^\[\[sil[eê]ncio\]\]$/i.test(result.text.trim()) && said.length > 40 && !isAckOnly([said], false)) {
+      const step = await tracer.step({ agent: "cto", type: "info", name: "trava: silêncio", input: { mensagem: said.slice(0, 200) } });
+      const again = await runToolLoop({
+        agent: "cto",
+        task: "agent:cto",
+        ctx,
+        tools: [],
+        maxSteps: 1,
+        messages: [
+          ...result.messages,
+          { role: "system", content: "Ela falou mais que um \"ok\" (adiou, combinou ou explicou algo). Responda curto, em 1 linha, mostrando que entendeu. Não responda [[silencio]]." },
+        ],
+      }).catch(() => null);
+      const text = again?.text?.trim() ?? "";
+      const ok = Boolean(text) && !/^\[\[sil[eê]ncio\]\]$/i.test(text);
+      await step.ok({ respondeu: ok });
+      if (ok) result.text = text;
     }
     if (guard.stopped) {
       const step = await tracer.step({ agent: "cto", type: "info", name: "parada a pedido", input: { acoes: guard.toolCalls } });
