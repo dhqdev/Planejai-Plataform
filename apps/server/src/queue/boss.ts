@@ -31,6 +31,8 @@ export const QUEUES = {
   uber: "uber.run",
   /** link público de agendamento (booking.ts): aviso do cliente perto do horário, mensagem pronta sem IA */
   booking: "booking.remind",
+  /** dicas dos primeiros dias no WhatsApp (trial-tips.ts): tick de hora em hora e um envio por pessoa com atraso sorteado */
+  trialTips: "trial.tips",
 } as const;
 
 let boss: PgBoss | null = null;
@@ -60,6 +62,7 @@ export async function getBoss(): Promise<PgBoss> {
   await b.createQueue(QUEUES.backup, { name: QUEUES.backup, policy: "singleton" });
   await b.createQueue(QUEUES.uber, { name: QUEUES.uber, policy: "standard" });
   await b.createQueue(QUEUES.booking, { name: QUEUES.booking, policy: "standard" });
+  await b.createQueue(QUEUES.trialTips, { name: QUEUES.trialTips, policy: "standard" });
   boss = b;
   return b;
 }
@@ -91,6 +94,7 @@ export const QUEUE_LABELS: Record<string, string> = {
   [QUEUES.backup]: "Backup no bucket",
   [QUEUES.uber]: "Uber e 99 (beta)",
   [QUEUES.booking]: "Agendamentos",
+  [QUEUES.trialTips]: "Dicas dos primeiros dias",
 };
 
 /**

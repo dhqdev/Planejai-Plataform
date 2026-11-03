@@ -365,7 +365,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
         const step = await tracer.step({ agent: "cto", type: "tool", name: `atalho sem IA: ${intent.kind}`, input: intent });
         await step.ok({ ...quick.data, economizou: "a chamada do CTO" });
         await channel.sendText(conversation.remote_jid, text).catch(() => {});
-        if (channel.id === "app" && intent.kind !== "apaga_ultimo") await appCards(user.id, user.timezone ?? settings.timezone, [intent.kind === "agenda" ? "agenda" : "dinheiro"], "kinds");
+        if (channel.id === "app" && (intent.kind === "agenda" || intent.kind === "gasto_mes")) await appCards(user.id, user.timezone ?? settings.timezone, [intent.kind === "agenda" ? "agenda" : "dinheiro"], "kinds");
         const m = userMsgs[0]!;
         await pushShort(conversationId, [
           { id: m.id, role: "user" as const, text: m.content ?? "", ts: new Date(m.created_at).getTime(), ext: m.external_id },

@@ -9,7 +9,7 @@ import { brl } from "./tools/finance.js";
  * Atalhos sem IA: os pedidos mais comuns saem direto do banco, sem chamar o CTO.
  * Só pega frase curta e inequívoca; qualquer dúvida devolve null e o time responde como sempre.
  */
-export type QuickIntent = { kind: "gasto_mes" } | { kind: "agenda"; day: 0 | 1 } | { kind: "apaga_ultimo"; noun: boolean };
+export type QuickIntent = { kind: "gasto_mes" } | { kind: "agenda"; day: 0 | 1 } | { kind: "apaga_ultimo"; noun: boolean } | { kind: "parar_dicas" };
 
 const norm = (s: string) =>
   s
@@ -31,9 +31,13 @@ const AGENDA = new RegExp(
 );
 const APAGA = /^(?:apaga|apague|exclui|exclua|deleta|delete|remove|remova|tira|cancela)(?: (?:o|esse|aquele))? ultimo( (?:gasto|lancamento|registro|que (?:eu )?(?:anotei|lancei|mandei)))?(?: (?:pra mim|por favor|pf|pfv))?$/;
 
+/** Resposta às dicas dos primeiros dias (trial-tips.ts): "PARAR DICAS" desliga só elas. */
+const PARAR_DICAS = /^(?:parar|pare|para|desligar|desliga|sem|chega de|nao quero(?: mais)?|cancelar|cancela)(?: as| com as)? dicas(?: (?:pra mim|por favor|pf|pfv))?$/;
+
 export function matchQuick(raw: string): QuickIntent | null {
   const t = norm(raw);
   if (!t || t.length > 70) return null;
+  if (PARAR_DICAS.test(t)) return { kind: "parar_dicas" };
   if (GASTO.test(t)) return { kind: "gasto_mes" };
   const a = AGENDA.exec(t);
   if (a) return { kind: "agenda", day: (a[1] ?? a[2] ?? a[3]) === "amanha" ? 1 : 0 };
@@ -51,6 +55,11 @@ const hm = (d: Date, tz: string) => {
 
 /** Responde o atalho; null = deixa para o time (ex.: Google Agenda conectado, parcela, coisa mais nova que o lançamento). */
 export async function quickAnswer(user: { id: string; phone: string }, owner: boolean, intent: QuickIntent, tz: string): Promise<{ text: string; data: Record<string, unknown> } | null> {
+  if (intent.kind === "parar_dicas") {
+    const { stopTrialTips } = await import("../trial-tips.js");
+    await stopTrialTips(user.id);
+    return { text: "Combinado, não mando mais dicas 👍 Quando precisar de algo, é só me chamar por aqui.", data: { dicas: "desligadas" } };
+  }
   const today = isoLocal(new Date(), tz).slice(0, 10);
   if (intent.kind === "gasto_mes") {
     const month = today.slice(0, 7);

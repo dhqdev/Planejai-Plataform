@@ -172,6 +172,14 @@ async function startChannelJobs(log: WorkerLog) {
   });
   await boss.schedule(QUEUES.waStatus, "23 * * * *");
 
+  // dicas dos primeiros dias (sem IA): de hora em hora vê quem está na hora (9h/12h locais) e manda com minuto sorteado
+  await boss.work<{ userId?: string; step?: import("../trial-tips.js").TipStep; tick?: boolean }>(QUEUES.trialTips, { batchSize: 1, pollingIntervalSeconds: 15 }, async ([job]) => {
+    const tips = await import("../trial-tips.js");
+    if (job?.data?.userId && job.data.step) await tips.sendTrialTip(job.data.userId, job.data.step);
+    else await tips.scheduleTrialTips(log).catch((err) => log.error({ err }, "dicas dos primeiros dias falharam"));
+  });
+  await boss.schedule(QUEUES.trialTips, "3 * * * *", { tick: true });
+
   // secretária de reuniões: cada trecho do Meet vira texto e, no fim, a ata em PDF
   await boss.work<import("../meet.js").MeetJob>(QUEUES.meet, { batchSize: 1, pollingIntervalSeconds: 3 }, async ([job]) => {
     const { runMeetJob } = await import("../meet.js");
