@@ -67,6 +67,9 @@ export interface AgentDef {
   toolGroups?: { when: RegExp; tools: Tool[] }[];
 }
 
+/** "Meu mês começa dia 5", "recebo todo dia 5", "meu mês fecha dia 4": dia em que o mês financeiro começa. */
+export const MONTH_START_WHEN = /(?<!\p{L})(m[eê]s\b.{0,25}(come[cç]|fecha|vira|inici)|(recebo|caio o sal[aá]rio|sal[aá]rio cai|pagamento cai)\w*.{0,20}dia \d)/iu;
+
 /** Especialistas do time. Cada um tem ferramentas próprias e uma rota de modelo ("agent:<id>"). */
 export const SPECIALISTS: AgentDef[] = [
   {
@@ -164,6 +167,7 @@ export const SPECIALISTS: AgentDef[] = [
       "Metas (juntar dinheiro para algo): goal_create com valor e prazo; 'guardei 200 na viagem' é goal_add (não é gasto, nada de add_transaction); " +
       "ao falar de gastos de quem tem meta, diga em uma frase como isso afeta a meta e quanto falta por mês (per_month), sem sermão. " +
       "Categorias são dela: criar, renomear, trocar cor, palavras ou excluir é categories. Corrigir a categoria com update_transaction ensina o sistema: os próximos parecidos já caem nela. " +
+      "Mês que começa em outro dia ('recebo dia 5, meu mês começa dia 5'): month_start com o dia; depois disso finance_summary, limites e gráficos já usam o período dela (diga o período, ex.: 5/nov a 4/dez). " +
       "Valor em dólar (US$, USD, 'dólar', 'dollars'): convert_currency antes de lançar; registre em reais com o valor convertido e responda mostrando os dois lados com a data da cotação; se falhar, avise e não chute.",
     tools: [
       finance.addTransaction,
@@ -176,6 +180,7 @@ export const SPECIALISTS: AgentDef[] = [
       finance.createPaymentLink,
       finance.setBudget,
       finance.budgetStatusTool,
+      finance.monthStartTool,
       finance.makeChart,
       bills.billSave,
       bills.billList,
@@ -202,6 +207,7 @@ export const SPECIALISTS: AgentDef[] = [
       },
       { when: /\bmetas?\b|guard|junt|economiz|poupan|objetiv|reserva|sonho/i, tools: GOAL_TOOLS },
       { when: /limite|or[çc]amento|teto|no m[aá]ximo|estour|passar de/i, tools: [finance.setBudget, finance.budgetStatusTool] },
+      { when: MONTH_START_WHEN, tools: [finance.monthStartTool] },
       { when: /gr[aá]fico|chart|visual|pizza|barras|imagem/i, tools: [finance.makeChart] },
       { when: /link|cobran|cobrar|\bpix\b|mercado ?pago|pagamento/i, tools: [finance.createPaymentLink] },
     ],
@@ -377,6 +383,7 @@ export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
   { id: "uber", when: /(?<!\p{L})(uber|t[aá]xi|99 ?pop|(uma|na|pela|da) 99(?!\d)|corrida (pra|para|at[eé])|chama(r)? um carro|me (leva|busca) (pra|para|at[eé]))/iu, tools: UBER_TOOLS },
   { id: "acompanhamentos", when: /(?<!\p{L})(de olho|acompanh|monitor|avis\w* quando)/iu, tools: [social.watchList, social.watchCancel, social.watchUpdate] },
   { id: "dinheiro", when: /(?<!\p{L})(limite|or[çc]amento|teto|no m[aá]ximo|fatura|cart[aã]o|cart[õo]es)/iu, tools: [finance.setBudget, cards.cardList, cards.cardInvoicePay] },
+  { id: "mes-financeiro", when: MONTH_START_WHEN, tools: [finance.monthStartTool] },
   { id: "dolar", when: /(?<!\p{L})(d[oó]lar(es)?|dollars?|USD|US\$)/iu, tools: [finance.convertCurrency] },
   {
     // "esse gasto vai no cartão X", "era 18 e não 81": corrige o que já foi lançado (lançar de novo duplicava)

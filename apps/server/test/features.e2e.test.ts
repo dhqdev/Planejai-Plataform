@@ -379,6 +379,13 @@ describe.skipIf(!enabled)("recursos (e2e)", () => {
     const adm = cookieOf(login);
     const fin = (await app.inject({ method: "GET", url: "/api/finance?month=2026-10", headers: { cookie: adm } })).json();
     expect(fin.transactions.map((t: any) => t.user_name)).toEqual(["Ana"]);
+    // mês financeiro: começa no dia que ela escolheu (5 = de 5 a 4 do mês seguinte); fora de 1..28 é recusado
+    expect((await app.inject({ method: "PUT", url: "/api/finance/month-start", headers: { cookie: adm }, payload: { start: 31 } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "PUT", url: "/api/finance/month-start", headers: { cookie: adm }, payload: { start: 5 } })).json()).toMatchObject({ ok: true, start: 5 });
+    const fin5 = (await app.inject({ method: "GET", url: "/api/finance?month=2026-10", headers: { cookie: adm } })).json();
+    expect(fin5.period).toMatchObject({ start: 5, from: "2026-10-05", to: "2026-11-04", days: 31 });
+    expect((await app.inject({ method: "GET", url: "/api/finance/month-start", headers: { cookie: adm } })).json()).toMatchObject({ start: 5 });
+    await app.inject({ method: "PUT", url: "/api/finance/month-start", headers: { cookie: adm }, payload: { start: 1 } });
 
     // perguntas de boas-vindas: aparecem para quem acabou de entrar; resposta fora do caminho escolhido é descartada
     const ob = (await app.inject({ method: "GET", url: "/api/me/onboarding", headers: { cookie: adm } })).json();

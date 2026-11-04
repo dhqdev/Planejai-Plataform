@@ -6,6 +6,7 @@ import { config } from "../../../config.js";
 import { many, one, query } from "../../../db/pool.js";
 import { ingest } from "../../../ingest.js";
 import { selfUserId } from "../../../sharing.js";
+import { financeMonthOf, monthSql, monthStartOf } from "../../../finance-month.js";
 
 /** Arquivo mandado pelo chat do app: até 15 MB (o mesmo teto que o WhatsApp aceita bem para foto e documento). */
 const MAX_UPLOAD = 15 * 1024 * 1024;
@@ -131,6 +132,7 @@ export function chatRoutes(base: FastifyInstance) {
  */
 async function hello(uid: string, user: { name?: string | null; full_name?: string | null; timezone?: string | null }) {
   const tz = user.timezone ?? config.DEFAULT_TIMEZONE;
+  const start = await monthStartOf(uid);
   const [today, money, watches, errands] = await Promise.all([
     many(
       `SELECT COALESCE(title, intent) AS title, COALESCE(event_at, due_at) AS at FROM reminders
@@ -141,10 +143,10 @@ async function hello(uid: string, user: { name?: string | null; full_name?: stri
       [uid, tz],
     ),
     one(
-      `SELECT COALESCE(SUM(amount) FILTER (WHERE date_trunc('month', occurred_at AT TIME ZONE $2) = date_trunc('month', now() AT TIME ZONE $2)), 0) AS month,
+      `SELECT COALESCE(SUM(amount) FILTER (WHERE ${monthSql("occurred_at", "$2", start)} = $3), 0) AS month,
               COALESCE(SUM(amount) FILTER (WHERE (occurred_at AT TIME ZONE $2)::date = (now() AT TIME ZONE $2)::date), 0) AS today
          FROM transactions WHERE user_id = $1 AND kind = 'expense'`,
-      [uid, tz],
+      [uid, tz, financeMonthOf(new Date(), tz, start)],
     ),
     many("SELECT query FROM watches WHERE user_id = $1 AND active ORDER BY created_at DESC LIMIT 2", [uid]),
     one("SELECT COUNT(*)::int AS n FROM errands WHERE user_id = $1 AND status = 'asking' AND NOT hidden", [uid]),

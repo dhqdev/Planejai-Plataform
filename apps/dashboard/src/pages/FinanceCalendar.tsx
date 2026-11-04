@@ -3,7 +3,13 @@ import { brl } from "../api";
 import { haptic } from "../touch";
 import "../styles/financas-calendario.css";
 
-type Day = { day: number | string; expenses?: number | string | null; income?: number | string | null };
+type Day = { date?: string; day: number | string; expenses?: number | string | null; income?: number | string | null };
+
+const MON = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const pad = (n: number) => String(n).padStart(2, "0");
+/** AAAA-MM-DD no relógio do aparelho. */
+export const localIso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parseIso = (iso: string) => new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));
 
 /** Valor curto dentro do quadradinho do dia: 85, 1,2 mil. O valor exato aparece ao tocar no dia. */
 const MIL1 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
@@ -30,9 +36,15 @@ export function median(values: number[]) {
 const WD = ["S", "T", "Q", "Q", "S", "S", "D"];
 const LEVEL_LABEL = ["", "pouco", "normal", "acima do normal", "muito"];
 
-/** Calendário do mês em Finanças: quanto saiu em cada dia, com a cor pelo tamanho do gasto. */
+/**
+ * Calendário do mês em Finanças: quanto saiu em cada dia, com a cor pelo tamanho do gasto.
+ * O mês é o da pessoa: com início no dia 5 vai de 5 deste mês a 4 do próximo (from + days).
+ */
 export function FinanceCalendar({
   month,
+  from,
+  days,
+  footer,
   daily,
   income,
   expenses,
@@ -41,6 +53,10 @@ export function FinanceCalendar({
   renderTx,
 }: {
   month: string;
+  /** Primeiro dia (AAAA-MM-DD) e quantos dias o mês financeiro tem; sem isso, o mês do calendário. */
+  from?: string;
+  days?: number;
+  footer?: ReactNode;
   daily: Day[];
   income: number;
   expenses: number;
@@ -49,28 +65,31 @@ export function FinanceCalendar({
   renderTx: (t: any) => ReactNode;
 }) {
   const [y, m] = month.split("-").map(Number) as [number, number];
-  const daysIn = new Date(y, m, 0).getDate();
-  const now = new Date();
-  const isCurrent = now.getFullYear() === y && now.getMonth() + 1 === m;
-  const today = isCurrent ? now.getDate() : 0;
-  const [sel, setSel] = useState<number | null>(isCurrent ? today : null);
+  const first = from ? parseIso(from) : new Date(y, m - 1, 1);
+  const count = days ?? new Date(y, m, 0).getDate();
+  const dates = Array.from({ length: count }, (_, i) => localIso(new Date(first.getFullYear(), first.getMonth(), first.getDate() + i)));
+  const todayIso = localIso(new Date());
+  const isCurrent = dates.includes(todayIso);
+  const today = isCurrent ? todayIso : "";
+  const [sel, setSel] = useState<string | null>(isCurrent ? today : null);
 
-  const out = new Map<number, number>();
-  const inc = new Map<number, number>();
+  const out = new Map<string, number>();
+  const inc = new Map<string, number>();
   for (const d of daily) {
-    out.set(Number(d.day), Number(d.expenses ?? 0));
-    inc.set(Number(d.day), Number(d.income ?? 0));
+    const k = d.date ?? `${month}-${pad(Number(d.day))}`;
+    out.set(k, Number(d.expenses ?? 0));
+    inc.set(k, Number(d.income ?? 0));
   }
-  const ref = limit?.limit ? limit.limit / daysIn : median([...out.values()]);
-  const lead = (new Date(y, m - 1, 1).getDay() + 6) % 7;
+  const ref = limit?.limit ? limit.limit / count : median([...out.values()]);
+  const lead = (first.getDay() + 6) % 7;
   const balance = income - expenses;
 
-  const selTx = sel ? transactions.filter((t) => new Date(t.occurred_at).getDate() === sel && new Date(t.occurred_at).getMonth() + 1 === m) : [];
+  const selTx = sel ? transactions.filter((t) => localIso(new Date(t.occurred_at)) === sel) : [];
   const selOut = sel ? out.get(sel) ?? 0 : 0;
   const selIn = sel ? inc.get(sel) ?? 0 : 0;
   const selLabel = sel
     ? (() => {
-        const s = new Date(y, m - 1, sel).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+        const s = parseIso(sel).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
         return sel === today ? "Hoje" : s.charAt(0).toUpperCase() + s.slice(1);
       })()
     : "";
@@ -93,23 +112,25 @@ export function FinanceCalendar({
       <div className="fcal-grid" role="grid" aria-label="Gastos por dia">
         {WD.map((w, i) => <span key={i} className="fcal-wd" aria-hidden>{w}</span>)}
         {Array.from({ length: lead }, (_, i) => <span key={`e${i}`} />)}
-        {Array.from({ length: daysIn }, (_, i) => {
-          const d = i + 1;
-          const v = out.get(d) ?? 0;
+        {dates.map((iso, i) => {
+          const d = Number(iso.slice(8, 10));
+          const v = out.get(iso) ?? 0;
           const lv = spendLevel(v, ref);
-          const future = isCurrent && d > today;
+          const future = isCurrent && iso > today;
+          // o mês financeiro pode virar o mês do calendário no meio: o dia 1 mostra o mês novo
+          const turn = d === 1 && i > 0;
           return (
             <button
-              key={d}
+              key={iso}
               role="gridcell"
-              className={`fcal-day l${lv}${d === today ? " today" : ""}${sel === d ? " sel" : ""}${future ? " future" : ""}`}
-              aria-label={`Dia ${d}: ${v ? `${brl(v)} de gasto, ${LEVEL_LABEL[lv]}` : "sem gasto"}${inc.get(d) ? `, entrou ${brl(inc.get(d))}` : ""}`}
-              aria-selected={sel === d}
-              onClick={() => { haptic(4); setSel(sel === d ? null : d); }}
+              className={`fcal-day l${lv}${iso === today ? " today" : ""}${sel === iso ? " sel" : ""}${future ? " future" : ""}`}
+              aria-label={`Dia ${d}${turn || i === 0 ? ` de ${MON[Number(iso.slice(5, 7)) - 1]}` : ""}: ${v ? `${brl(v)} de gasto, ${LEVEL_LABEL[lv]}` : "sem gasto"}${inc.get(iso) ? `, entrou ${brl(inc.get(iso))}` : ""}`}
+              aria-selected={sel === iso}
+              onClick={() => { haptic(4); setSel(sel === iso ? null : iso); }}
             >
-              <span className="n">{d}</span>
+              <span className="n">{d}{turn && <small className="fcal-mon">{MON[Number(iso.slice(5, 7)) - 1]}</small>}</span>
               {v > 0 && <span className="v">{cellMoney(v)}</span>}
-              {(inc.get(d) ?? 0) > 0 && <i className="inc" aria-hidden />}
+              {(inc.get(iso) ?? 0) > 0 && <i className="inc" aria-hidden />}
             </button>
           );
         })}
@@ -122,6 +143,7 @@ export function FinanceCalendar({
         <span className="spacer" />
         <span className="fcal-legend-in"><i />entrada</span>
       </div>
+      {footer}
 
       {sel != null && (
         <div className="fcal-sel" key={sel}>

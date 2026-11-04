@@ -210,9 +210,11 @@ export async function learnCategory(userId: string, rows: { kind: string; catego
 /** Categorias com quantos lançamentos e quanto foi no mês (para a tela e para o Moacir). */
 export async function listCategories(userId: string, tz: string, month?: string) {
   const cats = await ensureCategories(userId);
-  const m = month ?? new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit" }).format(new Date());
+  const { financeMonthOf, monthSql, monthStartOf } = await import("./finance-month.js");
+  const start = await monthStartOf(userId);
+  const m = month ?? financeMonthOf(new Date(), tz, start);
   const use = await many<{ category: string; n: number; month_total: number }>(
-    `SELECT category, COUNT(*)::int AS n, COALESCE(SUM(amount) FILTER (WHERE to_char(occurred_at AT TIME ZONE $2, 'YYYY-MM') = $3), 0)::float AS month_total
+    `SELECT category, COUNT(*)::int AS n, COALESCE(SUM(amount) FILTER (WHERE ${monthSql("occurred_at", "$2", start)} = $3), 0)::float AS month_total
        FROM transactions WHERE user_id = $1 GROUP BY category`,
     [userId, tz, m],
   );

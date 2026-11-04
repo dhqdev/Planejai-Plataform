@@ -1,3 +1,4 @@
+import { clampStart, financeMonthOf, monthSql, monthStartOf, periodOf, periodText } from "./finance-month.js";
 import { barChart, budgetChart, donutChart, htmlToPdf } from "./charts.js";
 import { config } from "./config.js";
 import { many, one, query } from "./db/pool.js";
@@ -35,6 +36,8 @@ export interface ReportData {
   budgets: { category: string | null; limit: number; spent: number }[];
   bills: { description: string; kind: "expense" | "income"; amount: number | null; due_day: number; paid: boolean }[];
   cards: { name: string; last4: string | null; limit: number | null; used: number; invoice: number; invoiceStatus: string | null; due: string | null; futureInstallments: number }[];
+  /** Dia em que o mês financeiro começa (1 ou ausente = mês do calendário). */
+  start?: number;
 }
 
 const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
@@ -94,8 +97,10 @@ const signed = (v: number) => (Math.abs(v) < 0.01 ? "–" : `<span class="${v > 
 
 /** Monta o HTML do relatório (puro: dá para testar sem banco nem navegador). */
 export function buildFinanceReportHtml(d: ReportData) {
-  const label = monthLabel(d.month);
-  const isCurrent = d.today.slice(0, 7) === d.month;
+  const start = clampStart(d.start ?? 1);
+  const period = periodOf(d.month, start);
+  const label = start > 1 ? `${monthLabel(d.month)} (${periodText(d.month, start)})` : monthLabel(d.month);
+  const isCurrent = d.today >= period.from && d.today <= period.to;
   const exp = d.txs.filter((t) => t.kind === "expense");
   const inc = d.txs.filter((t) => t.kind === "income");
   const expenses = sum(exp);
@@ -121,15 +126,17 @@ export function buildFinanceReportHtml(d: ReportData) {
   const falling = catDelta.filter((c) => (c.delta ?? 0) <= -1).sort((a, b) => a.delta! - b.delta!);
 
   // dia a dia e semanas
-  const days = daysOf(d.month);
-  const byDay = Array.from({ length: days }, (_, i) => sum(exp.filter((t) => Number(t.day.slice(8, 10)) === i + 1)));
+  // dias do mês financeiro (com início no dia 5, vai de 5 deste mês a 4 do próximo)
+  const dayList = Array.from({ length: period.days }, (_, i) => new Date(Date.parse(`${period.from}T12:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10));
+  const byDay = dayList.map((iso) => sum(exp.filter((t) => t.day.slice(0, 10) === iso)));
   const topDayIdx = byDay.reduce((best, v, i) => (v > byDay[best]! ? i : best), 0);
+  const dom = (i: number) => Number(dayList[i]!.slice(8, 10));
   const weeks = [
-    [1, 7],
-    [8, 14],
-    [15, 21],
-    [22, days],
-  ].map(([a, b]) => ({ label: `${a} a ${b}`, total: r2(byDay.slice(a! - 1, b).reduce((x, y) => x + y, 0)) }));
+    [0, 6],
+    [7, 13],
+    [14, 20],
+    [21, dayList.length - 1],
+  ].map(([a, b]) => ({ label: `${dom(a!)} a ${dom(b!)}`, total: r2(byDay.slice(a!, b! + 1).reduce((x, y) => x + y, 0)) }));
   const byWeekday = Array.from({ length: 7 }, () => 0);
   for (const t of exp) {
     const wd = new Date(`${t.day}T12:00:00Z`).getUTCDay();
@@ -236,8 +243,8 @@ ${table(
     const wdTop = byWeekday.reduce((b, v, i) => (v > byWeekday[b]! ? i : b), 0);
     sections.push({
       title: "Dia a dia",
-      html: `<p>O dia em que você mais gastou foi <b>${ddmm(`${d.month}-${String(topDayIdx + 1).padStart(2, "0")}`)}</b>, com ${brl(byDay[topDayIdx]!)}. Pelo dia da semana, <b>${WEEKDAYS[wdTop]}</b> concentrou ${pct(byWeekday[wdTop]!, expenses)}% dos gastos, e o fim de semana somou ${brl(weekend)} (${pct(weekend, expenses)}%).</p>
-${chart(barChart("Gastos por dia", label, byDay.map((v, i) => ({ label: String(i + 1), value: v }))))}
+      html: `<p>O dia em que você mais gastou foi <b>${ddmm(dayList[topDayIdx]!)}</b>, com ${brl(byDay[topDayIdx]!)}. Pelo dia da semana, <b>${WEEKDAYS[wdTop]}</b> concentrou ${pct(byWeekday[wdTop]!, expenses)}% dos gastos, e o fim de semana somou ${brl(weekend)} (${pct(weekend, expenses)}%).</p>
+${chart(barChart("Gastos por dia", label, byDay.map((v, i) => ({ label: String(dom(i)), value: v }))))}
 <h3>Por semana do mês</h3>${table([{ label: "Dias" }, { label: "Gasto", right: true }, { label: "% do mês", right: true }], weeks.map((w) => [w.label, brl(w.total), `${pct(w.total, expenses)}%`]))}`,
     });
 
@@ -335,23 +342,25 @@ ${table(
 /** Junta tudo do banco para um mês de uma pessoa. */
 export async function loadReportData(userId: string, month: string, tz = config.DEFAULT_TIMEZONE): Promise<ReportData> {
   const user = await one<{ name: string | null; full_name: string | null }>("SELECT name, full_name FROM users WHERE id = $1", [userId]);
+  const start = await monthStartOf(userId);
+  const fm = (col: string) => monthSql(col, "$2", start);
   const txs = await many<ReportTx>(
     `SELECT to_char(t.occurred_at AT TIME ZONE $2, 'YYYY-MM-DD') AS day, t.kind, t.amount::float AS amount, t.category, t.description, t.merchant,
             c.name AS card_name, t.installment, t.installments
        FROM transactions t LEFT JOIN cards c ON c.id = t.card_id
-      WHERE t.user_id = $1 AND to_char(t.occurred_at AT TIME ZONE $2, 'YYYY-MM') = $3 ORDER BY t.occurred_at`,
+      WHERE t.user_id = $1 AND ${fm("t.occurred_at")} = $3 ORDER BY t.occurred_at`,
     [userId, tz, month],
   );
   const list = [5, 4, 3, 2, 1, 0].map((n) => shiftMonth(month, -n));
   const sums = await many<{ month: string; income: number; expenses: number }>(
-    `SELECT to_char(occurred_at AT TIME ZONE $2, 'YYYY-MM') AS month, COALESCE(SUM(amount) FILTER (WHERE kind='income'),0)::float AS income,
+    `SELECT ${fm("occurred_at")} AS month, COALESCE(SUM(amount) FILTER (WHERE kind='income'),0)::float AS income,
             COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0)::float AS expenses
-       FROM transactions WHERE user_id = $1 AND to_char(occurred_at AT TIME ZONE $2, 'YYYY-MM') = ANY($3::text[]) GROUP BY 1`,
+       FROM transactions WHERE user_id = $1 AND ${fm("occurred_at")} = ANY($3::text[]) GROUP BY 1`,
     [userId, tz, list],
   );
   const months = list.map((m) => sums.find((s) => s.month === m) ?? { month: m, income: 0, expenses: 0 });
   const prevByCategory = await many<{ category: string; total: number }>(
-    `SELECT category, SUM(amount)::float AS total FROM transactions WHERE user_id = $1 AND kind = 'expense' AND to_char(occurred_at AT TIME ZONE $2, 'YYYY-MM') = $3 GROUP BY 1`,
+    `SELECT category, SUM(amount)::float AS total FROM transactions WHERE user_id = $1 AND kind = 'expense' AND ${fm("occurred_at")} = $3 GROUP BY 1`,
     [userId, tz, shiftMonth(month, -1)],
   );
   const { budgetStatus } = await import("./agent/tools/finance.js");
@@ -376,7 +385,7 @@ export async function loadReportData(userId: string, month: string, tz = config.
       futureInstallments: r2(c.installments.reduce((a, i) => a + i.left_amount, 0)),
     };
   });
-  return { name: user?.full_name || user?.name || "Suas finanças", month, today: todayIn(tz), txs, months, prevByCategory, budgets, bills, cards };
+  return { name: user?.full_name || user?.name || "Suas finanças", month, today: todayIn(tz), txs, months, prevByCategory, budgets, bills, cards, start };
 }
 
 export const reportFileName = (month: string) => `Relatório financeiro - ${cap(monthLabel(month))}.pdf`;
@@ -410,8 +419,8 @@ export async function setReportSchedule(userId: string, day: number | null) {
 /** Dia do envio neste mês: 31 em fevereiro vira o último dia. */
 export const isSendDay = (day: number, today: string) => Number(today.slice(8, 10)) === Math.min(day, daysOf(today.slice(0, 7)));
 
-/** Mês que o envio agendado cobre: sempre o anterior, completo. */
-export const reportMonthFor = (today: string) => shiftMonth(today.slice(0, 7), -1);
+/** Mês que o envio agendado cobre: sempre o anterior, completo (o mês financeiro da pessoa, que pode começar no dia 5). */
+export const reportMonthFor = (today: string, start = 1) => shiftMonth(financeMonthOf(new Date(`${today}T12:00:00Z`), "UTC", start), -1);
 
 /** Gera, guarda em Documentos e manda no WhatsApp. */
 export async function sendFinanceReport(userId: string, month: string, tz = config.DEFAULT_TIMEZONE, intro?: string) {
@@ -440,7 +449,8 @@ export async function sendScheduledReports(log?: { info: (...a: any[]) => void; 
     const tz = r.timezone ?? config.DEFAULT_TIMEZONE;
     const today = todayIn(tz);
     if (r.last_sent_on === today || !isSendDay(r.day, today)) continue;
-    const month = reportMonthFor(today);
+    // o mês que acabou: com o mês começando no dia 5, o envio do dia 5 já cobre o período inteiro que fechou ontem
+    const month = reportMonthFor(today, await monthStartOf(r.user_id));
     try {
       await query("UPDATE finance_report_schedules SET last_sent_on = $2 WHERE user_id = $1", [r.user_id, today]);
       await sendFinanceReport(r.user_id, month, tz, `Chegou o seu relatório financeiro de ${monthLabel(month)} 📊 Como combinado, todo dia ${r.day}. Tem o resumo do mês, gráficos, tabelas e o que eu observei.`);

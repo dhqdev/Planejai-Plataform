@@ -84,21 +84,25 @@ export async function agendaCard(userId: string, tz: string): Promise<AgendaCard
 
 export async function moneyCard(userId: string, tz: string): Promise<MoneyCard | null> {
   const today = isoLocal(new Date(), tz).slice(0, 10);
-  const month = today.slice(0, 7);
-  const dom = Number(today.slice(8, 10));
+  // mês financeiro da pessoa (pode começar no dia 5); "prev" = o mês anterior até o mesmo ponto
+  const { financeMonthOf, monthSql, monthStartOf, periodOf, shiftMonth } = await import("./finance-month.js");
+  const start = await monthStartOf(userId);
+  const month = financeMonthOf(new Date(), tz, start);
+  const elapsed = Math.round((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${periodOf(month, start).from}T12:00:00Z`)) / 86_400_000);
+  const prevUntil = new Date(Date.parse(`${periodOf(shiftMonth(month, -1), start).from}T12:00:00Z`) + elapsed * 86_400_000).toISOString().slice(0, 10);
+  const fm = monthSql("occurred_at", "$2", start);
   const day = "to_char(occurred_at AT TIME ZONE $2, 'YYYY-MM-DD')";
   const [tot, cats, week, budget] = await Promise.all([
     one(
-      `SELECT COALESCE(SUM(amount) FILTER (WHERE kind = 'expense' AND ${day} LIKE $3 || '%'), 0)::float8 AS spent,
-              COALESCE(SUM(amount) FILTER (WHERE kind = 'income' AND ${day} LIKE $3 || '%'), 0)::float8 AS income,
-              COALESCE(SUM(amount) FILTER (WHERE kind = 'expense' AND to_char(occurred_at AT TIME ZONE $2, 'YYYY-MM') = to_char(($3 || '-01')::date - interval '1 month', 'YYYY-MM')
-                                           AND to_char(occurred_at AT TIME ZONE $2, 'DD')::int <= $4), 0)::float8 AS prev
+      `SELECT COALESCE(SUM(amount) FILTER (WHERE kind = 'expense' AND ${fm} = $3), 0)::float8 AS spent,
+              COALESCE(SUM(amount) FILTER (WHERE kind = 'income' AND ${fm} = $3), 0)::float8 AS income,
+              COALESCE(SUM(amount) FILTER (WHERE kind = 'expense' AND ${fm} = $4 AND ${day} <= $5), 0)::float8 AS prev
          FROM transactions WHERE user_id = $1`,
-      [userId, tz, month, dom],
+      [userId, tz, month, shiftMonth(month, -1), prevUntil],
     ),
     many(
       `SELECT category AS name, SUM(amount)::float8 AS total FROM transactions
-        WHERE user_id = $1 AND kind = 'expense' AND ${day} LIKE $3 || '%' GROUP BY category ORDER BY total DESC LIMIT 4`,
+        WHERE user_id = $1 AND kind = 'expense' AND ${fm} = $3 GROUP BY category ORDER BY total DESC LIMIT 4`,
       [userId, tz, month],
     ),
     many(

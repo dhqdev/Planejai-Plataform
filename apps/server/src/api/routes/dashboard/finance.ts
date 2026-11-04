@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { budgetStatus, parseAmount, recordTransaction } from "../../../agent/tools/finance.js";
 import { autoCategory, createCategory, DEFAULT_CATEGORIES, deleteCategory, learnCategory, listCategories, resolveCategory, updateCategory, type CategoryInput } from "../../../categories.js";
 import { config } from "../../../config.js";
+import { financeMonthOf, monthSql, monthStartOf, MONTH_START_MAX, periodOf, setMonthStart, shiftMonth } from "../../../finance-month.js";
 import { many, one, query } from "../../../db/pool.js";
 import { NOBODY, personalUser, personalUsers, selfUserId } from "../../../sharing.js";
 import { createBill, deleteBill, listBills, payBill, updateBill, type BillInput } from "../../../bills.js";
@@ -21,8 +22,12 @@ export function financeRoutes(base: FastifyInstance) {
     const me = (await selfUserId(req.account)) ?? NOBODY;
     const readonly = uids.length !== 1 || uids[0] !== me;
     const tz = config.DEFAULT_TIMEZONE;
-    const month = /^\d{4}-\d{2}$/.test(req.query.month ?? "") ? req.query.month! : new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit" }).format(new Date());
-    const where = `t.user_id = ANY($1) AND to_char(t.occurred_at AT TIME ZONE $2, 'YYYY-MM') = $3`;
+    // mês financeiro: começa no dia que a pessoa escolheu (o de quem é a tela; vendo "Todos", o meu)
+    const start = await monthStartOf(uids.length === 1 ? uids[0]! : me);
+    const current = financeMonthOf(new Date(), tz, start);
+    const month = /^\d{4}-\d{2}$/.test(req.query.month ?? "") ? req.query.month! : current;
+    const fm = monthSql("t.occurred_at", "$2", start);
+    const where = `t.user_id = ANY($1) AND ${fm} = $3`;
     const totals = await one(
       `SELECT COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses, COALESCE(SUM(amount) FILTER (WHERE kind='income'),0) AS income, COUNT(*) AS count FROM transactions t WHERE ${where}`,
       [uids, tz, month],
@@ -31,14 +36,15 @@ export function financeRoutes(base: FastifyInstance) {
       `SELECT category, SUM(amount) AS total, COUNT(*) AS count FROM transactions t WHERE ${where} AND kind = 'expense' GROUP BY category ORDER BY total DESC`,
       [uids, tz, month],
     );
+    // date = dia local completo (o mês financeiro pode pegar dois meses do calendário); day fica para quem lia só o dia
     const daily = await many(
-      `SELECT to_char(t.occurred_at AT TIME ZONE $2, 'DD') AS day, COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses, COALESCE(SUM(amount) FILTER (WHERE kind='income'),0) AS income FROM transactions t WHERE ${where} GROUP BY 1 ORDER BY 1`,
+      `SELECT to_char(t.occurred_at AT TIME ZONE $2, 'YYYY-MM-DD') AS date, to_char(t.occurred_at AT TIME ZONE $2, 'DD') AS day, COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses, COALESCE(SUM(amount) FILTER (WHERE kind='income'),0) AS income FROM transactions t WHERE ${where} GROUP BY 1, 2 ORDER BY 1`,
       [uids, tz, month],
     );
     const months = await many(
-      `SELECT to_char(t.occurred_at AT TIME ZONE $2, 'YYYY-MM') AS month, COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses, COALESCE(SUM(amount) FILTER (WHERE kind='income'),0) AS income
-         FROM transactions t WHERE t.user_id = ANY($1) AND t.occurred_at > now() - interval '6 months' GROUP BY 1 ORDER BY 1`,
-      [uids, tz],
+      `SELECT ${fm} AS month, COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses, COALESCE(SUM(amount) FILTER (WHERE kind='income'),0) AS income
+         FROM transactions t WHERE t.user_id = ANY($1) AND t.occurred_at > now() - interval '7 months' AND ${fm} > $3 GROUP BY 1 ORDER BY 1`,
+      [uids, tz, shiftMonth(current, -6)],
     );
     const transactions = await many(
       `SELECT t.id, t.kind, t.amount, t.category, t.description, t.merchant, t.source, t.occurred_at, u.name AS user_name, u.phone,
@@ -46,14 +52,28 @@ export function financeRoutes(base: FastifyInstance) {
          FROM transactions t JOIN users u ON u.id = t.user_id LEFT JOIN cards c ON c.id = t.card_id WHERE ${where} ORDER BY t.occurred_at DESC LIMIT 300`,
       [uids, tz, month],
     );
-    const [py, pm] = month.split("-").map(Number) as [number, number];
-    const prevMonth = new Date(Date.UTC(py, pm - 2, 1)).toISOString().slice(0, 7);
     const prevByCategory = await many(
       `SELECT category, SUM(amount) AS total FROM transactions t WHERE ${where} AND kind = 'expense' GROUP BY category`,
-      [uids, tz, prevMonth],
+      [uids, tz, shiftMonth(month, -1)],
     );
     const budgets = uids.length === 1 ? await budgetStatus(uids[0]!, tz, month) : [];
-    return { month, totals, byCategory, prevByCategory, daily, months, transactions, budgets, readonly };
+    const period = { ...periodOf(month, start), current };
+    return { month, period, totals, byCategory, prevByCategory, daily, months, transactions, budgets, readonly };
+  });
+
+  // dia em que o mês financeiro começa (1 = mês do calendário)
+  base.get("/api/finance/month-start", async (req) => {
+    const me = await selfUserId(req.account);
+    const start = me ? await monthStartOf(me) : 1;
+    return { start, current: periodOf(financeMonthOf(new Date(), config.DEFAULT_TIMEZONE, start), start) };
+  });
+  base.put<{ Body: { start?: number | string } }>("/api/finance/month-start", async (req, reply) => {
+    const me = await selfUserId(req.account);
+    if (!me) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil para escolher o dia" });
+    const n = Number(req.body?.start);
+    if (!Number.isInteger(n) || n < 1 || n > MONTH_START_MAX) return reply.code(400).send({ error: `Escolha um dia de 1 a ${MONTH_START_MAX}` });
+    const start = await setMonthStart(me, n);
+    return { ok: true, start, current: periodOf(financeMonthOf(new Date(), config.DEFAULT_TIMEZONE, start), start) };
   });
 
   base.post<{ Body: { kind: "expense" | "income"; amount: number | string; category: string; description?: string; date?: string; card_id?: string | null; installments?: number | string } }>("/api/finance", async (req, reply) => {
@@ -228,11 +248,11 @@ export function financeRoutes(base: FastifyInstance) {
   });
 
   // ---------- Relatório em PDF (baixar, mandar no WhatsApp agora e envio todo mês no dia escolhido) ----------
-  const monthOf = (m?: string) => (/^\d{4}-\d{2}$/.test(m ?? "") ? m! : new Intl.DateTimeFormat("en-CA", { timeZone: config.DEFAULT_TIMEZONE, year: "numeric", month: "2-digit" }).format(new Date()));
+  const monthOf = async (uid: string, m?: string) => (/^\d{4}-\d{2}$/.test(m ?? "") ? m! : financeMonthOf(new Date(), config.DEFAULT_TIMEZONE, await monthStartOf(uid)));
   base.get<{ Querystring: { user?: string; month?: string } }>("/api/finance/report", async (req, reply) => {
     const uid = await personalUser(req.account, req.query.user, "finance");
     if (!uid) return reply.code(403).send({ error: "Essa pessoa não compartilhou as finanças com você" });
-    const month = monthOf(req.query.month);
+    const month = await monthOf(uid, req.query.month);
     try {
       const pdf = await renderFinanceReport(uid, month);
       return reply
@@ -250,7 +270,7 @@ export function financeRoutes(base: FastifyInstance) {
     const uid = await selfUserId(req.account);
     if (!uid) return reply.code(400).send({ error: "Ligue seu WhatsApp ao perfil para receber o relatório" });
     try {
-      return { ok: true, ...(await sendFinanceReport(uid, monthOf(req.body?.month))) };
+      return { ok: true, ...(await sendFinanceReport(uid, await monthOf(uid, req.body?.month))) };
     } catch (err) {
       req.log.error({ err }, "envio do relatório financeiro falhou");
       return reply.code(503).send({ error: "Não consegui mandar o relatório agora. Tente de novo em instantes." });

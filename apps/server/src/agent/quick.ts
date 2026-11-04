@@ -62,11 +62,14 @@ export async function quickAnswer(user: { id: string; phone: string }, owner: bo
   }
   const today = isoLocal(new Date(), tz).slice(0, 10);
   if (intent.kind === "gasto_mes") {
-    const month = today.slice(0, 7);
-    const where = "user_id = $1 AND kind = 'expense' AND to_char(occurred_at AT TIME ZONE $2, 'YYYY-MM') = $3";
+    const { financeMonthOf, monthSql, monthStartOf, periodText } = await import("../finance-month.js");
+    const start = await monthStartOf(user.id);
+    const month = financeMonthOf(new Date(), tz, start);
+    const where = `user_id = $1 AND kind = 'expense' AND ${monthSql("occurred_at", "$2", start)} = $3`;
     const total = await one(`SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*)::int AS n FROM transactions WHERE ${where}`, [user.id, tz, month]);
     const top = await many(`SELECT category, SUM(amount) AS total FROM transactions WHERE ${where} GROUP BY category ORDER BY total DESC LIMIT 3`, [user.id, tz, month]);
-    const name = MONTHS[Number(month.slice(5)) - 1];
+    // mês que começa em outro dia: "neste mês (5/nov a 4/dez)" para não confundir com o mês do calendário
+    const name = start > 1 ? `seu mês (${periodText(month, start)})` : MONTHS[Number(month.slice(5)) - 1];
     if (!total?.n) return { text: `Ainda não tem nenhum gasto anotado em ${name}. Quando gastar, é só me mandar 💸`, data: { mes: month, total: 0 } };
     const parts = top.map((c) => `${c.category} (${money(c.total)})`);
     const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} e ${parts.at(-1)}` : parts[0];

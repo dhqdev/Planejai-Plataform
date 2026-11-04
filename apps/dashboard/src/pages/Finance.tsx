@@ -59,7 +59,8 @@ function dayLabel(iso: string) {
 }
 
 export function FinancePage() {
-  const [month, setMonth] = useState(thisMonth());
+  // vazio = o mês atual da pessoa, que o servidor calcula pelo dia em que o mês dela começa
+  const [picked, setMonth] = useState("");
   const [user, setUser] = useState(() => {
     try {
       return sessionStorage.getItem("pj-origin-finance") ?? "";
@@ -86,7 +87,11 @@ export function FinancePage() {
   // particular: cada um vê as suas; as de um contato só se ele compartilhou (só leitura)
   const shared = useApi<{ withMe: { id: string; name: string; scopes: string[] }[] }>("/api/shares");
   const owners = (shared.data?.withMe ?? []).filter((p) => p.scopes.includes("finance"));
-  const { data, error, reload } = useApi<any>(`/api/finance?month=${month}${user ? `&user=${user}` : ""}`, { poll: 20000, live: ["transactions", "budgets", "finance_categories", "finance_goals", "bills", "cards"] });
+  const { data, error, reload } = useApi<any>(`/api/finance?month=${picked}${user ? `&user=${user}` : ""}`, { poll: 20000, live: ["transactions", "budgets", "finance_categories", "finance_goals", "bills", "cards"] });
+  const period: { start: number; from: string; to: string; days: number; current: string } | undefined = data?.period;
+  const current = period?.current ?? thisMonth();
+  const month: string = picked || (data?.month as string | undefined) || current;
+  const [monthStart, setMonthStart] = useState(false);
   const categories = useCategories(user);
   const colorOf = categories.colorOf;
   const [managing, setManaging] = useState(false);
@@ -105,7 +110,7 @@ export function FinancePage() {
     if (g) g[1].push(t);
     else groups.push([k, [t]]);
   }
-  const isCurrent = month === thisMonth();
+  const isCurrent = month === current;
   const budgets: { id: string; category: string | null; limit: number; spent: number }[] = data?.budgets ?? [];
   const readonly = Boolean(data?.readonly);
   // primeiro acesso: nada lançado nos últimos meses e nenhum limite (as Finanças de um contato nunca contam)
@@ -185,7 +190,17 @@ export function FinancePage() {
   const monthTitle = `${monthName(month)}${month.slice(0, 4) !== String(now.getFullYear()) ? ` ${month.slice(0, 4)}` : ""}`;
   const totalBudget = budgets.find((b) => !b.category);
   const today = new Date();
-  const periodLabel = `1 - ${daysIn} de ${monthName(month).slice(0, 3)}, ${month.slice(0, 4)}`;
+  // mês que começa em outro dia: "5 nov - 4 dez, 2026"
+  const short = (iso: string) => `${Number(iso.slice(8, 10))} ${monthName(iso.slice(0, 7)).slice(0, 3)}`;
+  const periodLabel = period && period.start > 1 && period.from.slice(0, 7) === month
+    ? `${short(period.from)} - ${short(period.to)}, ${period.to.slice(0, 4)}`
+    : `1 - ${daysIn} de ${monthName(month).slice(0, 3)}, ${month.slice(0, 4)}`;
+  const periodFooter = !readonly && !user ? (
+    <div className="fcal-period">
+      <span>{period && period.start > 1 ? <>Seu mês começa no <strong>dia {period.start}</strong></> : "Seu mês vai do dia 1 ao último dia"}</span>
+      <button className="link-btn" onClick={() => { haptic(5); setMonthStart(true); }}>Mudar o dia <Icon name="chevron-right" size={13} /></button>
+    </div>
+  ) : null;
   // atalho grande para as categorias: no celular logo abaixo dos totais, no notebook no pé do card da rosca
   const CategoriesBar = ({ className }: { className: string }) => (
     <button className={`fin-cats-bar ${className}`} onClick={() => { haptic(5); setManaging(true); }}>
@@ -274,12 +289,13 @@ export function FinancePage() {
                 <span key={month} className={`pc-title-txt ${monthDir.current}`}>{monthTitle}</span>
                 <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7z" fill="currentColor" /></svg>
               </button>
+              {period && period.start > 1 && period.from.slice(0, 7) === month && <span className="fp-range">{short(period.from)} a {short(period.to)}</span>}
               <span className="spacer" />
               <button className="pc-ico sm fp-arrow" aria-label="Mês anterior" onClick={() => go(-1)}><Icon name="chevron-left" size={18} /></button>
               {isCurrent ? (
                 <button className="pc-ico sm fp-arrow" aria-label="Próximo mês" disabled><Icon name="chevron-right" size={18} /></button>
               ) : (
-                <button className="pc-today fp-now" onClick={() => { haptic(5); setCat(null); setMonth(thisMonth()); }}>Este mês</button>
+                <button className="pc-today fp-now" onClick={() => { haptic(5); setCat(null); setMonth(""); }}>Este mês</button>
               )}
             </div>
           )}
@@ -315,8 +331,11 @@ export function FinancePage() {
           <div className="fin-overview">
             <div className="fin-col fin-col-cal">
               <FinanceCalendar
-                key={`${month}-${user}`}
+                key={`${month}-${user}-${period?.start ?? 1}`}
                 month={month}
+                from={period?.from.slice(0, 7) === month ? period.from : undefined}
+                days={period?.from.slice(0, 7) === month ? period.days : undefined}
+                footer={periodFooter}
                 daily={data?.daily ?? []}
                 income={income}
                 expenses={expenses}
@@ -482,12 +501,13 @@ export function FinancePage() {
       {jump && (
         <MonthJump
           current={new Date(Number(month.slice(0, 4)), Number(month.slice(5)) - 1, 1)}
-          max={new Date(now.getFullYear(), now.getMonth(), 1)}
+          max={new Date(Number(current.slice(0, 4)), Number(current.slice(5)) - 1, 1)}
           onPick={(d) => { setJump(false); setCat(null); setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }}
           onClose={() => setJump(false)}
         />
       )}
       {managing && <CategoriesModal onClose={(changed) => { setManaging(false); if (changed) { void reload(); void categories.reload(); } }} />}
+      {monthStart && <MonthStartModal initial={period?.start ?? 1} onClose={(changed) => { setMonthStart(false); if (changed) { setCat(null); setMonth(""); void reload(); } }} />}
       {budget && <BudgetModal initial={budget} onClose={() => { setBudget(null); void reload(); }} />}
       {importing && (
         <ImportModal
@@ -495,7 +515,7 @@ export function FinancePage() {
             setImporting(false);
             if (m) {
               setCat(null);
-              setMonth(m > thisMonth() ? thisMonth() : m);
+              setMonth(m > current ? "" : m);
               void categories.reload();
             }
             void reload();
@@ -641,6 +661,54 @@ function TransactionForm({ initial, onClose }: { initial?: any; onClose: () => v
         </p>
       )}
       <div className="field"><label htmlFor="tx-date">Data</label><DateField id="tx-date" title="Data do lançamento" presets="passado" value={f.date} onChange={(date) => setF({ ...f, date })} /></div>
+      <ErrorBox error={error} />
+    </Modal>
+  );
+}
+
+const MON3 = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+/** Período de hoje para um dia de início (mesma conta do servidor: com 5, hoje 4/nov ainda é 5/out a 4/nov). */
+function periodFor(start: number, now = new Date()) {
+  const base = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (start - 1));
+  const from = new Date(base.getFullYear(), base.getMonth(), start);
+  const to = new Date(base.getFullYear(), base.getMonth() + 1, start - 1);
+  const f = (d: Date) => `${d.getDate()} de ${MON3[d.getMonth()]}`;
+  return `${f(from)} a ${f(to)}`;
+}
+
+/** Dia em que o mês financeiro começa (1 a 28): quem recebe dia 5 vê o mês de 5 a 4. */
+function MonthStartModal({ initial, onClose }: { initial: number; onClose: (changed: boolean) => void }) {
+  const [day, setDay] = useState(initial);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    if (day === initial) return onClose(false);
+    setBusy(true);
+    try {
+      await api("/api/finance/month-start", { method: "PUT", json: { start: day } });
+      haptic(8);
+      onClose(true);
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      bare
+      title="Quando seu mês começa"
+      icon={<Icon name="calendar" />}
+      onClose={() => onClose(false)}
+      footer={<button className="btn btn-primary" disabled={busy} onClick={() => void save()}>{busy ? "Salvando..." : "Salvar"}</button>}
+    >
+      <p className="mstart-help">Escolha o dia em que você costuma receber. Totais, limites, gráficos e o que o assistente conta no WhatsApp passam a seguir esse período.</p>
+      <div className="mstart-grid" role="radiogroup" aria-label="Dia em que o mês começa">
+        {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+          <button key={d} role="radio" aria-checked={day === d} className={day === d ? "on" : ""} onClick={() => { haptic(4); setDay(d); }}>{d}</button>
+        ))}
+      </div>
+      <p className="mstart-preview">{day === 1 ? <>Seu mês vai do <strong>dia 1 ao último dia</strong>, como no calendário.</> : <>Seu mês atual: <strong>{periodFor(day)}</strong>.</>}</p>
+      <p className="mstart-help">Recebe dia 29, 30 ou 31? Escolha 28.</p>
       <ErrorBox error={error} />
     </Modal>
   );

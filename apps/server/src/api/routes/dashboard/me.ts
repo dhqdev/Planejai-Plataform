@@ -20,12 +20,17 @@ export function meRoutes(base: FastifyInstance) {
   base.get("/api/me/overview", async (req) => {
     const uid = (await selfUserId(req.account)) ?? NOBODY;
     const tz = config.DEFAULT_TIMEZONE;
+    // mês financeiro da pessoa (pode começar no dia 5, por exemplo)
+    const { financeMonthOf, monthSql, monthStartOf, shiftMonth } = await import("../../../finance-month.js");
+    const start = await monthStartOf(uid);
+    const cur = financeMonthOf(new Date(), tz, start);
+    const fm = monthSql("occurred_at", "$2", start);
     const money = await one(
-      `SELECT COALESCE(SUM(amount) FILTER (WHERE kind='expense' AND date_trunc('month', occurred_at AT TIME ZONE $2) = date_trunc('month', now() AT TIME ZONE $2)),0) AS expenses_month,
-              COALESCE(SUM(amount) FILTER (WHERE kind='income' AND date_trunc('month', occurred_at AT TIME ZONE $2) = date_trunc('month', now() AT TIME ZONE $2)),0) AS income_month,
-              COALESCE(SUM(amount) FILTER (WHERE kind='expense' AND date_trunc('month', occurred_at AT TIME ZONE $2) = date_trunc('month', (now() - interval '1 month') AT TIME ZONE $2)),0) AS expenses_prev
+      `SELECT COALESCE(SUM(amount) FILTER (WHERE kind='expense' AND ${fm} = $3),0) AS expenses_month,
+              COALESCE(SUM(amount) FILTER (WHERE kind='income' AND ${fm} = $3),0) AS income_month,
+              COALESCE(SUM(amount) FILTER (WHERE kind='expense' AND ${fm} = $4),0) AS expenses_prev
          FROM transactions WHERE user_id = $1`,
-      [uid, tz],
+      [uid, tz, cur, shiftMonth(cur, -1)],
     );
     const counts = await one(
       `SELECT (SELECT COUNT(*) FROM reminders WHERE status = 'scheduled' AND user_id = $1) AS reminders,
@@ -38,8 +43,8 @@ export function meRoutes(base: FastifyInstance) {
       `SELECT t.category, SUM(t.amount) AS total, MIN(fc.color) AS color FROM transactions t
          LEFT JOIN finance_categories fc ON fc.user_id = t.user_id AND fc.name = t.category
         WHERE t.user_id = $1 AND t.kind = 'expense'
-          AND date_trunc('month', t.occurred_at AT TIME ZONE $2) = date_trunc('month', now() AT TIME ZONE $2) GROUP BY t.category ORDER BY total DESC`,
-      [uid, tz],
+          AND ${monthSql("t.occurred_at", "$2", start)} = $3 GROUP BY t.category ORDER BY total DESC`,
+      [uid, tz, cur],
     );
     const nextReminders = await many(
       // mensagens agendadas para alguém entram junto, como "Mensagem para Fulano: texto"

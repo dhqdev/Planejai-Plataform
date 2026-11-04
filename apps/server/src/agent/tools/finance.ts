@@ -12,6 +12,7 @@ import { autoCategory, ensureCategories, FALLBACK, learnCategory, plain, resolve
 import { CARD_USED } from "../claims.js";
 import { addMonths, cardInText, invoiceDates, invoiceMonthFor, listCards, localDate, monthName, placeOnCard, resolveCard, shiftDate, type Card } from "../../cards.js";
 import { safeFetch } from "../../net.js";
+import { financeMonthOf, monthSql, monthStartOf, periodText, shiftMonth } from "../../finance-month.js";
 
 export { CATEGORIES, guessCategory } from "../../categories.js";
 
@@ -156,13 +157,15 @@ export const calculate = defineTool<{ expression: string }>({
 });
 
 async function monthTotals(userId: string, timezone: string, when: Date, category: string) {
+  const start = await monthStartOf(userId);
+  const fm = monthSql("occurred_at", "$2", start);
   const r = await one(
     `SELECT COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses,
             COALESCE(SUM(amount) FILTER (WHERE kind='income'),0) AS income,
             COALESCE(SUM(amount) FILTER (WHERE kind='expense' AND category=$4),0) AS category_total
        FROM transactions WHERE user_id = $1
-        AND date_trunc('month', occurred_at AT TIME ZONE $2) = date_trunc('month', $3::timestamptz AT TIME ZONE $2)`,
-    [userId, timezone, when, category],
+        AND ${fm} = $3`,
+    [userId, timezone, financeMonthOf(when, timezone, start), category],
   );
   return {
     month_expenses: brl(cents(r?.expenses)),
@@ -174,15 +177,19 @@ async function monthTotals(userId: string, timezone: string, when: Date, categor
 
 // ---------- Limites de gastos ----------
 
-const monthKey = (d: Date, tz: string) => new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit" }).format(d);
+/** Mês financeiro atual da pessoa (começa no dia que ela escolheu; padrão dia 1). */
+export async function currentMonthOf(userId: string, tz: string, when = new Date()) {
+  return financeMonthOf(when, tz, await monthStartOf(userId));
+}
 
-/** Quanto foi gasto de cada limite no mês (category null = total). */
+/** Quanto foi gasto de cada limite no mês financeiro (category null = total). */
 export async function budgetStatus(userId: string, tz: string, month?: string) {
-  const m = month ?? monthKey(new Date(), tz);
+  const start = await monthStartOf(userId);
+  const m = month ?? financeMonthOf(new Date(), tz, start);
   return many(
     `SELECT b.id, b.category, b.amount::float AS limit, b.alerted_month, b.alerted_level,
             COALESCE((SELECT SUM(t.amount) FROM transactions t WHERE t.user_id = b.user_id AND t.kind = 'expense'
-               AND (b.category IS NULL OR t.category = b.category) AND to_char(t.occurred_at AT TIME ZONE $2, 'YYYY-MM') = $3), 0)::float AS spent
+               AND (b.category IS NULL OR t.category = b.category) AND ${monthSql("t.occurred_at", "$2", start)} = $3), 0)::float AS spent
        FROM budgets b WHERE b.user_id = $1 ORDER BY b.category NULLS FIRST`,
     [userId, tz, m],
   );
@@ -190,7 +197,7 @@ export async function budgetStatus(userId: string, tz: string, month?: string) {
 
 /** Depois de um gasto: avisa uma vez ao passar de 80% e uma vez ao estourar, por mês. */
 async function budgetAlerts(userId: string, tz: string, category: string, when: Date) {
-  const m = monthKey(when, tz);
+  const m = await currentMonthOf(userId, tz, when);
   const rows = (await budgetStatus(userId, tz, m)).filter((b) => b.category === null || b.category === category);
   const alerts: string[] = [];
   for (const b of rows) {
@@ -256,6 +263,24 @@ export const budgetStatusTool = defineTool<Record<string, never>>({
   },
 });
 
+export const monthStartTool = defineTool<{ day?: number }>({
+  name: "month_start",
+  description:
+    "Dia em que o mês financeiro dela começa (ex.: recebe dia 5 = mês de 5 a 4). Sem day mostra o atual; com day (1 a 28) muda. Totais, limites, gráficos e resumos passam a usar esse período.",
+  parameters: obj({ day: { type: "number", description: "1 a 28; 1 = mês do calendário" } }),
+  async run(args, ctx) {
+    const { periodText, setMonthStart, MONTH_START_MAX } = await import("../../finance-month.js");
+    if (args.day != null) {
+      const n = Math.floor(Number(args.day));
+      if (!(n >= 1 && n <= MONTH_START_MAX)) return { ok: false, error: `Dia precisa ser de 1 a ${MONTH_START_MAX}. Quem recebe dia 29, 30 ou 31 escolhe 28 ou o dia 1.` };
+      await setMonthStart(ctx.user.id, n);
+    }
+    const start = await monthStartOf(ctx.user.id);
+    const month = financeMonthOf(new Date(), ctx.timezone, start);
+    return { ok: true, starts_on_day: start, current_period: start > 1 ? periodText(month, start) : "mês do calendário", ...(args.day != null ? { changed: true } : {}) };
+  },
+});
+
 // ---------- Gráficos ----------
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -276,7 +301,10 @@ export const makeChart = defineTool<{ kind: "categorias" | "meses" | "dias" | "l
   ),
   async run(args, ctx) {
     const tz = ctx.timezone;
-    const month = /^\d{4}-\d{2}$/.test(args.month ?? "") ? args.month! : monthKey(new Date(), tz);
+    const start = await monthStartOf(ctx.user.id);
+    const fm = (col: string) => monthSql(col, "$2", start);
+    const ml = (m: string) => (start > 1 ? `${monthLabel(m)} (${periodText(m, start)})` : monthLabel(m));
+    const month = /^\d{4}-\d{2}$/.test(args.month ?? "") ? args.month! : financeMonthOf(new Date(), tz, start);
     const cat = args.category ? ((await resolveCategory(ctx.user.id, args.category))?.name ?? null) : null;
     const name = ctx.user.name ? ` de ${ctx.user.name.split(" ")[0]}` : "";
     let svg: string;
@@ -284,17 +312,17 @@ export const makeChart = defineTool<{ kind: "categorias" | "meses" | "dias" | "l
     if (args.kind === "categorias") {
       const rows = await many(
         `SELECT category AS label, SUM(amount)::float AS value FROM transactions WHERE user_id = $1 AND kind = 'expense'
-          AND to_char(occurred_at AT TIME ZONE $2, 'YYYY-MM') = $3 GROUP BY 1 ORDER BY 2 DESC`,
+          AND ${fm("occurred_at")} = $3 GROUP BY 1 ORDER BY 2 DESC`,
         [ctx.user.id, tz, month],
       );
-      if (!rows.length) return { ok: false, error: `Sem gastos em ${monthLabel(month)} para desenhar.` };
-      svg = donutChart(`Gastos${name}`, `por categoria em ${monthLabel(month)}`, rows as any);
+      if (!rows.length) return { ok: false, error: `Sem gastos em ${ml(month)} para desenhar.` };
+      svg = donutChart(`Gastos${name}`, `por categoria em ${ml(month)}`, rows as any);
       summary = rows.slice(0, 5).map((r) => `${r.label}: ${brl(cents(r.value))}`);
     } else if (args.kind === "meses") {
       const n = Math.min(Math.max(2, Math.floor(args.months ?? 6)), 12);
       const rows = await many(
         `SELECT to_char(m, 'YYYY-MM') AS month, COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.user_id = $1 AND t.kind = 'expense'
-            AND ($4::text IS NULL OR t.category = $4) AND to_char(t.occurred_at AT TIME ZONE $2, 'YYYY-MM') = to_char(m, 'YYYY-MM')), 0)::float AS value
+            AND ($4::text IS NULL OR t.category = $4) AND ${fm("t.occurred_at")} = to_char(m, 'YYYY-MM')), 0)::float AS value
            FROM generate_series(to_date($3, 'YYYY-MM') - make_interval(months => $5 - 1), to_date($3, 'YYYY-MM'), interval '1 month') m`,
         [ctx.user.id, tz, month, cat, n],
       );
@@ -305,16 +333,16 @@ export const makeChart = defineTool<{ kind: "categorias" | "meses" | "dias" | "l
       const rows = await many(
         `SELECT to_char(d, 'DD') AS day, COALESCE((SELECT SUM(amount) FROM transactions t WHERE t.user_id = $1 AND t.kind = 'expense'
             AND ($4::text IS NULL OR t.category = $4) AND (t.occurred_at AT TIME ZONE $2)::date = d::date), 0)::float AS value
-           FROM generate_series(to_date($3, 'YYYY-MM'), LEAST((to_date($3, 'YYYY-MM') + interval '1 month' - interval '1 day')::date, (now() AT TIME ZONE $2)::date), interval '1 day') d`,
-        [ctx.user.id, tz, month, cat],
+           FROM generate_series(to_date($3, 'YYYY-MM') + ($5::int - 1), LEAST((to_date($3, 'YYYY-MM') + interval '1 month')::date + ($5::int - 2), (now() AT TIME ZONE $2)::date), interval '1 day') d`,
+        [ctx.user.id, tz, month, cat, start],
       );
-      if (!rows.some((r) => r.value > 0)) return { ok: false, error: `Sem gastos em ${monthLabel(month)} para desenhar.` };
-      svg = barChart(`Gasto por dia${cat ? ` com ${cat}` : ""}`, monthLabel(month), rows.map((r) => ({ label: r.day, value: r.value })));
+      if (!rows.some((r) => r.value > 0)) return { ok: false, error: `Sem gastos em ${ml(month)} para desenhar.` };
+      svg = barChart(`Gasto por dia${cat ? ` com ${cat}` : ""}`, ml(month), rows.map((r) => ({ label: r.day, value: r.value })));
       summary = { total: brl(cents(rows.reduce((a, r) => a + r.value, 0))) };
     } else {
       const rows = await budgetStatus(ctx.user.id, tz, month);
       if (!rows.length) return { ok: false, error: "Nenhum limite criado ainda. Use set_budget primeiro." };
-      svg = budgetChart("Limites do mês", monthLabel(month), rows.map((b) => ({ label: b.category ?? "Total do mês", spent: b.spent, limit: b.limit })));
+      svg = budgetChart("Limites do mês", ml(month), rows.map((b) => ({ label: b.category ?? "Total do mês", spent: b.spent, limit: b.limit })));
       summary = rows.map((b) => `${b.category ?? "Total"}: ${Math.round((b.spent / b.limit) * 100)}%`);
     }
     const base64 = await svgToPng(svg);
@@ -621,8 +649,10 @@ export const financeSummary = defineTool<{ month?: string; of_contact?: string }
   async run(args, ctx) {
     const who = await financeOwner(ctx, args.of_contact);
     if ("error" in who) return who;
-    const month = args.month ?? new Intl.DateTimeFormat("en-CA", { timeZone: ctx.timezone, year: "numeric", month: "2-digit" }).format(new Date());
-    const where = `user_id = $1 AND to_char(occurred_at AT TIME ZONE $2, 'YYYY-MM') = $3`;
+    const start = await monthStartOf(who.id);
+    const month = /^\d{4}-\d{2}$/.test(args.month ?? "") ? args.month! : financeMonthOf(new Date(), ctx.timezone, start);
+    const fm = monthSql("occurred_at", "$2", start);
+    const where = `user_id = $1 AND ${fm} = $3`;
     const totals = await one(
       `SELECT COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses, COALESCE(SUM(amount) FILTER (WHERE kind='income'),0) AS income, COUNT(*) AS count FROM transactions WHERE ${where}`,
       [who.id, ctx.timezone, month],
@@ -633,8 +663,8 @@ export const financeSummary = defineTool<{ month?: string; of_contact?: string }
     );
     const prev = await one(
       `SELECT COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses FROM transactions
-        WHERE user_id = $1 AND to_char(occurred_at AT TIME ZONE $2, 'YYYY-MM') = to_char(to_date($3, 'YYYY-MM') - interval '1 month', 'YYYY-MM')`,
-      [who.id, ctx.timezone, month],
+        WHERE user_id = $1 AND ${fm} = $3`,
+      [who.id, ctx.timezone, shiftMonth(month, -1)],
     );
     const expenses = cents(totals?.expenses);
     const income = cents(totals?.income);
@@ -649,6 +679,7 @@ export const financeSummary = defineTool<{ month?: string; of_contact?: string }
         ? { card_invoices: cards.map((c) => `${c.name}: próxima fatura ${brl(c.next.total)}, vence ${c.next.due.split("-").reverse().join("/")} (${c.next.status})`) }
         : {}),
       month,
+      ...(start > 1 ? { period: periodText(month, start), month_starts_on_day: start } : {}),
       expenses: brl(expenses),
       income: brl(income),
       balance: brl(cents(income - expenses)),
