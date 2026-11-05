@@ -22,7 +22,7 @@ import { autoLaunchReceipts } from "./receipts.js";
 import { errandsContext, openErrands } from "../errands.js";
 import { isOwner } from "../ingest.js";
 import { describeMessage, preprocessMedia } from "./media.js";
-import { CARD_CLAIM, unbackedClaim, unmetRequest } from "./claims.js";
+import { CARD_CLAIM, dropUnbackedTotals, knownAmounts, unbackedClaim, unmetRequest } from "./claims.js";
 import { openPending, resolvePending } from "./confirm.js";
 import { Progress } from "./progress.js";
 import { arrange, humanize, subItems } from "./humanize.js";
@@ -536,6 +536,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
         ? (unbackedClaim(result.text, ctx.room.done, { event: proactive }) ??
           (!proactive ? unmetRequest(ctx.inboundText ?? "", result.text, ctx.room.done) : null))
         : null;
+    const laterMsgs: ChatMessage[] = [];
     if (claim && !guard.expired) {
       const step = await tracer.step({ agent: "cto", type: "info", name: "trava: ação não confirmada", input: { acao: claim, resposta: result.text.slice(0, 300) } });
       const retry = await runToolLoop({
@@ -560,6 +561,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
           },
         ],
       }).catch(() => null);
+      if (retry?.messages) laterMsgs.push(...retry.messages);
       const still = retry?.text
         ? (unbackedClaim(retry.text, ctx.room.done, { event: proactive }) ?? (!proactive ? unmetRequest(ctx.inboundText ?? "", retry.text, ctx.room.done) : null))
         : claim;
@@ -573,6 +575,17 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
               ? // outra coisa já rodou (lembrete, caderno): "nada foi feito" seria mentira
                 `Não consegui confirmar uma parte disso agora (${claim}). Pode me pedir de novo?`
               : `Não consegui concluir isso agora (${claim}), então nada foi feito. Pode me pedir de novo?`;
+    }
+    // "já são R$ 39 de alimentação hoje" somado de cabeça: frase de total sem valor de ferramenta (ou da pessoa) sai
+    if (!proactive && result.text) {
+      const trusted = [...result.messages.slice(1), ...laterMsgs]
+        .filter((m) => m.role === "tool" || m.role === "system")
+        .map((m) => (typeof m.content === "string" ? m.content : ""));
+      const fixed = dropUnbackedTotals(result.text, knownAmounts([...trusted, ctx.inboundText ?? ""]));
+      if (fixed.dropped.length && fixed.text.replace(/\[\[[^\]]*\]\]|\W/g, "").length) {
+        await tracer.step({ agent: "cto", type: "info", name: "trava: total sem ferramenta", input: { tirado: fixed.dropped } }).then((st) => st.ok({}));
+        result.text = fixed.text;
+      }
     }
     // resposta vazia (passos só com ferramentas, ou o modelo devolveu nada) não pode virar silêncio: mais uma rodada, sem ferramentas
     if (opts.trigger === "message" && !result.timedOut && !guard.expired && !result.text.trim()) {

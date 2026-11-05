@@ -223,3 +223,50 @@ export function unmetRequest(asked: string, answer: string, done: Set<string>): 
   if (lines.some((l) => shortSchedule(l) && !REQUESTS[0]!.unless.test(l)) && !REQUESTS[0]!.tools.some((t) => done.has(t)) && !done.has("save_memory")) return REQUESTS[0]!.what;
   return null;
 }
+
+// "Já são R$ 39 de alimentação hoje" (2026-11-05): o modelo somou de cabeça um gasto do histórico com o de agora.
+// Frase de total/soma só fica se o valor veio de uma ferramenta desta rodada (ou da própria pessoa).
+const TOTAL_TALK =
+  /(?<!\p{L})(j[áa] (s[ãa]o|foram|somam?|soma|vai|v[ãa]o|t[áa]|est[áa]|deu|d[áa])|no total|ao todo|totaliz\w*|total|somando|soma|somad[oa]s?|acumulad[oa]s?|at[ée] agora|no m[êe]s|neste m[êe]s|nesse m[êe]s|este m[êe]s|esse m[êe]s|hoje|na semana|essa semana|nessa semana)(?!\p{L})/iu;
+const MONEY = /R\$\s?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)|(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)\s?(?:reais|conto|pila)\b/gi;
+
+/** Valor em centavos de um número como a pessoa ou a ferramenta escreve ("1.234,56", "39", "19.5"). */
+function toCents(raw: string): number | null {
+  let s = raw.trim();
+  if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, "").replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
+  const n = Number(s);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
+
+/** Todos os valores que aparecem em textos de confiança (saídas de ferramenta, mensagem da pessoa). */
+export function knownAmounts(texts: string[]): Set<number> {
+  const out = new Set<number>();
+  for (const t of texts)
+    for (const m of t.matchAll(/\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?/g)) {
+      const c = toCents(m[0]);
+      if (c != null) out.add(c);
+    }
+  return out;
+}
+
+/**
+ * Tira da resposta as frases de total ("já são R$ 39 hoje", "no mês tá em R$ 846") cujo valor nenhuma ferramenta
+ * desta rodada devolveu nem a pessoa disse. Devolve o texto limpo e as frases tiradas (vazio = nada mudou).
+ */
+export function dropUnbackedTotals(text: string, known: Set<number>): { text: string; dropped: string[] } {
+  const parts = text.split(/((?<=[.!?\n])\s+)/);
+  const dropped: string[] = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    const s = parts[i]!;
+    if (!TOTAL_TALK.test(s)) continue;
+    const vals = [...s.matchAll(MONEY)].map((m) => toCents(m[1] ?? m[2] ?? "")).filter((c): c is number => c != null);
+    if (!vals.length || vals.every((c) => known.has(c))) continue;
+    dropped.push(s.trim());
+    parts[i] = "";
+    if (i + 1 < parts.length) parts[i + 1] = "";
+  }
+  if (!dropped.length) return { text, dropped };
+  const clean = parts.join("").replace(/\n{3,}/g, "\n\n").replace(/\n\s*---\s*\n\s*(?=---|$)/g, "\n").trim();
+  return { text: clean, dropped };
+}

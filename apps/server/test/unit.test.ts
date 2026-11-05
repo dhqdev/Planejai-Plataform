@@ -658,3 +658,20 @@ describe("comprovante na foto vira despesa sozinho", async () => {
     expect(receiptDate(null, "America/Sao_Paulo", now)).toBeUndefined();
   });
 });
+
+describe("total somado de cabeça", () => {
+  it("tira 'já são R$ 39 hoje' quando a ferramenta devolveu outro total", async () => {
+    const { dropUnbackedTotals, knownAmounts } = await import("../src/agent/claims.js");
+    const tool = '{"ok":true,"amount":"R$ 19,00","month_expenses":"R$ 19,00","month_category_total":"R$ 19,00","day_category_total":"R$ 19,00"}';
+    const known = knownAmounts([tool, "[áudio] gastei 19 reais na padaria hoje"]);
+    const r = dropUnbackedTotals("Lançado! 🥐 *R$ 19* na padaria, na Alimentação.\n\nJá são *R$ 39* de alimentação hoje.", known);
+    expect(r.dropped).toEqual(["Já são *R$ 39* de alimentação hoje."]);
+    expect(r.text).toBe("Lançado! 🥐 *R$ 19* na padaria, na Alimentação.");
+  });
+  it("mantém total que veio da ferramenta e valor sem frase de total", async () => {
+    const { dropUnbackedTotals, knownAmounts } = await import("../src/agent/claims.js");
+    const known = knownAmounts(['{"month_category_total":"R$ 1.234,50","day_expenses":"R$ 39,00"}']);
+    const t = "Anotado! *R$ 20* de sushi.\n\nNo mês a alimentação tá em *R$ 1.234,50* e hoje já são *R$ 39*.";
+    expect(dropUnbackedTotals(t, known)).toEqual({ text: t, dropped: [] });
+  });
+});

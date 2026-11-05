@@ -159,18 +159,24 @@ export const calculate = defineTool<{ expression: string }>({
 async function monthTotals(userId: string, timezone: string, when: Date, category: string) {
   const start = await monthStartOf(userId);
   const fm = monthSql("occurred_at", "$2", start);
+  // total do dia junto: "já são R$ 39 hoje" saiu de cabeça (2026-11-05), somando um gasto antigo do histórico
   const r = await one(
     `SELECT COALESCE(SUM(amount) FILTER (WHERE kind='expense'),0) AS expenses,
             COALESCE(SUM(amount) FILTER (WHERE kind='income'),0) AS income,
-            COALESCE(SUM(amount) FILTER (WHERE kind='expense' AND category=$4),0) AS category_total
+            COALESCE(SUM(amount) FILTER (WHERE kind='expense' AND category=$4),0) AS category_total,
+            COALESCE(SUM(amount) FILTER (WHERE kind='expense' AND (occurred_at AT TIME ZONE $2)::date = ($5::timestamptz AT TIME ZONE $2)::date),0) AS day_expenses,
+            COALESCE(SUM(amount) FILTER (WHERE kind='expense' AND category=$4 AND (occurred_at AT TIME ZONE $2)::date = ($5::timestamptz AT TIME ZONE $2)::date),0) AS day_category_total
        FROM transactions WHERE user_id = $1
         AND ${fm} = $3`,
-    [userId, timezone, financeMonthOf(when, timezone, start), category],
+    [userId, timezone, financeMonthOf(when, timezone, start), category, when.toISOString()],
   );
   return {
     month_expenses: brl(cents(r?.expenses)),
     month_income: brl(cents(r?.income)),
     month_category_total: brl(cents(r?.category_total)),
+    day_expenses: brl(cents(r?.day_expenses)),
+    day_category_total: brl(cents(r?.day_category_total)),
+    totals_note: "Total na resposta só destes; nunca some de cabeça.",
   };
 }
 
