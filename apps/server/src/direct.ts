@@ -7,7 +7,9 @@ import { redactSecrets } from "./agent/guard.js";
 import type { InboundMessage } from "./channels/types.js";
 import { many, one, query } from "./db/pool.js";
 import { followerOf, getPrefs, resumeFollow, withSignature } from "./chatprefs.js";
+import { config } from "./config.js";
 import { introduce } from "./errands.js";
+import { type ChatFile, FORWARD_MAX_BYTES, isChatFileKind, keepChatFile, panelFile } from "./chatfiles.js";
 import { isOwner, phoneVariants } from "./ingest.js";
 import { QUEUES, getBoss } from "./queue/boss.js";
 import { markSeen } from "./shortmem.js";
@@ -257,16 +259,21 @@ export async function handleDirectReply(msg: InboundMessage): Promise<boolean> {
   if (msg.externalId && (await markSeen(`direct:${msg.channel}:${msg.externalId}`, 48 * 3600)) === false) return true;
   const who = nickname || d.name || msg.pushName || `+${d.phone}`;
   const body = msg.kind === "text" ? msg.text : await describeInbound(msg, d.user_id);
-  await logContactMessage(d.user_id, d.phone, d.name || msg.pushName || null, "in", String(body ?? ""));
   // figurinha, foto, áudio, vídeo ou arquivo: além do texto, a própria mídia segue para a pessoa
   const file = await inboundFile(msg);
+  // PDF, foto ou vídeo também fica em Documentos (pasta Recados) e aparece no balão da conversa na tela Recados
+  let kept: ChatFile | null = null;
+  if (file && isChatFileKind(file.kind)) {
+    const tz = (await one<{ timezone: string | null }>("SELECT timezone FROM users WHERE id = $1", [d.user_id]))?.timezone ?? config.DEFAULT_TIMEZONE;
+    kept = await keepChatFile(d.user_id, who, tz, { kind: file.kind, base64: file.base64, mimetype: file.mimetype, fileName: file.fileName, caption: msg.text });
+  }
+  await logContactMessage(d.user_id, d.phone, d.name || msg.pushName || null, "in", String(body ?? ""), false, kept);
   const head = file?.kind === "sticker" && !msg.text?.trim() ? `*${who}* respondeu com uma figurinha:` : `*${who}* respondeu:\n\n${String(body ?? "").slice(0, 2000)}`;
   await notifyUser(d.user_id, head, file ?? undefined, { from: who });
   return true;
 }
 
-/** Até 16 MB, o limite de mídia do WhatsApp (documento vai até 100 MB, mas aí a pessoa recebe o aviso e pede o arquivo). */
-const FORWARD_MAX_BYTES = 16 * 1024 * 1024;
+// FORWARD_MAX_BYTES (chatfiles.ts): até 16 MB, o limite de mídia do WhatsApp (documento vai até 100 MB, mas aí a pessoa recebe o aviso e pede o arquivo).
 
 /** O arquivo da resposta (já baixado na chegada ou pedido ao provedor), para encaminhar como veio. Sem ele, fica só o texto. */
 async function inboundFile(msg: InboundMessage) {
@@ -312,14 +319,22 @@ export function describeDirect(d: DirectMessage, tz: string) {
 export const CONTACT_LOG_DAYS = 30;
 
 /** Guarda uma mensagem da conversa da pessoa com um contato. Nunca derruba o envio. */
-export async function logContactMessage(userId: string, phone: string, name: string | null | undefined, dir: "out" | "in", text: string, byPerson = false) {
+export async function logContactMessage(userId: string, phone: string, name: string | null | undefined, dir: "out" | "in", text: string, byPerson = false, file: ChatFile | null = null) {
   const t = redactSecrets(text).trim().slice(0, 3000);
-  if (!t) return;
-  await query("INSERT INTO contact_messages (user_id, phone, name, dir, text, by_person) VALUES ($1, $2, $3, $4, $5, $6)", [userId, phone, name?.trim().slice(0, 80) || null, dir, t, byPerson]).catch(() => {});
+  if (!t && !file) return;
+  await query("INSERT INTO contact_messages (user_id, phone, name, dir, text, by_person, file) VALUES ($1, $2, $3, $4, $5, $6, $7)", [
+    userId,
+    phone,
+    name?.trim().slice(0, 80) || null,
+    dir,
+    t,
+    byPerson,
+    file ? JSON.stringify(file) : null,
+  ]).catch(() => {});
 }
 
 /** voce = a própria pessoa escreveu pelo painel; nos = o assistente; eles = o contato */
-type ContactLine = { from: "nos" | "eles" | "voce"; text: string; at: string };
+type ContactLine = { from: "nos" | "eles" | "voce"; text: string; at: string; file?: ReturnType<typeof panelFile> };
 
 /**
  * Todo mundo com quem o assistente está conversando em nome da pessoa (fora os recados com estabelecimentos):
@@ -327,8 +342,8 @@ type ContactLine = { from: "nos" | "eles" | "voce"; text: string; at: string };
  */
 export async function listContactChats(userId: string) {
   const [rows, scheduled] = await Promise.all([
-    many<{ phone: string; name: string | null; dir: "out" | "in"; text: string; created_at: string; by_person: boolean }>(
-      `SELECT phone, name, dir, text, created_at, by_person FROM contact_messages
+    many<{ phone: string; name: string | null; dir: "out" | "in"; text: string; created_at: string; by_person: boolean; file: ChatFile | null }>(
+      `SELECT phone, name, dir, text, created_at, by_person, file FROM contact_messages
         WHERE user_id = $1 AND created_at > now() - make_interval(days => $2) ORDER BY created_at LIMIT 1000`,
       [userId, CONTACT_LOG_DAYS],
     ),
@@ -344,7 +359,10 @@ export async function listContactChats(userId: string) {
   };
   for (const r of rows) {
     const at = new Date(r.created_at).toISOString();
-    chat(r.phone, r.name, at).log.push({ from: r.dir === "in" ? "eles" : r.by_person ? "voce" : "nos", text: r.by_person ? withoutName(r.text) : r.text, at });
+    const from = r.dir === "in" ? "eles" : r.by_person ? "voce" : "nos";
+    // com arquivo, o balão mostra o arquivo e a legenda (a descrição da IA fica no WhatsApp da pessoa)
+    const file = panelFile(r.file);
+    chat(r.phone, r.name, at).log.push(file ? { from, text: r.file?.caption ?? "", at, file } : { from, text: r.by_person ? withoutName(r.text) : r.text, at });
   }
   // a ordem da lista é pela última coisa que aconteceu (o pedido da agendada), nunca por um horário no futuro
   for (const d of scheduled) chat(d.phone, d.name, new Date((d as DirectMessage & { created_at: string }).created_at).toISOString()).scheduled.push({ id: d.id, text: d.text, send_at: new Date(d.send_at).toISOString() });
@@ -382,7 +400,7 @@ export async function listContactChats(userId: string) {
           return w ? new Date(w).toISOString() : null;
         })(),
         updated_at: c.updated_at,
-        last: last ? { ...last, text: last.text.slice(0, 140) } : null,
+        last: last ? { from: last.from, at: last.at, text: (last.text || last.file?.name || "").slice(0, 140) } : null,
         log: c.log.slice(-60),
         scheduled: c.scheduled,
       };

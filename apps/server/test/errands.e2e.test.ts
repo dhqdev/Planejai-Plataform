@@ -409,6 +409,51 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     expect((await db.one("SELECT status FROM errands WHERE id = $1", [a.errand_id])).status).toBe("asking");
   });
 
+  it("PDF ou foto que eles mandam vai para o WhatsApp da pessoa, fica em Documentos e aparece na conversa", async () => {
+    const { startErrand, listErrands } = await import("../src/errands.js");
+    const { runErrandTurn } = await import("../src/agent/errand-agent.js");
+    const { ingest } = await import("../src/ingest.js");
+    const u = { id: david.id, phone: david.phone, name: "David" };
+    await db.query("UPDATE errands SET status = 'cancelled' WHERE user_id = $1 AND status IN ('waiting', 'asking')", [david.id]);
+    // os testes de cima já gastaram os recados do dia
+    await db.query("UPDATE errands SET created_at = now() - interval '2 days' WHERE user_id = $1", [david.id]);
+    const a: any = await startErrand({ user: u, conversationId: conv, place: "PetCamp", phone: PET, message: "Pode mandar o orçamento?", goal: "orçamento do banho", timezone: TZ });
+    expect(a).toMatchObject({ ok: true });
+    const pdf = Buffer.from("%PDF-1.4 orçamento falso").toString("base64");
+    const photo = Buffer.from("fake-jpeg").toString("base64");
+    await ingest({
+      channel: "playground", remoteJid: `${PET}@s.whatsapp.net`, phone: PET, externalId: `pet${++seq}`, kind: "document", text: "Segue o orçamento",
+      media: { mimetype: "application/pdf", base64: pdf, fileName: "Orcamento.pdf" }, timestamp: new Date(), raw: {},
+    });
+    await ingest({
+      channel: "playground", remoteJid: `${PET}@s.whatsapp.net`, phone: PET, externalId: `pet${++seq}`, kind: "image", text: "",
+      media: { mimetype: "image/jpeg", base64: photo }, timestamp: new Date(), raw: {},
+    });
+    const before = channels.playground.sent.length;
+    await runErrandTurn(a.errand_id);
+    const out = channels.playground.sent.slice(before);
+    // o arquivo chega como veio, com o aviso de quem mandou e a legenda
+    expect(out.map((s) => s.text ?? "").join("\n")).toMatch(/📎 \*PetCamp\* mandou o arquivo _Orcamento\.pdf_ na conversa\s+"Segue o orçamento"/);
+    expect(out.find((s) => s.image?.kind === "document")?.image).toMatchObject({ kind: "document", base64: pdf, fileName: "Orcamento.pdf", mimetype: "application/pdf" });
+    expect(out.find((s) => s.image?.kind === "image")?.image).toMatchObject({ kind: "image", base64: photo });
+    // e fica em Documentos, na pasta Recados
+    const docs = await db.many("SELECT name, folder, source, mimetype FROM documents WHERE user_id = $1 AND folder = 'Recados' ORDER BY created_at", [david.id]);
+    expect(docs[0]).toMatchObject({ name: "Orcamento.pdf", source: "recado", mimetype: "application/pdf" });
+    expect(docs[1]!.name).toMatch(/^Foto de PetCamp .+\.jpg$/);
+    // na tela Recados: o balão traz o arquivo e só a legenda (a leitura da IA fica para o agente)
+    const e = (await listErrands(david.id)).errands.find((x) => x.id === a.errand_id)!;
+    const withFile = e.log.filter((l: any) => l.file);
+    expect(withFile).toHaveLength(2);
+    expect(withFile[0]).toMatchObject({ from: "eles", text: "Segue o orçamento", file: { name: "Orcamento.pdf", kind: "document" } });
+    expect((withFile[0] as any).file.doc_id).toBeTruthy();
+    // a mídia crua sai do banco depois de lida, e o arquivo não é mandado duas vezes
+    const row = await db.one("SELECT log FROM errands WHERE id = $1", [a.errand_id]);
+    expect(row.log.filter((l: any) => l.file && l.media)).toHaveLength(0);
+    const again = channels.playground.sent.length;
+    await runErrandTurn(a.errand_id);
+    expect(channels.playground.sent.slice(again).some((s) => s.image?.kind === "document")).toBe(false);
+  });
+
   it("ficha da conversa: guarda itens, limpa, atualiza o mesmo rótulo e chega ao agente", async () => {
     const { savePrefs, addFact, getPrefs, styleHint, notedHint, MAX_FACTS } = await import("../src/chatprefs.js");
     const FICHA = "5519977778888";

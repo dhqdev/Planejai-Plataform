@@ -15,6 +15,7 @@ import { config } from "./config.js";
 import { formatLocal, isoLocal } from "./time.js";
 import { findOnWhatsApp } from "./whatsapp/rpc.js";
 import { MAX_ERRAND_TEXT } from "./agent/errand-check.js";
+import { type ChatFile, FORWARD_MAX_BYTES, fileLabel, isChatFileKind, keepChatFile, panelFile } from "./chatfiles.js";
 
 /**
  * Recados: o assistente fala com um estabelecimento (petshop, salão, clínica) pelo WhatsApp em nome da pessoa.
@@ -47,6 +48,8 @@ export interface ErrandLogEntry {
   kind?: string;
   media?: unknown;
   external_id?: string;
+  /** PDF, foto ou vídeo que eles mandaram: já foi para o WhatsApp da pessoa e está em Documentos (chatfiles.ts) */
+  file?: ChatFile;
 }
 
 export interface Errand {
@@ -335,6 +338,42 @@ export async function handleErrandInbound(msg: InboundMessage): Promise<boolean>
 }
 
 /**
+ * PDF, documento, foto ou vídeo que eles mandaram: segue para o WhatsApp da pessoa como veio e fica em Documentos
+ * (pasta Recados), para aparecer na conversa da tela. Sem IA e antes da trava de grãos: o arquivo chega mesmo com a
+ * carteira zerada. Marca cada item com `file` para nunca mandar duas vezes. Devolve quantos seguiram.
+ */
+export async function forwardErrandFiles(e: Errand, timezone: string) {
+  let n = 0;
+  for (const [i, l] of e.log.entries()) {
+    if (l.from !== "eles" || !l.media || l.file || !isChatFileKind(l.kind)) continue;
+    const kind = l.kind;
+    const media = l.media as { mimetype?: string; fileName?: string };
+    const got = await outboundChannel()
+      .downloadMedia({ externalId: l.external_id, remoteJid: e.jid, media } as unknown as InboundMessage)
+      .catch(() => null);
+    const mimetype = got?.mimetype || media.mimetype || "application/octet-stream";
+    const file: ChatFile = got?.base64
+      ? await keepChatFile(e.user_id, e.place, timezone, { kind, base64: got.base64, mimetype, fileName: media.fileName, caption: l.text })
+      : { doc_id: null, name: media.fileName ?? "", mimetype, kind, size: 0, ...(l.text?.trim() ? { caption: l.text.trim().slice(0, 1000) } : {}) };
+    // marca antes de mandar: se o envio cair no meio, a próxima vez não repete o arquivo
+    await query("UPDATE errands SET log = jsonb_set(log, ARRAY[$2, 'file'], $3::jsonb) WHERE id = $1", [e.id, String(i), JSON.stringify(file)]);
+    e.log[i] = { ...l, file };
+    const caption = file.caption ? `\n\n"${file.caption.slice(0, 500)}"` : "";
+    const head = `📎 *${e.place}* mandou ${fileLabel(file)} na conversa`;
+    const fits = Boolean(got?.base64) && file.size <= FORWARD_MAX_BYTES;
+    const where = file.doc_id ? `Guardei em Documentos, na pasta Recados, e ele está na conversa em ${followUrl()}` : `A conversa está em ${followUrl()}`;
+    await notifyUser(
+      e.user_id,
+      fits ? `${head}${caption}` : `${head}, mas ${got?.base64 ? "é grande demais para eu encaminhar por aqui" : "não consegui baixar"}. ${where}${caption}`,
+      fits ? { kind, base64: got!.base64, mimetype, fileName: file.name } : undefined,
+      { from: e.place },
+    ).catch(() => {});
+    n++;
+  }
+  return n;
+}
+
+/**
  * Aviso urgente ao dono numa conversa delegada (sem IA, direto no WhatsApp dele). No máximo um a cada 10 minutos por
  * conversa, para não virar enxurrada; o agente continua a conversa e já orienta a pessoa a procurar o SAMU (192).
  */
@@ -503,8 +542,12 @@ export async function listErrands(userId: string) {
         expires_at: e.expires_at,
         created_at: e.created_at,
         updated_at: e.updated_at,
-        last: last ? { from: last.from, text: last.text.slice(0, 140), at: last.at } : null,
-        log: e.log.map((l) => ({ from: l.from, text: l.text || (l.kind ? `(${l.kind})` : ""), at: l.at })),
+        last: last ? { from: last.from, text: (last.file ? last.file.caption || last.file.name || "Arquivo" : last.text).slice(0, 140), at: last.at } : null,
+        // com arquivo, o balão mostra o arquivo e a legenda; a descrição da IA (texto do PDF, da foto) fica só para o agente
+        log: e.log.map((l) => {
+          const file = panelFile(l.file);
+          return file ? { from: l.from, text: l.file?.caption ?? "", at: l.at, file } : { from: l.from, text: l.text || (l.kind ? `(${l.kind})` : ""), at: l.at };
+        }),
         next: p ? { preview: previewOf(p, user), allowed: p.args.allowed ?? null, created_at: p.created_at } : null,
       };
     }),

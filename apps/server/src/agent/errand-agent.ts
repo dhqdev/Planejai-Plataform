@@ -2,7 +2,7 @@ import { getSettings } from "../settings.js";
 import { billingAccess } from "../billing.js";
 import { one, query } from "../db/pool.js";
 import { addFact, getPrefs, notedHint, styleHint } from "../chatprefs.js";
-import { type Errand, type ErrandLogEntry, MAX_ERRAND_MESSAGES, alertOwner, finishErrand, followUrl, messageLimit, sendToErrand } from "../errands.js";
+import { type Errand, type ErrandLogEntry, MAX_ERRAND_MESSAGES, alertOwner, finishErrand, followUrl, forwardErrandFiles, messageLimit, sendToErrand } from "../errands.js";
 import type { ChatMessage } from "../llm/types.js";
 import { outboundChannel } from "../social.js";
 import { formatLocal, isoLocal, parseLocalDateTime } from "../time.js";
@@ -256,6 +256,8 @@ export async function runErrandTurn(errandId: string) {
   const timezone = user.timezone ?? settings.timezone;
   const person = (user.full_name || user.name || "a pessoa").split(" ")[0]!;
   const lastTheirs = e.log.filter((l) => l.from === "eles").slice(-3).map((l) => l.text).join("\n");
+  // PDF, foto ou vídeo deles vai para a pessoa como veio (e para Documentos) antes de tudo, sem IA e mesmo sem grãos
+  await forwardErrandFiles(e, timezone).catch((err) => console.error("[recados] encaminhar arquivo", (err as Error).message));
   const tracer = await Tracer.start({ trigger: "errand", userId: user.id, conversationId: conversation.id, input: `${e.place}: ${lastTheirs}` });
   // carteira de grãos zerada: o recado espera (a próxima resposta deles chama de novo quando houver grão)
   if (!(await billingAccess(user, settings)).allowed) {
@@ -269,7 +271,7 @@ export async function runErrandTurn(errandId: string) {
     // áudio, foto ou documento deles: interpreta uma vez e guarda o texto no recado (a mídia sai do banco)
     const withMedia = e.log.map((l, i) => ({ l, i })).filter(({ l }) => l.from === "eles" && l.media);
     if (withMedia.length) {
-      const fake = withMedia.map(({ l, i }) => ({ id: `${e.id}:${i}`, role: "user", media: l.media, external_id: l.external_id, content: l.text, meta: { kind: l.kind } }));
+      const fake = withMedia.map(({ l, i }) => ({ id: `${e.id}:${i}`, role: "user", media: l.media, external_id: l.external_id, content: l.text, meta: { kind: l.kind, fileName: (l.media as { fileName?: string }).fileName } }));
       await preprocessMedia(fake, outboundChannel(), tracer, e.jid, { persist: false });
       for (const [k, { i }] of withMedia.entries()) {
         e.log[i] = { ...e.log[i]!, text: describeMessage(fake[k]), media: undefined };

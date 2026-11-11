@@ -134,6 +134,19 @@ describe.skipIf(!enabled)("mensagem avulsa para qualquer número (e2e)", () => {
     });
     expect(sentTexts().at(-1)).toBe("*Rafael* respondeu com uma figurinha:");
     expect(channels.playground.sent.at(-1)).toMatchObject({ type: "image", image: { kind: "sticker", base64: webp, mimetype: "image/webp" } });
+
+    // resposta com PDF: o arquivo chega, fica em Documentos (pasta Recados) e aparece no balão da conversa
+    const pdf = Buffer.from("%PDF-1.4 recibo").toString("base64");
+    await ingest({
+      channel: "playground", remoteJid: `${CLIENT}@s.whatsapp.net`, phone: CLIENT, externalId: `c${++seq}`, kind: "document", text: "Segue o recibo",
+      media: { mimetype: "application/pdf", base64: pdf, fileName: "Recibo.pdf" }, timestamp: new Date(), raw: {},
+    });
+    expect(channels.playground.sent.at(-1)).toMatchObject({ type: "image", image: { kind: "document", base64: pdf, fileName: "Recibo.pdf" } });
+    const doc = await db.one("SELECT id, name, folder, source FROM documents WHERE user_id = $1 AND folder = 'Recados'", [david.id]);
+    expect(doc).toMatchObject({ name: "Recibo.pdf", source: "recado" });
+    const withPdf = (await listContactChats(david.id)).find((c) => c.phone === CLIENT)!;
+    expect(withPdf.log.at(-1)).toMatchObject({ from: "eles", text: "Segue o recibo", file: { doc_id: doc.id, name: "Recibo.pdf", kind: "document", mimetype: "application/pdf" } });
+    expect(withPdf.last?.text).toBe("Segue o recibo");
   });
 
   it("documento de Documentos vai junto numa mensagem agendada e sai como arquivo com legenda", async () => {

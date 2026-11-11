@@ -7,10 +7,13 @@ import { Icon } from "../icons";
 import { haptic } from "../touch";
 import { useKeyboardShell } from "../teclado";
 import { Vazio } from "../Vazio";
+import { DocPreview } from "./DocPreview";
 
 type State = "them" | "you" | "done" | "failed" | "cancelled" | "expired";
 /** voce = a própria pessoa escreveu pelo painel */
-type Line = { from: "nos" | "eles" | "pessoa" | "voce"; text: string; at: string };
+type Line = { from: "nos" | "eles" | "pessoa" | "voce"; text: string; at: string; file?: ChatFile };
+/** PDF, foto ou vídeo que mandaram na conversa: já foi para o WhatsApp e está em Documentos (pasta Recados) */
+type ChatFile = { doc_id: string | null; name: string; mimetype: string; kind: "image" | "video" | "document"; size: number };
 type Errand = {
   id: string;
   place: string;
@@ -848,9 +851,47 @@ function Bubble({ line, next }: { line: Line; next?: boolean }) {
   return (
     <div className={`errand-bubble ${line.from === "eles" ? "theirs" : "ours"}${mine ? " mine" : ""}${next ? " next" : ""}`}>
       {next && <span className="errand-bubble-tag">Próxima mensagem</span>}
-      <span className="errand-bubble-text">{line.text}</span>
+      {line.file && <FileCard file={line.file} />}
+      {line.text && <span className="errand-bubble-text">{line.text}</span>}
       <span className="errand-bubble-time">{next ? "não enviada" : mine ? `Você · ${hour(line.at)}` : hour(line.at)}</span>
     </div>
+  );
+}
+
+const fileSize = (n: number) => (n >= 1024 * 1024 ? `${(n / (1024 * 1024)).toFixed(1).replace(".", ",")} MB` : n ? `${Math.max(1, Math.round(n / 1024))} KB` : "");
+
+/** Arquivo no balão: foto em miniatura, PDF/documento/vídeo em cartão. Toque abre a pré-visualização (a mesma de Documentos). */
+function FileCard({ file }: { file: ChatFile }) {
+  const [open, setOpen] = useState(false);
+  const src = file.doc_id ? `/api/documents/${file.doc_id}/file?inline=1` : null;
+  const label = file.kind === "image" ? "Foto" : file.kind === "video" ? "Vídeo" : "Arquivo";
+  if (!file.doc_id)
+    return (
+      <span className="errand-file off">
+        <Icon name="file" size={18} />
+        <span className="errand-file-info">
+          <span className="errand-file-name">{file.name || label}</span>
+          <span className="errand-file-meta">Enviado no seu WhatsApp, não coube em Documentos</span>
+        </span>
+      </span>
+    );
+  return (
+    <>
+      {file.kind === "image" && src ? (
+        <button type="button" className="errand-photo" onClick={() => (haptic(5), setOpen(true))} aria-label={`Abrir ${file.name || "foto"}`}>
+          <img src={src} alt={file.name || "Foto"} loading="lazy" />
+        </button>
+      ) : (
+        <button type="button" className="errand-file" onClick={() => (haptic(5), setOpen(true))}>
+          <Icon name={file.kind === "video" ? "play" : "file"} size={18} />
+          <span className="errand-file-info">
+            <span className="errand-file-name">{file.name || label}</span>
+            <span className="errand-file-meta">{[label, fileSize(file.size)].filter(Boolean).join(" · ")}</span>
+          </span>
+        </button>
+      )}
+      {open && <DocPreview doc={{ id: file.doc_id, name: file.name || label, mimetype: file.mimetype, size: file.size }} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
