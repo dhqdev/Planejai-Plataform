@@ -1,5 +1,5 @@
 import { memo, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, ago, brl, ms, usd } from "../api";
 import type { Me } from "../App";
 import { AgentTag, CATEGORY_COLORS, Donut, Empty, Modal, PageHead, Status } from "../components";
@@ -414,16 +414,22 @@ function allowed(def: WidgetDef, isSuper: boolean) {
   return !def.only || def.only === (isSuper ? "super" : "admin");
 }
 
-/** Início: no celular é a conversa com o time (HomeChat); o painel de widgets fica no notebook e em /?painel=1. */
-/** Tabelas que mudam o resumo do Início (me/overview): recarrega na hora quando uma delas muda. */
+/**
+ * Painel de widgets (/painel). O Início passou a ser o Feed (pages/Rede.tsx, pedido do David em 2026-11-11);
+ * a conversa com o time abre em /conversa, pelo botão "Conversar" daqui.
+ */
+/** Tabelas que mudam o resumo do painel (me/overview): recarrega na hora quando uma delas muda. */
 const ME_OVERVIEW = ["reminders", "transactions", "watches", "memories"];
 
 export function DashboardPage(props: { me: Me; theme: string; onTheme: () => void }) {
   const phone = useMedia(PHONE_QUERY);
-  const [params] = useSearchParams();
-  if (phone && !params.has("painel")) return <HomeChat me={props.me} />;
-  if (!phone && params.has("chat")) return <HomeChat me={props.me} wide />;
   return <PanelPage {...props} phone={phone} />;
+}
+
+/** Conversa com o time dentro do app (mesmo motor do WhatsApp): tela cheia no celular, coluna no notebook. */
+export function ChatPage({ me }: { me: Me }) {
+  const phone = useMedia(PHONE_QUERY);
+  return <HomeChat me={me} wide={!phone} />;
 }
 
 function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onTheme: () => void; phone: boolean }) {
@@ -543,7 +549,7 @@ function PanelPage({ me, theme, onTheme, phone }: { me: Me; theme: string; onThe
             </>
           ) : (
             <div className="dash-actions">
-              <Link className={`btn btn-brand${phone ? "" : " dash-chat"}`} to={phone ? "/" : "/?chat=1"}>
+              <Link className={`btn btn-brand${phone ? "" : " dash-chat"}`} to="/conversa">
                 <Icon name="send" size={16} /> Conversar
               </Link>
               <button className="btn" onClick={() => setEditing(true)}>

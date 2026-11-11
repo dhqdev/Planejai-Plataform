@@ -31,6 +31,7 @@ const load = {
   calendar: () => import("./pages/Calendar"),
   clients: () => import("./pages/Clients"),
   dashboard: () => import("./pages/Dashboard"),
+  rede: () => import("./pages/Rede"),
   documents: () => import("./pages/Documents"),
   errands: () => import("./pages/Errands"),
   esteira: () => import("./pages/Esteira"),
@@ -95,6 +96,13 @@ const BillingPage = page(() => load.billing().then((m) => m.BillingPage));
 const PaymentsPage = page(() => load.payments().then((m) => m.PaymentsPage));
 const ClientsPage = page(() => load.clients().then((m) => m.ClientsPage));
 const DashboardPage = page(() => load.dashboard().then((m) => m.DashboardPage));
+const ChatPage = page(() => load.dashboard().then((m) => m.ChatPage));
+/** Rede social: o Feed é o que abre no Início; post, perfil, atividade e busca ficam em /rede/*. */
+const FeedPage = page(() => load.rede().then((m) => m.FeedPage));
+const RedePostPage = page(() => load.rede().then((m) => m.RedePostPage));
+const RedeProfilePage = page(() => load.rede().then((m) => m.RedeProfilePage));
+const RedeActivityPage = page(() => load.rede().then((m) => m.RedeActivityPage));
+const RedeSearchPage = page(() => load.rede().then((m) => m.RedeSearchPage));
 const ExecutionDetailPage = page(() => load.executions().then((m) => m.ExecutionDetailPage));
 const ExecutionsPage = page(() => load.executions().then((m) => m.ExecutionsPage));
 const FinancePage = page(() => load.finance().then((m) => m.FinancePage));
@@ -127,7 +135,10 @@ const WhatsAppPage = page(() => load.whatsapp().then((m) => m.WhatsAppPage));
 
 /** Qual pedaço cada rota do menu abre: para baixar antes do toque (e deixar pronto para abrir sem internet). */
 const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
-  "/": load.dashboard,
+  "/": load.rede,
+  "/rede": load.rede,
+  "/painel": load.dashboard,
+  "/conversa": load.dashboard,
   "/notificacoes": load.notifications,
   "/executions": load.executions,
   "/queues": load.queues,
@@ -208,9 +219,11 @@ const groupOf = (path: string) => GROUPS.find((g) => g.some((t) => t.to === "/" 
 
 /** Itens de dia a dia: iguais para o dono e para os clientes (cada um vê só os próprios dados). */
 const MY_DAY: NavItem[] = [
-  { to: "/", label: "Início", icon: "home" },
+  // o Feed (rede social) é o que abre no Início; o painel de números e a conversa com o time ficam em Painel
+  { to: "/", label: "Feed", icon: "home" },
   { to: "/agenda", label: "Agenda", icon: "calendar" },
   { to: "/finance", label: "Finanças", icon: "wallet" },
+  { to: "/painel", label: "Painel", icon: "layout" },
   { to: "/watches", label: "De olho", icon: "eye", short: "De olho" },
   { to: "/recados", label: "Recados", icon: "send" },
   { to: "/contatos", label: "Contatos", icon: "users" },
@@ -366,7 +379,7 @@ export function App() {
   const goBack = () => {
     haptic(5);
     if (((history.state as { idx?: number } | null)?.idx ?? 0) > 0) nav(-1);
-    else nav("/conta");
+    else nav(top === "/rede" ? "/" : "/conta");
   };
   const mainRef = useRef<HTMLElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -505,7 +518,8 @@ export function App() {
   const has = (m: string) => isSuper || (tabs.data?.modules ?? []).includes(m);
   // barra do celular: 3 abas fixas e a Conta (acesa também em qualquer tela que se abre por ela)
   const phoneTabs = links.filter((t) => PHONE_TABS.includes(t.to));
-  const here = phoneTabs.findIndex((t) => t.to === "/" + (loc.pathname.split("/")[1] ?? "") || groupOf(loc.pathname)?.[0]?.to === t.to);
+  // telas da rede (/rede/...) se abrem pelo Feed: a aba dele fica acesa
+  const here = phoneTabs.findIndex((t) => t.to === (top === "/rede" ? "/" : top) || groupOf(loc.pathname)?.[0]?.to === t.to);
   const tabIndex = here < 0 ? phoneTabs.length : here;
   const barTitle = titleFor(loc.pathname, NAV);
   return (
@@ -603,7 +617,14 @@ export function App() {
           <Route path="/notificacoes" element={<NotificationsPage />} />
           <Route path="/alarme" element={<AlarmPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
-          <Route path="/" element={<DashboardPage me={me} theme={theme} onTheme={toggleTheme} />} />
+          <Route path="/" element={<FeedPage me={me} />} />
+          <Route path="/rede/p/:id" element={<RedePostPage me={me} />} />
+          <Route path="/rede/u/:handle" element={<RedeProfilePage me={me} />} />
+          <Route path="/rede/atividade" element={<RedeActivityPage me={me} />} />
+          <Route path="/rede/buscar" element={<RedeSearchPage me={me} />} />
+          <Route path="/rede/*" element={<Navigate to="/" replace />} />
+          <Route path="/painel" element={<DashboardPage me={me} theme={theme} onTheme={toggleTheme} />} />
+          <Route path="/conversa" element={<ChatPage me={me} />} />
           {/* /invites é a visão do dono (todos os convites); cliente cai na aba Convites dele */}
           <Route path="/invites" element={isSuper ? <InvitesPage isSuper /> : <Navigate to="/convites" replace />} />
           <Route path="/convites" element={<ConvitesPage />} />
@@ -720,6 +741,8 @@ function sectionsOf(items: NavItem[]) {
   return out;
 }
 
+const REDE_TITLES: Record<string, string> = { p: "Publicação", u: "Perfil", atividade: "Atividade", buscar: "Buscar" };
+
 /** Tela aberta é este item ou uma irmã dele (Filas conta como Execuções). */
 const isOn = (path: string, to: string) => {
   const base = "/" + (path.split("/")[1] ?? "");
@@ -729,6 +752,8 @@ const isOn = (path: string, to: string) => {
 function titleFor(path: string, items: NavItem[]) {
   const base = "/" + (path.split("/")[1] ?? "");
   if (base === "/conta") return "Conta";
+  if (base === "/rede") return REDE_TITLES[path.split("/")[2] ?? ""] ?? "Feed";
+  if (base === "/conversa") return "Conversa";
   const hit = (items.find((i) => "to" in i && i.to === path) ?? items.find((i) => "to" in i && i.to === base)) as { label: string } | undefined;
   return hit?.label ?? groupOf(path)?.find((t) => t.to === base)?.label ?? "Planejai";
 }

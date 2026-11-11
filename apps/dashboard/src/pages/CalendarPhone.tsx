@@ -800,7 +800,7 @@ function EventScreen({ ev, origin, readonly, tags, onClose, onEdit, onChanged }:
   const notify30 = () =>
     void patch("avisar", { before_min: 30 }, { remindAt: new Date(s.getTime() - 30 * 60_000).toISOString() });
 
-  // pedir a mudança ao time: vai como mensagem no chat do Início, com o compromisso junto
+  // pedir a mudança ao time: vai como mensagem na conversa com o time (/conversa), com o compromisso junto
   const send = async () => {
     const text = ask.trim();
     if (!text) return;
@@ -811,7 +811,7 @@ function EventScreen({ ev, origin, readonly, tags, onClose, onEdit, onChanged }:
       await api("/api/chat", { method: "POST", json: { text: `Sobre "${ev.title}" (${when}) na minha agenda: ${text}` } });
       haptic(12);
       setAsk("");
-      setSent("Pedi ao time. A resposta chega no chat do Início e a agenda atualiza sozinha.");
+      setSent("Pedi ao time. A resposta chega na conversa com o time (Conta > Painel > Conversar) e a agenda atualiza sozinha.");
       setTimeout(() => onChanged(), 9000);
       setTimeout(() => onChanged(), 25000);
     } catch (err) {

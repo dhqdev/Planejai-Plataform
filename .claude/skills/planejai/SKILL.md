@@ -35,6 +35,7 @@ Princípios que não podem quebrar:
 | Quem vê o quê no painel | `painel.md`, `accounts.ts`, `sharing.ts` (`personalUser`/`personalUsers`), `api/routes/dashboard/shared.ts` |
 | Rota do painel | `api/routes/dashboard/<área>.ts` (agenda, finance, clients, executions, integrations, invites, memories, whatsapp) e `api/routes/dashboard.ts` |
 | Tela do painel | `apps/dashboard/src/pages/<Tela>.tsx`; menu e abas em `App.tsx` |
+| Rede social (Feed, status, perfil) | `feed.ts`, `api/routes/dashboard/feed.ts`, `pages/Rede.tsx`; ver `painel.md` |
 | Tabela do banco | `grep -rln "create table <nome>" apps/server/src/db/migrations` |
 | Fila / job agendado | `queue/boss.ts` (nomes em `QUEUES`) e `queue/worker.ts` |
 | Integração (conector) | `integrations/registry.ts` (`INTEGRATIONS`, `PERSONAL_INTEGRATIONS`) |

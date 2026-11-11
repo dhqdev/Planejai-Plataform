@@ -80,6 +80,11 @@ const P: Record<string, string> = {
   stop: "M7 7h10v10H7z",
   pause: "M8 5v14M16 5v14",
   arrow: "M5 12h14M13 6l6 6-6 6",
+  // rede social: balão de comentário, foto e compartilhar
+  message: "M20 11.5a7.5 7.5 0 0 1-11 6.6L4 19.5l1.4-4.6A7.5 7.5 0 1 1 20 11.5",
+  image: "M5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13A1.5 1.5 0 0 1 5.5 4M4 16l4.5-4.5 4 4 2.5-2.5 5 5M15.2 9.2h.01",
+  share: "M12 15V3.5M7.5 8 12 3.5 16.5 8M5 13v5.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V13",
+  type: "M5 7V5h14v2M12 5v14M9 19h6",
 };
 
 export function Icon({ name, size = 18, style, className }: { name: string; size?: number; style?: CSSProperties; className?: string }) {

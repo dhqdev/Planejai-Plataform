@@ -691,7 +691,7 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
   const page = (
     <div className={`hc${wide ? " hc-wide" : ""}`} ref={root}>
       <header className="hc-top">
-        <button className="hc-icon" ref={liquidGlass} aria-label="Ver painel" title="Ver painel" onClick={() => { haptic(); nav(wide ? "/" : "/?painel=1"); }}>
+        <button className="hc-icon" ref={liquidGlass} aria-label="Ver painel" title="Ver painel" onClick={() => { haptic(); nav("/painel"); }}>
           <Icon name="layout" size={20} />
         </button>
         <div className="hc-crew">
@@ -761,7 +761,7 @@ export function HomeChat({ me, wide = false }: { me: Me; wide?: boolean }) {
           <div className="hc-empty">
             <AgentFace face={cto?.face} agent="cto" size={84} live />
             <p>{state.reason ?? "O chat ainda não está disponível para esta conta."}</p>
-            <button className="btn" onClick={() => nav(wide ? "/" : "/?painel=1")}>Ver o painel</button>
+            <button className="btn" onClick={() => nav("/painel")}>Ver o painel</button>
           </div>
         ) : (
           <>
