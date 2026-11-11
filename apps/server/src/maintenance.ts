@@ -2,6 +2,7 @@ import { summarizeConversation } from "./agent/orchestrator.js";
 import { config } from "./config.js";
 import { many, query } from "./db/pool.js";
 import { MEETING_HOUR } from "./improve.js";
+import { purgeExpiredStatus } from "./feed.js";
 import { getSettings } from "./settings.js";
 import { moveBlobsToStorage, purgeStorageTrash, relocateLegacyObjects } from "./storage.js";
 import { redisAlive } from "./shortmem.js";
@@ -58,6 +59,8 @@ export async function purgeOld(log?: { info: (...a: any[]) => void; error: (...a
     [config.LOG_CONTENT_HOURS],
   );
   await closeOrphanRuns();
+  // rede social: status vencido (24h) sai com a foto e a lista de quem viu
+  await purgeExpiredStatus().catch((err) => log?.error({ err }, "falha ao apagar status vencidos"));
   const { purgeMeets } = await import("./meet.js");
   await purgeMeets().catch((err) => log?.error({ err }, "falha na limpeza das reuniões"));
   const { purgeUber } = await import("./uber.js");

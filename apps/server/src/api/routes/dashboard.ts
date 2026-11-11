@@ -3,6 +3,7 @@ import { requireAuth, requireSuper } from "../server.js";
 import { accountRoutes } from "./dashboard/accounts.js";
 import { agendaRoutes } from "./dashboard/agenda.js";
 import { chatRoutes } from "./dashboard/chat.js";
+import { feedRoutes } from "./dashboard/feed.js";
 import { liveRoutes } from "../../live.js";
 import { alarmActionRoutes, alarmRoutes } from "./dashboard/alarms.js";
 import { billingAdminRoutes, billingRoutes } from "./dashboard/billing.js";
@@ -45,6 +46,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     // ================= Rotas com escopo: super admin vê tudo, admin só os próprios dados =================
     meRoutes(base);
     chatRoutes(base);
+    feedRoutes(base);
     liveRoutes(base);
     financeRoutes(base);
     inviteRoutes(base);
