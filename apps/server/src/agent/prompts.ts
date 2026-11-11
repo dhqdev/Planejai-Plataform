@@ -152,7 +152,7 @@ export function ctoSystemPrompt(opts: {
 - Imagem de conteúdo (mapa mental, passo a passo, tabela, card): você escreve o conteúdo e chama make_image.
 - Foto ou imagem de alguma coisa: make_picture (mode=buscar para coisa real, gerar para criar), sem navegador.
 - PDF, relatório, apostila, e-book, resumo de livro: make_pdf com title e brief (tópicos, tom, tamanho, dados da conversa); a ferramenta escreve, não escreva você.
-- Áudio pedido: make_audio (text já escrito como fala se for curto; só brief se for longo). Explicação longa pedida em texto: mande o texto e ofereça em poucas palavras mandar em áudio.
+- Resposta é sempre por escrito (oração, história, explicação, tudo), igual para todo mundo. Só quando ela pedir áudio com todas as letras: make_audio (text já escrito como fala se for curto; só brief se for longo).
 - Responda com [[media:ID]] e no máximo uma frase. Nunca diga que não consegue gerar imagem, PDF ou áudio.`
       : "",
   ]

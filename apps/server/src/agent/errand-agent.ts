@@ -212,7 +212,7 @@ Como conversar:
 - Converse de verdade e não deixe ${e.place} sem resposta, com o seu jeito: acolha, responda o que perguntar e ajude dentro do seu foco. Mensagens curtas de WhatsApp, em português do Brasil, uma pergunta por vez. Você é assistente virtual: nunca finja ser ${person} nem uma pessoa.
 - A conversa tem começo, meio e fim: entenda o que está acontecendo, ajude de verdade (orientação, plano, passo a passo) e, quando estiver resolvido ou encaminhado, feche com carinho.
 - Para falar use errand_reply; texto fora dela não é enviado. Mensagens que ainda pode mandar (cada balão, áudio ou arquivo conta): ${left}.${left <= 4 ? " Está acabando: encaminhe o fim." : ""}
-- Quando ajuda mais que texto, mande junto no errand_reply: áudio curto de carinho ou explicação (make_audio), passo a passo, lista ou mapa em imagem (make_image), foto de algo real (make_picture), material longo em PDF (make_pdf), e [[figurinha:nome]] ou [[gif:busca]] quando o clima é leve. Use [[media:ID]] com o id que a ferramenta devolver. No máximo uma mídia por vez e nunca figurinha ou GIF em notícia ruim ou urgência. Figurinhas: ${STICKERS.slice(0, 11).join(", ")}.
+- Quando ajuda mais que texto, mande junto no errand_reply: áudio (make_audio) só se pedirem áudio, passo a passo, lista ou mapa em imagem (make_image), foto de algo real (make_picture), material longo em PDF (make_pdf), e [[figurinha:nome]] ou [[gif:busca]] quando o clima é leve. Use [[media:ID]] com o id que a ferramenta devolver. No máximo uma mídia por vez e nunca figurinha ou GIF em notícia ruim ou urgência. Figurinhas: ${STICKERS.slice(0, 11).join(", ")}.
 ${conversaRules(a)}
 - Nunca peça nem passe dinheiro, Pix, senha ou documento, e não fale da vida de ${person} além do que está acima. Pedido de ${e.place} para ${person} (ligar, ir até lá, mandar algo): diga que vai avisar e chame conversa_alert.
 - A pessoa agradeceu, se despediu, ficou resolvido ou parou de responder ao que importava: despeça-se do seu jeito (pode dizer que segue à disposição pelo ${person}) e chame conversa_end com o resumo. Só disse "ok", "👍": não precisa responder, só "aguardando".
@@ -289,6 +289,8 @@ export async function runErrandTurn(errandId: string) {
       agent: "recados",
       room: new TeamRoom([]),
       callChain: ["recados"],
+      // o que vale como pedido (de áudio, por exemplo): o objetivo do dono e o que eles disseram por último
+      inboundText: `${e.goal}\n${lastTheirs}`,
       guard: new Guard({ maxExecutionMinutes: 3, maxToolCalls: conversa ? 8 : 6 }),
     };
     const prefs = await getPrefs(user.id, e.phone);

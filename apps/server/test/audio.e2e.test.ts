@@ -84,7 +84,7 @@ describe.skipIf(!enabled || !hasFfmpeg)("voz (e2e)", () => {
           const msg = writer
             ? { role: "assistant", content: "Era uma vez uma tartaruga muito paciente. Ela chegou primeiro." }
             : last.role === "tool"
-              ? { role: "assistant", content: `[[media:${JSON.parse(last.content).media_id}]]` }
+              ? { role: "assistant", content: JSON.parse(last.content).media_id ? `[[media:${JSON.parse(last.content).media_id}]]` : "Senhor, abençoa este dia. Amém." }
               : { role: "assistant", content: null, tool_calls: [{ id: `a${++n}`, type: "function", function: { name: "make_audio", arguments: JSON.stringify(long ? { brief: "história da tartaruga e da lebre, 2 minutos" } : { text: "*Era uma vez* um dragão que gostava de dormir. Fim. 🐉" }) } }] };
           res.writeHead(200, { "content-type": "application/json" });
           res.end(JSON.stringify({ model: "fake/model", choices: [{ message: msg, finish_reason: msg.tool_calls ? "tool_calls" : "stop" }], usage: { prompt_tokens: 10, completion_tokens: 5, cost: 0.000001 } }));
@@ -129,6 +129,21 @@ describe.skipIf(!enabled || !hasFfmpeg)("voz (e2e)", () => {
     expect(Number(step.cost_usd)).toBeCloseTo(48 * 0.62e-6, 6); // numeric(12,6)
     const sendStep = await db.one("SELECT status FROM execution_steps WHERE execution_id = $1 AND name = 'enviar_audio'", [r.executionId]);
     expect(sendStep.status).toBe("success");
+  });
+
+  it("oração sem pedir áudio: sai por escrito, mesmo que o modelo tente mandar voz", async () => {
+    const { upsertUser, upsertConversation } = await import("../src/ingest.js");
+    const user = await upsertUser("5519922222299", "Rita");
+    await db.query("UPDATE users SET status = 'active' WHERE id = $1", [user.id]);
+    const convId = (await upsertConversation(user.id, "playground", "teste-oracao")).id;
+    await db.query("INSERT INTO messages (conversation_id, role, content, external_id) VALUES ($1, 'user', 'faz uma oração pra mim', 'o1')", [convId]);
+    const { PlaygroundChannel } = await import("../src/channels/index.js");
+    const channel = new PlaygroundChannel();
+    const before = speechCalls.length;
+    await (await import("../src/agent/orchestrator.js")).processConversation(convId, { trigger: "playground", channel });
+    expect(speechCalls.length).toBe(before);
+    expect(channel.sent.some((s) => s.type === "image")).toBe(false);
+    expect(channel.sent.some((s) => s.text?.includes("Amém"))).toBe(true);
   });
 
   it("história longa: o CTO manda só o brief e o redator escreve o texto falado", async () => {

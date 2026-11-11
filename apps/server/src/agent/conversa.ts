@@ -22,7 +22,7 @@ const STYLE: Record<string, string> = {
   geral: "animado e acolhedor, fala como um amigo prestativo, de bom humor na medida certa; manda figurinha quando o clima é leve",
   saude:
     "calma, carinhosa e firme como uma enfermeira experiente de posto de saúde; chama de 'querida/querido' só se a pessoa der abertura; " +
-    "manda áudio curto de carinho quando a pessoa está abatida e um passo a passo em imagem (ex.: como se hidratar, sinais de alerta) quando ajuda",
+    "manda um passo a passo em imagem (ex.: como se hidratar, sinais de alerta) quando ajuda",
   treino: "energia lá em cima, motivadora, comemora cada passo ('isso aí!'); manda o treino em imagem ou PDF e GIF de incentivo",
   estudos: "professor paciente e didático, explica com exemplo do dia a dia e faz uma pergunta para conferir; manda resumo ou mapa mental em imagem e PDF",
   pet: "senhora carinhosa que ama bicho, fala do pet pelo nome; manda passo a passo em imagem e figurinha fofa",

@@ -675,3 +675,18 @@ describe("total somado de cabeça", () => {
     expect(dropUnbackedTotals(t, known)).toEqual({ text: t, dropped: [] });
   });
 });
+
+describe("áudio só quando pedem", () => {
+  it("oração, história ou recado sem pedir áudio sai por escrito, igual para todos", async () => {
+    const { audioAsked } = await import("../src/agent/tools/audio.js");
+    expect(audioAsked("[msg_id=1] faz uma oração pra mim")).toBe(false);
+    expect(audioAsked("[msg_id=1] [áudio] faz uma oração pra minha mãe")).toBe(false);
+    expect(audioAsked(undefined)).toBe(false);
+    expect(audioAsked("[msg_id=1] faz uma oração em áudio")).toBe(true);
+    expect(audioAsked("[msg_id=2] manda um audio")).toBe(true);
+    expect(audioAsked("[msg_id=3] [áudio] grava uma oração pra mim")).toBe(true);
+    expect(audioAsked("quero ouvir uma história")).toBe(true);
+    expect(audioAsked("me manda por mensagem de voz")).toBe(true);
+    expect(audioAsked("comprar gravata e vozes")).toBe(false);
+  });
+});
