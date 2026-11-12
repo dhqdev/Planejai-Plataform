@@ -50,8 +50,17 @@
 .rd-tabs button.on { color: var(--text); }
 .rd-tabs button::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2.5px; border-radius: 2px; background: var(--ink); transform: scaleX(0); transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
 .rd-tabs button.on::after { transform: scaleX(1); }
-.rd-bell { position: relative; }
-.rd-bell i { position: absolute; top: 7px; right: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--magenta); box-shadow: 0 0 0 2px var(--panel); }
+/* ícones da barra: só o traço, sem círculo nem borda (como no Instagram); área de toque de 44px */
+.rd-bar-icons { display: flex; align-items: center; gap: 2px; margin-right: -10px; }
+.rd-ico { position: relative; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: var(--text); -webkit-tap-highlight-color: transparent; transition: background .15s, transform .15s; }
+@media (hover: hover) and (pointer: fine) { .rd-ico:hover { background: var(--panel-2); } }
+.rd-ico:active { transform: scale(.9); }
+.rd-bell i { position: absolute; top: 10px; right: 10px; width: 8px; height: 8px; border-radius: 50%; background: var(--magenta); box-shadow: 0 0 0 2px var(--panel); }
+/* convite para escrever no celular (no lugar do botão flutuante) */
+.rd-prompt { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 0; border: none; border-bottom: 1px solid var(--border); background: none; color: var(--muted); font: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.rd-prompt-txt { flex: 1; min-width: 0; height: 38px; display: flex; align-items: center; padding: 0 14px; border-radius: 99px; background: var(--panel-2); font-size: 15px; }
+.rd-prompt > svg { flex: none; margin-right: 4px; }
+.rd-prompt:active .rd-prompt-txt { background: var(--border); }
 
 /* ---------- post ---------- */
 .rd-post { margin: 0 -16px; padding: 14px 16px 12px; border-bottom: 1px solid var(--border); cursor: pointer; outline-offset: -2px; }
@@ -162,9 +171,7 @@
 .rd-compose-photos img { width: 100%; max-height: 280px; object-fit: cover; }
 .rd-compose-photos:not(.n1) img { aspect-ratio: 4 / 3; }
 .rd-compose-photos button, .rd-sc-x { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: none; border-radius: 50%; background: rgba(0, 0, 0, .62); color: #fff; cursor: pointer; }
-.rd-fab { position: fixed; right: 18px; bottom: calc(158px + var(--sab)); z-index: 30; width: 56px; height: 56px; border-radius: 50%; box-shadow: 0 10px 26px color-mix(in srgb, var(--violet) 34%, transparent); }
-html.pj-kb .rd-fab { display: none; }
-
+html.pj-kb 
 /* ---------- post aberto: responder e comentários ---------- */
 .rd-reply { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .rd-reply input { flex: 1; min-width: 0; height: 40px; padding: 0 16px; border: 1px solid var(--border); border-radius: 99px; outline: none; background: var(--panel-2); color: var(--text); font: inherit; font-size: 15px; }

@@ -753,15 +753,25 @@ function FeedHome() {
           <button type="button" role="tab" aria-selected={tab === "following"} className={tab === "following" ? "on" : ""} onClick={() => setTab("following")}>Seguindo</button>
         </div>
         <span className="spacer" />
-        <Link to="/rede/buscar" className="icon-btn" aria-label="Buscar pessoas"><Icon name="search" size={20} /></Link>
-        {profile && (
-          <Link to="/rede/atividade" className="icon-btn rd-bell" aria-label={unread ? `Atividade, ${unread} novas` : "Atividade"}>
-            <Icon name="heart" size={20} />
-            {unread > 0 && <i />}
-          </Link>
-        )}
+        <div className="rd-bar-icons">
+          <Link to="/rede/buscar" className="rd-ico" aria-label="Buscar pessoas"><Icon name="search" size={22} /></Link>
+          {profile && (
+            <Link to="/rede/atividade" className="rd-ico rd-bell" aria-label={unread ? `Atividade, ${unread} novas` : "Atividade"}>
+              <Icon name="heart" size={22} />
+              {unread > 0 && <i />}
+            </Link>
+          )}
+        </div>
       </div>
       {!profile && phone && <JoinCard inline onJoin={join} />}
+      {profile && phone && (
+        // no celular, escrever fica no topo do feed (sem botão flutuante tampando os posts)
+        <button type="button" className="rd-prompt" onClick={() => { haptic(6); setWriting(true); }}>
+          <Avatar who={profile} size={36} me link={false} />
+          <span className="rd-prompt-txt">No que você está pensando?</span>
+          <Icon name="image" size={20} />
+        </button>
+      )}
       {profile && !phone && <Composer inline onPosted={list.add} />}
       <PostList
         list={list}
@@ -773,14 +783,6 @@ function FeedHome() {
           )
         }
       />
-      {phone &&
-        // no <body>: a tela anima com transform, e botão fixo dentro dela ia parar no fim da lista
-        createPortal(
-          <button type="button" className="fab ink rd-fab" onClick={() => { haptic(8); if (join()) setWriting(true); }} aria-label="Nova publicação">
-            <Icon name="edit" size={21} />
-          </button>,
-          document.body,
-        )}
       {writing && (
         <Modal title="Nova publicação" onClose={() => setWriting(false)} className="rd-compose-modal">
           {(close) => <Composer autoFocus onPosted={(p) => { list.add(p); close(); }} />}
