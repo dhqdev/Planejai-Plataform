@@ -204,7 +204,8 @@ describe.skipIf(!enabled)("cartões (e2e)", () => {
 
   it("parcelou sem dizer o cartão: com um cartão só vai nele; débito não é cartão", async () => {
     const { addTransaction } = await import("../src/agent/tools/finance.js");
-    const r: any = await addTransaction.run({ kind: "expense", amount: 300, description: "Cadeira", installments: 3, date: "2026-10-08T10:00" }, ctx);
+    const r: any = await addTransaction.run({ kind: "expense", amount: 300, description: "Cadeira", installments: 3, date: `${new Date().toISOString().slice(0, 8)}01T10:00` }, ctx);
+    // dia 1 do mês corrente: a lista do teste seguinte olha o mês de hoje (com data fixa quebrava ao virar o mês)
     expect(r.card).toBe("Nubank");
     expect(r.card_note).toContain("único");
     const d: any = await addTransaction.run({ kind: "expense", amount: 12, description: "Pão", card: "débito" }, ctx);
