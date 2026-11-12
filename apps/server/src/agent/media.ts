@@ -324,6 +324,8 @@ async function processLink(rawUrl: string, tracer: Tracer): Promise<{ title: str
  * O resultado fica em meta e o arquivo pesado sai do banco.
  */
 export async function preprocessMedia(pending: any[], channel: Channel, tracer: Tracer, remoteJid: string, opts: { persist?: boolean } = {}) {
+  // sem grãos: nada de transcrever, descrever foto/vídeo ou ler link (tudo isso é IA)
+  if (await tracer.blocked?.()) return;
   for (const m of pending) {
     if (m.meta == null) m.meta = {};
     const textContent = typeof m.content === "string" ? m.content : "";

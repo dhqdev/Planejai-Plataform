@@ -31,6 +31,14 @@ function maskDeep(value: unknown): unknown {
   }
 }
 
+/** A pessoa está sem grãos (cobrança ligada, fora do período grátis, carteira zerada): nenhuma IA roda por ela. */
+export class NoGrainsError extends Error {
+  constructor() {
+    super("Sem grãos: a IA está parada até recarregar.");
+    this.name = "NoGrainsError";
+  }
+}
+
 export type StepType = "llm" | "tool" | "delegate" | "channel" | "info";
 
 /** Limita o tamanho do que vai para o log (base64 de mídia, páginas enormes etc.) */
@@ -56,6 +64,24 @@ export class Tracer {
     readonly noCharge = false,
   ) {}
 
+  private access?: Promise<boolean>;
+
+  /**
+   * Trava de grãos de todo o sistema: qualquer passo de IA (type "llm") de uma pessoa sem grãos para aqui, venha de
+   * onde vier (mensagem, lembrete, recado, reunião, resumo, corrida...). Confere uma vez por execução.
+   * Trabalho da plataforma (noCharge) e execuções sem pessoa não passam pela trava.
+   */
+  blocked(): Promise<boolean> {
+    if (!this.userId || this.noCharge) return Promise.resolve(false);
+    this.access ??= (async () => {
+      const { billingAccess } = await import("../billing.js");
+      const user = await one("SELECT * FROM users WHERE id = $1", [this.userId]);
+      if (!user) return false;
+      return !(await billingAccess(user)).allowed;
+    })().catch(() => false);
+    return this.access;
+  }
+
   static async start(opts: { trigger: string; userId?: string | null; conversationId?: string | null; input?: string; noCharge?: boolean }) {
     const row = await one<{ id: string }>(
       "INSERT INTO executions (trigger, user_id, conversation_id, input) VALUES ($1, $2, $3, $4) RETURNING id",
@@ -76,6 +102,13 @@ export class Tracer {
   }
 
   async step(opts: { agent: string; type: StepType; name: string; input?: unknown; parentId?: number | null; model?: string }): Promise<StepHandle> {
+    if (opts.type === "llm" && (await this.blocked())) {
+      await query(
+        `INSERT INTO execution_steps (execution_id, parent_id, agent, type, name, status, error) VALUES ($1, $2, $3, 'info', $4, 'error', $5)`,
+        [this.executionId, opts.parentId ?? null, opts.agent, `trava: grãos (${opts.name})`.slice(0, 200), "sem grãos: IA não chamada"],
+      ).catch(() => {});
+      throw new NoGrainsError();
+    }
     const started = Date.now();
     const row = await one<{ id: number }>(
       `INSERT INTO execution_steps (execution_id, parent_id, agent, type, name, model, input)

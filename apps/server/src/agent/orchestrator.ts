@@ -300,7 +300,7 @@ async function processLocked(conversationId: string, opts: ProcessOpts): Promise
       await step.ok({ blocked: true });
       const notified = await one(
         `UPDATE users SET profile = profile || jsonb_build_object('billing_notice_at', now()) WHERE id = $1
-           AND COALESCE((profile->>'billing_notice_at')::timestamptz, 'epoch') < now() - interval '24 hours' RETURNING id`,
+           AND COALESCE((profile->>'billing_notice_at')::timestamptz, 'epoch') < now() - interval '1 hour' RETURNING id`,
         [user.id],
       );
       if (notified) await channel.sendText(conversation.remote_jid, await blockedMessage(user.id)).catch(() => {});

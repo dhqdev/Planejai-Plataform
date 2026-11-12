@@ -77,6 +77,8 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
   let payN = 0;
   let subN = 0;
   let paymentsEmptyOnce = false;
+  // cliente removido no painel do Asaas: cobrança recusa até restaurar
+  let removed = false;
   const reloadUser = async () => (user = await db.one("SELECT * FROM users WHERE id = $1", [user.id]));
   const wallet = async (id = user.id) => db.one("SELECT plan_grains, extra_grains FROM wallets WHERE user_id = $1", [id]);
   const outbox = async () => (await db.many("SELECT data FROM pgboss.job WHERE name = 'outbound.send' ORDER BY created_on")).map((r) => r.data);
@@ -90,7 +92,15 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
       const method = init?.method ?? "GET";
       asaasCalls.push({ method, path, body: init?.body ? JSON.parse(init.body) : null });
       const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+      const removedErr = (what: string) => new Response(JSON.stringify({ errors: [{ description: `Não é possível criar uma ${what} para um cliente removido.` }] }), { status: 400 });
       if (path === "/customers") return json({ id: "cus_1" });
+      if (path === "/customers/cus_1/restore") {
+        removed = false;
+        return json({ id: "cus_1", deleted: false });
+      }
+      if (path === "/customers/cus_1" && method === "GET") return json({ id: "cus_1", deleted: removed, name: "Carla Dias", cpfCnpj: "52998224725" });
+      if (removed && path === "/payments" && method === "POST") return removedErr("cobrança");
+      if (removed && path === "/subscriptions" && method === "POST") return removedErr("assinatura");
       if (path === "/subscriptions" && method === "POST") return json({ id: `sub_${++subN}` });
       const subPayments = path.match(/^\/subscriptions\/(sub_\d+)\/payments$/);
       if (subPayments) {
@@ -238,7 +248,7 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     expect(await db.many("SELECT delta FROM grain_ledger WHERE user_id = $1 AND reason = 'uso'", [leo.id])).toEqual([{ delta: -2 }]);
   });
 
-  it("carteira zerada: o assistente não chama a IA e avisa no máximo uma vez por dia", async () => {
+  it("carteira zerada: o assistente não chama a IA e avisa no máximo uma vez por hora", async () => {
     const channels = await import("../src/channels/index.js");
     const { processConversation } = await import("../src/agent/orchestrator.js");
     const say = async (text: string, id: string) => {
@@ -251,7 +261,7 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     const first = await say("oi, anota um gasto de 10 reais", "b1");
     expect(first.channel.sent).toEqual([]);
     expect(await db.many("SELECT type, name FROM execution_steps WHERE execution_id = $1", [first.r.executionId])).toEqual([{ type: "info", name: "trava: grãos" }]);
-    // no dia seguinte avisa de novo com o link
+    // uma hora depois avisa de novo com o link
     await db.query("UPDATE users SET profile = profile - 'billing_notice_at' WHERE id = $1", [user.id]);
     const next = await say("oi?", "b2");
     expect(next.channel.sent).toHaveLength(1);
@@ -277,6 +287,15 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     const { runErrandTurn } = await import("../src/agent/errand-agent.js");
     expect(await runErrandTurn(errand.id)).toBeNull();
     expect(await db.one("SELECT status FROM errands WHERE id = $1", [errand.id])).toEqual({ status: "waiting" });
+    // trava geral: qualquer passo de IA de quem está sem grãos para no Tracer (resumo, reunião, corrida...), sem chamar o modelo
+    const { Tracer, NoGrainsError } = await import("../src/agent/trace.js");
+    const t = await Tracer.start({ trigger: "summary", userId: user.id, conversationId: convId, input: "resumo" });
+    expect(await (await t.step({ agent: "cto", type: "info", name: "ok" })).id).toBeGreaterThan(0);
+    await expect(t.step({ agent: "cto", type: "llm", name: "resumo da conversa" })).rejects.toBeInstanceOf(NoGrainsError);
+    expect(await steps(t.executionId)).toEqual(["ok", "trava: grãos (resumo da conversa)"]);
+    // trabalho da plataforma (noCharge) não passa pela trava
+    const plat = await Tracer.start({ trigger: "improve", userId: user.id, input: "x", noCharge: true });
+    await expect(plat.step({ agent: "cto", type: "llm", name: "melhoria" })).resolves.toBeTruthy();
   });
 
   it("pacote avulso: cobrança no Asaas com referência própria, entra uma vez só quando paga e destrava", async () => {
@@ -511,5 +530,62 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     expect(await db.one("SELECT status FROM grain_purchases WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1", [dani.id])).toEqual({ status: "canceled" });
     await billing.forgetCard(dani.id);
     expect(billing.savedCardOf(await billing.getSubscription(dani.id))).toBeNull();
+  });
+
+  it("cliente removido no Asaas: o pagamento restaura o cliente e passa; a assinatura que caiu junto é refeita sem avisar cancelamento", async () => {
+    const eva = await (await import("../src/ingest.js")).upsertUser("5519966660000", "Eva");
+    await db.query("UPDATE users SET status = 'active', full_name = 'Eva Souza', created_at = now() - interval '30 days' WHERE id = $1", [eva.id]);
+    const evaUser = await db.one("SELECT * FROM users WHERE id = $1", [eva.id]);
+    await db.query("DELETE FROM subscriptions WHERE user_id = $1", [eva.id]);
+    await db.query("INSERT INTO subscriptions (user_id, asaas_customer_id, status, value) VALUES ($1, 'cus_1', 'canceled', 0)", [eva.id]);
+    // pacote: o Asaas recusa ("cliente removido"), restaura e cobra de novo
+    removed = true;
+    asaasCalls.length = 0;
+    const p = await billing.buyPack(evaUser, "p500");
+    expect(asaasCalls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /payments", "POST /customers/cus_1/restore", "POST /payments"]);
+    expect(p.invoice_url).toBeTruthy();
+    expect(await db.many("SELECT status FROM grain_purchases WHERE user_id = $1 ORDER BY created_at", [eva.id])).toEqual([{ status: "pending" }]);
+    // assinar também passa
+    removed = true;
+    const sub = await billing.subscribe(evaUser, { planId: "leve", method: "pix" });
+    expect(sub.asaas_subscription_id).toMatch(/^sub_/);
+    // pagou um mês; depois alguém remove o cliente no Asaas e a assinatura cai junto
+    await db.query("UPDATE subscriptions SET status = 'active', last_payment_at = now(), paid_until = '2099-02-10', next_due_date = '2099-02-10' WHERE user_id = $1", [eva.id]);
+    const before = (await outbox()).length;
+    removed = true;
+    asaasCalls.length = 0;
+    const r = await hook({ id: "rm1", event: "SUBSCRIPTION_DELETED", subscription: { id: sub.asaas_subscription_id } });
+    expect(r.statusCode).toBe(200);
+    expect(asaasCalls.map((c) => `${c.method} ${c.path}`)).toEqual(["GET /customers/cus_1", "POST /customers/cus_1/restore", "POST /subscriptions"]);
+    expect(asaasCalls.at(-1)!.body).toMatchObject({ customer: "cus_1", nextDueDate: "2099-02-10", value: sub.value, cycle: "MONTHLY" });
+    const now = await billing.getSubscription(eva.id);
+    expect(now).toMatchObject({ status: "active", next_due_date: "2099-02-10" });
+    expect(now!.asaas_subscription_id).not.toBe(sub.asaas_subscription_id);
+    expect((await outbox()).length).toBe(before);
+    // assinatura apagada à mão no Asaas, com o cliente ativo: aí é cancelamento mesmo
+    await hook({ id: "rm2", event: "SUBSCRIPTION_DELETED", subscription: { id: now!.asaas_subscription_id } });
+    expect((await billing.getSubscription(eva.id))!.status).toBe("canceled");
+    expect((await outbox()).length).toBe(before + 1);
+  });
+
+  it("cancelar pelo painel não manda \"seu plano foi cancelado\" quando o webhook chega no meio", async () => {
+    const fia = await (await import("../src/ingest.js")).upsertUser("5519977770000", "Fia");
+    await db.query("UPDATE users SET status = 'active', created_at = now() - interval '30 days' WHERE id = $1", [fia.id]);
+    await db.query(`INSERT INTO subscriptions (user_id, asaas_customer_id, asaas_subscription_id, status, value, plan_id, last_payment_at) VALUES ($1, 'cus_1', 'sub_fia', 'active', 19.9, 'leve', now())
+       ON CONFLICT (user_id) DO UPDATE SET asaas_subscription_id = 'sub_fia', status = 'active', last_payment_at = now()`, [fia.id]);
+    const before = (await outbox()).length;
+    const prev = globalThis.fetch;
+    // o Asaas manda o SUBSCRIPTION_DELETED enquanto o DELETE ainda nem respondeu
+    globalThis.fetch = (async (url: any, init?: any) => {
+      if (String(url).includes("/subscriptions/sub_fia") && init?.method === "DELETE") await billing.handleAsaasEvent({ id: "fia1", event: "SUBSCRIPTION_DELETED", subscription: { id: "sub_fia" } });
+      return prev(url, init);
+    }) as typeof fetch;
+    try {
+      await billing.cancelSubscription(fia.id);
+    } finally {
+      globalThis.fetch = prev;
+    }
+    expect((await billing.getSubscription(fia.id))!.status).toBe("canceled");
+    expect((await outbox()).length).toBe(before);
   });
 });

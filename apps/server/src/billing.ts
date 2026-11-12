@@ -193,6 +193,45 @@ async function ensureCustomer(user: any, input?: { name?: string; cpfCnpj?: stri
   return String(customer.id);
 }
 
+/** O Asaas recusou porque o cliente foi removido lá (apagado no painel do Asaas). */
+export const customerRemoved = (err: unknown) => /cliente (foi )?removido|cliente exclu[ií]do|customer.{0,20}(removed|deleted)/i.test(err instanceof Error ? err.message : String(err ?? ""));
+
+/**
+ * Cliente removido no Asaas: restaura o mesmo cadastro (POST /customers/:id/restore). Se nem isso der, cria outro com
+ * os mesmos dados (nome, CPF/CNPJ, e-mail) e guarda o id novo. Pagar nunca pode travar por causa disso.
+ */
+export async function reviveCustomer(user: any, customerId: string, input?: { name?: string; cpfCnpj?: string; email?: string | null }) {
+  const restored = await asaas("POST", `/customers/${encodeURIComponent(customerId)}/restore`).then(
+    () => true,
+    () => false,
+  );
+  if (restored) {
+    await notify({ userId: null, kind: "assinatura", title: "Cliente restaurado no Asaas", body: `${user.full_name ?? user.name ?? "+" + user.phone} estava removido no Asaas; restaurei para a cobrança passar.`, link: "/settings" }).catch(() => {});
+    return customerId;
+  }
+  const old = await asaas("GET", `/customers/${encodeURIComponent(customerId)}`).catch(() => null);
+  const name = String(input?.name || old?.name || user.full_name || "").trim();
+  const cpfCnpj = String(input?.cpfCnpj || old?.cpfCnpj || "");
+  await query("UPDATE subscriptions SET asaas_customer_id = NULL, updated_at = now() WHERE user_id = $1", [user.id]);
+  try {
+    return await ensureCustomer(user, { name, cpfCnpj, email: input?.email ?? old?.email ?? null });
+  } catch (err) {
+    // sem como recriar: volta o id antigo para não perder o vínculo
+    await query("UPDATE subscriptions SET asaas_customer_id = COALESCE(asaas_customer_id, $2), updated_at = now() WHERE user_id = $1", [user.id, customerId]);
+    throw err;
+  }
+}
+
+/** Roda uma chamada ao Asaas com o cliente da pessoa; se o cliente tiver sido removido lá, restaura e tenta de novo uma vez. */
+async function withCustomer<T>(user: any, customerId: string, fn: (customerId: string) => Promise<T>, input?: { name?: string; cpfCnpj?: string; email?: string | null }) {
+  try {
+    return await fn(customerId);
+  } catch (err) {
+    if (!customerRemoved(err)) throw err;
+    return fn(await reviveCustomer(user, customerId, input));
+  }
+}
+
 export type PayMethod = "card" | "pix";
 
 /** Cartão digitado no checkout: vai direto para o Asaas (nunca gravado). */
@@ -218,11 +257,15 @@ export async function subscribe(user: any, input: { planId: string; method?: Pay
   const customerId = await ensureCustomer(user, input);
   const method: PayMethod = input.card ? "card" : input.method === "pix" ? "pix" : "card";
   // a assinatura velha sai do Asaas antes, senão ele continua gerando uma cobrança vencida por mês
-  if (unpaid) await deleteAsaasSubscription(existing.asaas_subscription_id!);
+  // (marca cancelada antes: o webhook dessa exclusão não pode avisar a pessoa que o plano foi cancelado)
+  if (unpaid) {
+    await query("UPDATE subscriptions SET status = 'canceled', updated_at = now() WHERE user_id = $1", [user.id]);
+    await deleteAsaasSubscription(existing.asaas_subscription_id!);
+  }
   const { percent } = await referralDiscount(user.id, s);
   const value = withDiscount(plan.price, percent);
-  const created = await asaas("POST", "/subscriptions", {
-    customer: customerId,
+  const created = await withCustomer(user, customerId, (customer) => asaas("POST", "/subscriptions", {
+    customer,
     // cartão: a primeira sai agora (no checkout) e as próximas saem sozinhas no mesmo cartão
     billingType: method === "card" ? "CREDIT_CARD" : "UNDEFINED",
     value,
@@ -231,7 +274,7 @@ export async function subscribe(user: any, input: { planId: string; method?: Pay
     description: `Planejai ${plan.name} (${grains(plan.grains)} por mês)`,
     externalReference: user.id,
     ...(input.card ?? {}),
-  });
+  }), input);
   const first = input.card ? await firstPayment(String(created.id)) : await firstOpenPayment(String(created.id));
   const paid = Boolean(first && PAID.has(`PAYMENT_${first.status}`));
   // assinatura nova começa do zero: nada do plano anterior (pagamento, cartão, lembrete) fica valendo
@@ -286,9 +329,15 @@ async function deleteAsaasSubscription(id: string) {
 export async function cancelSubscription(userId: string) {
   const sub = await getSubscription(userId);
   if (!hasPlan(sub)) throw new Error("Não há plano para cancelar.");
-  // já não existe do lado do Asaas: segue e marca como cancelada aqui
-  await deleteAsaasSubscription(sub.asaas_subscription_id!);
+  // marca aqui antes de apagar no Asaas: o webhook SUBSCRIPTION_DELETED chega em segundos e precisa saber que foi a própria pessoa
   await query("UPDATE subscriptions SET status = 'canceled', invoice_url = NULL, next_plan_id = NULL, updated_at = now() WHERE user_id = $1", [userId]);
+  try {
+    // já não existe do lado do Asaas: segue (deleteAsaasSubscription ignora 404)
+    await deleteAsaasSubscription(sub.asaas_subscription_id!);
+  } catch (err) {
+    await query("UPDATE subscriptions SET status = $2, invoice_url = $3, next_plan_id = $4, updated_at = now() WHERE user_id = $1", [userId, sub.status, sub.invoice_url ?? null, sub.next_plan_id ?? null]);
+    throw err;
+  }
   await syncInviterDiscount(userId).catch(() => {});
 }
 
@@ -362,14 +411,23 @@ async function createCharge(user: any, customerId: string, item: { kind: "pack" 
   if (open) return open;
   const row = await one("INSERT INTO grain_purchases (user_id, kind, item_id, grains, value) VALUES ($1, $2, $3, $4, $5) RETURNING *", [user.id, item.kind, item.itemId, item.grains, item.value]);
   const tomorrow = new Date(Date.now() + 86_400_000);
-  const payment = await asaas("POST", "/payments", {
-    customer: customerId,
-    billingType: "UNDEFINED",
-    value: item.value,
-    dueDate: isoDay(tomorrow),
-    description: item.description,
-    externalReference: `grains:${row.id}`,
-  });
+  let payment: any;
+  try {
+    payment = await withCustomer(user, customerId, (customer) =>
+      asaas("POST", "/payments", {
+        customer,
+        billingType: "UNDEFINED",
+        value: item.value,
+        dueDate: isoDay(tomorrow),
+        description: item.description,
+        externalReference: `grains:${row.id}`,
+      }),
+    );
+  } catch (err) {
+    // a compra não chegou ao Asaas: fecha a linha para não ficar pendente sem cobrança
+    await query("UPDATE grain_purchases SET status = 'canceled' WHERE id = $1", [row.id]);
+    throw err;
+  }
   return one("UPDATE grain_purchases SET asaas_payment_id = $2, invoice_url = $3 WHERE id = $1 RETURNING *", [row.id, String(payment.id), linkFor(payment)]);
 }
 
@@ -421,16 +479,18 @@ async function chargeSavedCard(user: any, item: { kind: "pack"; itemId: string; 
   const row = await one("INSERT INTO grain_purchases (user_id, kind, item_id, grains, value) VALUES ($1, $2, $3, $4, $5) RETURNING *", [user.id, item.kind, item.itemId, item.grains, item.value]);
   let payment: any;
   try {
-    payment = await asaas("POST", "/payments", {
-      customer: sub.asaas_customer_id,
-      billingType: "CREDIT_CARD",
-      value: item.value,
-      dueDate: isoDay(new Date()),
-      description: item.description,
-      externalReference: `grains:${row.id}`,
-      creditCardToken: token,
-      remoteIp: remoteIp || undefined,
-    });
+    payment = await withCustomer(user, sub.asaas_customer_id, (customer) =>
+      asaas("POST", "/payments", {
+        customer,
+        billingType: "CREDIT_CARD",
+        value: item.value,
+        dueDate: isoDay(new Date()),
+        description: item.description,
+        externalReference: `grains:${row.id}`,
+        creditCardToken: token,
+        remoteIp: remoteIp || undefined,
+      }),
+    );
   } catch (err) {
     await query("UPDATE grain_purchases SET status = 'canceled' WHERE id = $1", [row.id]);
     throw new Error(`O cartão ${card.brand ?? ""} final ${card.last4} não passou. Tente por Pix, boleto ou outro cartão.`.replace("  ", " "), { cause: err });
@@ -645,6 +705,14 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
     case "SUBSCRIPTION_DELETED":
     case "SUBSCRIPTION_INACTIVATED": {
       const wasCanceled = sub.status === "canceled";
+      // apagada junto com o cliente no Asaas (ninguém pediu para cancelar): restaura o cliente e o plano segue
+      if (!wasCanceled && sub.last_payment_at) {
+        const kept = await keepPlanAfterCustomerRemoved(sub).catch((err) => {
+          console.error("[assinatura] não deu para refazer o plano", err);
+          return false;
+        });
+        if (kept) return { handled: true, status: sub.status };
+      }
       const r = await set("canceled", { invoice_url: null, next_plan_id: null });
       // cancelou pelo painel: a tela já disse; aqui só avisa quando veio de fora (pelo Asaas)
       if (!wasCanceled) {
@@ -657,6 +725,45 @@ async function applyAsaasEvent(event: string, body: any, sub: SubscriptionRow): 
     default:
       return { handled: false };
   }
+}
+
+/**
+ * O Asaas apagou a assinatura porque o cliente foi removido lá. A pessoa não cancelou: restaura o cliente e cria a
+ * assinatura de novo com o mesmo plano e valor, vencendo na data que já ia vencer (nada é cobrado antes). No cartão
+ * guardado continua no cartão; sem cartão, Pix/boleto. Devolve false quando o cliente não estava removido (aí a
+ * assinatura foi mesmo cancelada no Asaas e o plano termina).
+ */
+async function keepPlanAfterCustomerRemoved(sub: SubscriptionRow) {
+  const customer = await asaas("GET", `/customers/${encodeURIComponent(sub.asaas_customer_id)}`).catch(() => null);
+  if (!customer?.deleted) return false;
+  const user = await one("SELECT * FROM users WHERE id = $1", [sub.user_id]);
+  if (!user || user.status !== "active") return false;
+  const s = await getSettings();
+  const plan = planById(s, sub.next_plan_id ?? sub.plan_id);
+  if (!plan) return false;
+  const customerId = await reviveCustomer(user, sub.asaas_customer_id);
+  const today = isoDay(new Date());
+  const due = [sub.next_due_date, sub.paid_until, today].filter(Boolean).sort().at(-1)!;
+  const token = sub.saved_card_token && sub.pay_method === "card" ? decryptJson<{ token: string }>(sub.saved_card_token).token : null;
+  const created = await asaas("POST", "/subscriptions", {
+    customer: customerId,
+    billingType: token ? "CREDIT_CARD" : "UNDEFINED",
+    value: Number(sub.value),
+    nextDueDate: due,
+    cycle: "MONTHLY",
+    description: `Planejai ${plan.name} (${grains(plan.grains)} por mês)`,
+    externalReference: sub.user_id,
+    ...(token ? { creditCardToken: token } : {}),
+  });
+  await query("UPDATE subscriptions SET asaas_subscription_id = $2, next_due_date = $3, invoice_url = NULL, updated_at = now() WHERE user_id = $1", [sub.user_id, String(created.id), due]);
+  await notify({
+    userId: null,
+    kind: "assinatura",
+    title: "Assinatura refeita no Asaas",
+    body: `${user.full_name ?? user.name ?? "+" + user.phone}: o cliente tinha sido removido no Asaas e a assinatura caiu junto. Restaurei e o plano ${plan.name} segue, próxima cobrança ${ddmm(due)}.`,
+    link: "/settings",
+  });
+  return true;
 }
 
 /**
