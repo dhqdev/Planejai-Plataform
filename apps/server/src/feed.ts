@@ -22,7 +22,10 @@ const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 const PAGE = 20;
 
 /** Fundos do status de texto (as cores moram no CSS do painel; aqui só os nomes aceitos). */
-export const STATUS_BGS = ["tinta", "roxo", "magenta", "ceu", "mata", "sol"] as const;
+export const STATUS_BGS = ["tinta", "roxo", "magenta", "ceu", "mata", "sol", "noite", "lilas", "areia", "rosa", "mar", "vinho"] as const;
+/** Fontes e alinhamento do status de texto (o desenho de cada fonte mora no CSS do painel). */
+export const STATUS_FONTS = ["classica", "forte", "serifa", "maquina", "leve"] as const;
+export const STATUS_ALIGNS = ["center", "left", "right"] as const;
 
 const RESERVED = new Set(["planejai", "planejai.oficial", "admin", "suporte", "ajuda", "oficial", "sistema", "moderacao", "feed", "status", "rede", "api", "eu", "me"]);
 
@@ -536,8 +539,8 @@ export async function listActivity(me: string) {
 
 /** Status no ar, agrupados por pessoa: os meus primeiro, depois quem tem coisa que ainda não vi (quem eu sigo antes). */
 export async function listStatus(me: string) {
-  const rows = await many<{ id: string; user_id: string; kind: "text" | "photo"; body: string; bg: string; created_at: string; expires_at: string; seen: boolean; views: number; followed: boolean }>(
-    `SELECT s.id, s.user_id, s.kind, s.body, s.bg, s.created_at, s.expires_at,
+  const rows = await many<{ id: string; user_id: string; kind: "text" | "photo"; body: string; bg: string; font: string; align: string; created_at: string; expires_at: string; seen: boolean; views: number; followed: boolean }>(
+    `SELECT s.id, s.user_id, s.kind, s.body, s.bg, s.font, s.align, s.created_at, s.expires_at,
             (s.user_id = $1 OR EXISTS (SELECT 1 FROM feed_status_views v WHERE v.status_id = s.id AND v.user_id = $1)) AS seen,
             (SELECT count(*)::int FROM feed_status_views v WHERE v.status_id = s.id AND v.user_id <> s.user_id) AS views,
             EXISTS (SELECT 1 FROM feed_follows f WHERE f.follower_id = $1 AND f.followed_id = s.user_id) AS followed
@@ -557,7 +560,7 @@ export async function listStatus(me: string) {
     const author = who.get(r.user_id);
     if (!author) continue;
     const g = groups.get(r.user_id) ?? { author, me: r.user_id === me, followed: r.followed, seen: true, last: r.created_at, items: [] };
-    g.items.push({ id: r.id, kind: r.kind, body: r.body, bg: r.bg, media: photo.get(r.id) ?? null, created_at: r.created_at, expires_at: r.expires_at, seen: r.seen, views: r.user_id === me ? r.views : undefined });
+    g.items.push({ id: r.id, kind: r.kind, body: r.body, bg: r.bg, font: r.font, align: r.align, media: photo.get(r.id) ?? null, created_at: r.created_at, expires_at: r.expires_at, seen: r.seen, views: r.user_id === me ? r.views : undefined });
     g.seen = g.seen && r.seen;
     g.last = r.created_at;
     groups.set(r.user_id, g);
@@ -566,13 +569,22 @@ export async function listStatus(me: string) {
   return [...groups.values()].sort((a, b) => rank(a) - rank(b) || (a.last < b.last ? 1 : -1)).slice(0, 60);
 }
 
-export async function createStatus(me: string, input: { body?: unknown; bg?: unknown; photo?: unknown }) {
+export async function createStatus(me: string, input: { body?: unknown; bg?: unknown; font?: unknown; align?: unknown; photo?: unknown }) {
   const body = clean(input.body, STATUS_MAX);
   const photos = readPhotos(input.photo ? [input.photo] : [], 1);
   if (!body && !photos.length) throw new FeedError("Escreva alguma coisa ou escolha uma foto.");
   const bg = STATUS_BGS.includes(input.bg as (typeof STATUS_BGS)[number]) ? String(input.bg) : "tinta";
   await limit(me, "status", 30, "Você já postou bastante status hoje. Tente de novo amanhã.");
-  const row = await one<{ id: string }>("INSERT INTO feed_status (user_id, kind, body, bg) VALUES ($1, $2, $3, $4) RETURNING id", [me, photos.length ? "photo" : "text", body, bg]);
+  const font = STATUS_FONTS.includes(input.font as (typeof STATUS_FONTS)[number]) ? String(input.font) : "classica";
+  const align = STATUS_ALIGNS.includes(input.align as (typeof STATUS_ALIGNS)[number]) ? String(input.align) : "center";
+  const row = await one<{ id: string }>("INSERT INTO feed_status (user_id, kind, body, bg, font, align) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id", [
+    me,
+    photos.length ? "photo" : "text",
+    body,
+    bg,
+    font,
+    align,
+  ]);
   try {
     await savePhotos({ status_id: row!.id }, photos);
   } catch (err) {

@@ -394,25 +394,105 @@ function LinkCard({ post }: { post: Post }) {
   );
 }
 
+/**
+ * Foto aberta em tela cheia: fundo preto de verdade (nada do feed aparece por trás), arrastar para os lados troca
+ * de foto, puxar para baixo fecha. Abre e fecha com um zoom curto.
+ */
 function Lightbox({ media, start, onClose }: { media: Photo[]; start: number; onClose: () => void }) {
   const [i, setI] = useState(start);
+  const box = useRef<HTMLDivElement>(null);
+  const strip = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x: number; y: number; dy: number; down: boolean } | null>(null);
+  const leaving = useRef(false);
+  const calm = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+  const close = useCallback(() => {
+    const b = box.current;
+    if (leaving.current) return;
+    leaving.current = true;
+    if (!b || calm()) return onClose();
+    const img = b.querySelectorAll<HTMLElement>(".rd-light-strip img")[i];
+    img?.animate([{ transform: img.style.transform || "none", opacity: 1 }, { transform: "scale(.88)", opacity: 0 }], { duration: 200, easing: "ease-in", fill: "forwards" });
+    b.animate([{ backgroundColor: getComputedStyle(b).backgroundColor }, { backgroundColor: "rgba(0, 0, 0, 0)" }], { duration: 220, easing: "ease-in", fill: "forwards" }).onfinish = onClose;
+  }, [i, onClose]);
+
+  useLayoutEffect(() => {
+    const el = strip.current;
+    if (el) el.scrollLeft = start * el.clientWidth;
+    const b = box.current;
+    if (!b || calm()) return;
+    b.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: "ease-out" });
+    b.querySelectorAll<HTMLElement>(".rd-light-strip img")[start]?.animate([{ transform: "scale(.9)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 300, easing: "cubic-bezier(.2, .9, .25, 1)" });
+  }, [start]);
+
   useEffect(() => {
+    const to = (n: number) => strip.current?.scrollTo({ left: n * strip.current.clientWidth, behavior: "smooth" });
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowRight") setI((v) => Math.min(media.length - 1, v + 1));
-      if (e.key === "ArrowLeft") setI((v) => Math.max(0, v - 1));
+      if (e.key === "Escape") close();
+      if (e.key === "ArrowRight") to(Math.min(media.length - 1, i + 1));
+      if (e.key === "ArrowLeft") to(Math.max(0, i - 1));
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [media.length, onClose]);
+    // a página de trás não rola enquanto a foto está aberta
+    const html = document.documentElement;
+    const was = html.style.overflow;
+    html.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      html.style.overflow = was;
+    };
+  }, [media.length, i, close]);
+
+  const go = (n: number) => strip.current?.scrollTo({ left: n * strip.current.clientWidth, behavior: "smooth" });
+  const img = () => box.current?.querySelectorAll<HTMLElement>(".rd-light-strip img")[i];
+  const onDown = (e: React.PointerEvent) => {
+    if (e.pointerType === "mouse") return;
+    drag.current = { x: e.clientX, y: e.clientY, dy: 0, down: false };
+  };
+  const onMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    if (!d.down && dy > 12 && dy > Math.abs(dx) * 1.4) d.down = true;
+    if (!d.down) return;
+    d.dy = Math.max(0, dy);
+    const el = img();
+    if (el) el.style.transform = `translateY(${d.dy}px) scale(${1 - Math.min(d.dy, 400) / 1400})`;
+    if (box.current) box.current.style.backgroundColor = `rgba(0, 0, 0, ${1 - Math.min(d.dy, 400) / 550})`;
+  };
+  const onUp = () => {
+    const d = drag.current;
+    drag.current = null;
+    if (!d?.down) return;
+    if (d.dy > 110) return close();
+    const el = img();
+    if (el) {
+      const from = el.style.transform;
+      el.style.transform = "";
+      el.animate([{ transform: from }, { transform: "none" }], { duration: 260, easing: "cubic-bezier(.2, .9, .25, 1)" });
+    }
+    if (box.current) box.current.style.backgroundColor = "";
+  };
+
   return createPortal(
-    <div className="rd-light" role="dialog" aria-modal="true" aria-label="Foto" onClick={onClose}>
-      <img src={mediaUrl(media[i]!.id)} alt="" onClick={(e) => e.stopPropagation()} />
-      <button type="button" className="rd-light-x" onClick={onClose} aria-label="Fechar"><Icon name="x" size={20} /></button>
+    <div className="rd-light" role="dialog" aria-modal="true" aria-label="Foto" ref={box} onClick={close} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+      <div
+        className="rd-light-strip"
+        ref={strip}
+        onScroll={(e) => setI(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))}
+      >
+        {media.map((m) => (
+          <div key={m.id} className="rd-light-slide">
+            <img src={mediaUrl(m.id)} alt="" draggable={false} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ))}
+      </div>
+      <button type="button" className="rd-light-x" onClick={(e) => { e.stopPropagation(); close(); }} aria-label="Fechar"><Icon name="x" size={20} /></button>
       {media.length > 1 && (
         <>
-          <button type="button" className="rd-light-nav prev" disabled={i === 0} onClick={(e) => { e.stopPropagation(); setI(i - 1); }} aria-label="Foto anterior"><Icon name="chevron-left" size={22} /></button>
-          <button type="button" className="rd-light-nav next" disabled={i === media.length - 1} onClick={(e) => { e.stopPropagation(); setI(i + 1); }} aria-label="Próxima foto"><Icon name="chevron-right" size={22} /></button>
+          <button type="button" className="rd-light-nav prev" disabled={i === 0} onClick={(e) => { e.stopPropagation(); go(i - 1); }} aria-label="Foto anterior"><Icon name="chevron-left" size={22} /></button>
+          <button type="button" className="rd-light-nav next" disabled={i === media.length - 1} onClick={(e) => { e.stopPropagation(); go(i + 1); }} aria-label="Próxima foto"><Icon name="chevron-right" size={22} /></button>
           <span className="rd-light-n">{i + 1} / {media.length}</span>
         </>
       )}

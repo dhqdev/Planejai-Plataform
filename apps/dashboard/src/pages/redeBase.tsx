@@ -71,6 +71,8 @@ export interface StatusItem {
   kind: "text" | "photo";
   body: string;
   bg: string;
+  font?: string;
+  align?: string;
   media: Photo | null;
   created_at: string;
   seen: boolean;
@@ -88,7 +90,21 @@ export const COMMENT_MAX = 300;
 export const STATUS_MAX = 220;
 export const BIO_MAX = 160;
 export const MAX_PHOTOS = 4;
-export const STATUS_BGS = ["tinta", "roxo", "magenta", "ceu", "mata", "sol"] as const;
+export const STATUS_BGS = ["roxo", "noite", "tinta", "lilas", "magenta", "rosa", "vinho", "sol", "areia", "mata", "mar", "ceu"] as const;
+/** Letras do status (o nome que aparece ao trocar) e alinhamentos. A ordem é a do botão "Aa". */
+export const STATUS_FONTS = [
+  ["classica", "Clássica"],
+  ["forte", "Forte"],
+  ["serifa", "Serifa"],
+  ["maquina", "Máquina"],
+  ["leve", "Leve"],
+] as const;
+export const STATUS_ALIGNS = ["center", "left", "right"] as const;
+/**
+ * Tamanho da letra do status de texto: frase curta grande, texto longo menor. Vai em largura do cartão (cqw), para a
+ * prévia do editor sair igual ao que os outros veem, em qualquer tela.
+ */
+export const statusFontSize = (len: number) => `${((len <= 40 ? 30 : len <= 90 ? 25 : len <= 150 ? 21 : 18) / 3.6).toFixed(2)}cqw`;
 
 export const mediaUrl = (id: string) => `/api/feed/media/${id}`;
 export const profilePath = (handle: string) => `/rede/u/${handle}`;

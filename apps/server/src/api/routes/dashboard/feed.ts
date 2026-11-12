@@ -242,7 +242,7 @@ export function feedRoutes(base: FastifyInstance) {
     return listStatus(uid);
   });
 
-  base.post<{ Body: { body?: string; bg?: string; photo?: unknown } }>("/api/feed/status", async (req, reply) => {
+  base.post<{ Body: { body?: string; bg?: string; font?: string; align?: string; photo?: unknown } }>("/api/feed/status", async (req, reply) => {
     const uid = await who(req, reply, { write: true });
     if (!uid) return;
     try {
