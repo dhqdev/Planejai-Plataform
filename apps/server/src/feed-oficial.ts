@@ -1,12 +1,14 @@
 import { config } from "./config.js";
 import { many, one, query } from "./db/pool.js";
 import { attachServerPhoto } from "./feed.js";
+import { postPauta } from "./feed-pauta.js";
 
 /**
  * Perfil oficial do Planejai na rede social (@planejai, com selo). Ele posta sozinho, sem IA e sem grão:
  * - uns posts de partida (SEED), uma vez só, espalhados nas últimas semanas para o feed não nascer vazio;
  * - cada post do blog publicado com capa vira um cartão de link;
- * - cada status do WhatsApp com cena do Bolinho vira post com a foto e, nas primeiras 24 h, status da rede também.
+ * - cada status do WhatsApp com cena do Bolinho vira post com a foto e, nas primeiras 24 h, status da rede também;
+ * - um post por dia da pauta (feed-pauta.ts): finanças, calendário, curiosidades e novidades do app.
  * `source` em feed_posts/feed_status impede repetir. Roda na limpeza de hora em hora, ao subir o worker
  * e logo depois de um status do WhatsApp sair (wa-status.ts).
  *
@@ -163,10 +165,11 @@ async function mirrorWhatsAppStatus(official: string) {
 }
 
 /** Cria o perfil oficial, os posts de partida e espelha blog e status do WhatsApp. Pode rodar quantas vezes quiser. */
-export async function syncOfficialFeed() {
+export async function syncOfficialFeed(now = new Date()) {
   const official = await ensureOfficial();
   const seeded = await seed(official);
   const blog = await mirrorBlog(official);
   const status = await mirrorWhatsAppStatus(official);
-  return { seeded, blog, status };
+  const pauta = await postPauta(official, now);
+  return { seeded, blog, status, pauta };
 }

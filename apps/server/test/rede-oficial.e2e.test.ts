@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /** Perfil oficial do Planejai na rede: posts de partida, espelho do blog e do status do WhatsApp, sem repetir. */
 const enabled = Boolean(process.env.TEST_DATABASE_URL);
+// 3h da manhã em São Paulo: a pauta do dia ainda não sai
+const NIGHT = new Date("2026-11-12T06:00:00Z");
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 describe.skipIf(!enabled)("perfil oficial na rede (e2e)", () => {
@@ -28,8 +30,8 @@ describe.skipIf(!enabled)("perfil oficial na rede (e2e)", () => {
   it("cria o @planejai com selo e os posts de partida uma vez só", async () => {
     const { syncOfficialFeed, SEED } = await import("../src/feed-oficial.js");
     expect(SEED.length).toBeGreaterThanOrEqual(20);
-    expect((await syncOfficialFeed()).seeded).toBe(SEED.length);
-    expect((await syncOfficialFeed()).seeded).toBe(0);
+    expect((await syncOfficialFeed(NIGHT)).seeded).toBe(SEED.length);
+    expect((await syncOfficialFeed(NIGHT)).seeded).toBe(0);
     // sem perfil a pessoa já vê o feed
     const feed = (await app.inject({ method: "GET", url: "/api/feed", headers: { cookie } })).json();
     expect(feed.posts).toHaveLength(20);
@@ -58,8 +60,8 @@ describe.skipIf(!enabled)("perfil oficial na rede (e2e)", () => {
       [Buffer.from(PNG, "base64")],
     );
     const { syncOfficialFeed } = await import("../src/feed-oficial.js");
-    expect(await syncOfficialFeed()).toEqual({ seeded: 0, blog: 1, status: 1 });
-    expect(await syncOfficialFeed()).toEqual({ seeded: 0, blog: 0, status: 0 });
+    expect(await syncOfficialFeed(NIGHT)).toEqual({ seeded: 0, blog: 1, status: 1, pauta: 0 });
+    expect(await syncOfficialFeed(NIGHT)).toEqual({ seeded: 0, blog: 0, status: 0, pauta: 0 });
     const feed = (await app.inject({ method: "GET", url: "/api/feed", headers: { cookie } })).json();
     const link = feed.posts.find((p: any) => p.link);
     expect(link.link).toMatchObject({ title: "Como organizar a semana", desc: "Em 10 minutos" });
@@ -71,5 +73,24 @@ describe.skipIf(!enabled)("perfil oficial na rede (e2e)", () => {
     const status = (await app.inject({ method: "GET", url: "/api/feed/status", headers: { cookie } })).json();
     expect(status[0].author.handle).toBe("planejai");
     expect(status[0].items[0].kind).toBe("photo");
+  });
+
+  it("pauta: um post por dia, os de época primeiro e sem repetir até rodar a lista", async () => {
+    const { syncOfficialFeed } = await import("../src/feed-oficial.js");
+    const { PAUTA, nextPauta } = await import("../src/feed-pauta.js");
+    expect(PAUTA.length).toBeGreaterThanOrEqual(40);
+    expect(new Set(PAUTA.map((p) => p.id)).size).toBe(PAUTA.length);
+    // novembro, meio-dia em São Paulo: sai um de novembro (13º ou Black Friday) e só um no dia
+    const noon = new Date("2026-11-12T15:00:00Z");
+    expect((await syncOfficialFeed(noon)).pauta).toBe(1);
+    expect((await syncOfficialFeed(new Date("2026-11-12T20:00:00Z"))).pauta).toBe(0);
+    const first = await db.one("SELECT source FROM feed_posts WHERE source LIKE 'pauta:%'");
+    expect(first.source).toMatch(/^pauta:cal-(13|black):2026-11-12$/);
+    expect((await syncOfficialFeed(new Date("2026-11-13T15:00:00Z"))).pauta).toBe(1);
+    const two = await db.many("SELECT source FROM feed_posts WHERE source LIKE 'pauta:%'");
+    expect(new Set(two.map((r: any) => r.source.split(":")[1])).size).toBe(2);
+    // fora da época não sai post de outro mês
+    const july = nextPauta([], 7, new Date("2026-07-10T15:00:00Z"));
+    expect(july!.months ?? [7]).toContain(7);
   });
 });
