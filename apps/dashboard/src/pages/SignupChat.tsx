@@ -3,6 +3,7 @@ import { api, phoneFmt } from "../api";
 import type { Me } from "../App";
 import { Modal } from "../components";
 import { Icon } from "../icons";
+import { useKeyboardShell } from "../teclado";
 import { isStandalone } from "../touch";
 import { MASCOTE } from "../mascote/nome";
 import { ChatView, askWelcome, telFmt, useChatScript, type Chat, type WelcomeAnswers, type WelcomeQuestion } from "./ChatCadastro";
@@ -76,6 +77,8 @@ function stepFor(error: string): Step | null {
 export function SignupChat({ initialCode, onLogin, onEnter }: { initialCode: string | null; onLogin: (me: Me) => void; onEnter: () => void }) {
   const [terms, setTerms] = useState<((ok: boolean) => void) | null>(null);
   const readTerms = () => new Promise<boolean>((resolve) => setTerms(() => resolve));
+  // caixa de escrever presa embaixo: com o teclado aberto, arrastar fora da conversa não empurra a tela
+  useKeyboardShell();
 
   const chat = useChatScript(async (c: Chat) => {
     const draft = readDraft();
