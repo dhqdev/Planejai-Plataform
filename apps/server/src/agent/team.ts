@@ -23,6 +23,7 @@ import * as shopping from "./tools/shopping.js";
 import * as social from "./tools/social.js";
 import { UBER_TOOLS } from "./tools/uber.js";
 import { notebookRead, notebookSave } from "./tools/notebook.js";
+import * as notes from "./tools/notes.js";
 import { many } from "../db/pool.js";
 import type { Tool } from "./tools/types.js";
 
@@ -295,6 +296,23 @@ export const SPECIALISTS: AgentDef[] = [
       "Sem número com WhatsApp, devolva o telefone para a pessoa ligar.",
     tools: [places.placesNearby, direct.contactsSearch, research.webSearch, research.fetchUrl, errands.errandStart, errands.errandList, errands.errandCancel, core.getDatetime],
   },
+  {
+    id: "anotacoes",
+    persona: "Zulmira",
+    face: { color: 5, eyes: "glasses", mouth: "smile", extra: "bow" },
+    name: "Anotações",
+    icon: "edit",
+    role:
+      "Anotações da pessoa no estilo Google Docs (aba Anotações do painel): escreve em tópicos, listas, passo a passo, atas, roteiros, ideias e listas de tarefas; " +
+      "acrescenta numa anotação que já existe, reorganiza, renomeia, lê de volta e apaga.",
+    instructions:
+      "Cada anotação é um documento que a pessoa também edita no painel. Antes de criar, veja se já existe uma do mesmo assunto (note_list) e acrescente nela; " +
+      "crie uma nova só para assunto novo, com título curto e claro ('Lista de mercado', 'Ideias da festa'). " +
+      "Organize bem: tópicos curtos com '-', subtópicos com 2 espaços, seções com '##', passos com '1.', tarefas com '[ ]'; o que ela ditou fica com as palavras dela, só arrumado e sem inventar nada. " +
+      "Pedido para pôr numa seção ('no tópico Mercado'): mode append com under. Reorganizar ou reescrever tudo: note_read, depois mode replace com o texto completo (a versão anterior fica guardada no painel). " +
+      "Devolva ao CTO em uma ou duas linhas o que escreveu, o título e o link.",
+    tools: [...notes.NOTE_TOOLS, core.getDatetime],
+  },
 ];
 
 /**
@@ -393,6 +411,12 @@ export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
   },
   { id: "categorias", when: /(?<!\p{L})categori/iu, tools: [categoriesTool] },
   { id: "recados", when: /(?<!\p{L})(recado|estabelecimento|conversa)/iu, tools: [errands.errandList, errands.errandCancel] },
+  // "anota em tópicos", "cria uma anotação", "põe na minha lista de ideias": o simples o CTO escreve; organizar muito é com a Zulmira
+  {
+    id: "anotacoes",
+    when: /(?<!\p{L})(anota[çc][aãõo]|t[oó]picos?|bloco de notas|minhas notas|lista de (tarefa|ideia|mercado|compra|coisa|filme|livro|presente|convidad|afazere)|checklist|ata\b|roteiro|passo a passo|anot\w* (isso|a[ií]|em|pra mim|essa?s? ideia|tudo))/iu,
+    tools: [notes.noteWrite, notes.noteList],
+  },
   { id: "documentos", when: /(?<!\p{L})(apag|exclu|delet|remov)\w*.{0,40}\b(document|arquivo|pdf|contrato)/iu, tools: [documents.documentDelete] },
 ];
 

@@ -88,6 +88,15 @@ export const ROUTE_DEFAULTS: RouteDefault[] = [
     maxTokens: 800,
   },
   {
+    task: "agent:anotacoes",
+    label: "Anotações",
+    why: "Escreve e organiza as anotações da pessoa em tópicos: texto bem arrumado sem inventar, poucas chamadas. Precisa de saída maior que os outros por causa do documento.",
+    model: "deepseek/deepseek-v4.1-flash",
+    fallbacks: ["xiaomi/mimo-v2.6-flash"],
+    temperature: 0.3,
+    maxTokens: 3000,
+  },
+  {
     task: "agent:compras",
     label: "Compras",
     why: "Busca nas lojas, compara e monta a lista com links: poucas chamadas e texto curto. O preço vem pronto da ferramenta, então um modelo barato serve.",

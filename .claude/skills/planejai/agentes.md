@@ -12,6 +12,7 @@ Leia antes de mexer no orquestrador, no time (CTO, especialistas, agentes sob me
 | `comunicacao` | Telma | mensagens no WhatsApp (contatos e qualquer número), convites, contatos, e-mail e Slack |
 | `produtividade` | Nivaldo | Notion, Linear, GitHub, n8n do dono |
 | `recados` | Zezinho | fala com estabelecimentos pela pessoa |
+| `anotacoes` | Zulmira | escreve e organiza as Anotações (documentos estilo Google Docs) em tópicos |
 | `compras` | Nina | fora do time desde 2026-10-15 (`COMPRAS_AGENT`, ver `compras.md`); menor preço é do Pesquisador e aviso de preço é acompanhamento |
 | `c_<slug>` | da pessoa | agentes sob medida de cada cliente (rota `agent:cliente`) |
 
@@ -127,3 +128,8 @@ Cada item tem teste; rode `npm test` depois de mexer em `orchestrator.ts`, `runn
 ## Modelos
 Qual modelo cada agente usa, como trocar e como medir: `modelos.md`.
 - Emoji de calendário: 📅 e 📆 aparecem no WhatsApp com um dia fixo ("17") e confundiam; `plainCalendar` (`agent/humanize.ts`) troca os dois por 🗓️ em toda resposta (`humanize`) e no `sendText` do Baileys, e o prompt do CTO pede 🗓️ (David, 2026-10-16).
+
+## Anotações (Zulmira)
+- Ferramentas em `agent/tools/notes.ts` (`note_write`, `note_list`, `note_read`, `note_rename`, `note_delete` com "sim"). O agente escreve em texto com marcação leve (`# título`, `- tópico`, 2 espaços = subtópico, `1.`, `[ ]`/`[x]`, `>`, `*negrito*`) e `notes.ts` monta o HTML; `noteHtmlToText` devolve no mesmo formato para ler.
+- `note_write` acha a anotação pelo id ou pelo título (sem acento), acrescenta no fim ou dentro da seção `under`, `replace` reescreve; antes de o Planejai mexer, a versão anterior vai para `note_versions` (20 por anotação).
+- O CTO tem `note_write`/`note_list` pelo grupo `anotacoes` (`CTO_TOOL_GROUPS`); organizar muito, ler ou apagar é `ask_anotacoes`.
