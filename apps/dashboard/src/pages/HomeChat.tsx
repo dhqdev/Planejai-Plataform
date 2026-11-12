@@ -105,6 +105,10 @@ const ASKS: Record<string, Chip[]> = {
     { label: "Lista de tarefas", text: "Cria uma lista de tarefas para hoje com ", },
     { label: "Anotar uma ideia", text: "Anota essa ideia: " },
   ],
+  anotacoes: [
+    { label: "Anotar em tópicos", text: "Anota em tópicos: " },
+    { label: "Minhas anotações", text: "Quais anotações eu tenho?", send: true },
+  ],
   recados: [
     { label: "Marcar um horário", text: "Marca um horário pra mim no " },
     { label: "Mandar um recado", text: "Manda uma mensagem pra " },

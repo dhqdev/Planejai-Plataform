@@ -33,6 +33,7 @@ const load = {
   dashboard: () => import("./pages/Dashboard"),
   rede: () => import("./pages/Rede"),
   documents: () => import("./pages/Documents"),
+  notes: () => import("./pages/Notes"),
   errands: () => import("./pages/Errands"),
   esteira: () => import("./pages/Esteira"),
   skills: () => import("./pages/Skills"),
@@ -125,6 +126,7 @@ const CustomTabPage = page(() => load.dashboard().then((m) => m.CustomTabPage));
 const NotificationsPage = page(() => load.notifications().then((m) => m.NotificationsPage));
 const AlarmPage = page(() => load.alarm().then((m) => m.AlarmPage));
 const DocumentsPage = page(() => load.documents().then((m) => m.DocumentsPage));
+const NotesPage = page(() => load.notes().then((m) => m.NotesPage));
 const ErrandsPage = page(() => load.errands().then((m) => m.ErrandsPage));
 const EsteiraPage = page(() => load.esteira().then((m) => m.EsteiraPage));
 const EsteiraCustosPage = page(() => load.esteira().then((m) => m.EsteiraCustosPage));
@@ -158,6 +160,7 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/contatos": load.contacts,
   "/convites": load.convites,
   "/documentos": load.documents,
+  "/anotacoes": load.notes,
   "/settings": load.settings,
   "/profile": load.profile,
   "/conta": load.conta,
@@ -169,6 +172,7 @@ const ROUTE_CHUNK: Record<string, () => Promise<unknown>> = {
   "/esteira-skills": load.skills,
   "/blog-posts": load.blogAdmin,
 };
+const isPhoneNow = () => matchMedia("(max-width: 767px)").matches;
 function preload(to: string) {
   ROUTE_CHUNK[to]?.().catch(() => {});
 }
@@ -228,6 +232,7 @@ const MY_DAY: NavItem[] = [
   { to: "/recados", label: "Recados", icon: "send" },
   { to: "/contatos", label: "Contatos", icon: "users" },
   { to: "/documentos", label: "Documentos", icon: "file" },
+  { to: "/anotacoes", label: "Anotações", icon: "edit" },
   { to: "/especialistas", label: "Especialistas", icon: "sparkle" },
 ];
 
@@ -578,7 +583,8 @@ export function App() {
         <PullToRefresh target={mainRef} />
         <Suspense fallback={<Loading />}>
         {isSuper && <SubTabs path={loc.pathname} />}
-        <div className={`route-fade route-${motion}`} key={loc.pathname}>
+        {/* Anotações: trocar de documento não remonta a lista (só o editor troca) */}
+        <div className={`route-fade route-${motion}`} key={loc.pathname.startsWith("/anotacoes/") && !isPhoneNow() ? "/anotacoes" : loc.pathname}>
         {back === "conta" && loc.pathname !== "/plano" && (
           <button type="button" className="page-back" onClick={goBack}><Icon name="chevron-left" size={18} />Conta</button>
         )}
@@ -617,6 +623,8 @@ export function App() {
           <Route path="/notificacoes" element={<NotificationsPage />} />
           <Route path="/alarme" element={<AlarmPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
+          <Route path="/anotacoes" element={<NotesPage />} />
+          <Route path="/anotacoes/:id" element={<NotesPage />} />
           <Route path="/" element={<FeedPage me={me} />} />
           <Route path="/rede/p/:id" element={<RedePostPage me={me} />} />
           <Route path="/rede/u/:handle" element={<RedeProfilePage me={me} />} />

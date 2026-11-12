@@ -19,6 +19,7 @@ export const ROLE_MOODS: Record<string, Mood[]> = {
   comunicacao: ["idle", "wink", "working"],
   produtividade: ["working", "finished", "idle"],
   recados: ["curious", "idle", "happy"],
+  anotacoes: ["working", "thinking", "happy"],
 };
 export const CLIENT_MOODS: Mood[] = ["idle", "happy", "curious"];
 /** Especialistas da loja (roupa skin:<slug>): o jeito de olhar combina com o assunto. */
@@ -43,6 +44,7 @@ export const ROLE_DOING: Record<string, string[]> = {
   comunicacao: ["achando o importante", "resumindo e-mails", "rascunhando resposta"],
   produtividade: ["riscando a lista", "rodando suas rotinas", "organizando tarefas"],
   recados: ["levando seu recado", "esperando resposta", "marcando o horário"],
+  anotacoes: ["escrevendo em tópicos", "arrumando a lista", "passando a limpo"],
 };
 export const CLIENT_DOING = ["estudando o assunto", "vendo o que você gosta"];
 Object.assign(ROLE_DOING, {
@@ -133,6 +135,19 @@ export function PropArt({ agent }: { agent: string }) {
           {[14.5, 20, 25.5].map((x, i) => (
             <circle key={x} className={`ap-dot d${i}`} cx={x} cy={17} r={1.9} fill={i === 1 ? "var(--ap-accent)" : INK} />
           ))}
+        </g>
+      );
+    case "anotacoes":
+      return (
+        <g>
+          <rect x={9} y={6} width={22} height={28} rx={2.5} fill="#fff" stroke={INK} strokeWidth={2.2} />
+          <path d="M13 12 H22" stroke={INK} strokeWidth={2} strokeLinecap="round" />
+          {[18, 23, 28].map((y, i) => (
+            <path key={y} className={`ap-check c${i}`} d={`M14 ${y} H${i === 2 ? 22 : 27}`} stroke={i === 0 ? "var(--ap-accent)" : INK} strokeWidth={1.8} strokeLinecap="round" opacity={i ? 0.45 : 1} pathLength={1} />
+          ))}
+          <circle cx={11.6} cy={18} r={0.9} fill={INK} />
+          <circle cx={11.6} cy={23} r={0.9} fill={INK} />
+          <circle cx={11.6} cy={28} r={0.9} fill={INK} />
         </g>
       );
     case "skin:treino":

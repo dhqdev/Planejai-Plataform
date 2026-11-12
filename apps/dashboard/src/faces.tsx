@@ -104,4 +104,5 @@ export const CORE_FACES: Record<string, { persona: string; face: Face }> = {
   comunicacao: { persona: "Telma", face: { color: 1, eyes: "wink", mouth: "cat", extra: "headset" } },
   produtividade: { persona: "Nivaldo", face: { color: 0, eyes: "wide", mouth: "smile", extra: "leaf" } },
   recados: { persona: "Zezinho", face: { color: 3, eyes: "dot", mouth: "open", extra: "none" } },
+  anotacoes: { persona: "Zulmira", face: { color: 5, eyes: "glasses", mouth: "smile", extra: "bow" } },
 };

@@ -80,3 +80,8 @@
 - Toque: alvo menor que 44px ganha área invisível em `leis-ux.css` (`pointer: coarse`); peça nova pequena entra lá.
 - Celular: `PageHead` com o mesmo título da barra de cima (`BarTitle`, dado pelo `App.tsx`) esconde o h1 repetido. Nome da tela = nome do menu (ex.: "De olho").
 - Lembrete no Início sem "(criado pelo painel)" e sem segundos ("ter., 27/10 às 14:00").
+
+## Anotações (estilo Google Docs, David 2026-11-12)
+- `/anotacoes` e `/anotacoes/:id` (`pages/Notes.tsx`, `styles/anotacoes.css`), no Meu dia de todos, particular de cada um. Rotas em `api/routes/dashboard/notes.ts`, banco `notes` + `note_versions` (migração 096, com `pj_live`).
+- Editor `contentEditable` + `execCommand`: estilos (texto, título, subtítulo, título 3, destaque), negrito/itálico/sublinhado/riscado, link, tópicos, numerada, lista de tarefas (`ul[data-check]`, toque na caixinha marca `data-done`), recuo, linha, limpar; atalhos "- ", "1. ", "# ", "[] ". Salva sozinho em 0,9 s. Tela larga mostra os "Tópicos do documento" (títulos) à esquerda da folha. PDF = imprimir só a folha.
+- Todo HTML passa por `cleanNoteHtml` (lista fechada de tags/atributos) antes de gravar. Conflito: o PATCH manda `since`; se o Planejai escreveu depois, 409 e a pessoa escolhe; "Manter a minha" guarda o texto dele nas Versões. Anotação nova deixada vazia é apagada ao sair.

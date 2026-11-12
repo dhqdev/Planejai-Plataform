@@ -732,6 +732,7 @@ export const AGENT_LABEL: Record<string, string> = {
   comunicacao: "Comunicação",
   produtividade: "Produtividade",
   recados: "Recados",
+  anotacoes: "Anotações",
 };
 
 export const AGENT_ICON: Record<string, string> = {
@@ -742,6 +743,7 @@ export const AGENT_ICON: Record<string, string> = {
   comunicacao: "mail",
   produtividade: "folder",
   recados: "send",
+  anotacoes: "edit",
 };
 
 /** Nome do agente com ícone (agentes de cliente vêm como c_<slug>). */
