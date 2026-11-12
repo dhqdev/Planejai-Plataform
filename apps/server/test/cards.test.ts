@@ -215,8 +215,9 @@ describe.skipIf(!enabled)("cartões (e2e)", () => {
 
   it("apagar a compra parcelada inteira pega as parcelas futuras (com o sim)", async () => {
     const { deleteTransaction, listTransactions } = await import("../src/agent/tools/finance.js");
-    // período fixo no mês da compra: o padrão (últimos 30 dias) deixava a 1ª parcela de fora conforme o calendário andava
-    const l: any = await listTransactions.run({ search: "Cadeira", from: "2026-10-01", to: "2026-10-31" }, ctx);
+    // só o mês da compra (dia 1 do mês corrente, teste anterior): o padrão de 30 dias podia pegar outra parcela
+    const ym = new Date().toISOString().slice(0, 8);
+    const l: any = await listTransactions.run({ search: "Cadeira", from: `${ym}01`, to: `${ym}28` }, ctx);
     expect(l.items[0].parcela).toBe("1/3");
     expect(l.note).toContain("all_installments");
     const r: any = await deleteTransaction.run({ ids: [l.items[0].id], all_installments: true }, { ...ctx, approvedAction: true });
