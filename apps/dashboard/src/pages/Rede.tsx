@@ -35,7 +35,7 @@ import {
   type Post,
   type Profile,
 } from "./redeBase";
-import { StatusRow } from "./RedeStatus";
+import { StatusComposer, StatusRow } from "./RedeStatus";
 
 /**
  * Rede social do Planejai: o Feed é o que abre no Início (celular e notebook). Mistura do Instagram com o Twitter:
@@ -713,7 +713,7 @@ const PostSkeleton = () => (
 
 // ---------- Escrever ----------
 
-function Composer({ onPosted, autoFocus, inline }: { onPosted: (p: Post) => void; autoFocus?: boolean; inline?: boolean }) {
+function Composer({ onPosted, autoFocus, inline, initial }: { onPosted: (p: Post) => void; autoFocus?: boolean; inline?: boolean; initial?: File[] }) {
   // só aparece para quem já tem perfil
   const profile = useRede().profile!;
   const [body, setBody] = useState("");
@@ -730,7 +730,7 @@ function Composer({ onPosted, autoFocus, inline }: { onPosted: (p: Post) => void
     el.style.height = `${Math.min(320, el.scrollHeight)}px`;
   }, [body]);
 
-  const add = async (files: FileList | null) => {
+  const add = async (files: FileList | File[] | null) => {
     setError(null);
     const room = MAX_PHOTOS - photos.length;
     const picked: PickedPhoto[] = [];
@@ -741,6 +741,13 @@ function Composer({ onPosted, autoFocus, inline }: { onPosted: (p: Post) => void
     }
     if (picked.length) setPhotos((p) => [...p, ...picked].slice(0, MAX_PHOTOS));
   };
+  // veio do "+ > Foto": as fotos já escolhidas entram assim que a folha abre
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || !initial?.length) return;
+    seeded.current = true;
+    void add(initial);
+  });
   const can = (body.trim().length > 0 || photos.length > 0) && !busy;
   const send = async () => {
     if (!can) return;
@@ -809,11 +816,93 @@ const readTab = (): Tab => {
   }
 };
 
+/**
+ * Bolinha de + na barra do Feed: abre um menu curto para postar (publicação, foto ou status). A foto abre a galeria
+ * direto no toque (o iPhone só deixa abrir a galeria dentro do toque) e já chega na folha de publicar.
+ */
+function PlusMenu({ onPost, onPhotos, onStatus }: { onPost: () => void; onPhotos: (f: File[]) => void; onStatus: () => void }) {
+  const { join } = useRede();
+  const [open, setOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const file = useRef<HTMLInputElement>(null);
+  const close = useCallback(() => {
+    setLeaving(true);
+    window.setTimeout(() => { setOpen(false); setLeaving(false); }, 140);
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    const out = (e: PointerEvent) => !box.current?.contains(e.target as Node) && close();
+    const key = (e: KeyboardEvent) => e.key === "Escape" && close();
+    document.addEventListener("pointerdown", out);
+    window.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", out);
+      window.removeEventListener("keydown", key);
+    };
+  }, [open, close]);
+  const pick = (go: () => void) => () => {
+    haptic(6);
+    close();
+    go();
+  };
+  return (
+    <div className="rd-plus-wrap" ref={box}>
+      <button
+        type="button"
+        className={`rd-plus${open && !leaving ? " on" : ""}`}
+        aria-label="Postar"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => {
+          haptic(6);
+          if (open) return close();
+          if (join()) setOpen(true);
+        }}
+      >
+        <Icon name="plus" size={18} />
+      </button>
+      {open && (
+        <div className={`rd-plus-menu${leaving ? " out" : ""}`} role="menu">
+          <button type="button" role="menuitem" onClick={pick(onPost)}>
+            <Icon name="edit" size={18} />
+            <span><strong>Publicação</strong><small>Um texto para o feed</small></span>
+          </button>
+          <button type="button" role="menuitem" onClick={() => { haptic(6); file.current?.click(); }}>
+            <Icon name="image" size={18} />
+            <span><strong>Foto</strong><small>Até {MAX_PHOTOS} da sua galeria</small></span>
+          </button>
+          <button type="button" role="menuitem" onClick={pick(onStatus)}>
+            <span className="rd-plus-ring" aria-hidden />
+            <span><strong>Status</strong><small>Some em 24 horas</small></span>
+          </button>
+        </div>
+      )}
+      <input
+        ref={file}
+        type="file"
+        accept="image/*"
+        multiple
+        className="rd-file"
+        tabIndex={-1}
+        aria-hidden
+        onChange={(e) => {
+          const f = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          close();
+          if (f.length) onPhotos(f);
+        }}
+      />
+    </div>
+  );
+}
+
 function FeedHome() {
   const { unread, profile, join } = useRede();
   const phone = useMedia(PHONE);
   const [tab, setTabState] = useState<Tab>(readTab);
-  const [writing, setWriting] = useState(false);
+  const [writing, setWriting] = useState<false | File[]>(false);
+  const [statusing, setStatusing] = useState(false);
   const list = usePosts(`/api/feed?tab=${tab}`);
   const setTab = (t: Tab) => {
     haptic(5);
@@ -834,6 +923,7 @@ function FeedHome() {
         </div>
         <span className="spacer" />
         <div className="rd-bar-icons">
+          <PlusMenu onPost={() => setWriting([])} onPhotos={(f) => setWriting(f)} onStatus={() => setStatusing(true)} />
           <Link to="/rede/buscar" className="rd-ico" aria-label="Buscar pessoas"><Icon name="search" size={22} /></Link>
           {profile && (
             <Link to="/rede/atividade" className="rd-ico rd-bell" aria-label={unread ? `Atividade, ${unread} novas` : "Atividade"}>
@@ -846,7 +936,7 @@ function FeedHome() {
       {!profile && phone && <JoinCard inline onJoin={join} />}
       {profile && phone && (
         // no celular, escrever fica no topo do feed (sem botão flutuante tampando os posts)
-        <button type="button" className="rd-prompt" onClick={() => { haptic(6); setWriting(true); }}>
+        <button type="button" className="rd-prompt" onClick={() => { haptic(6); setWriting([]); }}>
           <Avatar who={profile} size={36} me link={false} />
           <span className="rd-prompt-txt">No que você está pensando?</span>
           <Icon name="image" size={20} />
@@ -859,14 +949,20 @@ function FeedHome() {
           tab === "following" ? (
             <Blank title="Ninguém por aqui ainda" text="Siga algumas pessoas e os posts delas aparecem nesta aba." action={<Link className="btn" to="/rede/buscar"><Icon name="search" size={16} /> Encontrar pessoas</Link>} />
           ) : (
-            <Blank title="O feed está começando" text="Seja a primeira pessoa a publicar. Vale uma ideia, uma foto ou um status." action={<button type="button" className="btn btn-brand" onClick={() => join() && setWriting(true)}><Icon name="edit" size={16} /> Escrever</button>} />
+            <Blank title="O feed está começando" text="Seja a primeira pessoa a publicar. Vale uma ideia, uma foto ou um status." action={<button type="button" className="btn btn-brand" onClick={() => join() && setWriting([])}><Icon name="edit" size={16} /> Escrever</button>} />
           )
         }
       />
       {writing && (
         <Modal title="Nova publicação" onClose={() => setWriting(false)} className="rd-compose-modal">
-          {(close) => <Composer autoFocus onPosted={(p) => { list.add(p); close(); }} />}
+          {(close) => <Composer autoFocus={!writing.length} initial={writing} onPosted={(p) => { list.add(p); close(); }} />}
         </Modal>
+      )}
+      {statusing && (
+        <StatusComposer
+          onClose={() => setStatusing(false)}
+          onDone={() => { setStatusing(false); window.dispatchEvent(new Event("pj-status-changed")); }}
+        />
       )}
     </>
   );

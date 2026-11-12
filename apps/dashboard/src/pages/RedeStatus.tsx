@@ -29,6 +29,13 @@ export function StatusRow() {
   const rings = useRef(new Map<string, HTMLElement>());
   const groups = list.data ?? [];
   const mine = groups.findIndex((g) => g.me);
+  // status criado pelo "+" do Feed: a fileira se atualiza
+  const reload = list.reload;
+  useEffect(() => {
+    const on = () => void reload();
+    window.addEventListener("pj-status-changed", on);
+    return () => window.removeEventListener("pj-status-changed", on);
+  }, [reload]);
   const show = (i: number, el: HTMLElement) => {
     haptic(6);
     setOpen({ i, from: el.getBoundingClientRect() });
