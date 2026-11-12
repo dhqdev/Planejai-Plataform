@@ -12,6 +12,8 @@ export interface Author {
   handle: string;
   name: string;
   outfit: Outfit | null;
+  /** perfil oficial do Planejai: selo e o logo no lugar do Bolinho vestido */
+  official?: boolean;
 }
 export interface Person extends Author {
   bio: string;
@@ -34,9 +36,20 @@ export interface Photo {
   w: number;
   h: number;
 }
+export interface PostLink {
+  url: string;
+  title: string;
+  desc: string;
+}
 export interface Post {
   id: string;
   body: string;
+  /** post em cartão: frase grande sobre uma cor (nome da cor) */
+  card?: string | null;
+  /** cartão de link (post do blog); a capa é a primeira foto */
+  link?: PostLink | null;
+  /** @ de alguém que curtiu (o mais recente), para "Curtido por" */
+  liker?: string | null;
   created_at: string;
   author: Author;
   media: Photo[];
@@ -80,8 +93,18 @@ export const STATUS_BGS = ["tinta", "roxo", "magenta", "ceu", "mata", "sol"] as 
 export const mediaUrl = (id: string) => `/api/feed/media/${id}`;
 export const profilePath = (handle: string) => `/rede/u/${handle}`;
 
-/** Quem está usando a rede (perfil já criado) e se pode moderar. */
-export const RedeMe = createContext<{ profile: Profile; isSuper: boolean; unread: number; reload: () => void } | null>(null);
+/**
+ * Quem está usando a rede e se pode moderar. Sem perfil (`profile` null) a pessoa só olha; `join()` abre a folha de
+ * criar o perfil (ou avisa quando não dá) e devolve false, para a ação que pediu parar ali.
+ */
+export interface RedeCtx {
+  profile: Profile | null;
+  isSuper: boolean;
+  unread: number;
+  reload: () => void;
+  join: () => boolean;
+}
+export const RedeMe = createContext<RedeCtx | null>(null);
 export const useRede = () => useContext(RedeMe)!;
 
 const DAY_MONTH = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "short" });
@@ -99,8 +122,30 @@ export function shortTime(iso: string) {
 
 export const count = (n: number) => (n >= 10000 ? `${Math.round(n / 1000)} mil` : n >= 1000 ? `${(n / 1000).toFixed(1).replace(".", ",").replace(",0", "")} mil` : String(n));
 
+/** Selo de perfil verificado (só o oficial do Planejai). */
+export const Verified = ({ size = 15 }: { size?: number }) => (
+  <svg className="rd-verified" width={size} height={size} viewBox="0 0 24 24" role="img" aria-label="Perfil oficial">
+    <path fill="currentColor" d="M12 1.6l2.5 1.9 3.1-.2 1 3 2.6 1.8-1 3 1 2.9-2.6 1.8-1 3-3.1-.2L12 22.4l-2.5-1.9-3.1.2-1-3-2.6-1.8 1-2.9-1-3 2.6-1.8 1-3 3.1.2z" />
+    <path fill="none" stroke="var(--on-brand, #fff)" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" d="M8 12.2l2.7 2.7L16.2 9.4" />
+  </svg>
+);
+
+/** Nome com o selo, quando é o perfil oficial. */
+export const NameOf = ({ who }: { who: Pick<Author, "name" | "official"> }) => (
+  <>
+    {who.name}
+    {who.official && <Verified />}
+  </>
+);
+
 export function Avatar({ who, size = 40, me = false, link = true }: { who: Author; size?: number; me?: boolean; link?: boolean }) {
-  const face = <UserMascote name={who.name} outfit={who.outfit} seed={who.id} size={size} me={me} />;
+  const face = who.official ? (
+    <span className="rd-official" style={{ width: size, height: size }} aria-hidden>
+      <img src="/logo.svg" alt="" width={Math.round(size * 0.62)} height={Math.round(size * 0.62)} />
+    </span>
+  ) : (
+    <UserMascote name={who.name} outfit={who.outfit} seed={who.id} size={size} me={me} />
+  );
   if (!link) return face;
   return (
     <Link to={profilePath(who.handle)} className="rd-avatar" aria-label={`Perfil de ${who.name}`} onClick={(e) => e.stopPropagation()}>
@@ -191,10 +236,11 @@ export async function pickPhoto(file: File): Promise<PickedPhoto> {
 export function FollowButton({ handle, following, onChange, small }: { handle: string; following: boolean; onChange?: (on: boolean) => void; small?: boolean }) {
   const [on, setOn] = useState(following);
   const [busy, setBusy] = useState(false);
+  const rede = useContext(RedeMe);
   const toggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    if (busy) return;
+    if (busy || (rede && !rede.join())) return;
     const next = !on;
     haptic(8);
     setOn(next);
@@ -220,7 +266,7 @@ export function PersonRow({ p, extra, onNavigate }: { p: Person; extra?: ReactNo
     <div className="rd-person">
       <Avatar who={p} size={44} />
       <Link to={profilePath(p.handle)} className="rd-person-txt" onClick={onNavigate}>
-        <strong>{p.name}</strong>
+        <strong><NameOf who={p} /></strong>
         <span>@{p.handle}</span>
         {p.bio && <em>{p.bio}</em>}
       </Link>

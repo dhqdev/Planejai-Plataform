@@ -17,6 +17,7 @@ import {
   FollowButton,
   MAX_PHOTOS,
   mediaUrl,
+  NameOf,
   PeopleList,
   PersonRow,
   pickPhoto,
@@ -26,6 +27,7 @@ import {
   RichText,
   shortTime,
   useRede,
+  Verified,
   type Comment,
   type Person,
   type PickedPhoto,
@@ -37,8 +39,10 @@ import { StatusRow } from "./RedeStatus";
 
 /**
  * Rede social do Planejai: o Feed é o que abre no Início (celular e notebook). Mistura do Instagram com o Twitter:
- * status de 24h em cima, posts curtos com até 4 fotos, curtir, comentar, seguir, perfil, busca e atividade.
- * A pessoa só entra (e só aparece para os outros) depois de criar o perfil; o avatar é o Bolinho dela.
+ * status de 24h em cima, posts curtos com até 4 fotos, posts em cartão (frase sobre cor) e cartões de link do blog,
+ * curtir (até com dois toques na foto), comentar, seguir, perfil em grade, busca e atividade.
+ * Olhar é livre; para publicar, curtir, comentar e seguir a pessoa cria o perfil (o avatar é o Bolinho dela).
+ * O perfil oficial @planejai posta sozinho (status do WhatsApp, blog e posts de partida, feed-oficial.ts no servidor).
  * Telas: "/" (feed), /rede/p/:id (post), /rede/u/:handle (perfil), /rede/atividade, /rede/buscar.
  */
 
@@ -46,21 +50,31 @@ const PHONE = "(max-width: 767px)";
 const quiet = { "x-pj-quiet": "1" };
 interface MeData {
   profile: Profile | null;
+  canJoin?: boolean;
   suggestion?: { handle: string; name: string };
   unread?: number;
 }
 
-/** Moldura das telas da rede: confere o perfil, monta a coluna do meio e, no notebook, a coluna da direita. */
+/** Moldura das telas da rede: monta a coluna do meio e, no notebook, a coluna da direita. Sem perfil, só olha. */
 function Shell({ me, title, back, children }: { me: Me; title?: string; back?: boolean; children: ReactNode }) {
   const mine = useApi<MeData>("/api/feed/me", { poll: 60_000 });
   const nav = useNavigate();
   const phone = useMedia(PHONE);
+  const [joining, setJoining] = useState(false);
+  const profile = mine.data?.profile ?? null;
+  const canJoin = Boolean(mine.data?.canJoin);
+  const join = useCallback(() => {
+    if (profile) return true;
+    haptic(6);
+    if (canJoin) setJoining(true);
+    else void alertDialog("Rede só para olhar", me.impersonating ? "Na conta de outra pessoa a rede é só para olhar." : "Ligue o seu WhatsApp ao Planejai para publicar e participar.");
+    return false;
+  }, [profile, canJoin, me.impersonating]);
   const ctx = useMemo(
-    () => (mine.data?.profile ? { profile: mine.data.profile, isSuper: me.role === "superadmin" && !me.impersonating, unread: mine.data.unread ?? 0, reload: () => void mine.reload() } : null),
-    [mine.data, me.role, me.impersonating, mine.reload],
+    () => ({ profile, isSuper: me.role === "superadmin" && !me.impersonating, unread: mine.data?.unread ?? 0, reload: () => void mine.reload(), join }),
+    [profile, mine.data, me.role, me.impersonating, mine.reload, join],
   );
   if (!mine.data) return mine.error ? <div className="rd"><div className="rd-col"><p className="rd-none">{mine.error}</p></div></div> : null;
-  if (!ctx) return <Join suggestion={mine.data.suggestion} onDone={() => void mine.reload()} />;
   return (
     <RedeMe value={ctx}>
       <div className="rd">
@@ -75,13 +89,23 @@ function Shell({ me, title, back, children }: { me: Me; title?: string; back?: b
         </div>
         <Aside />
       </div>
+      {joining && (
+        <Join
+          suggestion={mine.data.suggestion}
+          onClose={() => setJoining(false)}
+          onDone={() => {
+            setJoining(false);
+            void mine.reload();
+          }}
+        />
+      )}
     </RedeMe>
   );
 }
 
-/** Coluna da direita (só notebook largo): busca, meu perfil e quem seguir. */
+/** Coluna da direita (só notebook largo): busca, meu perfil (ou criar), atividade e quem seguir. */
 function Aside() {
-  const { profile, unread } = useRede();
+  const { profile, unread, join } = useRede();
   const nav = useNavigate();
   const [q, setQ] = useState("");
   const people = useApi<Person[]>("/api/feed/people");
@@ -91,17 +115,23 @@ function Aside() {
         <Icon name="search" size={17} />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar pessoas" aria-label="Buscar pessoas" />
       </form>
-      <Link to={profilePath(profile.handle)} className="rd-mecard">
-        <Avatar who={profile} size={48} me link={false} />
-        <span>
-          <strong>{profile.name}</strong>
-          <em>@{profile.handle}</em>
-        </span>
-      </Link>
-      <Link to="/rede/atividade" className="rd-aside-link">
-        <Icon name="heart" size={18} /> Atividade
-        {unread > 0 && <b>{unread > 99 ? "99+" : unread}</b>}
-      </Link>
+      {profile ? (
+        <>
+          <Link to={profilePath(profile.handle)} className="rd-mecard">
+            <Avatar who={profile} size={48} me link={false} />
+            <span>
+              <strong>{profile.name}</strong>
+              <em>@{profile.handle}</em>
+            </span>
+          </Link>
+          <Link to="/rede/atividade" className="rd-aside-link">
+            <Icon name="heart" size={18} /> Atividade
+            {unread > 0 && <b>{unread > 99 ? "99+" : unread}</b>}
+          </Link>
+        </>
+      ) : (
+        <JoinCard onJoin={join} />
+      )}
       {(people.data?.length ?? 0) > 0 && (
         <section className="rd-aside-box">
           <h2>Quem seguir</h2>
@@ -111,12 +141,27 @@ function Aside() {
           <Link to="/rede/buscar" className="rd-more">Ver mais</Link>
         </section>
       )}
+      <p className="rd-aside-foot">Sua agenda, seus gastos e seu número nunca aparecem aqui.</p>
     </aside>
   );
 }
 
-/** Primeira vez: a pessoa escolhe o @ e o nome que os outros vão ver. Nada dela aparece antes disso. */
-function Join({ suggestion, onDone, editing, onClose }: { suggestion?: { handle: string; name: string; bio?: string }; onDone: (handle: string) => void; editing?: boolean; onClose?: () => void }) {
+/** Convite para quem está só olhando. */
+function JoinCard({ onJoin, inline }: { onJoin: () => boolean; inline?: boolean }) {
+  return (
+    <div className={`rd-joincard${inline ? " inline" : ""}`}>
+      <UserMascote size={inline ? 44 : 52} me />
+      <div>
+        <strong>Entre no Feed</strong>
+        <p>Crie seu perfil para publicar, curtir e comentar.</p>
+      </div>
+      <button type="button" className="btn btn-brand" onClick={() => onJoin()}>Criar perfil</button>
+    </div>
+  );
+}
+
+/** Criar o perfil (o @ e o nome que os outros vão ver) ou editar. Nada da pessoa aparece antes disso. */
+function Join({ suggestion, onDone, editing, onClose }: { suggestion?: { handle: string; name: string; bio?: string }; onDone: (handle: string) => void; editing?: boolean; onClose: () => void }) {
   const [handle, setHandle] = useState(suggestion?.handle ?? "");
   const [name, setName] = useState(suggestion?.name ?? "");
   const [bio, setBio] = useState(suggestion?.bio ?? "");
@@ -136,55 +181,50 @@ function Join({ suggestion, onDone, editing, onClose }: { suggestion?: { handle:
       setBusy(false);
     }
   };
-  const fields = (
-    <>
-      <label className="rd-field">
-        <span>Nome</span>
-        <input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} placeholder="Como você quer aparecer" autoComplete="off" required />
-      </label>
-      <label className="rd-field">
-        <span>Seu @</span>
-        <div className="rd-at">
-          <b>@</b>
-          <input value={handle} maxLength={20} onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ""))} placeholder="seunome" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="off" required />
-        </div>
-      </label>
-      <label className="rd-field">
-        <span>Bio <i>opcional</i></span>
-        <textarea value={bio} maxLength={BIO_MAX} rows={2} onChange={(e) => setBio(e.target.value)} placeholder="Uma linha sobre você" />
-      </label>
-      {error && <div className="error-box">{error}</div>}
-    </>
-  );
-  if (editing)
-    return (
-      <Modal
-        title="Editar perfil"
-        onClose={onClose!}
-        footer={(close) => (
-          <>
-            <button type="button" className="btn" onClick={close}>Cancelar</button>
-            <button type="button" className="btn btn-brand" disabled={busy} onClick={() => void save()}>{busy ? "Salvando…" : "Salvar"}</button>
-          </>
-        )}
-      >
-        <form className="rd-join-form" onSubmit={save}>{fields}</form>
-      </Modal>
-    );
   return (
-    <div className="rd rd-join">
-      <form className="rd-join-card" onSubmit={save}>
-        <UserMascote size={92} me />
-        <h1>Entre no Feed do Planejai</h1>
-        <p>Um lugar para trocar ideias com quem também usa o Planejai: posts curtos, fotos e status que somem em 24 horas.</p>
-        {fields}
-        <button type="submit" className="btn btn-brand rd-join-go" disabled={busy}>{busy ? "Criando…" : "Criar meu perfil"}</button>
-        <ul className="rd-join-notes">
-          <li><Icon name="shield" size={15} /> Sua agenda, seus gastos e seu número continuam só seus. Aqui aparece apenas o que você publicar.</li>
-          <li><Icon name="user" size={15} /> Sua foto é o seu Bolinho. Você pode sair da rede quando quiser.</li>
-        </ul>
+    <Modal
+      title={editing ? "Editar perfil" : "Criar seu perfil"}
+      onClose={onClose}
+      className="rd-join-modal"
+      footer={(close) => (
+        <>
+          <button type="button" className="btn" onClick={close}>Cancelar</button>
+          <button type="button" className="btn btn-brand" disabled={busy} onClick={() => void save()}>{busy ? "Salvando…" : editing ? "Salvar" : "Criar perfil"}</button>
+        </>
+      )}
+    >
+      <form className="rd-join-form" onSubmit={save}>
+        {!editing && (
+          <div className="rd-join-top">
+            <UserMascote size={64} me />
+            <p>Posts curtos, fotos e status que somem em 24 horas, com quem também usa o Planejai.</p>
+          </div>
+        )}
+        <label className="rd-field">
+          <span>Nome</span>
+          <input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} placeholder="Como você quer aparecer" autoComplete="off" required />
+        </label>
+        <label className="rd-field">
+          <span>Seu @</span>
+          <div className="rd-at">
+            <b>@</b>
+            <input value={handle} maxLength={20} onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ""))} placeholder="seunome" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="off" required />
+          </div>
+        </label>
+        <label className="rd-field">
+          <span>Bio <i>opcional</i></span>
+          <textarea value={bio} maxLength={BIO_MAX} rows={2} onChange={(e) => setBio(e.target.value)} placeholder="Uma linha sobre você" />
+        </label>
+        {error && <div className="error-box">{error}</div>}
+        {!editing && (
+          <ul className="rd-join-notes">
+            <li><Icon name="shield" size={15} /> Sua agenda, seus gastos e seu número continuam só seus. Aqui aparece apenas o que você publicar.</li>
+            <li><Icon name="user" size={15} /> Sua foto é o seu Bolinho. Você pode sair da rede quando quiser.</li>
+          </ul>
+        )}
+        <button type="submit" hidden />
       </form>
-    </div>
+    </Modal>
   );
 }
 
@@ -195,7 +235,8 @@ interface Page {
   next: string | null;
 }
 function usePosts(path: string | null, pick: (d: any) => Page = (d) => d) {
-  const first = useApi<any>(path);
+  // de minuto em minuto busca a primeira página de novo: post de outra pessoa aparece sem precisar puxar a tela
+  const first = useApi<any>(path, { poll: 60_000 });
   const [extra, setExtra] = useState<{ path: string | null; posts: Post[]; next: string | null | undefined }>({ path, posts: [], next: undefined });
   const [loadingMore, setLoadingMore] = useState(false);
   const [removed, setRemoved] = useState<Set<string>>(new Set());
@@ -257,19 +298,99 @@ function LoadMore({ on, more, busy }: { on: boolean; more: () => void; busy: boo
 
 // ---------- Post ----------
 
-function Photos({ media, onOpen }: { media: Photo[]; onOpen: (i: number) => void }) {
+/** Dois toques curtem (como no Instagram); um toque abre. Devolve o handler de clique e o coração que pula. */
+function useDoubleTap(onSingle: () => void, onDouble: () => void) {
+  const last = useRef(0);
+  const timer = useRef<number>(0);
+  const [burst, setBurst] = useState(0);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const onClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const now = Date.now();
+    if (now - last.current < 300) {
+      window.clearTimeout(timer.current);
+      last.current = 0;
+      setBurst((b) => b + 1);
+      onDouble();
+      return;
+    }
+    last.current = now;
+    timer.current = window.setTimeout(onSingle, 260);
+  };
+  return { onClick, burst };
+}
+
+const Burst = ({ n }: { n: number }) =>
+  n ? (
+    <span className="rd-burst" key={n} aria-hidden>
+      <Heart on size={84} />
+    </span>
+  ) : null;
+
+function Photos({ media, onOpen, onLike }: { media: Photo[]; onOpen: (i: number) => void; onLike: () => void }) {
+  const [at, setAt] = useState(0);
+  const strip = useRef<HTMLDivElement>(null);
+  const tap = useDoubleTap(() => onOpen(at), onLike);
   if (!media.length) return null;
   const one = media[0]!;
-  // uma foto só respeita a proporção dela (entre 4:5 e 2:1); várias viram grade
-  const ratio = one.w && one.h ? Math.min(2, Math.max(0.8, one.w / one.h)) : 1.25;
+  // proporção da primeira foto (entre 4:5 e 1,91:1, como no Instagram); as outras seguem a mesma moldura
+  const ratio = one.w && one.h ? Math.min(1.91, Math.max(0.8, one.w / one.h)) : 1;
+  const onScroll = () => {
+    const el = strip.current;
+    if (el) setAt(Math.round(el.scrollLeft / Math.max(1, el.clientWidth)));
+  };
   return (
-    <div className={`rd-photos n${Math.min(4, media.length)}`} style={media.length === 1 ? { aspectRatio: String(ratio) } : undefined}>
-      {media.slice(0, 4).map((m, i) => (
-        <button type="button" key={m.id} onClick={(e) => { e.stopPropagation(); onOpen(i); }} aria-label={`Abrir foto ${i + 1}`}>
-          <img src={mediaUrl(m.id)} alt="" loading="lazy" decoding="async" />
-        </button>
-      ))}
+    <div className="rd-media" style={{ aspectRatio: String(ratio) }} onClick={tap.onClick} role="button" tabIndex={-1} aria-label="Abrir foto">
+      <div className="rd-strip" ref={strip} onScroll={onScroll}>
+        {media.map((m) => (
+          <img key={m.id} src={mediaUrl(m.id)} alt="" loading="lazy" decoding="async" draggable={false} />
+        ))}
+      </div>
+      {media.length > 1 && (
+        <>
+          <span className="rd-count">{at + 1}/{media.length}</span>
+          <span className="rd-dotsbar" aria-hidden>
+            {media.map((m, i) => <i key={m.id} className={i === at ? "on" : ""} />)}
+          </span>
+        </>
+      )}
+      <Burst n={tap.burst} />
     </div>
+  );
+}
+
+/** Post em cartão: a frase grande sobre uma cor lisa. */
+function CardTile({ post, onLike, onOpen }: { post: Post; onLike: () => void; onOpen: () => void }) {
+  const tap = useDoubleTap(onOpen, onLike);
+  const long = post.body.length > 90;
+  return (
+    <div className={`rd-cardpost rd-card-${post.card}`} onClick={tap.onClick}>
+      <p className={long ? "long" : ""}>{post.body}</p>
+      <span className="rd-cardpost-by">@{post.author.handle}</span>
+      <Burst n={tap.burst} />
+    </div>
+  );
+}
+
+/** Cartão de link (post do blog): capa, endereço, título e linha de apoio. Abre em outra aba. */
+function LinkCard({ post }: { post: Post }) {
+  const link = post.link!;
+  let host = "";
+  try {
+    host = new URL(link.url).host.replace(/^www\./, "");
+  } catch {
+    /* endereço estranho */
+  }
+  const cover = post.media[0];
+  return (
+    <a className="rd-linkcard" href={link.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+      {cover && <img src={mediaUrl(cover.id)} alt="" loading="lazy" decoding="async" />}
+      <span>
+        {host && <em>{host}</em>}
+        <strong>{link.title}</strong>
+        {link.desc && <small>{link.desc}</small>}
+      </span>
+    </a>
   );
 }
 
@@ -300,23 +421,48 @@ function Lightbox({ media, start, onClose }: { media: Photo[]; start: number; on
   );
 }
 
-const Heart = ({ on, size = 19 }: { on: boolean; size?: number }) => (
+const Heart = ({ on, size = 22 }: { on: boolean; size?: number }) => (
   <svg className={`rd-heart${on ? " on" : ""}`} width={size} height={size} viewBox="0 0 24 24" fill={on ? "currentColor" : "none"} stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10" />
   </svg>
 );
 
+/** "Curtido por @ana e outras 3 pessoas" / "12 curtidas". */
+function LikesLine({ post, onShow }: { post: Post; onShow: (e: React.MouseEvent) => void }) {
+  if (!post.likes) return null;
+  // o @ que vem do servidor nunca é o meu; se eu curti, eu estou entre os "outros"
+  const others = post.likes - 1;
+  return (
+    <button type="button" className="rd-likes" onClick={onShow}>
+      {post.liker ? (
+        <>
+          Curtido por <b>{post.liker}</b>
+          {others > 0 && (
+            <>
+              {" "}e <b>{others === 1 ? (post.liked ? "você" : "outra pessoa") : `outras ${count(others)} pessoas`}</b>
+            </>
+          )}
+        </>
+      ) : (
+        <b>{post.likes === 1 ? (post.liked ? "Você curtiu" : "1 curtida") : `${count(post.likes)} curtidas`}</b>
+      )}
+    </button>
+  );
+}
+
 function PostCard({ post, detail, onPatch, onRemove }: { post: Post; detail?: boolean; onPatch: (c: Partial<Post>) => void; onRemove: () => void }) {
-  const { isSuper } = useRede();
+  const { isSuper, join } = useRede();
   const nav = useNavigate();
   const [menu, setMenu] = useState(false);
   const [likes, setLikes] = useState<Person[] | null | undefined>(undefined);
   const [photo, setPhoto] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const open = () => !detail && nav(`/rede/p/${post.id}`);
+  const hasPhotos = post.media.length > 0 && !post.link;
 
-  const like = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const on = !post.liked;
+  const setLiked = async (on: boolean) => {
+    if (!join()) return;
+    if (on === post.liked) return;
     haptic(on ? 12 : 6);
     onPatch({ liked: on, likes: Math.max(0, post.likes + (on ? 1 : -1)) });
     try {
@@ -326,6 +472,10 @@ function PostCard({ post, detail, onPatch, onRemove }: { post: Post; detail?: bo
       onPatch({ liked: post.liked, likes: post.likes });
     }
   };
+  const like = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    void setLiked(!post.liked);
+  };
   const share = async (e: React.MouseEvent) => {
     e.stopPropagation();
     const url = `${location.origin}/rede/p/${post.id}`;
@@ -334,7 +484,7 @@ function PostCard({ post, detail, onPatch, onRemove }: { post: Post; detail?: bo
       if (navigator.share) await navigator.share({ url, text: `${post.author.name} no Planejai` });
       else {
         await navigator.clipboard.writeText(url);
-        void alertDialog("Link copiado", "Só quem está na rede do Planejai consegue abrir.");
+        void alertDialog("Link copiado", "Só quem está no Planejai consegue abrir.");
       }
     } catch {
       /* a pessoa fechou a folha de compartilhar */
@@ -361,6 +511,7 @@ function PostCard({ post, detail, onPatch, onRemove }: { post: Post; detail?: bo
   };
   const report = async () => {
     setMenu(false);
+    if (!join()) return;
     if (!(await confirmDialog({ title: "Denunciar esta publicação?", body: "O Planejai vai olhar e tirar do ar se não devia estar aqui. A pessoa não fica sabendo quem denunciou.", confirmLabel: "Denunciar", danger: true }))) return;
     try {
       await api("/api/feed/report", { method: "POST", json: { kind: "post", id: post.id } });
@@ -371,39 +522,59 @@ function PostCard({ post, detail, onPatch, onRemove }: { post: Post; detail?: bo
   };
   const block = async () => {
     setMenu(false);
+    if (!join()) return;
     if (!(await confirmDialog({ title: `Bloquear @${post.author.handle}?`, body: "Vocês deixam de se seguir e um não vê mais nada do outro.", confirmLabel: "Bloquear", danger: true }))) return;
     await api(`/api/feed/u/${post.author.handle}/block`, { method: "POST" }).catch(() => {});
     onRemove();
   };
 
+  // legenda longa fica recolhida no feed ("mais"), como no Instagram
+  const longBody = !detail && !expanded && post.body.length > 220;
+  const body = post.body && !post.card && (
+    <p className={`rd-body${hasPhotos ? " caption" : ""}`}>
+      {hasPhotos && (
+        <Link to={profilePath(post.author.handle)} className="rd-cap-name" onClick={(e) => e.stopPropagation()}>{post.author.handle}</Link>
+      )}
+      <RichText text={longBody ? `${post.body.slice(0, 200).trimEnd()}…` : post.body} />
+      {longBody && (
+        <button type="button" className="rd-more-btn" onClick={(e) => { e.stopPropagation(); setExpanded(true); }}>mais</button>
+      )}
+    </p>
+  );
+
   return (
     <>
-    <article className={`rd-post${detail ? " detail" : ""}`} onClick={open} tabIndex={detail ? undefined : 0} onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && open()}>
-      <Avatar who={post.author} size={detail ? 46 : 42} me={post.mine} />
-      <div className="rd-post-main">
-        <header>
-          <Link to={profilePath(post.author.handle)} onClick={(e) => e.stopPropagation()}>
-            <strong>{post.author.name}</strong>
-            <span>@{post.author.handle}</span>
-          </Link>
-          <time dateTime={post.created_at}>· {shortTime(post.created_at)}</time>
-          <span className="spacer" />
-          <button type="button" className="rd-dots" onClick={(e) => { e.stopPropagation(); haptic(5); setMenu(true); }} aria-label="Mais opções"><Icon name="more" size={18} /></button>
-        </header>
-        {post.body && <p className="rd-body"><RichText text={post.body} /></p>}
-        <Photos media={post.media} onOpen={setPhoto} />
-        <footer>
-          <button type="button" className={`rd-act${post.liked ? " liked" : ""}`} onClick={like} aria-pressed={post.liked} aria-label={post.liked ? "Tirar curtida" : "Curtir"}>
-            <Heart on={post.liked} key={post.liked ? "on" : "off"} />
-            {post.likes > 0 && <span>{count(post.likes)}</span>}
+    <article className={`rd-post${detail ? " detail" : ""}${hasPhotos ? " has-media" : ""}`} onClick={open} tabIndex={detail ? undefined : 0} onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && open()}>
+      <header className="rd-post-head">
+        <Avatar who={post.author} size={detail ? 44 : 38} me={post.mine} />
+        <Link to={profilePath(post.author.handle)} className="rd-who" onClick={(e) => e.stopPropagation()}>
+          <strong><NameOf who={post.author} /></strong>
+          <span>@{post.author.handle} · <time dateTime={post.created_at}>{shortTime(post.created_at)}</time></span>
+        </Link>
+        <button type="button" className="rd-dots" onClick={(e) => { e.stopPropagation(); haptic(5); setMenu(true); }} aria-label="Mais opções"><Icon name="more" size={18} /></button>
+      </header>
+      {!hasPhotos && body}
+      {post.card && <CardTile post={post} onLike={() => void setLiked(true)} onOpen={open} />}
+      {post.link && <LinkCard post={post} />}
+      {hasPhotos && <Photos media={post.media} onOpen={setPhoto} onLike={() => void setLiked(true)} />}
+      <footer className="rd-acts">
+        <button type="button" className={`rd-act${post.liked ? " liked" : ""}`} onClick={like} aria-pressed={post.liked} aria-label={post.liked ? "Tirar curtida" : "Curtir"}>
+          <Heart on={post.liked} key={post.liked ? "on" : "off"} />
+        </button>
+        <button type="button" className="rd-act" onClick={(e) => { e.stopPropagation(); if (detail) document.getElementById("rd-reply")?.focus(); else open(); }} aria-label="Comentar">
+          <Icon name="message" size={21} />
+        </button>
+        <button type="button" className="rd-act" onClick={share} aria-label="Compartilhar"><Icon name="send" size={20} /></button>
+      </footer>
+      <div className="rd-post-foot">
+        <LikesLine post={post} onShow={showLikes} />
+        {hasPhotos && body}
+        {!detail && post.comments > 0 && (
+          <button type="button" className="rd-seecom" onClick={(e) => { e.stopPropagation(); open(); }}>
+            {post.comments === 1 ? "Ver 1 comentário" : `Ver os ${count(post.comments)} comentários`}
           </button>
-          <button type="button" className="rd-act" onClick={(e) => { e.stopPropagation(); open(); }} aria-label="Comentar">
-            <Icon name="message" size={19} />
-            {post.comments > 0 && <span>{count(post.comments)}</span>}
-          </button>
-          <button type="button" className="rd-act" onClick={share} aria-label="Compartilhar"><Icon name="share" size={19} /></button>
-          {detail && post.likes > 0 && <button type="button" className="rd-likers" onClick={showLikes}>Ver quem curtiu</button>}
-        </footer>
+        )}
+        {detail && <time className="rd-fulltime" dateTime={post.created_at}>{fullTime(post.created_at)}</time>}
       </div>
     </article>
       {menu && (
@@ -412,7 +583,7 @@ function PostCard({ post, detail, onPatch, onRemove }: { post: Post; detail?: bo
             {(post.mine || isSuper) && (
               <button type="button" className="sheet-item rd-danger" onClick={remove}><span className="ico-box"><Icon name="trash" size={17} /></span>Apagar{post.mine ? "" : " (moderação)"}</button>
             )}
-            {!post.mine && (
+            {!post.mine && !post.author.official && (
               <>
                 <button type="button" className="sheet-item" onClick={report}><span className="ico-box"><Icon name="shield" size={17} /></span>Denunciar</button>
                 <button type="button" className="sheet-item" onClick={block}><span className="ico-box"><Icon name="eye-off" size={17} /></span>Bloquear @{post.author.handle}</button>
@@ -434,6 +605,9 @@ function PostCard({ post, detail, onPatch, onRemove }: { post: Post; detail?: bo
   );
 }
 
+const FULL = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "long", year: "numeric" });
+const fullTime = (iso: string) => FULL.format(new Date(iso)).replace(" às ", " · ");
+
 function PostList({ list, empty }: { list: ReturnType<typeof usePosts>; empty: ReactNode }) {
   if (list.loading && !list.posts.length) return <PostSkeleton />;
   if (list.error && !list.posts.length) return <p className="rd-none">{list.error}</p>;
@@ -444,6 +618,7 @@ function PostList({ list, empty }: { list: ReturnType<typeof usePosts>; empty: R
         <PostCard key={p.id} post={p} onPatch={(c) => list.patch(p.id, c)} onRemove={() => list.remove(p.id)} />
       ))}
       <LoadMore on={list.hasMore} more={list.more} busy={list.loadingMore} />
+      {!list.hasMore && list.posts.length > 4 && <p className="rd-end">Você viu tudo por enquanto.</p>}
     </>
   );
 }
@@ -459,7 +634,8 @@ const PostSkeleton = () => (
 // ---------- Escrever ----------
 
 function Composer({ onPosted, autoFocus, inline }: { onPosted: (p: Post) => void; autoFocus?: boolean; inline?: boolean }) {
-  const { profile } = useRede();
+  // só aparece para quem já tem perfil
+  const profile = useRede().profile!;
   const [body, setBody] = useState("");
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [busy, setBusy] = useState(false);
@@ -554,7 +730,7 @@ const readTab = (): Tab => {
 };
 
 function FeedHome() {
-  const { unread } = useRede();
+  const { unread, profile, join } = useRede();
   const phone = useMedia(PHONE);
   const [tab, setTabState] = useState<Tab>(readTab);
   const [writing, setWriting] = useState(false);
@@ -578,26 +754,29 @@ function FeedHome() {
         </div>
         <span className="spacer" />
         <Link to="/rede/buscar" className="icon-btn" aria-label="Buscar pessoas"><Icon name="search" size={20} /></Link>
-        <Link to="/rede/atividade" className="icon-btn rd-bell" aria-label={unread ? `Atividade, ${unread} novas` : "Atividade"}>
-          <Icon name="heart" size={20} />
-          {unread > 0 && <i />}
-        </Link>
+        {profile && (
+          <Link to="/rede/atividade" className="icon-btn rd-bell" aria-label={unread ? `Atividade, ${unread} novas` : "Atividade"}>
+            <Icon name="heart" size={20} />
+            {unread > 0 && <i />}
+          </Link>
+        )}
       </div>
-      {!phone && <Composer inline onPosted={list.add} />}
+      {!profile && phone && <JoinCard inline onJoin={join} />}
+      {profile && !phone && <Composer inline onPosted={list.add} />}
       <PostList
         list={list}
         empty={
           tab === "following" ? (
             <Blank title="Ninguém por aqui ainda" text="Siga algumas pessoas e os posts delas aparecem nesta aba." action={<Link className="btn" to="/rede/buscar"><Icon name="search" size={16} /> Encontrar pessoas</Link>} />
           ) : (
-            <Blank title="O feed está começando" text="Seja a primeira pessoa a publicar. Vale uma ideia, uma foto ou um status." action={<button type="button" className="btn btn-brand" onClick={() => setWriting(true)}><Icon name="edit" size={16} /> Escrever</button>} />
+            <Blank title="O feed está começando" text="Seja a primeira pessoa a publicar. Vale uma ideia, uma foto ou um status." action={<button type="button" className="btn btn-brand" onClick={() => join() && setWriting(true)}><Icon name="edit" size={16} /> Escrever</button>} />
           )
         }
       />
       {phone &&
         // no <body>: a tela anima com transform, e botão fixo dentro dela ia parar no fim da lista
         createPortal(
-          <button type="button" className="fab ink rd-fab" onClick={() => { haptic(8); setWriting(true); }} aria-label="Nova publicação">
+          <button type="button" className="fab ink rd-fab" onClick={() => { haptic(8); if (join()) setWriting(true); }} aria-label="Nova publicação">
             <Icon name="edit" size={21} />
           </button>,
           document.body,
@@ -624,7 +803,7 @@ const Blank = ({ title, text, action }: { title: string; text: string; action?: 
 
 function PostScreen() {
   const { id = "" } = useParams();
-  const { profile, isSuper } = useRede();
+  const { profile, isSuper, join } = useRede();
   const nav = useNavigate();
   const data = useApi<{ post: Post; comments: Comment[] }>(`/api/feed/posts/${id}`);
   const [text, setText] = useState("");
@@ -662,11 +841,17 @@ function PostScreen() {
   return (
     <>
       <PostCard post={post} detail onPatch={patch} onRemove={() => nav("/", { replace: true })} />
-      <form className="rd-reply" onSubmit={send}>
-        <Avatar who={profile} size={34} me link={false} />
-        <input value={text} maxLength={COMMENT_MAX} onChange={(e) => setText(e.target.value)} placeholder={`Responder a ${post.author.name.split(" ")[0]}`} aria-label="Escrever comentário" />
-        <button type="submit" className="rd-reply-go" disabled={!text.trim() || busy} aria-label="Enviar comentário"><Icon name="arrow-up" size={18} /></button>
-      </form>
+      {profile ? (
+        <form className="rd-reply" onSubmit={send}>
+          <Avatar who={profile} size={34} me link={false} />
+          <input id="rd-reply" value={text} maxLength={COMMENT_MAX} onChange={(e) => setText(e.target.value)} placeholder={`Responder a ${post.author.official ? post.author.name : post.author.name.split(" ")[0]}`} aria-label="Escrever comentário" />
+          <button type="submit" className="rd-reply-go" disabled={!text.trim() || busy} aria-label="Enviar comentário"><Icon name="arrow-up" size={18} /></button>
+        </form>
+      ) : (
+        <button type="button" id="rd-reply" className="rd-reply rd-reply-join" onClick={() => join()}>
+          <Icon name="message" size={18} /> Crie seu perfil para comentar
+        </button>
+      )}
       {error && <div className="error-box">{error}</div>}
       <div className="rd-comments">
         {comments.map((c) => (
@@ -674,12 +859,12 @@ function PostScreen() {
             <Avatar who={c.author} size={34} me={c.mine} />
             <div>
               <header>
-                <Link to={profilePath(c.author.handle)}><strong>{c.author.name}</strong></Link>
+                <Link to={profilePath(c.author.handle)}><strong><NameOf who={c.author} /></strong></Link>
                 <time dateTime={c.created_at}>{shortTime(c.created_at)}</time>
               </header>
               <p><RichText text={c.body} /></p>
             </div>
-            {c.canDelete || isSuper ? (
+            {!profile ? null : c.canDelete || isSuper ? (
               <button type="button" className="rd-dots" onClick={() => void drop(c)} aria-label="Apagar comentário"><Icon name="trash" size={15} /></button>
             ) : (
               <button type="button" className="rd-dots" onClick={() => void reportIt(c)} aria-label="Denunciar comentário"><Icon name="shield" size={15} /></button>
@@ -694,18 +879,37 @@ function PostScreen() {
 
 // ---------- Perfil ----------
 
+/** Quadradinho da grade do perfil: foto, cartão de frase ou texto. */
+function Tile({ post }: { post: Post }) {
+  const cover = post.media[0];
+  return (
+    <Link to={`/rede/p/${post.id}`} className={`rd-tile${post.card ? ` rd-card-${post.card}` : cover ? "" : " text"}`} aria-label={post.body ? post.body.slice(0, 80) : "Abrir publicação"}>
+      {cover ? <img src={mediaUrl(cover.id)} alt="" loading="lazy" decoding="async" /> : <p>{post.body}</p>}
+      {(post.media.length > 1 || post.link) && (
+        <span className="rd-tile-mark" aria-hidden><Icon name={post.link ? "link" : "copy"} size={15} /></span>
+      )}
+      {(post.likes > 0 || post.comments > 0) && (
+        <span className="rd-tile-hover" aria-hidden>
+          <span><Heart on size={17} /> {count(post.likes)}</span>
+          <span><Icon name="message" size={17} /> {count(post.comments)}</span>
+        </span>
+      )}
+    </Link>
+  );
+}
+
 function ProfileScreen() {
   const { handle = "" } = useParams();
   const me = useRede();
   const nav = useNavigate();
+  const phone = useMedia(PHONE);
   const pick = useCallback((d: any) => ({ posts: d.posts, next: d.next }), []);
   const list = usePosts(`/api/feed/u/${handle}`, pick);
-  const [view, setView] = useState<"posts" | "fotos">("posts");
+  const [view, setView] = useState<"grade" | "lista">("grade");
   const [people, setPeople] = useState<{ title: string; list: Person[] | null } | null>(null);
   const [editing, setEditing] = useState(false);
   const [menu, setMenu] = useState(false);
   const [delta, setDelta] = useState(0);
-  const [photo, setPhoto] = useState<{ media: Photo[]; i: number } | null>(null);
   const p: Profile | undefined = list.data?.profile;
   if (list.error && !p) return <Blank title="Perfil não encontrado" text="Esse @ não existe ou não está disponível para você." action={<Link className="btn" to="/">Voltar ao feed</Link>} />;
   if (!p) return <PostSkeleton />;
@@ -721,12 +925,14 @@ function ProfileScreen() {
   };
   const block = async () => {
     setMenu(false);
+    if (!me.join()) return;
     if (!p.blocked && !(await confirmDialog({ title: `Bloquear @${p.handle}?`, body: "Vocês deixam de se seguir e um não vê mais nada do outro.", confirmLabel: "Bloquear", danger: true }))) return;
     await api(`/api/feed/u/${p.handle}/block`, { method: p.blocked ? "DELETE" : "POST" }).catch(() => {});
     void list.reload();
   };
   const report = async () => {
     setMenu(false);
+    if (!me.join()) return;
     if (!(await confirmDialog({ title: `Denunciar @${p.handle}?`, body: "O Planejai vai olhar o perfil. A pessoa não fica sabendo quem denunciou.", confirmLabel: "Denunciar", danger: true }))) return;
     await api("/api/feed/report", { method: "POST", json: { kind: "profile", id: p.handle } }).catch(() => {});
   };
@@ -737,58 +943,65 @@ function ProfileScreen() {
     me.reload();
     nav("/", { replace: true });
   };
-  const grid = list.posts.flatMap((post) => post.media.map((m, i) => ({ m, i, post })));
+  const stats = (
+    <div className="rd-stats">
+      <span><b>{count(p.posts)}</b> {p.posts === 1 ? "publicação" : "publicações"}</span>
+      <button type="button" onClick={() => void openPeople("seguidores")}><b>{count(Math.max(0, p.followers + delta))}</b> seguidores</button>
+      <button type="button" onClick={() => void openPeople("seguindo")}><b>{count(p.following)}</b> seguindo</button>
+    </div>
+  );
+  const actions = (
+    <div className="rd-profile-acts">
+      {p.me ? (
+        <button type="button" className="btn" onClick={() => setEditing(true)}>Editar perfil</button>
+      ) : p.blocked ? (
+        <button type="button" className="btn" onClick={block}>Desbloquear</button>
+      ) : (
+        <FollowButton key={String(p.iFollow)} handle={p.handle} following={p.iFollow} onChange={(on) => setDelta((d) => d + (on ? 1 : -1))} />
+      )}
+      <button type="button" className="btn rd-sq" onClick={() => setMenu(true)} aria-label="Mais opções"><Icon name="more" size={18} /></button>
+    </div>
+  );
 
   return (
     <>
       <section className="rd-profile">
-        <div className="rd-profile-top">
-          <Avatar who={p} size={84} me={p.me} link={false} />
-          <div className="rd-stats">
-            <span><b>{count(p.posts)}</b> posts</span>
-            <button type="button" onClick={() => void openPeople("seguidores")}><b>{count(Math.max(0, p.followers + delta))}</b> seguidores</button>
-            <button type="button" onClick={() => void openPeople("seguindo")}><b>{count(p.following)}</b> seguindo</button>
+        <Avatar who={p} size={phone ? 86 : 132} me={p.me} link={false} />
+        <div className="rd-profile-info">
+          <div className="rd-profile-line">
+            <h1>{p.handle}{p.official && <Verified size={18} />}</h1>
+            {!phone && actions}
+          </div>
+          {stats}
+          <div className="rd-profile-bio">
+            <strong>{p.name}</strong>
+            {p.followsMe && !p.me && <i className="rd-followsme">Segue você</i>}
+            {p.bio && <p><RichText text={p.bio} /></p>}
           </div>
         </div>
-        <h1>{p.name}</h1>
-        <p className="rd-handle">@{p.handle}{p.followsMe && !p.me && <i>Segue você</i>}</p>
-        {p.bio && <p className="rd-bio"><RichText text={p.bio} /></p>}
-        <div className="rd-profile-acts">
-          {p.me ? (
-            <button type="button" className="btn" onClick={() => setEditing(true)}>Editar perfil</button>
-          ) : p.blocked ? (
-            <button type="button" className="btn" onClick={block}>Desbloquear</button>
-          ) : (
-            <FollowButton key={String(p.iFollow)} handle={p.handle} following={p.iFollow} onChange={(on) => setDelta((d) => d + (on ? 1 : -1))} />
-          )}
-          <button type="button" className="btn rd-sq" onClick={() => setMenu(true)} aria-label="Mais opções"><Icon name="more" size={18} /></button>
-        </div>
+        {phone && actions}
       </section>
       {p.blocked ? (
         <p className="rd-none">Você bloqueou este perfil.</p>
       ) : (
         <>
-          <div className="rd-bar">
-            <div className="rd-tabs" role="tablist" style={{ ["--i" as string]: view === "posts" ? 0 : 1 }}>
-              <button type="button" role="tab" aria-selected={view === "posts"} className={view === "posts" ? "on" : ""} onClick={() => setView("posts")}>Publicações</button>
-              <button type="button" role="tab" aria-selected={view === "fotos"} className={view === "fotos" ? "on" : ""} onClick={() => setView("fotos")}>Fotos</button>
-            </div>
+          <div className="rd-ptabs" role="tablist">
+            <button type="button" role="tab" aria-selected={view === "grade"} className={view === "grade" ? "on" : ""} onClick={() => { haptic(5); setView("grade"); }} aria-label="Grade"><Icon name="apps" size={20} /><span>Publicações</span></button>
+            <button type="button" role="tab" aria-selected={view === "lista"} className={view === "lista" ? "on" : ""} onClick={() => { haptic(5); setView("lista"); }} aria-label="Lista"><Icon name="rows" size={20} /><span>Lista</span></button>
           </div>
-          {view === "posts" ? (
+          {view === "lista" ? (
             <PostList list={list} empty={<p className="rd-none">{p.me ? "Você ainda não publicou nada." : "Nenhuma publicação ainda."}</p>} />
-          ) : grid.length ? (
+          ) : list.posts.length ? (
             <>
               <div className="rd-grid">
-                {grid.map(({ m, i, post }) => (
-                  <button type="button" key={m.id} onClick={() => setPhoto({ media: post.media, i })} aria-label="Abrir foto">
-                    <img src={mediaUrl(m.id)} alt="" loading="lazy" decoding="async" />
-                  </button>
-                ))}
+                {list.posts.map((post) => <Tile key={post.id} post={post} />)}
               </div>
               <LoadMore on={list.hasMore} more={list.more} busy={list.loadingMore} />
             </>
+          ) : list.loading ? (
+            <PostSkeleton />
           ) : (
-            <p className="rd-none">Nenhuma foto ainda.</p>
+            <p className="rd-none">{p.me ? "Você ainda não publicou nada." : "Nenhuma publicação ainda."}</p>
           )}
         </>
       )}
@@ -802,7 +1015,7 @@ function ProfileScreen() {
         <Modal title={`@${p.handle}`} onClose={() => setMenu(false)} bare>
           {p.me ? (
             <button type="button" className="sheet-item rd-danger" onClick={leave}><span className="ico-box"><Icon name="logout" size={17} /></span>Sair da rede e apagar tudo</button>
-          ) : (
+          ) : p.official ? null : (
             <>
               <button type="button" className="sheet-item" onClick={block}><span className="ico-box"><Icon name="eye-off" size={17} /></span>{p.blocked ? "Desbloquear" : "Bloquear"}</button>
               <button type="button" className="sheet-item" onClick={report}><span className="ico-box"><Icon name="shield" size={17} /></span>Denunciar perfil</button>
@@ -811,7 +1024,6 @@ function ProfileScreen() {
           <button type="button" className="sheet-item" onClick={() => { setMenu(false); void navigator.clipboard?.writeText(`${location.origin}${profilePath(p.handle)}`); }}><span className="ico-box"><Icon name="link" size={17} /></span>Copiar link do perfil</button>
         </Modal>
       )}
-      {photo && <Lightbox media={photo.media} start={photo.i} onClose={() => setPhoto(null)} />}
     </>
   );
 }
@@ -830,11 +1042,12 @@ interface ActivityItem {
 
 function ActivityScreen() {
   const me = useRede();
-  const list = useApi<ActivityItem[]>("/api/feed/activity");
+  const list = useApi<ActivityItem[]>(me.profile ? "/api/feed/activity" : null);
   // abrir a tela marca como visto: a bolinha do coração some
   useEffect(() => {
     if (list.data) me.reload();
   }, [list.data, me.reload]);
+  if (!me.profile) return <Blank title="Sem atividade" text="Crie seu perfil para ver quem curtiu, comentou e começou a seguir você." action={<button type="button" className="btn btn-brand" onClick={() => me.join()}>Criar perfil</button>} />;
   if (!list.data) return <PostSkeleton />;
   if (!list.data.length) return <Blank title="Nada por aqui ainda" text="Curtidas, comentários e novos seguidores aparecem aqui." />;
   const say = (a: ActivityItem) => (a.kind === "like" ? "curtiu sua publicação" : a.kind === "comment" ? "comentou" : "começou a seguir você");

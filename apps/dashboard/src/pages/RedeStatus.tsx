@@ -24,8 +24,11 @@ export function StatusRow() {
   const groups = list.data ?? [];
   const mine = groups.findIndex((g) => g.me);
 
+  // quem ainda não criou o perfil só assiste: sem bolinha própria e sem fileira vazia
+  if (!profile && !groups.length) return null;
   return (
     <div className="rd-status" role="list" aria-label="Status">
+      {profile && (
       <div className="rd-st" role="listitem">
         <button
           type="button"
@@ -40,13 +43,14 @@ export function StatusRow() {
         </button>
         <span>Seu status</span>
       </div>
+      )}
       {groups.map((g, i) =>
         g.me ? null : (
           <div className="rd-st" role="listitem" key={g.author.id}>
             <button type="button" className={`rd-st-ring${g.seen ? " seen" : ""}`} onClick={() => { haptic(6); setOpen(i); }} aria-label={`Status de ${g.author.name}${g.seen ? "" : ", novo"}`}>
               <Avatar who={g.author} size={58} link={false} />
             </button>
-            <span>{g.author.name.split(" ")[0]}</span>
+            <span>{g.author.official ? g.author.name : g.author.name.split(" ")[0]}</span>
           </div>
         ),
       )}
