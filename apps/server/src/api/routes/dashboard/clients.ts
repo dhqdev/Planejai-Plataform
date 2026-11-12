@@ -28,7 +28,7 @@ export function clientRoutes(api: FastifyInstance) {
                  (SELECT COUNT(*)::int FROM client_agents ca WHERE ca.user_id = u.id AND ca.active) AS agents,
                  a.id AS account_id, a.email AS account_email, a.status AS account_status, a.role AS account_role
             FROM users u LEFT JOIN users inv ON inv.id = u.invited_by LEFT JOIN accounts a ON a.user_id = u.id
-           WHERE u.phone <> 'playground' ORDER BY u.status = 'pending' DESC, u.created_at DESC LIMIT 500`)),
+           WHERE u.phone NOT IN ('playground', 'planejai') ORDER BY u.status = 'pending' DESC, u.created_at DESC LIMIT 500`)),
   );
   api.post<{ Body: { full_name?: string; email?: string; phone?: string; notify?: boolean } }>("/api/clients", async (req, reply) => {
     const fullName = String(req.body.full_name ?? "").trim().replace(/\s+/g, " ").slice(0, 120);

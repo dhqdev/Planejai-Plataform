@@ -108,6 +108,8 @@ async function startChannelJobs(log: WorkerLog) {
   });
   // de hora em hora: resume e apaga mensagens com mais de 24h, logs e gravações antigas
   await boss.schedule(QUEUES.purge, "17 * * * *");
+  // rede social: o perfil oficial e os posts de partida aparecem logo depois do deploy, sem esperar a hora cheia
+  void import("../feed-oficial.js").then((m) => m.syncOfficialFeed()).catch((err) => log.error({ err }, "falha ao postar no perfil oficial da rede"));
 
   // convites saem pelo worker (é ele que segura a conexão do WhatsApp)
   await boss.work<{ inviteId: string }>(QUEUES.invite, { batchSize: 1, pollingIntervalSeconds: 2 }, async ([job]) => {

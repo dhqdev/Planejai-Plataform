@@ -33,16 +33,21 @@ import {
 import { selfUserId } from "../../../sharing.js";
 import { isUuid } from "./shared.js";
 
+const NOBODY = "00000000-0000-0000-0000-000000000000";
+
 /**
- * Rede social (feed + status). Toda rota vale para a pessoa logada: quem ainda não criou o perfil só consegue
- * ver o próprio estado (`/api/feed/me`) e criar o perfil. Quem está na conta de outra pessoa ("Entrar como")
- * só olha: publicar, curtir, seguir e apagar em nome do cliente é recusado.
+ * Rede social (feed + status). Toda rota vale para a pessoa logada. Olhar (feed, perfis, status, busca) é livre para
+ * qualquer conta do painel, mesmo sem perfil: assim o que alguém publica aparece para todo mundo. Publicar, curtir,
+ * comentar, seguir e denunciar pedem o perfil criado (`needsProfile`). Quem está na conta de outra pessoa
+ * ("Entrar como") só olha: escrever em nome do cliente é recusado.
  */
 export function feedRoutes(base: FastifyInstance) {
-  /** Pessoa por trás da conta; com `profile` exige o perfil criado. Responde o erro e devolve null se não der. */
+  /** Pessoa por trás da conta; escrever exige o perfil criado. Responde o erro e devolve null se não der. */
   async function who(req: FastifyRequest, reply: FastifyReply, opts: { write?: boolean; profile?: boolean } = {}) {
     const uid = await selfUserId(req.account);
     if (!uid) {
+      // conta sem WhatsApp ligado ainda pode olhar a rede (um id que não é de ninguém)
+      if (!opts.write && opts.profile !== false) return NOBODY;
       reply.code(400).send({ error: "Conta sem WhatsApp ligado" });
       return null;
     }
@@ -50,8 +55,8 @@ export function feedRoutes(base: FastifyInstance) {
       reply.code(403).send({ error: "Na conta de outra pessoa a rede é só para olhar." });
       return null;
     }
-    if (opts.profile !== false && !(await profileOf(uid))) {
-      reply.code(403).send({ error: "Crie seu perfil para entrar na rede.", needsProfile: true });
+    if (opts.write && opts.profile !== false && !(await profileOf(uid))) {
+      reply.code(403).send({ error: "Crie seu perfil para participar da rede.", needsProfile: true });
       return null;
     }
     return uid;
@@ -64,10 +69,12 @@ export function feedRoutes(base: FastifyInstance) {
   const notFound = (reply: FastifyReply, what = "Não encontrado") => reply.code(404).send({ error: what });
 
   base.get("/api/feed/me", async (req, reply) => {
-    const uid = await who(req, reply, { profile: false });
+    const uid = await who(req, reply);
     if (!uid) return;
+    // sem WhatsApp ligado: só olha (não dá para criar perfil sem a pessoa por trás)
+    if (uid === NOBODY) return { profile: null, canJoin: false };
     const profile = await profileOf(uid);
-    if (!profile) return { profile: null, suggestion: await suggestProfile(uid) };
+    if (!profile) return { profile: null, canJoin: !req.account.impersonatedBy, suggestion: await suggestProfile(uid) };
     return { profile: await getProfile(uid, profile.handle), unread: await activityUnread(uid) };
   });
 

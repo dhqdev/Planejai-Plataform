@@ -24,7 +24,7 @@ const PAGE = 20;
 /** Fundos do status de texto (as cores moram no CSS do painel; aqui só os nomes aceitos). */
 export const STATUS_BGS = ["tinta", "roxo", "magenta", "ceu", "mata", "sol"] as const;
 
-const RESERVED = new Set(["planejai", "admin", "suporte", "ajuda", "oficial", "sistema", "moderacao", "feed", "status", "rede", "api", "eu", "me"]);
+const RESERVED = new Set(["planejai", "planejai.oficial", "admin", "suporte", "ajuda", "oficial", "sistema", "moderacao", "feed", "status", "rede", "api", "eu", "me"]);
 
 export class FeedError extends Error {
   constructor(message: string, public code = 400) {
@@ -44,6 +44,8 @@ export interface Author {
   handle: string;
   name: string;
   outfit: Outfit | null;
+  /** perfil oficial do Planejai (selo de verificado) */
+  official: boolean;
 }
 export interface PhotoIn {
   base64?: string;
@@ -108,12 +110,19 @@ export async function saveProfile(userId: string, input: { handle?: unknown; nam
   const bio = clean(input.bio, BIO_MAX);
   const taken = await one("SELECT 1 FROM feed_profiles WHERE lower(handle) = $1 AND user_id <> $2", [handle, userId]);
   if (taken) throw new FeedError("Esse @ já é de outra pessoa. Tente outro.", 409);
+  const isNew = !(await profileOf(userId));
   try {
     await query(
       `INSERT INTO feed_profiles (user_id, handle, name, bio) VALUES ($1, $2, $3, $4)
        ON CONFLICT (user_id) DO UPDATE SET handle = EXCLUDED.handle, name = EXCLUDED.name, bio = EXCLUDED.bio`,
       [userId, handle, name, bio],
     );
+    // quem entra já segue o Planejai: a aba Seguindo nasce com alguma coisa
+    if (isNew)
+      await query(
+        `INSERT INTO feed_follows (follower_id, followed_id) SELECT $1, user_id FROM feed_profiles WHERE official AND user_id <> $1 ON CONFLICT DO NOTHING`,
+        [userId],
+      );
   } catch (err) {
     if ((err as { code?: string }).code === "23505") throw new FeedError("Esse @ já é de outra pessoa. Tente outro.", 409);
     throw err;
@@ -135,10 +144,10 @@ async function authors(ids: string[]): Promise<Map<string, Author>> {
   const out = new Map<string, Author>();
   if (!uniq.length) return out;
   const [rows, outfits] = await Promise.all([
-    many<{ user_id: string; handle: string; name: string }>("SELECT user_id, handle, name FROM feed_profiles WHERE user_id = ANY($1)", [uniq]),
+    many<{ user_id: string; handle: string; name: string; official: boolean }>("SELECT user_id, handle, name, official FROM feed_profiles WHERE user_id = ANY($1)", [uniq]),
     outfitsOf(uniq),
   ]);
-  for (const r of rows) out.set(r.user_id, { id: r.user_id, handle: r.handle, name: r.name, outfit: outfits.get(r.user_id) ?? null });
+  for (const r of rows) out.set(r.user_id, { id: r.user_id, handle: r.handle, name: r.name, outfit: outfits.get(r.user_id) ?? null, official: r.official });
   return out;
 }
 
@@ -146,13 +155,20 @@ interface PostRow {
   id: string;
   user_id: string;
   body: string;
+  card: string | null;
+  link_url: string | null;
+  link_title: string | null;
+  link_desc: string | null;
   created_at: string;
   likes: number;
   comments: number;
   liked: boolean;
+  liker: string | null;
 }
-const POST_COLS = `p.id, p.user_id, p.body, p.created_at,
+const POST_COLS = `p.id, p.user_id, p.body, p.card, p.link_url, p.link_title, p.link_desc, p.created_at,
   (SELECT count(*)::int FROM feed_likes l WHERE l.post_id = p.id) AS likes,
+  (SELECT fp.handle FROM feed_likes l JOIN feed_profiles fp ON fp.user_id = l.user_id
+    WHERE l.post_id = p.id AND l.user_id <> $1 AND ${notBlocked("l.user_id", 1)} ORDER BY l.created_at DESC LIMIT 1) AS liker,
   (SELECT count(*)::int FROM feed_comments c WHERE c.post_id = p.id AND ${notBlocked("c.user_id", 1)}) AS comments,
   EXISTS (SELECT 1 FROM feed_likes l WHERE l.post_id = p.id AND l.user_id = $1) AS liked`;
 
@@ -169,12 +185,15 @@ async function hydrate(me: string, rows: PostRow[]) {
     .map((r) => ({
       id: r.id,
       body: r.body,
+      card: r.card,
+      link: r.link_url ? { url: r.link_url, title: r.link_title ?? "", desc: r.link_desc ?? "" } : null,
       created_at: r.created_at,
       author: who.get(r.user_id)!,
       media: media.filter((m) => m.post_id === r.id).map((m) => ({ id: m.id, w: m.width, h: m.height })),
       likes: r.likes,
       comments: r.comments,
       liked: r.liked,
+      liker: r.liker,
       mine: r.user_id === me,
     }));
 }
@@ -263,6 +282,43 @@ async function savePhotos(owner: { post_id?: string; status_id?: string }, photo
     const blob = await storeBlob(`arquivos/rede/${row!.id}`, p.data, p.mimetype);
     await query("UPDATE feed_media SET data = $2, storage_key = $3 WHERE id = $1", [row!.id, blob.data, blob.storage_key]);
   }
+}
+
+/** Largura e altura de JPEG, PNG ou WebP lendo só o cabeçalho (0 se não reconhecer). */
+export function imageSize(data: Buffer): { width: number; height: number } {
+  try {
+    if (data[0] === 0x89 && data[1] === 0x50) return { width: data.readUInt32BE(16), height: data.readUInt32BE(20) };
+    if (data.subarray(0, 4).toString("latin1") === "RIFF") {
+      const kind = data.subarray(12, 16).toString("latin1");
+      if (kind === "VP8X") return { width: 1 + data.readUIntLE(24, 3), height: 1 + data.readUIntLE(27, 3) };
+      if (kind === "VP8 ") return { width: data.readUInt16LE(26) & 0x3fff, height: data.readUInt16LE(28) & 0x3fff };
+      if (kind === "VP8L") {
+        const b = data.readUInt32LE(21);
+        return { width: 1 + (b & 0x3fff), height: 1 + ((b >> 14) & 0x3fff) };
+      }
+    }
+    if (data[0] === 0xff && data[1] === 0xd8) {
+      let i = 2;
+      while (i + 9 < data.length) {
+        if (data[i] !== 0xff) return { width: 0, height: 0 };
+        const marker = data[i + 1]!;
+        const len = data.readUInt16BE(i + 2);
+        if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc)
+          return { width: data.readUInt16BE(i + 7), height: data.readUInt16BE(i + 5) };
+        i += 2 + len;
+      }
+    }
+  } catch {
+    /* cabeçalho estranho */
+  }
+  return { width: 0, height: 0 };
+}
+
+/** Foto que o próprio servidor publica (post ou status do perfil oficial): confere o tipo e mede pelo cabeçalho. */
+export async function attachServerPhoto(owner: { post_id?: string; status_id?: string }, data: Buffer) {
+  const mimetype = sniffImage(data);
+  if (!mimetype) throw new FeedError("Imagem em formato que a rede não mostra.");
+  await savePhotos(owner, [{ data: Buffer.from(data), mimetype, ...imageSize(data) }]);
 }
 
 async function limit(userId: string, what: string, max: number, message: string) {
@@ -530,6 +586,7 @@ export async function viewStatus(me: string, id: string) {
   await query(
     `INSERT INTO feed_status_views (status_id, user_id)
      SELECT s.id, $1 FROM feed_status s WHERE s.id = $2 AND s.user_id <> $1 AND s.expires_at > now() AND ${notBlocked("s.user_id", 1)}
+        AND EXISTS (SELECT 1 FROM feed_profiles WHERE user_id = $1)
      ON CONFLICT DO NOTHING`,
     [me, id],
   );

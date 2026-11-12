@@ -27,7 +27,7 @@ export function executionRoutes(api: FastifyInstance) {
         FROM cost_daily`);
     const orAccountQ = openRouterAccount().catch((e) => ({ error: (e as Error).message }));
     const countsQ = one(`
-      SELECT (SELECT COUNT(*) FROM users WHERE status = 'active' AND phone <> 'playground') AS people,
+      SELECT (SELECT COUNT(*) FROM users WHERE status = 'active' AND phone NOT IN ('playground', 'planejai')) AS people,
              (SELECT COUNT(*) FROM users WHERE status = 'pending') AS pending_people,
              (SELECT COALESCE(SUM(messages), 0) FROM usage_daily WHERE day = current_date) AS messages_24h,
              (SELECT COUNT(*) FROM invites WHERE status = 'accepted') AS invites_accepted,

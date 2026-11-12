@@ -259,6 +259,9 @@ export async function postDraft(id: string) {
     throw err;
   }
   await query("UPDATE wa_status_posts SET status = 'postado', recipients = $2, error = NULL, posted_at = now() WHERE id = $1", [id, jids.length]);
+  // o mesmo status vai para o perfil oficial da rede social do Planejai (post + status de 24 h)
+  const { syncOfficialFeed } = await import("./feed-oficial.js");
+  await syncOfficialFeed().catch(() => {});
   return jids.length;
 }
 

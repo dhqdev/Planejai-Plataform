@@ -40,12 +40,14 @@ describe.skipIf(!enabled)("rede social (e2e)", () => {
     await app?.close();
   });
 
-  it("sem perfil a pessoa não vê nem publica nada; a sugestão usa só o primeiro nome", async () => {
+  it("sem perfil a pessoa só olha (vê o feed, mas não publica); a sugestão usa só o primeiro nome", async () => {
     const me = (await call(ana.cookie, "GET", "/api/feed/me")).json();
     expect(me.profile).toBeNull();
+    expect(me.canJoin).toBe(true);
     expect(me.suggestion).toEqual({ handle: "ana", name: "Ana" });
-    for (const [m, u] of [["GET", "/api/feed"], ["GET", "/api/feed/status"], ["GET", "/api/feed/people"], ["POST", "/api/feed/posts"]] as const) {
-      const r = await call(ana.cookie, m, u, m === "POST" ? { body: "oi" } : undefined);
+    for (const u of ["/api/feed", "/api/feed/status", "/api/feed/people"]) expect((await call(ana.cookie, "GET", u)).statusCode, u).toBe(200);
+    for (const [u, body] of [["/api/feed/posts", { body: "oi" }], ["/api/feed/status", { body: "oi" }]] as const) {
+      const r = await call(ana.cookie, "POST", u, body);
       expect(r.statusCode, u).toBe(403);
       expect(r.json().needsProfile).toBe(true);
     }
@@ -173,7 +175,7 @@ describe.skipIf(!enabled)("rede social (e2e)", () => {
     await call(beto.cookie, "POST", "/api/feed/posts", { body: "Post do Beto" });
     expect((await call(beto.cookie, "DELETE", "/api/feed/me")).statusCode).toBe(200);
     expect((await db.one("SELECT count(*)::int AS n FROM feed_posts WHERE user_id = $1", [beto.id])).n).toBe(0);
-    expect((await call(beto.cookie, "GET", "/api/feed")).statusCode).toBe(403);
+    expect((await call(beto.cookie, "GET", "/api/feed")).statusCode).toBe(200);
     expect((await call(ana.cookie, "GET", "/api/feed/u/beto")).statusCode).toBe(404);
   });
 });

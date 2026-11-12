@@ -534,7 +534,7 @@ async function computeStorage() {
 
   const people = await many(`
     SELECT u.id, COALESCE(u.full_name, u.name) AS name, u.phone, u.status, u.created_at, u.last_seen_at, a.email
-      FROM users u LEFT JOIN accounts a ON a.user_id = u.id WHERE u.phone <> 'playground'`);
+      FROM users u LEFT JOIN accounts a ON a.user_id = u.id WHERE u.phone NOT IN ('playground', 'planejai')`);
   const userBytes = await many("SELECT id, (24 + pg_column_size(u.*))::bigint AS bytes FROM users u");
   const userRowBytes = new Map(userBytes.map((u) => [u.id, Number(u.bytes)]));
   const usersTotal = Number(byName.get("users")?.total ?? 0);

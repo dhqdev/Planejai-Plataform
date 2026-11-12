@@ -61,6 +61,9 @@ export async function purgeOld(log?: { info: (...a: any[]) => void; error: (...a
   await closeOrphanRuns();
   // rede social: status vencido (24h) sai com a foto e a lista de quem viu
   await purgeExpiredStatus().catch((err) => log?.error({ err }, "falha ao apagar status vencidos"));
+  // perfil oficial do Planejai: posts de partida e espelho do blog e do status do WhatsApp
+  const { syncOfficialFeed } = await import("./feed-oficial.js");
+  await syncOfficialFeed().catch((err) => log?.error({ err }, "falha ao postar no perfil oficial da rede"));
   const { purgeMeets } = await import("./meet.js");
   await purgeMeets().catch((err) => log?.error({ err }, "falha na limpeza das reuniões"));
   const { purgeUber } = await import("./uber.js");
