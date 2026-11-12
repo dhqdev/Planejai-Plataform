@@ -195,7 +195,7 @@ export async function startErrand(opts: {
   const kind = opts.kind ?? "recado";
   const persona = kind === "conversa" ? opts.persona : null;
   const text = withSignature(
-    redactSecrets(humanize(introduce(opts.message, firstName(opts.user), opts.timezone ?? config.DEFAULT_TIMEZONE, new Date(), persona))),
+    redactSecrets(humanize(introduce(opts.message, firstName(opts.user), opts.timezone ?? config.DEFAULT_TIMEZONE, new Date(), persona), { bullets: true })),
     (await getPrefs(opts.user.id, phone))?.signature,
   );
   const first = await channel.sendText(jid, text);
@@ -247,7 +247,7 @@ export async function sendToErrand(errandId: string, text: string, opts: { sameT
               : `(imagem)${m.caption ? ` ${m.caption}` : ""}`;
     await outboundChannel().sendImage(e.jid, m);
   } else {
-    clean = redactSecrets(humanize(text.trim())).slice(0, MAX_ERRAND_TEXT);
+    clean = redactSecrets(humanize(text.trim(), { bullets: true })).slice(0, MAX_ERRAND_TEXT);
     if (!clean) return { ok: false, error: "Mensagem vazia" };
     sentId = (await outboundChannel().sendText(e.jid, clean))?.id;
   }
@@ -440,16 +440,16 @@ export async function expireErrands() {
       await notifyUser(
         e.user_id,
         answered
-          ? `A conversa com ${e.place} chegou ao fim do prazo e eu encerrei. Se quiser que eu continue, é só pedir de novo.`
-          : `${e.place} não respondeu, então encerrei a conversa. Se quiser, dá para ligar: +${e.phone}`,
+          ? `💬 *Conversa com ${e.place} encerrada*\n\nChegou ao fim do prazo e eu encerrei. Se quiser que eu continue, é só pedir de novo 😉`
+          : `🔕 *${e.place} não respondeu*\n\nEntão encerrei a conversa. Se quiser, dá pra ligar: +${e.phone}`,
       ).catch(() => {});
       continue;
     }
     await notifyUser(
       e.user_id,
       answered
-        ? `Passaram os 7 dias e a conversa com ${e.place} parou no meio, então deixei de acompanhar.${lastSaid(e)} Se quiser, fale direto: +${e.phone}`
-        : `${e.place} não respondeu em 7 dias, então parei de acompanhar. Se quiser, dá para ligar: +${e.phone}. Para seguir sem prazo, escolha "Sem prazo" em ${followUrl()}`,
+        ? `⏳ *Parei de acompanhar ${e.place}*\n\nPassaram os 7 dias e a conversa parou no meio.${lastSaid(e)}\n\nSe quiser, fala direto: +${e.phone}`
+        : `🔕 *${e.place} não respondeu em 7 dias*\n\nEntão parei de acompanhar. Se quiser, dá pra ligar: +${e.phone}\n\nPra seguir sem prazo, escolhe *Sem prazo* em ${followUrl()}`,
     ).catch(() => {});
   }
   return rows.length;
@@ -501,7 +501,7 @@ async function pendingErrands(userId: string) {
 function previewOf(p: PendingErrand, user: { name?: string | null; full_name?: string | null; timezone?: string | null }, signature?: string | null) {
   const raw = String(p.args.message ?? "");
   const text = p.tool === "errand_start" ? introduce(raw, firstName(user), user.timezone ?? config.DEFAULT_TIMEZONE) : raw.trim();
-  const out = redactSecrets(humanize(text)).slice(0, MAX_ERRAND_TEXT);
+  const out = redactSecrets(humanize(text, { bullets: true })).slice(0, MAX_ERRAND_TEXT);
   return p.tool === "errand_start" ? withSignature(out, signature) : out;
 }
 

@@ -174,11 +174,16 @@ async function startChannelJobs(log: WorkerLog) {
   });
   await boss.schedule(QUEUES.waStatus, "23 * * * *");
 
-  // dicas dos primeiros dias (sem IA): de hora em hora vê quem está na hora (9h/12h locais) e manda com minuto sorteado
-  await boss.work<{ userId?: string; step?: import("../trial-tips.js").TipStep; tick?: boolean }>(QUEUES.trialTips, { batchSize: 1, pollingIntervalSeconds: 15 }, async ([job]) => {
+  // dicas dos primeiros dias e da semana depois do uso livre (sem IA): de hora em hora vê quem está na hora e manda com minuto sorteado
+  await boss.work<{ userId?: string; step?: import("../trial-tips.js").TipStep; week?: number; tick?: boolean }>(QUEUES.trialTips, { batchSize: 1, pollingIntervalSeconds: 15 }, async ([job]) => {
     const tips = await import("../trial-tips.js");
+    const week = await import("../week-tips.js");
     if (job?.data?.userId && job.data.step) await tips.sendTrialTip(job.data.userId, job.data.step);
-    else await tips.scheduleTrialTips(log).catch((err) => log.error({ err }, "dicas dos primeiros dias falharam"));
+    else if (job?.data?.userId && job.data.week) await week.sendWeekTip(job.data.userId, job.data.week);
+    else {
+      await tips.scheduleTrialTips(log).catch((err) => log.error({ err }, "dicas dos primeiros dias falharam"));
+      await week.scheduleWeekTips(log).catch((err) => log.error({ err }, "dicas da semana depois do teste falharam"));
+    }
   });
   await boss.schedule(QUEUES.trialTips, "3 * * * *", { tick: true });
 

@@ -71,6 +71,7 @@ apps/server/src/
   social.ts  onboarding.ts  tabs.ts  privacy.ts
                            convites/contatos, perguntas de boas-vindas, abas do cliente, LGPD (eraseUserData)
   trial-tips.ts            dicas dos primeiros dias no WhatsApp (dia 1, dia 2 e fim do uso livre), sem IA, uma por dia
+  week-tips.ts             7 dias de dicas depois do uso livre, sorteadas das 100 de week-tips-texts.ts (dias 1/3/5/7 com imagem), sem IA
   phonebook.ts             agenda de contatos da pessoa (tela Contatos: .vcf do celular ou seletor do Android; contacts_search/contact_save)
   documents.ts  storage.ts  notifications.ts  events.ts  telegram.ts  logincode.ts
                            documentos, sininho, eventos para o n8n, Telegram, código de login

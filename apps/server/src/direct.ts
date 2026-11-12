@@ -69,7 +69,7 @@ export function directText(message: string, sender: { full_name?: string | null;
   const first = firstName(sender);
   const t = message.trim();
   const says = first && new RegExp(`\\b${first.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t);
-  return redactSecrets(humanize(says ? t : introduce(t, first))).slice(0, 3000);
+  return redactSecrets(humanize(says ? t : introduce(t, first), { bullets: true })).slice(0, 3000);
 }
 
 /** A mensagem que a pessoa digitou no painel; com `named`, "*David:* chego às 8" (o nome dela na frente, para quem recebe saber quem fala). */

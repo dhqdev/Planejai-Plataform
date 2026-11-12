@@ -165,17 +165,21 @@ export function grainsLink() {
   return `${config.PUBLIC_URL.replace(/\/$/, "")}/plano`;
 }
 
+/** Avisos de grãos no WhatsApp: título em negrito com emoji, o dado que importa em negrito e o link no fim (estilo do assistente). */
 export const GRAIN_TEXT = {
   low: (left: number, link: string) =>
-    `Seus grãos estão acabando: sobraram ${grains(left)}. Para eu não parar no meio, dá para comprar um pacote avulso ou subir de plano aqui: ${link}`,
+    `🌾 *Seus grãos estão acabando*\n\nSobraram *${grains(left)}* por aqui. Pra eu não parar no meio de nada, dá pra:\n• comprar um pacote avulso\n• ou subir de plano\n\nLeva um minutinho 👉 ${link}`,
   empty: (link: string) =>
-    `Seus grãos acabaram, então pausei por aqui 🙏 O painel continua aberto, e para eu voltar a responder aqui e no chat do app é só comprar um pacote avulso ou subir de plano: ${link}`,
+    `⏸️ *Seus grãos acabaram*\n\nPausei por aqui 🙏 O painel continua aberto, e pra eu voltar a responder aqui e no chat do app é só comprar um pacote avulso ou subir de plano.\n\n👉 ${link}`,
   /** nunca pagou: o período grátis (dias livres + grãos de presente) acabou */
   freeOver: (link: string) =>
-    `Seu período grátis acabou 🙏 Você continua com o painel, e para eu voltar a te ajudar aqui e no chat do app é só assinar um plano ou comprar grãos. Leva um minutinho: ${link}`,
+    `💜 *Seu período grátis acabou*\n\nFoi muito bom te ajudar nesses dias! O painel continua com você, e pra eu voltar a te ajudar aqui e no chat do app é só assinar um plano ou comprar grãos.\n\nLeva um minutinho 👉 ${link}`,
   trialOver: (days: number, left: number, link: string) =>
-    `Seus ${days} ${days === 1 ? "dia" : "dias"} de uso livre acabaram 🎉 Daqui pra frente cada pedido gasta grãos, e você ainda tem ${grains(left)} de presente. Quando acabarem, dá para assinar um plano ou comprar mais aqui: ${link}`,
+    `🎉 *Seus ${days} ${days === 1 ? "dia" : "dias"} de uso livre acabaram*\n\nDaqui pra frente cada pedido gasta grãos, e você ainda tem *${grains(left)} de presente* pra continuar.\n\nQuando acabarem, dá pra assinar um plano ou comprar mais 👉 ${link}`,
 };
+
+/** Texto puro para o sininho do painel e para o e-mail: sem *negrito*, _itálico_ nem ~riscado~ do WhatsApp. */
+export const plainText = (t: string) => t.replace(/(^|[\s(])[*_~]([^*_~\n]+)[*_~](?=$|[\s.,!?:;)])/gm, "$1$2");
 
 /** O mesmo aviso por e-mail (assunto e texto), que o fluxo "[Sistema] Planejai · Eventos" do n8n manda. */
 export const GRAIN_EMAIL = {
@@ -205,7 +209,10 @@ async function mailGrains(userId: string, event: "grains.low" | "grains.empty", 
 
 /** Fila de envio do WhatsApp + sininho do painel (o aviso não some se o número cair). */
 export async function tellPerson(userId: string, text: string, kind = "assinatura", link = "/plano") {
-  await notify({ userId, kind, title: text.split(/(?<=[.!?:])\s/)[0]!, body: text, link });
+  // sininho: sem a marcação do WhatsApp; o título é a primeira linha (o título do aviso) ou a primeira frase
+  const plain = plainText(text);
+  const title = plain.split("\n")[0]!.split(/(?<=[.!?:])\s/)[0]!.replace(/^[^\p{L}\p{N}]+/u, "").trim();
+  await notify({ userId, kind, title, body: plain, link });
   await (await getBoss()).send(QUEUES.outbound, { type: "send", userId, text }, { retryLimit: 2, retryDelay: 20 });
 }
 

@@ -201,7 +201,7 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     await credits.chargeUsage(user.id, 0.01);
     let sent = await outbox();
     expect(sent).toHaveLength(1);
-    expect(sent[0].text).toMatch(/grãos estão acabando: sobraram 90 grãos[\s\S]*\/plano$/);
+    expect(sent[0].text).toMatch(/grãos estão acabando\*[\s\S]*Sobraram \*90 grãos\*[\s\S]*\/plano$/);
     // zerou: nunca fica negativo, avisa na hora
     expect(await credits.chargeUsage(user.id, 5)).toEqual({ charged: 5000, left: 0 });
     expect(await wallet()).toEqual({ plan_grains: 0, extra_grains: 0 });
@@ -322,7 +322,7 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     // cartão manda RECEIVED do mesmo pagamento depois, com outro id de evento: não credita de novo
     await hook({ id: "e2", event: "PAYMENT_RECEIVED", payment: { id: "pay_av_1", externalReference: `grains:${p.id}` } });
     expect(await wallet()).toEqual({ plan_grains: 0, extra_grains: 500 });
-    expect((await outbox()).at(-1).text).toMatch(/Entraram 500 grãos e agora você tem 500 grãos/);
+    expect((await outbox()).at(-1).text).toMatch(/Entraram \*500 grãos\* e agora você tem \*500 grãos\*/);
     expect(await billing.billingAccess(user)).toMatchObject({ allowed: true, state: "grains", balance: 500 });
     // referência que não é nossa: aceita e ignora
     expect((await hook({ event: "PAYMENT_RECEIVED", payment: { id: "x", externalReference: "outra-coisa" } })).json()).toEqual({ ok: true, handled: false });
@@ -342,7 +342,7 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     await hook({ id: "s2", event: "PAYMENT_RECEIVED", payment: { id: "pay_1", subscription: "sub_1", value: 39.9, dueDate: due, billingType: "CREDIT_CARD" } });
     expect(await wallet()).toEqual({ plan_grains: 5500, extra_grains: 500 });
     expect(await db.one("SELECT status, card_brand, card_last4 FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ status: "active", card_brand: "VISA", card_last4: "4242" });
-    expect((await outbox()).at(-1).text).toMatch(/obrigado por assinar o Dia a dia! Já coloquei 5.500 grãos/);
+    expect((await outbox()).at(-1).text).toMatch(/assinar o \*Dia a dia\*[\s\S]*Já coloquei \*5.500 grãos\*/);
     // o uso sai primeiro do plano
     await credits.chargeUsage(user.id, 1);
     expect(await wallet()).toEqual({ plan_grains: 4500, extra_grains: 500 });
@@ -429,7 +429,7 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     expect(await billing.handleAsaasEvent(evt)).toMatchObject({ handled: true, status: "active" });
     expect(await billing.handleAsaasEvent(evt)).toMatchObject({ duplicate: true });
     expect(asaasCalls.find((c) => c.path === "/subscriptions/sub_ana")?.body).toMatchObject({ value: 18.9, updatePendingPayments: true });
-    expect((await outbox()).find((m: any) => m.userId === ana.id).text).toMatch(/Beto assinou pelo seu convite! Agora são 1 amigo[\s\S]*5% de desconto/);
+    expect((await outbox()).find((m: any) => m.userId === ana.id).text).toMatch(/Beto assinou pelo seu convite![\s\S]*Agora são \*1 amigo\*[\s\S]*5% de desconto/);
 
     await billing.handleAsaasEvent({ id: "r2", event: "PAYMENT_CONFIRMED", payment: { id: "pay_c1", subscription: "sub_caio", value: 19.9 } });
     expect(await db.one("SELECT discount_percent, value::float AS value FROM subscriptions WHERE user_id = $1", [ana.id])).toEqual({ discount_percent: 10, value: 17.91 });
@@ -487,7 +487,7 @@ describe.skipIf(!enabled)("grãos e planos pelo Asaas (e2e)", () => {
     await hook({ id: "n2s", event: "PAYMENT_REPROVED_BY_RISK_ANALYSIS", payment: { id: "pay_sub_2b", subscription: "sub_2", value: 19.9, invoiceUrl: "https://sandbox.asaas.com/i/pay_sub_2b" } });
     const refused = (await outbox()).filter((m: any) => /cartão não passou/.test(m.text));
     expect(refused).toHaveLength(2);
-    expect(refused[0].text).toMatch(new RegExp(`Pix ou boleto aqui: ${payLink("pay_sub_2b").replace(/[.]/g, "\\.")}$`));
+    expect(refused[0].text).toMatch(new RegExp(`Pix ou boleto 👉 ${payLink("pay_sub_2b").replace(/[.]/g, "\\.")}$`));
     expect(await db.one("SELECT status FROM subscriptions WHERE user_id = $1", [user.id])).toEqual({ status: "overdue" });
     // nunca pagou: pode assinar de novo; a assinatura velha sai do Asaas (e o Asaas pode demorar um instante para gerar a cobrança)
     asaasCalls.length = 0;

@@ -210,6 +210,7 @@ O que ${person} contou e quer: ${e.goal}
 
 Como conversar:
 - Converse de verdade e não deixe ${e.place} sem resposta, com o seu jeito: acolha, responda o que perguntar e ajude dentro do seu foco. Mensagens curtas de WhatsApp, em português do Brasil, uma pergunta por vez. Você é assistente virtual: nunca finja ser ${person} nem uma pessoa.
+- Capricho de WhatsApp: o que importa (horário, remédio, passo) em *negrito*; passo a passo ou lista em linhas com "•" ou 1., 2., 3.; emoji que combine com o seu jeito, sem exagero; nada de #, ** ou travessão.
 - A conversa tem começo, meio e fim: entenda o que está acontecendo, ajude de verdade (orientação, plano, passo a passo) e, quando estiver resolvido ou encaminhado, feche com carinho.
 - Para falar use errand_reply; texto fora dela não é enviado. Mensagens que ainda pode mandar (cada balão, áudio ou arquivo conta): ${left}.${left <= 4 ? " Está acabando: encaminhe o fim." : ""}
 - Quando ajuda mais que texto, mande junto no errand_reply: áudio (make_audio) só se pedirem áudio, passo a passo, lista ou mapa em imagem (make_image), foto de algo real (make_picture), material longo em PDF (make_pdf), e [[figurinha:nome]] ou [[gif:busca]] quando o clima é leve. Use [[media:ID]] com o id que a ferramenta devolver. No máximo uma mídia por vez e nunca figurinha ou GIF em notícia ruim ou urgência. Figurinhas: ${STICKERS.slice(0, 11).join(", ")}.
@@ -228,6 +229,7 @@ Já liberado por ${person} (pode fechar sem perguntar): ${e.allowed ?? "nada; s�
 
 Como conversar (soe como gente, nunca como robô):
 - Mensagens curtas de WhatsApp, educadas e calorosas, em português do Brasil, uma pergunta por vez. Você é assistente virtual: nunca finja ser ${person}.
+- Capricho de WhatsApp: o dado que importa (dia, horário, serviço, valor) em *negrito*; 2 ou 3 itens viram linhas com "•"; no máximo um emoji gentil por mensagem (😊, 🙏); nada de #, ** ou travessão.
 - Responda o que eles perguntarem com o que está no objetivo (raça, serviço, dia); o que não souber, errand_ask_person. Não repita pergunta já respondida.
 - Valor, nome de quem atende, horário ou condição que eles disserem: guarde com errand_ficha (a pessoa vê a ficha na tela). Use a ficha da conversa, se houver, para saber o que perguntar e o que a pessoa aceita.
 - Para falar com eles use errand_reply; texto fora dela não é enviado. Mensagens que ainda pode mandar: ${Math.max(0, MAX_ERRAND_MESSAGES - e.sent)}.
@@ -335,7 +337,7 @@ export async function runErrandTurn(errandId: string) {
         await query("UPDATE errands SET status = 'asking', question = $2, updated_at = now() WHERE id = $1 AND status = 'waiting'", [e.id, `${e.place} escreveu e eu não consegui responder sozinho`]);
         await notifyUser(
           e.user_id,
-          `${e.place} escreveu: "${theirLast.text.slice(0, 300)}"\nNão consegui responder sozinho, então preciso de você: responda por aqui ou pelo Recados (${followUrl()}).`,
+          `🙋 *${e.place} escreveu e preciso de você*\n\n_"${theirLast.text.slice(0, 300)}"_\n\nNão consegui responder sozinho. Me responde por aqui ou pelo Recados 👉 ${followUrl()}`,
         ).catch(() => {});
       }
     }
@@ -351,10 +353,10 @@ export async function runErrandTurn(errandId: string) {
         const { notifyUser } = await import("../social.js");
         await notifyUser(
           e.user_id,
-          `*Resultado da conversa com ${e.place}*\n${outcome.text}` +
-            (outcome.at ? `\nFicou marcado para ${formatLocal(outcome.at, timezone)}.` : "") +
-            (outcome.reminder ? ` Já criei um lembrete para ${outcome.reminder}.` : "") +
-            `\nTudo o que foi dito está em ${followUrl()}`,
+          `✅ *Resultado da conversa com ${e.place}*\n\n${outcome.text}` +
+            (outcome.at ? `\n\n🗓️ Ficou marcado para *${formatLocal(outcome.at, timezone)}*.` : "") +
+            (outcome.reminder ? `\n⏰ Já criei um lembrete para *${outcome.reminder}*.` : "") +
+            `\n\nTudo o que foi dito está em ${followUrl()}`,
         ).catch(() => {});
         return outcome;
       }

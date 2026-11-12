@@ -299,14 +299,17 @@ export async function notifyUser(
   userId: string,
   text: string,
   image?: { base64: string; mimetype: string; kind?: "image" | "document" | "sticker" | "audio" | "video"; fileName?: string },
-  opts: { from?: string } = {},
+  opts: { from?: string; caption?: boolean } = {},
 ) {
   const u = await one("SELECT * FROM users WHERE id = $1", [userId]);
   if (!u) return;
-  text = redactSecrets(humanize(text));
+  // listas com "•" ficam (é o estilo do WhatsApp do assistente); travessão e hífen solto viram vírgula
+  text = redactSecrets(humanize(text, { bullets: true }));
   const { conv, channel } = await conversationOf(u.id, u.phone);
-  await channel.sendText(conv.remote_jid, text);
   const kind = image?.kind ?? "image";
+  // caption: a foto sai com o texto embaixo, numa mensagem só (dicas com imagem)
+  const inCaption = Boolean(image && opts.caption && kind === "image");
+  if (!inCaption) await channel.sendText(conv.remote_jid, text);
   if (image)
     await channel.sendImage(
       conv.remote_jid,
@@ -315,7 +318,7 @@ export async function notifyUser(
         : kind === "audio"
           ? // nota de voz (Ogg/Opus) chega como bolinha; mp3 e outros como arquivo de áudio
             { kind, base64: image.base64, mimetype: image.mimetype, ptt: /ogg|opus/.test(image.mimetype) }
-          : { kind, base64: image.base64, mimetype: image.mimetype },
+          : { kind, base64: image.base64, mimetype: image.mimetype, ...(inCaption ? { caption: text } : {}) },
     );
   const sent = { document: `arquivo ${image?.fileName ?? ""} enviado junto`.replace(/ +enviado/, " enviado"), sticker: "figurinha enviada junto", audio: "áudio enviado junto", video: "vídeo enviado junto", image: "foto enviada junto" }[kind];
   const body = image ? `${text}\n[${sent}]` : text;

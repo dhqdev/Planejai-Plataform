@@ -61,7 +61,7 @@ export function tipDue(c: TipCandidate, now = new Date()): TipStep | null {
   return null;
 }
 
-const FOOTER = "_Se não quiser essas dicas, responde *PARAR DICAS*._";
+export const FOOTER = "_Se não quiser essas dicas, responde *PARAR DICAS*._";
 
 const HABIT: Record<string, string> = {
   exercise: "me lembra de treinar às 18h todo dia",

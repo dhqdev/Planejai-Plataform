@@ -94,7 +94,7 @@ export const QUEUE_LABELS: Record<string, string> = {
   [QUEUES.backup]: "Backup no bucket",
   [QUEUES.uber]: "Uber e 99 (beta)",
   [QUEUES.booking]: "Agendamentos",
-  [QUEUES.trialTips]: "Dicas dos primeiros dias",
+  [QUEUES.trialTips]: "Dicas do teste e da semana seguinte",
 };
 
 /**

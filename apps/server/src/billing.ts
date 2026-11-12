@@ -514,19 +514,22 @@ const brl = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", c
 const ddmm = (iso?: string | null) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "");
 
 /** Mensagens que cada evento do Asaas manda para a pessoa (sem IA: texto fixo, zero token). */
+/** Avisos de pagamento no WhatsApp: título em negrito com emoji, valor e data em negrito, link no fim. */
 export const BILLING_TEXT = {
   firstPayment: (plan: string, amount: number, next: string) =>
-    `Pagamento confirmado, obrigado por assinar o ${plan}! Já coloquei ${grains(amount)} na sua conta. A próxima mensalidade vence dia ${ddmm(next)}.`,
-  renewed: (amount: number, next: string) => `Recebi a mensalidade, obrigado! Seus grãos do plano foram recarregados: ${grains(amount)}. A próxima vence dia ${ddmm(next)}.`,
-  pack: (amount: number, total: number) => `Pagamento confirmado! Entraram ${grains(amount)} e agora você tem ${grains(total)}. Pode mandar o que precisar.`,
-  upgrade: (plan: string, amount: number) => `Pronto, agora você está no ${plan}! Já entraram ${grains(amount)} a mais neste mês.`,
-  overdue: (value: number, link: string) => `A mensalidade de ${brl(value)} venceu e ainda não apareceu aqui, então os grãos do plano não foram recarregados. Dá para pagar por Pix, cartão ou boleto: ${link}`,
+    `🎉 *Pagamento confirmado!*\n\nObrigado por assinar o *${plan}* 💜 Já coloquei *${grains(amount)}* na sua conta.\n\n🗓️ A próxima mensalidade vence dia *${ddmm(next)}*.`,
+  renewed: (amount: number, next: string) =>
+    `✅ *Recebi a mensalidade, obrigado!*\n\nSeus grãos do plano foram recarregados: *${grains(amount)}*.\n\n🗓️ A próxima vence dia *${ddmm(next)}*.`,
+  pack: (amount: number, total: number) => `✅ *Pagamento confirmado!*\n\nEntraram *${grains(amount)}* e agora você tem *${grains(total)}*. Pode mandar o que precisar 😉`,
+  upgrade: (plan: string, amount: number) => `🚀 *Pronto, agora você está no ${plan}!*\n\nJá entraram *${grains(amount)}* a mais neste mês.`,
+  overdue: (value: number, link: string) =>
+    `⚠️ *A mensalidade venceu*\n\nA mensalidade de *${brl(value)}* ainda não apareceu aqui, então os grãos do plano não foram recarregados.\n\nDá pra pagar por Pix, cartão ou boleto 👉 ${link}`,
   dueSoon: (value: number, days: number, due: string, link: string) =>
-    `${days === 0 ? "Hoje vence" : days === 1 ? "Amanhã vence" : `Dia ${ddmm(due)} vence`} a sua mensalidade de ${brl(value)}. Se quiser já deixar pago: ${link}`,
-  cardRefused: (link: string) => `O cartão não passou no pagamento do Planejai. Dá para tentar outro cartão ou pagar por Pix ou boleto aqui: ${link}`,
-  canceled: () => "Seu plano foi cancelado. Os grãos que já estão na sua conta continuam valendo até acabar, e dá para voltar quando quiser.",
+    `🗓️ *${days === 0 ? "Hoje vence" : days === 1 ? "Amanhã vence" : `Dia ${ddmm(due)} vence`} a sua mensalidade de ${brl(value)}*\n\nSe quiser já deixar pago 👉 ${link}`,
+  cardRefused: (link: string) => `💳 *O cartão não passou*\n\nO pagamento do Planejai não foi aprovado. Dá pra tentar outro cartão ou pagar por Pix ou boleto 👉 ${link}`,
+  canceled: () => "👋 *Seu plano foi cancelado*\n\nOs grãos que já estão na sua conta continuam valendo até acabar, e dá pra voltar quando quiser.",
   referral: (name: string, percent: number, friends: number) =>
-    `${name} assinou pelo seu convite! Agora são ${friends} ${friends === 1 ? "amigo" : "amigos"} pagando, e sua mensalidade tem ${percent}% de desconto. Obrigado por indicar!`,
+    `🥳 *${name} assinou pelo seu convite!*\n\nAgora são *${friends} ${friends === 1 ? "amigo" : "amigos"}* pagando, e sua mensalidade tem *${percent}% de desconto*. Obrigado por indicar 💜`,
 };
 
 /** Evento já tratado? O Asaas reenvia quando não recebe 200; cada evento só vira mensagem uma vez. Sem id nenhum, não dá para saber. */

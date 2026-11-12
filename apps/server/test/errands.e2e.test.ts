@@ -256,7 +256,7 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     await runErrandTurn(r.errand_id);
     // nada sai para eles; a pessoa é avisada de que o agente não conseguiu responder (nunca fica mudo)
     expect(sentTexts().length).toBe(sentBefore + 1);
-    expect(sentTexts().at(-1)).toMatch(/PetCamp escreveu: "Me xinga aí"[\s\S]*preciso de você/);
+    expect(sentTexts().at(-1)).toMatch(/PetCamp escreveu e preciso de você\*[\s\S]*"Me xinga aí"/);
     expect(sentTexts().join(" ")).not.toMatch(/Seus idiotas/);
     expect((await db.one("SELECT sent FROM errands WHERE id = $1", [r.errand_id])).sent).toBe(1);
 
@@ -405,7 +405,7 @@ describe.skipIf(!enabled)("recados com estabelecimentos (e2e)", () => {
     // sem resposta nenhuma mesmo na segunda tentativa: a pessoa é avisada e o recado espera por ela
     await petshopSays("Silêncio total");
     await runErrandTurn(a.errand_id);
-    expect(sentTexts().at(-1)).toMatch(/PetCamp escreveu: "Silêncio total"[\s\S]*preciso de você/);
+    expect(sentTexts().at(-1)).toMatch(/PetCamp escreveu e preciso de você\*[\s\S]*"Silêncio total"/);
     expect((await db.one("SELECT status FROM errands WHERE id = $1", [a.errand_id])).status).toBe("asking");
   });
 
