@@ -40,7 +40,41 @@ describe.skipIf(!enabled)("perfil oficial na rede (e2e)", () => {
     // fora da lista de Pessoas e das contagens
     const owner = String((await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@planejai.local", password: "test-password" } })).headers["set-cookie"]).split(";")[0]!;
     const clients = (await app.inject({ method: "GET", url: "/api/clients", headers: { cookie: owner } })).json();
-    expect(clients.some((c: any) => c.phone === "planejai")).toBe(false);
+    expect(clients.some((c: any) => c.phone.startsWith("planejai"))).toBe(false);
+  });
+
+  it("pessoas de exemplo curtem e comentam aos poucos, sem repetir e sem mexer em post de gente de verdade", async () => {
+    const { syncOfficialFeed } = await import("../src/feed-oficial.js");
+    const { PEOPLE, EXAMPLE_POSTS } = await import("../src/feed-exemplo.js");
+    const people = await db.many("SELECT u.phone, u.status FROM users u JOIN feed_profiles f ON f.user_id = u.id WHERE u.phone LIKE 'planejai-ex-%'");
+    expect(people).toHaveLength(PEOPLE.length);
+    expect(people.every((p: any) => p.status === "blocked")).toBe(true);
+    expect((await db.one("SELECT count(*)::int AS n FROM feed_posts WHERE source LIKE 'ex:post:%'")).n).toBe(EXAMPLE_POSTS.length);
+    const before = await db.one("SELECT (SELECT count(*)::int FROM feed_likes) AS l, (SELECT count(*)::int FROM feed_comments) AS c");
+    expect(before.l).toBeGreaterThan(50);
+    expect(before.c).toBeGreaterThan(20);
+    // de novo, na mesma hora: nada repete
+    const again = await syncOfficialFeed(NIGHT);
+    expect(again.crowd).toMatchObject({ posts: 0, likes: 0, comments: 0 });
+    // o de boas-vindas tem os comentários escritos para ele, na ordem
+    const welcome = await db.one("SELECT id FROM feed_posts WHERE source = 'seed:1'");
+    const post = (await app.inject({ method: "GET", url: `/api/feed/posts/${welcome.id}`, headers: { cookie } })).json();
+    expect(post.comments.map((c: any) => c.body)[0]).toBe("Que legal ter um lugar assim. Bora trocar dicas!");
+    expect(post.post.likes).toBeGreaterThan(0);
+    expect(post.post.likes).toBeLessThan(PEOPLE.length);
+    // nada chega no futuro: um post de agora ainda está sem curtida; horas depois, já tem
+    const { syncExampleCrowd } = await import("../src/feed-exemplo.js");
+    const official = (await db.one("SELECT id FROM users WHERE phone = 'planejai'")).id;
+    await syncExampleCrowd(official, new Date(NIGHT.getTime() + 24 * 3600_000));
+    expect((await db.one("SELECT count(*)::int AS n FROM feed_likes WHERE post_id = $1", [welcome.id])).n).toBe(PEOPLE.length);
+    const fresh = await db.one("INSERT INTO feed_posts (user_id, body, source, created_at) VALUES ($1, 'teste', 'pauta:teste:2026-11-12', $2) RETURNING id", [official, NIGHT]);
+    await syncExampleCrowd(official, NIGHT);
+    expect((await db.one("SELECT count(*)::int AS n FROM feed_likes WHERE post_id = $1", [fresh.id])).n).toBe(0);
+    await syncExampleCrowd(official, new Date(NIGHT.getTime() + 6 * 3600_000));
+    expect((await db.one("SELECT count(*)::int AS n FROM feed_likes WHERE post_id = $1", [fresh.id])).n).toBeGreaterThanOrEqual(3);
+    await db.query("DELETE FROM feed_posts WHERE id = $1", [fresh.id]);
+    // post de gente de verdade fica quieto
+    expect((await db.one("SELECT count(*)::int AS n FROM feed_likes l JOIN feed_posts p ON p.id = l.post_id WHERE p.source IS NULL")).n).toBe(0);
   });
 
   it("quem cria o perfil já segue o Planejai", async () => {
@@ -60,8 +94,8 @@ describe.skipIf(!enabled)("perfil oficial na rede (e2e)", () => {
       [Buffer.from(PNG, "base64")],
     );
     const { syncOfficialFeed } = await import("../src/feed-oficial.js");
-    expect(await syncOfficialFeed(NIGHT)).toEqual({ seeded: 0, blog: 1, status: 1, pauta: 0 });
-    expect(await syncOfficialFeed(NIGHT)).toEqual({ seeded: 0, blog: 0, status: 0, pauta: 0 });
+    expect(await syncOfficialFeed(NIGHT)).toMatchObject({ seeded: 0, blog: 1, status: 1, pauta: 0 });
+    expect(await syncOfficialFeed(NIGHT)).toMatchObject({ seeded: 0, blog: 0, status: 0, pauta: 0 });
     const feed = (await app.inject({ method: "GET", url: "/api/feed", headers: { cookie } })).json();
     const link = feed.posts.find((p: any) => p.link);
     expect(link.link).toMatchObject({ title: "Como organizar a semana", desc: "Em 10 minutos" });

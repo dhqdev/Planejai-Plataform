@@ -1,6 +1,7 @@
 import { config } from "./config.js";
 import { many, one, query } from "./db/pool.js";
 import { attachServerPhoto } from "./feed.js";
+import { syncExampleCrowd } from "./feed-exemplo.js";
 import { postPauta } from "./feed-pauta.js";
 
 /**
@@ -8,7 +9,8 @@ import { postPauta } from "./feed-pauta.js";
  * - uns posts de partida (SEED), uma vez só, espalhados nas últimas semanas para o feed não nascer vazio;
  * - cada post do blog publicado com capa vira um cartão de link;
  * - cada status do WhatsApp com cena do Bolinho vira post com a foto e, nas primeiras 24 h, status da rede também;
- * - um post por dia da pauta (feed-pauta.ts): finanças, calendário, curiosidades e novidades do app.
+ * - um post por dia da pauta (feed-pauta.ts): finanças, calendário, curiosidades e novidades do app;
+ * - pessoas de exemplo curtem e comentam esses posts e têm os posts delas (feed-exemplo.ts).
  * `source` em feed_posts/feed_status impede repetir. Roda na limpeza de hora em hora, ao subir o worker
  * e logo depois de um status do WhatsApp sair (wa-status.ts).
  *
@@ -56,6 +58,22 @@ export const SEED: { body: string; card?: (typeof CARD_BGS)[number]; h: number }
   { h: 355, card: "areia", body: "Lista feita em casa economiza no mercado." },
   { h: 372, body: "Privacidade em primeiro lugar: sua agenda, seus gastos e seu número nunca aparecem aqui. No Feed só aparece o que você mesmo publicar." },
   { h: 390, card: "tinta", body: "Menos abas abertas, mais cabeça livre." },
+  // segunda leva (2026-11-12): entram uma vez, com a hora contada de quando chegam
+  { h: 4, body: "Mora com mais alguém? Combinem um dia por mês para olhar as contas da casa juntos. Dez minutos de conversa evitam muita discussão depois." },
+  { h: 12, card: "mata", body: "Pouco todo dia é mais que muito de vez em quando." },
+  { h: 23, body: "Sabia que dá para perguntar \"quanto falta para a minha meta\"? O Planejai mostra quanto já juntou e quanto falta até a data." },
+  { h: 35, body: "Faça o teste: some quanto foi para delivery e aplicativos de comida nos últimos três meses. Não é para sentir culpa, é para decidir com o número na mão." },
+  { h: 48, card: "noite", body: "Planejar é decidir antes, para não ter que correr depois." },
+  { h: 61, body: "Pergunte \"quais contas vencem esta semana\" e veja tudo numa mensagem só, com valor e data." },
+  { h: 76, body: "Guardar pouco todo mês vale mais do que guardar muito de vez em quando. Começa com o que dá: 50 reais por semana já são 2.600 reais em um ano." },
+  { h: 92, card: "areia", body: "Desconto bom é o do que você já ia comprar." },
+  { h: 107, body: "Aniversário de alguém querido? Manda \"me lembra do aniversário da minha mãe todo dia 14 de março\" e o aviso chega todo ano, com antecedência." },
+  { h: 121, card: "lilas", body: "Você não precisa ter tudo sob controle. Só precisa saber onde está." },
+  { h: 137, body: "Mês apertado? Olhe primeiro os gastos variáveis: comida fora, transporte por aplicativo e compras pequenas. É ali que mora a folga, não no aluguel." },
+  { h: 153, card: "tinta", body: "Lembrete não é cobrança. É cuidado com o você de amanhã." },
+  { h: 166, body: "Recebeu um dinheiro extra? Uma divisão simples ajuda: uma parte para dívida ou reserva, uma para um objetivo e uma para aproveitar sem culpa." },
+  { h: 184, card: "roxo", body: "Começar pequeno ainda é começar." },
+  { h: 199, body: "Tudo o que você manda no WhatsApp aparece no painel: agenda, gastos, listas e metas. Abre no celular ou no computador, do jeito que for mais fácil." },
 ];
 
 /** Cria (uma vez) a pessoa e o perfil oficial. Devolve o id. */
@@ -86,15 +104,18 @@ export const plainCaption = (s: string) =>
     .trim()
     .slice(0, 500);
 
-async function seed(official: string) {
-  const done = await one("SELECT 1 FROM feed_posts WHERE source LIKE 'seed:%' LIMIT 1");
-  if (done) return 0;
+/** Posts de partida: entram os que vêm depois do maior número que já saiu (apagado não volta; leva nova entra). */
+async function seed(official: string, now: Date) {
+  const last = await one<{ n: number | null }>("SELECT max(split_part(source, ':', 2)::int) AS n FROM feed_posts WHERE source ~ '^seed:[0-9]+$'");
+  const from = last?.n ?? 0;
+  if (from >= SEED.length) return 0;
   let n = 0;
   for (const [i, p] of SEED.entries()) {
+    if (i < from) continue;
     const r = await query(
-      `INSERT INTO feed_posts (user_id, body, card, source, created_at) VALUES ($1, $2, $3, $4, now() - make_interval(hours => $5) - make_interval(mins => $6))
+      `INSERT INTO feed_posts (user_id, body, card, source, created_at) VALUES ($1, $2, $3, $4, $7::timestamptz - make_interval(hours => $5) - make_interval(mins => $6))
        ON CONFLICT (source) WHERE source IS NOT NULL DO NOTHING`,
-      [official, p.body, p.card ?? null, `seed:${i + 1}`, p.h, (i * 17) % 50],
+      [official, p.body, p.card ?? null, `seed:${i + 1}`, p.h, (i * 17) % 50, now],
     );
     n += r.rowCount ?? 0;
   }
@@ -167,9 +188,10 @@ async function mirrorWhatsAppStatus(official: string) {
 /** Cria o perfil oficial, os posts de partida e espelha blog e status do WhatsApp. Pode rodar quantas vezes quiser. */
 export async function syncOfficialFeed(now = new Date()) {
   const official = await ensureOfficial();
-  const seeded = await seed(official);
+  const seeded = await seed(official, now);
   const blog = await mirrorBlog(official);
   const status = await mirrorWhatsAppStatus(official);
   const pauta = await postPauta(official, now);
-  return { seeded, blog, status, pauta };
+  const crowd = await syncExampleCrowd(official, now);
+  return { seeded, blog, status, pauta, crowd };
 }
