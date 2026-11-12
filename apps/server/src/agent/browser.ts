@@ -110,20 +110,22 @@ export class BrowserSession {
   private constructor(private browser: Browser, readonly page: Page) {}
 
   /** lite: não baixa imagem, vídeo nem fonte (o robô da Uber só lê texto e gasta bem menos memória e banda) */
-  static async open(record: boolean, opts: { device?: "desktop" | "mobile"; lite?: boolean } = {}): Promise<BrowserSession> {
+  /** timeoutMs: quanto a sessão pode durar no browserless (o robô de reunião fica horas); args: flags extras do Chrome */
+  static async open(record: boolean, opts: { device?: "desktop" | "mobile"; lite?: boolean; timeoutMs?: number; args?: string[] } = {}): Promise<BrowserSession> {
     const puppeteer = (await import("puppeteer-core")).default;
     const b = await getCredentials("browserless");
     let browser: Browser;
     if (b?.url) {
       const ws = b.url.replace(/^http/, "ws").replace(/\/$/, "");
-      const qs = new URLSearchParams({ timeout: "300000" });
+      const qs = new URLSearchParams({ timeout: String(opts.timeoutMs ?? 300_000) });
       if (b.token) qs.set("token", b.token);
+      if (opts.args?.length) qs.set("launch", JSON.stringify({ args: opts.args }));
       browser = await puppeteer.connect({ browserWSEndpoint: `${ws}?${qs}`, defaultViewport: { width: 1280, height: 800 } });
     } else if (config.CHROME_PATH) {
       browser = await puppeteer.launch({
         executablePath: config.CHROME_PATH,
         headless: true,
-        args: ["--no-sandbox", "--disable-dev-shm-usage"],
+        args: ["--no-sandbox", "--disable-dev-shm-usage", ...(opts.args ?? [])],
         defaultViewport: { width: 1280, height: 800 },
       });
     } else {

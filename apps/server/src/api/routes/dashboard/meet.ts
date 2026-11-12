@@ -21,6 +21,16 @@ export function meetRoutes(base: FastifyInstance) {
     if (user && !(await billingAccess(user)).allowed) return reply.code(402).send({ error: await blockedMessage(uid) });
     return startMeet(uid, req.body?.title);
   });
+  // Marlene entra sozinha pela URL da reunião (robô do navegador da stack)
+  base.post<{ Body: { url?: string; title?: string } }>("/api/meet/robo", async (req, reply) => {
+    const uid = await me(req);
+    if (!uid) return reply.code(400).send(noUser);
+    const user = await one("SELECT * FROM users WHERE id = $1", [uid]);
+    if (user && !(await billingAccess(user)).allowed) return reply.code(402).send({ error: await blockedMessage(uid) });
+    const { joinMeetByLink } = await import("../../../meet-bot.js");
+    const r = await joinMeetByLink(uid, String(req.body?.url ?? ""), req.body?.title);
+    return r.ok ? r.session : reply.code(r.status).send({ error: r.error });
+  });
   base.get<{ Params: { id: string } }>("/api/meet/:id", async (req, reply) => {
     const uid = await me(req);
     const s = uid ? await getMeet(uid, req.params.id) : null;

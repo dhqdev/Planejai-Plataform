@@ -28,7 +28,9 @@ const SILENCE = /^\s*\[?(sil[eê]ncio|sem fala|inaud[ií]vel)\]?\.?\s*$/i;
 export interface MeetSession {
   id: string;
   title: string;
-  status: "gravando" | "resumindo" | "pronto" | "erro";
+  /** entrando = o robô pediu para participar e espera alguém deixar entrar */
+  status: "entrando" | "gravando" | "resumindo" | "pronto" | "erro";
+  mode?: "painel" | "robo";
   started_at: string;
   ended_at: string | null;
   document_id: string | null;
@@ -36,25 +38,25 @@ export interface MeetSession {
   chunks: number;
 }
 
-const COLS = `s.id, s.title, s.status, s.started_at, s.ended_at, s.document_id, s.error,
+const COLS = `s.id, s.title, s.status, s.mode, s.started_at, s.ended_at, s.document_id, s.error,
   (SELECT count(*)::int FROM meet_chunks c WHERE c.session_id = s.id) AS chunks`;
 
 export function defaultTitle(now = new Date(), tz = "America/Sao_Paulo") {
   return `Reunião de ${now.toLocaleString("pt-BR", { timeZone: tz, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", " às")}`;
 }
 
-export async function startMeet(userId: string, title?: string) {
+export async function startMeet(userId: string, title?: string, robo?: { url: string }) {
   // reunião esquecida aberta (aba fechada no meio): fecha e resume o que chegou antes de abrir outra
-  const stale = await many<{ id: string }>("SELECT id FROM meet_sessions WHERE user_id = $1 AND status = 'gravando'", [userId]);
-  for (const s of stale) await stopMeet(userId, s.id).catch(() => {});
+  const stale = await many<{ id: string }>("SELECT id FROM meet_sessions WHERE user_id = $1 AND status = 'gravando' AND mode = 'painel'", [userId]);
+  if (!robo) for (const s of stale) await stopMeet(userId, s.id).catch(() => {});
   const name = String(title ?? "").replace(/\s+/g, " ").trim().slice(0, MEET_LIMITS.titleChars) || defaultTitle();
   const tracer = await Tracer.start({ trigger: "reuniao", userId, input: name });
   // a execução fica aberta a reunião inteira; "success" desde já para a limpeza de órfãs não marcar erro
   await tracer.finish("acompanhando a reunião");
   return (await one<MeetSession>(
-    `INSERT INTO meet_sessions (user_id, title, execution_id) VALUES ($1, $2, $3)
-     RETURNING id, title, status, started_at, ended_at, document_id, error, 0 AS chunks`,
-    [userId, name, tracer.executionId],
+    `INSERT INTO meet_sessions (user_id, title, execution_id, mode, meet_url, status) VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, title, status, mode, started_at, ended_at, document_id, error, 0 AS chunks`,
+    [userId, name, tracer.executionId, robo ? "robo" : "painel", robo?.url ?? null, robo ? "entrando" : "gravando"],
   ))!;
 }
 
@@ -109,7 +111,13 @@ export async function stopMeet(userId: string, id: string) {
   );
   // espera uns segundos: o último trecho costuma chegar junto com o "encerrar"
   if (s) await (await getBoss()).send(QUEUES.meet, { action: "finish", sessionId: id } satisfies MeetJob, { startAfter: 10, retryLimit: 1, retryDelay: 60, singletonKey: `meet:${id}:fim` });
-  return Boolean(s);
+  if (s) return true;
+  // robô que ainda nem entrou: cancela (ele vê o status mudar e sai da sala de espera)
+  const c = await one(
+    "UPDATE meet_sessions SET status = 'erro', error = 'Você cancelou antes de eu entrar na reunião.', ended_at = now() WHERE id = $1 AND user_id = $2 AND status = 'entrando' RETURNING id",
+    [id, userId],
+  );
+  return Boolean(c);
 }
 
 /** webm/opus do navegador -> mp3 mono 16 kHz (o formato que os modelos omni aceitam). Sem ffmpeg vai como veio. */
@@ -295,6 +303,6 @@ export async function runMeetJob(job: MeetJob, log?: { error: (...a: any[]) => v
 /** Limpeza de hora em hora: a transcrição some em 7 dias (a ata fica); reunião largada aberta por 6 h é encerrada. */
 export async function purgeMeets() {
   await query("DELETE FROM meet_chunks WHERE created_at < now() - interval '7 days'");
-  const stale = await many<{ id: string; user_id: string }>("SELECT id, user_id FROM meet_sessions WHERE status = 'gravando' AND started_at < now() - interval '6 hours'");
+  const stale = await many<{ id: string; user_id: string }>("SELECT id, user_id FROM meet_sessions WHERE status IN ('gravando', 'entrando') AND started_at < now() - interval '6 hours'");
   for (const s of stale) await stopMeet(s.user_id, s.id).catch(() => {});
 }

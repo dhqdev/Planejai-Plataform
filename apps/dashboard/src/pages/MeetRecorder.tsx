@@ -11,11 +11,11 @@ import { haptic } from "../touch";
  * em PDF (Documentos > Reuniões e WhatsApp). Cada trecho é um arquivo inteiro: o gravador para e recomeça.
  */
 
-type Meet = { id: string; title: string; status: "gravando" | "resumindo" | "pronto" | "erro"; started_at: string; ended_at: string | null; document_id: string | null; error: string | null; chunks: number; overview?: string | null };
+type Meet = { id: string; title: string; mode?: "painel" | "robo"; status: "entrando" | "gravando" | "resumindo" | "pronto" | "erro"; started_at: string; ended_at: string | null; document_id: string | null; error: string | null; chunks: number; overview?: string | null };
 type MeetDetail = Meet & { parts: { seq: number; status: string; transcript: string | null }[] };
 
 const SEGMENT_MS = 150_000;
-const STATUS: Record<Meet["status"], string> = { gravando: "Ouvindo", resumindo: "Escrevendo a ata", pronto: "Ata pronta", erro: "Não deu certo" };
+const STATUS: Record<Meet["status"], string> = { entrando: "Esperando aceitarem a entrada", gravando: "Ouvindo", resumindo: "Escrevendo a ata", pronto: "Ata pronta", erro: "Não deu certo" };
 
 const canCapture = () =>
   typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getDisplayMedia) && typeof MediaRecorder !== "undefined" && !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -49,7 +49,7 @@ interface Live {
 
 export function MeetRecorder() {
   const list = useApi<{ items: Meet[] }>("/api/meet");
-  const busy = list.data?.items.some((m) => m.status === "gravando" || m.status === "resumindo");
+  const busy = list.data?.items.some((m) => m.status === "entrando" || m.status === "gravando" || m.status === "resumindo");
   const [liveId, setLiveId] = useState<string | null>(null);
   const detail = useApi<MeetDetail>(liveId ? `/api/meet/${liveId}` : null, { poll: 15_000, live: ["meet_sessions"] });
   const [title, setTitle] = useState("");
@@ -200,6 +200,29 @@ export function MeetRecorder() {
     void list.reload();
   }
 
+  // Marlene entra sozinha pelo link: não precisa de notebook nem desta aba aberta
+  const [link, setLink] = useState("");
+  const [sending, setSending] = useState(false);
+  const sendBot = async () => {
+    haptic();
+    setError(null);
+    setSending(true);
+    try {
+      await api("/api/meet/robo", { method: "POST", json: { url: link.trim() } });
+      setLink("");
+      void list.reload();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSending(false);
+    }
+  };
+  const leaveBot = async (m: Meet) => {
+    haptic();
+    await api(`/api/meet/${m.id}/stop`, { method: "POST" }).catch((e) => setError((e as Error).message));
+    void list.reload();
+  };
+
   const remove = async (m: Meet) => {
     if (!(await confirmDialog({ title: "Apagar esta reunião?", body: `A transcrição de "${m.title}" some. O PDF da ata continua em Documentos.`, confirmLabel: "Apagar", danger: true }))) return;
     await api(`/api/meet/${m.id}`, { method: "DELETE" }).catch((e) => setError((e as Error).message));
@@ -211,9 +234,19 @@ export function MeetRecorder() {
 
   return (
     <>
+      <ErrorBox error={error} />
       <section className="card meet-card">
-        <h3>Acompanhar reunião</h3>
-        <ErrorBox error={error} />
+        <h3>Mandar a Marlene para a reunião</h3>
+        <p className="muted meet-help">Cole o link do Meet. Ela entra sozinha com o nome dela, mesmo sem você na reunião, e manda a ata no WhatsApp quando acabar. Alguém da reunião precisa aceitar a entrada dela.</p>
+        <div className="meet-link">
+          <input className="input" value={link} inputMode="url" placeholder="meet.google.com/abc-defg-hij" onChange={(e) => setLink(e.target.value)} />
+          <button className="btn btn-primary" disabled={sending || !/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}/i.test(link)} onClick={() => void sendBot()}>
+            <Icon name="send" size={16} /> {sending ? "Enviando…" : "Mandar"}
+          </button>
+        </div>
+      </section>
+      <section className="card meet-card">
+        <h3>Ouvir pelo notebook</h3>
         {phase === "live" || phase === "stopping" ? (
           <>
             <div className="meet-live" aria-live="polite">
@@ -271,7 +304,12 @@ export function MeetRecorder() {
                         <Icon name="file" size={16} /> Ata
                       </a>
                     )}
-                    {m.status !== "gravando" && m.status !== "resumindo" && (
+                    {m.mode === "robo" && (m.status === "entrando" || m.status === "gravando") && (
+                      <button className="btn" onClick={() => void leaveBot(m)}>
+                        <Icon name="stop" size={16} /> {m.status === "entrando" ? "Cancelar" : "Tirar da reunião"}
+                      </button>
+                    )}
+                    {m.status !== "entrando" && m.status !== "gravando" && m.status !== "resumindo" && (
                       <button className="icon-btn" aria-label="Apagar reunião" onClick={() => void remove(m)}>
                         <Icon name="trash" size={16} />
                       </button>

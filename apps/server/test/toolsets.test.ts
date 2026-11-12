@@ -39,7 +39,8 @@ describe("ferramentas do CTO por assunto", () => {
     // make_audio e send_gif não têm especialista: o grupo de mídia pega "áudio" e "gif" pela palavra
     // unsend_message apaga mensagem do próprio CTO na conversa: não tem por que passar por especialista
     // Uber (beta) é só do CTO: enfileira e a resposta chega sozinha, não tem o que um especialista somar
-    const own = new Set(["make_audio", "send_gif", "document_delete", "unsend_message", ...UBER_TOOLS.map((t) => t.name)]);
+    // reunião pelo link: a Marlene é da loja (não está em SPECIALISTS), então o CTO também manda ela entrar e sair
+    const own = new Set(["make_audio", "send_gif", "document_delete", "unsend_message", "meeting_join", "meeting_leave", "meeting_list", ...UBER_TOOLS.map((t) => t.name)]);
     for (const t of CTO_TOOL_GROUPS.flatMap((g) => g.tools)) {
       expect(core.has(t.name), `${t.name} não pode estar no núcleo e num grupo`).toBe(false);
       expect(team.has(t.name) || own.has(t.name), `${t.name} sem especialista`).toBe(true);

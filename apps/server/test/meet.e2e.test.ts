@@ -179,4 +179,79 @@ describe.skipIf(!enabled)("secretária de reuniões (e2e)", () => {
     expect((await db.one("SELECT status FROM meet_sessions WHERE id = $1", [a.id])).status).toBe("resumindo");
     expect(b.status).toBe("gravando");
   });
+
+  it("link do Meet: só aceita meet.google.com, uma reunião por vez, e cancelar antes de entrar avisa o robô", async () => {
+    const bot = await import("../src/meet-bot.js");
+    expect(bot.meetLink("entra aí https://meet.google.com/ABC-defg-hij?authuser=0 valeu")).toBe("https://meet.google.com/abc-defg-hij");
+    expect(bot.meetLink("https://zoom.us/j/123")).toBeNull();
+    expect((await bot.joinMeetByLink(user.id, "https://evil.com/abc-defg-hij")).ok).toBe(false);
+    const r = await bot.joinMeetByLink(user.id, "meet.google.com/xyz-abcd-efg".replace(/^/, "https://"), "Diretoria");
+    expect(r).toMatchObject({ ok: true, session: { status: "entrando", mode: "robo", title: "Diretoria" } });
+    expect(await bot.joinMeetByLink(user.id, "https://meet.google.com/xyz-abcd-efg")).toMatchObject({ ok: false, status: 409 });
+    const id = (r as any).session.id;
+    // a tela e a ferramenta do WhatsApp cancelam do mesmo jeito
+    const { meetingLeave } = await import("../src/agent/tools/meet.js");
+    expect(await meetingLeave.run({}, { user: { id: user.id } } as any)).toMatchObject({ ok: true, title: "Diretoria" });
+    expect(await db.one("SELECT status, error FROM meet_sessions WHERE id = $1", [id])).toMatchObject({ status: "erro", error: expect.stringMatching(/cancelou/) });
+    // o robô que pega o job depois vê o cancelamento e nem abre o navegador
+    await bot.runMeetBot(id);
+  });
 });
+
+/** Robô entrando numa sala falsa no Chrome local: nome, "Pedir para participar", áudio do WebRTC vira trecho, sai quando a reunião acaba. */
+describe.skipIf(!enabled || !process.env.CHROME_PATH)("Marlene entra sozinha pelo link (navegador)", () => {
+  let db: typeof import("../src/db/pool.js");
+  let server: import("node:http").Server;
+  let base = "";
+  const names: string[] = [];
+  const ROOM = `<!doctype html><html lang="pt-BR"><body>
+<input type="text" aria-label="Seu nome" id="nome">
+<button id="entrar">Pedir para participar</button>
+<div id="sala"></div>
+<script>
+document.getElementById("entrar").onclick = async () => {
+  fetch("/nome?n=" + encodeURIComponent(document.getElementById("nome").value));
+  document.getElementById("entrar").remove();
+  // sala com áudio de outra pessoa chegando pelo WebRTC (dois peers na mesma página)
+  const ctx = new AudioContext(); const osc = ctx.createOscillator(); osc.frequency.value = 300;
+  const d = ctx.createMediaStreamDestination(); osc.connect(d); osc.start();
+  const a = new RTCPeerConnection(); const b = new RTCPeerConnection();
+  a.onicecandidate = (e) => e.candidate && b.addIceCandidate(e.candidate);
+  b.onicecandidate = (e) => e.candidate && a.addIceCandidate(e.candidate);
+  a.addTrack(d.stream.getAudioTracks()[0], d.stream);
+  await a.setLocalDescription(await a.createOffer()); await b.setRemoteDescription(a.localDescription);
+  await b.setLocalDescription(await b.createAnswer()); await a.setRemoteDescription(b.localDescription);
+  setTimeout(() => { document.getElementById("sala").innerHTML = '<button aria-label="Sair da chamada">sair</button>'; }, 800);
+  setTimeout(() => { document.getElementById("sala").innerHTML = "A chamada foi encerrada pelo organizador"; }, 9000);
+};
+</script></body></html>`;
+
+  beforeAll(async () => {
+    db = await import("../src/db/pool.js");
+    const http = await import("node:http");
+    server = http.createServer((req, res) => {
+      if (req.url?.startsWith("/nome")) names.push(new URL(req.url, "http://x").searchParams.get("n") ?? "");
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(ROOM);
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    base = `http://127.0.0.1:${(server.address() as any).port}`;
+  });
+  afterAll(() => new Promise<void>((r) => server.close(() => r())));
+
+  it("entra com o nome dela, grava o que os outros falam e fecha a reunião quando ela acaba", async () => {
+    const bot = await import("../src/meet-bot.js");
+    const meet = await import("../src/meet.js");
+    Object.assign(bot.BOT_TIMING, { segmentMs: 3000, pollMs: 1000, settleMs: 500 });
+    const { upsertUser } = await import("../src/ingest.js");
+    const u = await upsertUser("5519955557777", "Davi Queiroz");
+    const s = await meet.startMeet(u.id, "Sala falsa", { url: `${base}/abc-defg-hij` });
+    await bot.runMeetBot(s.id);
+    const row = await db.one("SELECT status, error FROM meet_sessions WHERE id = $1", [s.id]);
+    expect(row).toMatchObject({ status: "resumindo", error: null });
+    expect(names).toEqual(["Marlene (anotações de Davi)"]);
+    const chunks = await db.many("SELECT seq, length(audio) AS n FROM meet_chunks WHERE session_id = $1 ORDER BY seq", [s.id]);
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+    expect(Number(chunks[0].n)).toBeGreaterThan(1000);
+  }, 60_000);
+});
+

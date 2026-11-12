@@ -193,6 +193,16 @@ async function startChannelJobs(log: WorkerLog) {
     if (job) await runMeetJob(job.data, log);
   });
 
+  // Marlene na reunião pelo link: cada robô segura um Chrome do browserless enquanto a reunião dura (2 ao mesmo tempo)
+  for (let i = 0; i < 2; i++) {
+    await boss.work<{ sessionId: string }>(QUEUES.meetBot, { batchSize: 1, pollingIntervalSeconds: 3 }, async ([job]) => {
+      const { runMeetBot } = await import("../meet-bot.js");
+      if (job) await runMeetBot(job.data.sessionId, log);
+    });
+  }
+  // deploy no meio de uma reunião: o robô que caiu volta para a sala
+  void import("../meet-bot.js").then((m) => m.resumeMeetBots()).catch((err) => log.error({ err }, "falha ao retomar robôs de reunião"));
+
   // Uber (beta): só aqui (parte do canal, 1 réplica), então UBER_CONCURRENCY é o teto de Chromes da Uber no sistema todo
   for (let i = 0; i < config.UBER_CONCURRENCY; i++) {
     await boss.work<import("../uber.js").UberJob>(QUEUES.uber, { batchSize: 1, pollingIntervalSeconds: 2 }, async ([job]) => {

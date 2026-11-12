@@ -25,3 +25,6 @@ p.meet-help { padding-left: 0; }
 .meet-status.s-erro { color: var(--err); }
 .meet-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 @media (prefers-reduced-motion: reduce) { .meet-dot { animation: none; } }
+.meet-link { display: flex; gap: 8px; }
+.meet-link .input { flex: 1; min-width: 0; }
+.meet-status.s-entrando { color: var(--accent); }

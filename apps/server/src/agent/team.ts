@@ -418,7 +418,8 @@ export const CTO_TOOL_GROUPS: { id: string; when: RegExp; tools: Tool[] }[] = [
     when: /(?<!\p{L})(anota[çc][aãõo]|t[oó]picos?|bloco de notas|minhas notas|lista de (tarefa|ideia|mercado|compra|coisa|filme|livro|presente|convidad|afazere)|checklist|ata\b|roteiro|passo a passo|anot\w* (isso|a[ií]|em|pra mim|essa?s? ideia|tudo))/iu,
     tools: [notes.noteWrite, notes.noteList],
   },
-  { id: "documentos", when: /(?<!\p{L})(apag|exclu|delet|remov)\w*.{0,40}\b(document|arquivo|pdf|contrato)/iu, tools: [documents.documentDelete] },
+  { id: "documentos", when: /(?<!\p{L})(apag|exclu|delet|remov)\w*.{0,40}\b(document|arquivo|pdf|contrato)/iu, tools: [documents.documentDelete] },  // link do Meet na mensagem ("entra nessa reunião e me manda os pontos"): a Marlene entra sozinha; "sai da reunião" tira
+  { id: "reuniao", when: /meet\.google\.com\/|(?<!\p{L})(sai[ar]?|tira\w*)\b.{0,30}\breuni[aã]o/iu, tools: [meet.meetingJoin, meet.meetingLeave, meet.meetingList] },
 ];
 
 /** Assunto do time sob medida (team_create_agent e companhia, em tools/team.ts). */
@@ -487,6 +488,8 @@ export const CLIENT_AGENT_TOOLS: Record<string, Tool> = Object.fromEntries(
     pdf.makePdf,
     meet.meetingList,
     meet.meetingRead,
+    meet.meetingJoin,
+    meet.meetingLeave,
   ].map((t) => [t.name, t]),
 );
 
