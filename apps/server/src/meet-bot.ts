@@ -178,16 +178,25 @@ async function knock(page: Page, name: string) {
     if (await clickButton(page, JOIN)) return true;
     await sleep(2000);
   }
-  throw new Error("a página do Meet não mostrou o botão de participar. O link pode estar errado ou a reunião exige conta do Google da empresa.");
+  throw new Error("a página do Meet não mostrou o botão de pedir para participar, então ninguém recebeu pedido.");
 }
 
-function meetRefusalText(text: string) {
+/** A linha da página que disse o motivo, para a mensagem citar o que o Meet mostrou de verdade. */
+export function refusalLine(text: string) {
+  const line = text.split("\n").map((l) => l.trim()).find((l) => REFUSED.some((r) => r.test(l)));
+  return line ? line.slice(0, 160) : "";
+}
+
+export function meetRefusalText(text: string) {
+  if (/não (pode|é possível) participar|can.t join this (video )?call/i.test(text))
+    return `o Google não deixou meu navegador automático entrar: a página do Meet mostrou "${refusalLine(text) || "Você não pode participar desta videochamada"}" antes de eu conseguir pedir para participar. Ninguém da reunião recebeu pedido; não é problema da sua reunião. Por enquanto, me ouça pela aba Reuniões no notebook.`;
   if (/recusou|negou|denied/i.test(text)) return "alguém da reunião recusou a minha entrada.";
   if (/ningu[eé]m respondeu|no one responded/i.test(text)) return "ninguém aceitou a minha entrada a tempo.";
   if (/removeu|removed/i.test(text)) return "me tiraram da reunião.";
   if (/terminou|encerrada|ended/i.test(text)) return "a reunião já tinha terminado.";
   if (/c[oó]digo|code|não existe/i.test(text)) return "esse link de reunião não existe.";
-  return "o Meet não deixou eu participar (a reunião pode aceitar só contas da empresa).";
+  const line = refusalLine(text);
+  return line ? `o Meet mostrou "${line}".` : "o Meet não deixou eu participar.";
 }
 
 export async function runMeetBot(sessionId: string, log?: { error: (...a: any[]) => void }) {

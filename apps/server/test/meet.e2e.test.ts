@@ -52,6 +52,15 @@ vi.mock("../src/social.js", async (orig) => ({
 }));
 
 describe("ata da reunião: formato", () => {
+  it("recusa do Meet: a mensagem cita o que a página mostrou e não inventa motivo", async () => {
+    const { meetRefusalText } = await import("../src/meet-bot.js");
+    const blocked = meetRefusalText("Google Meet\nVocê não pode participar desta videochamada\nVoltar à tela inicial");
+    expect(blocked).toContain('"Você não pode participar desta videochamada"');
+    expect(blocked).toContain("Ninguém da reunião recebeu pedido");
+    expect(blocked).not.toMatch(/empresa/);
+    expect(meetRefusalText("Alguém na chamada recusou sua solicitação")).toBe("alguém da reunião recusou a minha entrada.");
+  });
+
   it("meetSpec tira foto e sumário, marca a capa como ata e mantém a tabela de tarefas", async () => {
     const { meetSpec, defaultTitle } = await import("../src/meet.js");
     const spec = meetSpec("Lançamento", ATA);
