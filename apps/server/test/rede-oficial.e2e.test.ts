@@ -50,6 +50,11 @@ describe.skipIf(!enabled)("perfil oficial na rede (e2e)", () => {
     expect(people).toHaveLength(PEOPLE.length);
     expect(people.every((p: any) => p.status === "blocked")).toBe(true);
     expect((await db.one("SELECT count(*)::int AS n FROM feed_posts WHERE source LIKE 'ex:post:%'")).n).toBe(EXAMPLE_POSTS.length);
+    // posts com ilustração (arquivos em src/assets/rede) e destaques fixos nos perfis
+    const { EXAMPLE_HIGHLIGHTS } = await import("../src/feed-exemplo.js");
+    expect((await db.one("SELECT count(*)::int AS n FROM feed_media m JOIN feed_posts p ON p.id = m.post_id WHERE p.source LIKE 'ex:post:%'")).n).toBe(EXAMPLE_POSTS.filter((p) => p.photo).length);
+    expect((await db.one("SELECT count(*)::int AS n FROM feed_status WHERE source LIKE 'ex:hl:%' AND highlighted_at IS NOT NULL")).n).toBe(EXAMPLE_HIGHLIGHTS.length);
+    expect((await db.one("SELECT count(*)::int AS n FROM feed_status WHERE source LIKE 'ex:st:%' AND expires_at > $1", [NIGHT])).n).toBeGreaterThan(0);
     const before = await db.one("SELECT (SELECT count(*)::int FROM feed_likes) AS l, (SELECT count(*)::int FROM feed_comments) AS c");
     expect(before.l).toBeGreaterThan(50);
     expect(before.c).toBeGreaterThan(20);
