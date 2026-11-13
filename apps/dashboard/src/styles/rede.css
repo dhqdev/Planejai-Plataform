@@ -220,7 +220,7 @@
 .rd-profile-bio strong { font-size: 14.5px; font-weight: 650; }
 .rd-profile-bio p { margin: 0; font-size: 14.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .rd-followsme { padding: 2px 8px; border-radius: 6px; background: var(--panel-2); font-size: 11.5px; font-style: normal; color: var(--muted); }
-.rd-profile-acts { display: flex; gap: 8px; }
+.rd-profile-acts { display: flex; align-items: center; gap: 8px; }
 .rd-profile-acts > .btn:first-child, .rd-profile-acts > .rd-follow { height: 34px; padding: 0 18px; border-radius: 10px; justify-content: center; font-size: 14px; font-weight: 600; }
 .rd-sq { flex: none; width: 34px; height: 34px; padding: 0; border-radius: 10px; justify-content: center; }
 .rd-follow { height: 38px; padding: 0 18px; border: 1px solid transparent; border-radius: 12px; background: var(--ink); color: var(--on-ink); font: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer; transition: background .15s, color .15s, transform .15s; }
@@ -401,6 +401,87 @@
 @keyframes rd-text-in { from { opacity: 0; transform: translateY(10px) scale(.98); } }
 @media (prefers-reduced-motion: reduce) { .rd-sv-text, .rd-sv-img, .rd-se-img { animation: none; } }
 
+/* ---------- telas no jeito de rede social (David, 2026-11-13): perfil, destaques, sugestões, notificações, explorar ---------- */
+
+/* perfil: foto com anel de status, @ no topo (notebook) ou nome (celular), números, bio e botões de mesma largura */
+.rd-pf-ring { flex: none; padding: 3px; border: 2.5px solid var(--violet); border-radius: 50%; background: none; line-height: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: transform .15s; }
+.rd-pf-ring.seen { border-color: var(--border-2); }
+.rd-pf-ring.none { border-color: transparent; cursor: default; }
+button.rd-pf-ring:active { transform: scale(.95); }
+.rd-profile h1 .rd-pf-name { display: none; }
+.rd-profile-bio .rd-pf-at { display: none; align-items: center; gap: 8px; font-size: 13.5px; color: var(--muted); }
+.rd-profile-bio small { margin-top: 2px; font-size: 12.5px; color: var(--muted); }
+.rd-profile-acts > .btn { height: 34px; padding: 0 16px; border-radius: 10px; justify-content: center; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.rd-profile-acts > .btn.rd-sq { padding: 0; }
+.rd-profile-acts > .rd-sq.on { background: var(--panel-2); }
+.rd-pnone { display: grid; justify-items: center; gap: 12px; padding: 44px 16px 52px; text-align: center; color: var(--muted); }
+.rd-pnone span { width: 62px; height: 62px; display: grid; place-items: center; border: 1.5px solid var(--border-2); border-radius: 50%; color: var(--text); }
+.rd-pnone p { margin: 0; max-width: 32ch; font-size: 14.5px; text-wrap: balance; }
+.rd-ptabs button { padding: 13px 4px; }
+.rd-grid-wait i { aspect-ratio: 4 / 5; background: var(--panel-2); animation: rd-breathe 1.4s ease-in-out infinite; }
+
+/* destaques: bolinhas com a miniatura do status que ficou no perfil */
+.rd-hl { display: flex; gap: 16px; overflow-x: auto; padding: 4px 2px 18px; scrollbar-width: none; overscroll-behavior-x: contain; }
+.rd-hl::-webkit-scrollbar { display: none; }
+.rd-hl-item { flex: none; width: 72px; display: grid; justify-items: center; gap: 6px; }
+.rd-hl-item > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text); }
+.rd-hl-ring { width: 68px; height: 68px; padding: 3px; display: grid; place-items: center; border: 1.5px solid var(--border-2); border-radius: 50%; background: none; color: var(--text); cursor: pointer; overflow: hidden; -webkit-tap-highlight-color: transparent; transition: transform .15s; }
+.rd-hl-ring:active { transform: scale(.94); }
+.rd-hl-ring img, .rd-hl-ring i { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.rd-hl-ring i { display: grid; place-items: center; padding: 8px; overflow: hidden; color: #fff; font-style: normal; font-size: 7.5px; font-weight: 700; line-height: 1.15; text-align: center; overflow-wrap: anywhere; }
+.rd-hl-ring.new { border-style: dashed; }
+.rd-sv-star.on { background: #fff; color: #111; }
+.rd-sv-star { margin-right: 4px; }
+
+/* sugestões: cartões que deslizam para o lado */
+.rd-sug { padding: 14px 0 16px; border-bottom: 1px solid var(--border); }
+.rd-profile + .rd-sug { border-bottom: none; padding-top: 0; }
+.rd-sug header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.rd-sug h2 { flex: 1; margin: 0; font-size: 15px; font-weight: 700; }
+.rd-sug-all { font-size: 13.5px; font-weight: 600; color: var(--muted) !important; }
+.rd-sug-close { width: 28px; height: 28px; margin-right: -6px; display: grid; place-items: center; padding: 0; border: none; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
+.rd-sug-row { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; overscroll-behavior-x: contain; }
+.rd-sug-row::-webkit-scrollbar { display: none; }
+.rd-sug-card { position: relative; flex: none; width: 152px; display: grid; justify-items: center; gap: 2px; padding: 16px 12px 12px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); text-align: center; scroll-snap-align: start; }
+.rd-sug-card .rd-avatar { align-self: auto; margin-bottom: 8px; }
+.rd-sug-name { max-width: 100%; display: flex; align-items: center; gap: 4px; font-size: 14.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rd-sug-why { max-width: 100%; margin-bottom: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--muted); }
+.rd-sug-card .rd-follow { width: 100%; height: 32px; padding: 0 8px; border-radius: 10px; white-space: nowrap; }
+.rd-sug-x { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: none; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
+@media (hover: hover) { .rd-sug-x:hover, .rd-sug-close:hover { background: var(--panel-2); color: var(--text); } .rd-sug-all:hover { color: var(--text) !important; } }
+
+/* notificações: filtros em pílula, grupos por data, rostos juntos e miniatura da publicação */
+.rd-chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 6px; scrollbar-width: none; }
+.rd-chips::-webkit-scrollbar { display: none; }
+.rd-chips button { flex: none; height: 34px; padding: 0 14px; border: none; border-radius: 10px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background .15s, color .15s; }
+.rd-chips button.on { background: var(--ink); color: var(--on-ink); }
+.rd-nt h2 { margin: 18px 0 4px; font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.rd-nt-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; }
+.rd-nt-row > .rd-avatar { align-self: center; }
+.rd-nt-faces { position: relative; flex: none; width: 46px; height: 46px; }
+.rd-nt-faces > * { position: absolute; top: 0; left: 0; border-radius: 50%; }
+.rd-nt-faces > :last-child { top: auto; left: auto; right: 0; bottom: 0; box-shadow: 0 0 0 2px var(--panel); background: var(--panel); }
+.rd-nt-txt { flex: 1; min-width: 0; font-size: 14.5px; line-height: 1.35; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.rd-nt-txt b { font-weight: 650; }
+.rd-nt-txt b .rd-verified { margin-left: 3px; }
+.rd-nt-txt time { color: var(--muted); white-space: nowrap; }
+.rd-nt-row.new .rd-nt-txt time::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 7px; border-radius: 50%; background: var(--violet); vertical-align: 1px; }
+.rd-nt-thumb { flex: none; width: 46px; height: 46px; display: block; border-radius: 9px; overflow: hidden; }
+.rd-nt-thumb:not([class*="rd-card-"]) { background: var(--panel-2); }
+.rd-nt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rd-nt-thumb i { display: block; padding: 6px 5px; font-style: normal; font-size: 6.5px; font-weight: 600; line-height: 1.2; overflow: hidden; height: 100%; }
+.rd-nt-row .rd-follow { white-space: nowrap; }
+.rd-sub-big { margin: 16px 0 10px; font-size: 15px; font-weight: 700; color: var(--text); }
+
+/* meu perfil na barra do feed e a folha de publicar */
+.rd-ico-me > * { border-radius: 50%; box-shadow: 0 0 0 1.5px var(--border-2); }
+.rd-compose > :first-child { align-self: start; }
+.rd-compose-who { display: grid; line-height: 1.25; padding-top: 2px; }
+.rd-compose-who strong { font-size: 15px; font-weight: 650; }
+.rd-compose-who span { font-size: 12.5px; color: var(--muted); }
+.rd-tool.wide { width: auto; height: 36px; margin-left: 0; padding: 0 12px 0 10px; display: inline-flex; align-items: center; gap: 7px; border-radius: 99px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 13.5px; font-weight: 600; }
+.rd-compose-modal .rd-compose textarea { min-height: 96px; }
+
 /* ---------- celular ---------- */
 @media (max-width: 767px) {
   .main:has(> .route-fade > .rd) { background: var(--panel); }
@@ -416,7 +497,7 @@
   .rd-profile { grid-template-columns: auto minmax(0, 1fr); column-gap: 20px; row-gap: 14px; }
   .rd-profile-info { gap: 8px; }
   .rd-profile-line h1 { font-size: 19px; }
-  .rd-profile .rd-stats { gap: 16px; }
+  .rd-profile .rd-stats { gap: 0; display: grid; grid-template-columns: repeat(3, 1fr); }
   .rd-profile .rd-stats > * { display: grid; justify-items: start; gap: 0; font-size: 13px; color: var(--muted); }
   .rd-profile .rd-stats b { font-size: 16.5px; color: var(--text); }
   .rd-profile-bio { grid-column: 1 / -1; order: 3; }
@@ -424,7 +505,16 @@
   .rd-profile-line, .rd-profile .rd-stats { grid-column: 2; }
   .rd-profile > .rd-avatar, .rd-profile > .rd-official, .rd-profile > :first-child { grid-row: span 2; }
   .rd-profile > .rd-profile-acts { grid-column: 1 / -1; order: 4; }
-  .rd-profile-acts > .btn:first-child, .rd-profile-acts > .rd-follow { flex: 1; }
+  .rd-profile-acts > .btn:not(.rd-sq), .rd-profile-acts > .rd-follow { flex: 1; min-width: 0; padding: 0 8px; }
+  .rd-profile h1 .rd-pf-handle, .rd-profile-bio > strong { display: none; }
+  .rd-profile h1 .rd-pf-name { display: inline; }
+  .rd-profile-bio .rd-pf-at { display: flex; }
+  .rd-profile-line { align-self: end; }
+  .rd-profile .rd-stats { align-self: start; }
+  .rd-hl { margin: 0 -16px; padding: 2px 16px 16px; }
+  .rd-sug { margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
+  .rd-sug-row { margin: 0 -16px; padding: 0 16px; scroll-padding: 0 16px; }
+  .rd-chips { margin: 0 -16px; padding: 4px 16px 6px; }
   .rd-ptabs { gap: 0; margin: 0 -16px; }
   .rd-ptabs button { flex: 1; justify-content: center; }
   .rd-ptabs button span { display: none; }

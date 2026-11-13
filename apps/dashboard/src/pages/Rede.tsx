@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
@@ -34,8 +34,10 @@ import {
   type Photo,
   type Post,
   type Profile,
+  type StatusGroup,
+  type StatusItem,
 } from "./redeBase";
-import { StatusComposer, StatusRow } from "./RedeStatus";
+import { StatusComposer, StatusRow, StatusViewer } from "./RedeStatus";
 
 /**
  * Rede social do Planejai: o Feed é o que abre no Início (celular e notebook). Mistura do Instagram com o Twitter:
@@ -43,10 +45,13 @@ import { StatusComposer, StatusRow } from "./RedeStatus";
  * curtir (até com dois toques na foto), comentar, seguir, perfil em grade, busca e atividade.
  * Olhar é livre; para publicar, curtir, comentar e seguir a pessoa cria o perfil (o avatar é o Bolinho dela).
  * O perfil oficial @planejai posta sozinho (status do WhatsApp, blog e posts de partida, feed-oficial.ts no servidor).
- * Telas: "/" (feed), /rede/p/:id (post), /rede/u/:handle (perfil), /rede/atividade, /rede/buscar.
+ * Telas: "/" (feed), /rede/p/:id (post), /rede/u/:handle (perfil com destaques, grade, lista e marcados),
+ * /rede/atividade (notificações por data, com filtros) e /rede/buscar (busca, sugestões e explorar).
  */
 
 const PHONE = "(max-width: 767px)";
+/** A partir daqui existe a coluna da direita (busca, meu perfil, Quem seguir). */
+const WIDE = "(min-width: 1100px)";
 const quiet = { "x-pj-quiet": "1" };
 interface MeData {
   profile: Profile | null;
@@ -125,7 +130,7 @@ function Aside() {
             </span>
           </Link>
           <Link to="/rede/atividade" className="rd-aside-link">
-            <Icon name="heart" size={18} /> Atividade
+            <Icon name="heart" size={18} /> Notificações
             {unread > 0 && <b>{unread > 99 ? "99+" : unread}</b>}
           </Link>
         </>
@@ -225,6 +230,59 @@ function Join({ suggestion, onDone, editing, onClose }: { suggestion?: { handle:
         <button type="submit" hidden />
       </form>
     </Modal>
+  );
+}
+
+// ---------- Sugestões de pessoas (carrossel de cartões) ----------
+
+const SKIP_KEY = "pj-rede-sug-fora";
+const readSkip = (): string[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(SKIP_KEY) ?? "[]");
+    return Array.isArray(v) ? v.map(String).slice(-200) : [];
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * "Sugestões para você": cartões que deslizam para o lado, cada um com o Bolinho da pessoa, o nome, por que ela
+ * aparece (segue você, gente em comum) e o botão de seguir. O x tira a pessoa das sugestões neste aparelho.
+ */
+function Suggest({ title = "Sugestões para você", onClose }: { title?: string; onClose?: () => void }) {
+  const people = useApi<Person[]>("/api/feed/people");
+  const [skip, setSkip] = useState<string[]>(readSkip);
+  const list = (people.data ?? []).filter((p) => !skip.includes(p.id)).slice(0, 14);
+  if (!list.length) return null;
+  const drop = (id: string) => {
+    haptic(5);
+    const next = [...skip, id];
+    setSkip(next);
+    try {
+      localStorage.setItem(SKIP_KEY, JSON.stringify(next));
+    } catch {
+      /* sem storage: some só nesta visita */
+    }
+  };
+  return (
+    <section className="rd-sug" aria-label={title}>
+      <header>
+        <h2>{title}</h2>
+        <Link to="/rede/buscar" className="rd-sug-all">Ver todas</Link>
+        {onClose && <button type="button" className="rd-sug-close" onClick={onClose} aria-label="Fechar sugestões"><Icon name="x" size={16} /></button>}
+      </header>
+      <div className="rd-sug-row">
+        {list.map((p) => (
+          <div className="rd-sug-card" key={p.id}>
+            <button type="button" className="rd-sug-x" onClick={() => drop(p.id)} aria-label={`Não sugerir ${p.name}`}><Icon name="x" size={14} /></button>
+            <Avatar who={p} size={72} />
+            <Link to={profilePath(p.handle)} className="rd-sug-name"><NameOf who={p} /></Link>
+            <span className="rd-sug-why">{p.followsMe ? "Segue você" : p.mutual ? `${p.mutual} em comum` : `@${p.handle}`}</span>
+            <FollowButton handle={p.handle} following={p.following} back={p.followsMe} small />
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -688,14 +746,17 @@ function PostCard({ post, detail, onPatch, onRemove }: { post: Post; detail?: bo
 const FULL = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "long", year: "numeric" });
 const fullTime = (iso: string) => FULL.format(new Date(iso)).replace(" às ", " · ");
 
-function PostList({ list, empty }: { list: ReturnType<typeof usePosts>; empty: ReactNode }) {
+function PostList({ list, empty, between }: { list: ReturnType<typeof usePosts>; empty: ReactNode; /** bloco que entra depois do terceiro post (sugestões) */ between?: ReactNode }) {
   if (list.loading && !list.posts.length) return <PostSkeleton />;
   if (list.error && !list.posts.length) return <p className="rd-none">{list.error}</p>;
   if (!list.posts.length) return <>{empty}</>;
   return (
     <>
-      {list.posts.map((p) => (
-        <PostCard key={p.id} post={p} onPatch={(c) => list.patch(p.id, c)} onRemove={() => list.remove(p.id)} />
+      {list.posts.map((p, i) => (
+        <Fragment key={p.id}>
+          <PostCard post={p} onPatch={(c) => list.patch(p.id, c)} onRemove={() => list.remove(p.id)} />
+          {between && i === Math.min(2, list.posts.length - 1) && between}
+        </Fragment>
       ))}
       <LoadMore on={list.hasMore} more={list.more} busy={list.loadingMore} />
       {!list.hasMore && list.posts.length > 4 && <p className="rd-end">Você viu tudo por enquanto.</p>}
@@ -771,6 +832,12 @@ function Composer({ onPosted, autoFocus, inline, initial }: { onPosted: (p: Post
     <div className={`rd-compose${inline ? " inline" : ""}`}>
       <Avatar who={profile} size={42} me link={false} />
       <div className="rd-compose-main">
+        {!inline && (
+          <div className="rd-compose-who">
+            <strong>{profile.name}</strong>
+            <span>@{profile.handle} · aparece no Feed para todo mundo</span>
+          </div>
+        )}
         <textarea
           ref={area}
           value={body}
@@ -794,7 +861,10 @@ function Composer({ onPosted, autoFocus, inline, initial }: { onPosted: (p: Post
         )}
         {error && <div className="error-box">{error}</div>}
         <div className="rd-compose-bar">
-          <button type="button" className="rd-tool" disabled={photos.length >= MAX_PHOTOS} onClick={() => file.current?.click()} aria-label="Adicionar foto" title={`Foto (até ${MAX_PHOTOS})`}><Icon name="image" size={20} /></button>
+          <button type="button" className={`rd-tool${inline ? "" : " wide"}`} disabled={photos.length >= MAX_PHOTOS} onClick={() => file.current?.click()} aria-label="Adicionar foto" title={`Foto (até ${MAX_PHOTOS})`}>
+            <Icon name="image" size={20} />
+            {!inline && <span>{photos.length ? `${photos.length} de ${MAX_PHOTOS} fotos` : "Foto"}</span>}
+          </button>
           <input ref={file} type="file" accept="image/*" multiple hidden onChange={(e) => { void add(e.target.files); e.target.value = ""; }} />
           <span className="spacer" />
           {left <= 80 && <span className={`rd-left${left <= 20 ? " low" : ""}`} aria-live="polite">{left}</span>}
@@ -900,6 +970,7 @@ function PlusMenu({ onPost, onPhotos, onStatus }: { onPost: () => void; onPhotos
 function FeedHome() {
   const { unread, profile, join } = useRede();
   const phone = useMedia(PHONE);
+  const wide = useMedia(WIDE);
   const [tab, setTabState] = useState<Tab>(readTab);
   const [writing, setWriting] = useState<false | File[]>(false);
   const [statusing, setStatusing] = useState(false);
@@ -926,10 +997,13 @@ function FeedHome() {
           <PlusMenu onPost={() => setWriting([])} onPhotos={(f) => setWriting(f)} onStatus={() => setStatusing(true)} />
           <Link to="/rede/buscar" className="rd-ico" aria-label="Buscar pessoas"><Icon name="search" size={22} /></Link>
           {profile && (
-            <Link to="/rede/atividade" className="rd-ico rd-bell" aria-label={unread ? `Atividade, ${unread} novas` : "Atividade"}>
+            <Link to="/rede/atividade" className="rd-ico rd-bell" aria-label={unread ? `Notificações, ${unread} novas` : "Notificações"}>
               <Icon name="heart" size={22} />
               {unread > 0 && <i />}
             </Link>
+          )}
+          {profile && !wide && (
+            <Link to={profilePath(profile.handle)} className="rd-ico rd-ico-me" aria-label="Meu perfil"><Avatar who={profile} size={28} me link={false} /></Link>
           )}
         </div>
       </div>
@@ -945,6 +1019,7 @@ function FeedHome() {
       {profile && !phone && <Composer inline onPosted={list.add} />}
       <PostList
         list={list}
+        between={wide ? undefined : <Suggest />}
         empty={
           tab === "following" ? (
             <Blank title="Ninguém por aqui ainda" text="Siga algumas pessoas e os posts delas aparecem nesta aba." action={<Link className="btn" to="/rede/buscar"><Icon name="search" size={16} /> Encontrar pessoas</Link>} />
@@ -1057,7 +1132,7 @@ function PostScreen() {
 
 // ---------- Perfil ----------
 
-/** Quadradinho da grade do perfil: foto, cartão de frase ou texto. */
+/** Quadradinho da grade (perfil, marcados e explorar): foto, cartão de frase ou texto. */
 function Tile({ post }: { post: Post }) {
   const cover = post.media[0];
   return (
@@ -1076,21 +1151,118 @@ function Tile({ post }: { post: Post }) {
   );
 }
 
+function Grid({ list, empty }: { list: ReturnType<typeof usePosts>; empty: ReactNode }) {
+  if (list.posts.length)
+    return (
+      <>
+        <div className="rd-grid">
+          {list.posts.map((post) => <Tile key={post.id} post={post} />)}
+        </div>
+        <LoadMore on={list.hasMore} more={list.more} busy={list.loadingMore} />
+      </>
+    );
+  return list.loading ? <div className="rd-grid rd-grid-wait" aria-busy="true">{[0, 1, 2, 3, 4, 5].map((i) => <i key={i} />)}</div> : <>{empty}</>;
+}
+
+const SINCE = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" });
+const DAY = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "short" });
+
+/** Legenda da bolinha de destaque: o começo do texto ou, em foto sem legenda, o dia. */
+const highlightLabel = (it: StatusItem) => {
+  const t = it.body.replace(/\s+/g, " ").trim();
+  return t ? (t.length > 14 ? `${t.slice(0, 13).trimEnd()}…` : t) : DAY.format(new Date(it.created_at)).replace(".", "");
+};
+
+/**
+ * Destaques do perfil: status que a pessoa deixou fixos (não somem em 24 horas). Bolinhas que deslizam para o lado;
+ * tocar abre na tela de status, passando de um destaque para o outro. No meu perfil, "Novo" cria um direto.
+ */
+function Highlights({ p, items, onChanged }: { p: Profile; items: StatusItem[]; onChanged: () => void }) {
+  const [open, setOpen] = useState<{ i: number; from: DOMRect } | null>(null);
+  const [creating, setCreating] = useState(false);
+  const rings = useRef(new Map<number, HTMLElement>());
+  if (!items.length && !p.me) return null;
+  const group: StatusGroup = { author: p, me: p.me, seen: true, items };
+  return (
+    <div className="rd-hl" role="list" aria-label="Destaques">
+      {p.me && (
+        <div className="rd-hl-item" role="listitem">
+          <button type="button" className="rd-hl-ring new" onClick={() => { haptic(6); setCreating(true); }} aria-label="Novo destaque"><Icon name="plus" size={24} /></button>
+          <span>Novo</span>
+        </div>
+      )}
+      {items.map((it, i) => (
+        <div className="rd-hl-item" role="listitem" key={it.id}>
+          <button
+            type="button"
+            className="rd-hl-ring"
+            ref={(el) => { if (el) rings.current.set(i, el); }}
+            onClick={(e) => { haptic(6); setOpen({ i, from: e.currentTarget.getBoundingClientRect() }); }}
+            aria-label={`Destaque: ${highlightLabel(it)}`}
+          >
+            {it.kind === "photo" && it.media ? <img src={mediaUrl(it.media.id)} alt="" loading="lazy" /> : <i className={`rd-bg-${it.bg}`}>{it.body.slice(0, 28)}</i>}
+          </button>
+          <span>{highlightLabel(it)}</span>
+        </div>
+      ))}
+      {open && items[open.i] && (
+        <StatusViewer
+          groups={[group]}
+          start={0}
+          startItem={open.i}
+          label={p.me ? "Seus destaques" : undefined}
+          from={open.from}
+          ringOf={() => open.from}
+          onClose={() => { setOpen(null); onChanged(); }}
+          onDeleted={() => {}}
+        />
+      )}
+      {creating && <StatusComposer highlight onClose={() => setCreating(false)} onDone={() => { setCreating(false); onChanged(); window.dispatchEvent(new Event("pj-status-changed")); }} />}
+    </div>
+  );
+}
+
+const SUG_OFF = "pj-rede-sug-perfil";
+
 function ProfileScreen() {
   const { handle = "" } = useParams();
   const me = useRede();
   const nav = useNavigate();
   const phone = useMedia(PHONE);
+  // no notebook largo a coluna da direita já traz "Quem seguir"
+  const wide = useMedia(WIDE);
   const pick = useCallback((d: any) => ({ posts: d.posts, next: d.next }), []);
   const list = usePosts(`/api/feed/u/${handle}`, pick);
-  const [view, setView] = useState<"grade" | "lista">("grade");
+  const [view, setView] = useState<"grade" | "lista" | "marcados">("grade");
+  const tagged = usePosts(view === "marcados" ? `/api/feed/u/${handle}/marcados` : null);
+  const status = useApi<StatusGroup[]>("/api/feed/status", { poll: 60_000 });
+  const [watching, setWatching] = useState<DOMRect | null>(null);
   const [people, setPeople] = useState<{ title: string; list: Person[] | null } | null>(null);
   const [editing, setEditing] = useState(false);
   const [menu, setMenu] = useState(false);
   const [delta, setDelta] = useState(0);
+  const [sug, setSug] = useState(() => {
+    try {
+      return localStorage.getItem(SUG_OFF) !== "1";
+    } catch {
+      return true;
+    }
+  });
+  const showSug = (on: boolean) => {
+    setSug(on);
+    try {
+      on ? localStorage.removeItem(SUG_OFF) : localStorage.setItem(SUG_OFF, "1");
+    } catch {
+      /* sem storage */
+    }
+  };
   const p: Profile | undefined = list.data?.profile;
   if (list.error && !p) return <Blank title="Perfil não encontrado" text="Esse @ não existe ou não está disponível para você." action={<Link className="btn" to="/">Voltar ao feed</Link>} />;
   if (!p) return <PostSkeleton />;
+  const highlights: StatusItem[] = list.data?.highlights ?? [];
+  // status no ar: a foto do perfil ganha o anel e abre o status
+  const live = (status.data ?? []).findIndex((g) => g.author.id === p.id);
+  const liveGroup = live >= 0 ? status.data![live]! : null;
 
   const openPeople = async (kind: "seguidores" | "seguindo") => {
     setPeople({ title: kind === "seguidores" ? "Seguidores" : "Seguindo", list: null });
@@ -1121,10 +1293,23 @@ function ProfileScreen() {
     me.reload();
     nav("/", { replace: true });
   };
+  const share = async () => {
+    const url = `${location.origin}${profilePath(p.handle)}`;
+    haptic(6);
+    try {
+      if (navigator.share) await navigator.share({ url, text: `${p.name} (@${p.handle}) no Planejai` });
+      else {
+        await navigator.clipboard.writeText(url);
+        void alertDialog("Link copiado", "Só quem está no Planejai consegue abrir.");
+      }
+    } catch {
+      /* a pessoa fechou a folha de compartilhar */
+    }
+  };
   const stats = (
     <div className="rd-stats">
-      <span><b>{count(p.posts)}</b> {p.posts === 1 ? "publicação" : "publicações"}</span>
-      <button type="button" onClick={() => void openPeople("seguidores")}><b>{count(Math.max(0, p.followers + delta))}</b> seguidores</button>
+      <span><b>{count(p.posts)}</b> {phone ? (p.posts === 1 ? "post" : "posts") : p.posts === 1 ? "publicação" : "publicações"}</span>
+      <button type="button" onClick={() => void openPeople("seguidores")}><b>{count(Math.max(0, p.followers + delta))}</b> {p.followers + delta === 1 ? "seguidor" : "seguidores"}</button>
       <button type="button" onClick={() => void openPeople("seguindo")}><b>{count(p.following)}</b> seguindo</button>
     </div>
   );
@@ -1135,53 +1320,75 @@ function ProfileScreen() {
       ) : p.blocked ? (
         <button type="button" className="btn" onClick={block}>Desbloquear</button>
       ) : (
-        <FollowButton key={String(p.iFollow)} handle={p.handle} following={p.iFollow} onChange={(on) => setDelta((d) => d + (on ? 1 : -1))} />
+        <FollowButton key={String(p.iFollow)} handle={p.handle} following={p.iFollow} back={p.followsMe} onChange={(on) => setDelta((d) => d + (on ? 1 : -1))} />
+      )}
+      <button type="button" className="btn" onClick={() => void share()}>{phone ? "Compartilhar" : "Compartilhar perfil"}</button>
+      {p.me && !wide && (
+        <button type="button" className={`btn rd-sq${sug ? " on" : ""}`} onClick={() => { haptic(5); showSug(!sug); }} aria-pressed={sug} aria-label="Encontrar pessoas"><Icon name="user-plus" size={18} /></button>
       )}
       <button type="button" className="btn rd-sq" onClick={() => setMenu(true)} aria-label="Mais opções"><Icon name="more" size={18} /></button>
     </div>
   );
+  const none = (mine: string, other: string, icon: string) => (
+    <div className="rd-pnone">
+      <span><Icon name={icon} size={26} /></span>
+      <p>{p.me ? mine : other}</p>
+    </div>
+  );
+  const face = <Avatar who={p} size={phone ? 86 : 150} me={p.me} link={false} />;
 
   return (
     <>
       <section className="rd-profile">
-        <Avatar who={p} size={phone ? 86 : 132} me={p.me} link={false} />
+        {liveGroup ? (
+          <button type="button" className={`rd-pf-ring${liveGroup.seen ? " seen" : ""}`} onClick={(e) => { haptic(6); setWatching(e.currentTarget.getBoundingClientRect()); }} aria-label={`Ver o status de ${p.name}`}>{face}</button>
+        ) : (
+          <span className="rd-pf-ring none">{face}</span>
+        )}
         <div className="rd-profile-info">
           <div className="rd-profile-line">
-            <h1>{p.handle}{p.official && <Verified size={18} />}</h1>
+            <h1>
+              <span className="rd-pf-handle">{p.handle}</span>
+              <span className="rd-pf-name">{p.name}</span>
+              {p.official && <Verified size={18} />}
+            </h1>
             {!phone && actions}
           </div>
           {stats}
           <div className="rd-profile-bio">
             <strong>{p.name}</strong>
-            {p.followsMe && !p.me && <i className="rd-followsme">Segue você</i>}
+            <span className="rd-pf-at">
+              @{p.handle}
+              {p.followsMe && !p.me && <i className="rd-followsme">Segue você</i>}
+            </span>
             {p.bio && <p><RichText text={p.bio} /></p>}
+            <small>{p.official ? "Perfil oficial do Planejai" : `Na rede desde ${SINCE.format(new Date(p.since))}`}</small>
           </div>
         </div>
         {phone && actions}
       </section>
+      {p.me && sug && !wide && <Suggest title="Encontrar pessoas" onClose={() => showSug(false)} />}
       {p.blocked ? (
         <p className="rd-none">Você bloqueou este perfil.</p>
       ) : (
         <>
+          <Highlights p={p} items={highlights} onChanged={() => void list.reload()} />
           <div className="rd-ptabs" role="tablist">
-            <button type="button" role="tab" aria-selected={view === "grade"} className={view === "grade" ? "on" : ""} onClick={() => { haptic(5); setView("grade"); }} aria-label="Grade"><Icon name="apps" size={20} /><span>Publicações</span></button>
-            <button type="button" role="tab" aria-selected={view === "lista"} className={view === "lista" ? "on" : ""} onClick={() => { haptic(5); setView("lista"); }} aria-label="Lista"><Icon name="rows" size={20} /><span>Lista</span></button>
+            <button type="button" role="tab" aria-selected={view === "grade"} className={view === "grade" ? "on" : ""} onClick={() => { haptic(5); setView("grade"); }} aria-label="Grade"><Icon name="grid" size={21} /><span>Publicações</span></button>
+            <button type="button" role="tab" aria-selected={view === "lista"} className={view === "lista" ? "on" : ""} onClick={() => { haptic(5); setView("lista"); }} aria-label="Lista"><Icon name="rows" size={21} /><span>Lista</span></button>
+            <button type="button" role="tab" aria-selected={view === "marcados"} className={view === "marcados" ? "on" : ""} onClick={() => { haptic(5); setView("marcados"); }} aria-label="Marcados"><Icon name="tagged" size={21} /><span>Marcados</span></button>
           </div>
           {view === "lista" ? (
-            <PostList list={list} empty={<p className="rd-none">{p.me ? "Você ainda não publicou nada." : "Nenhuma publicação ainda."}</p>} />
-          ) : list.posts.length ? (
-            <>
-              <div className="rd-grid">
-                {list.posts.map((post) => <Tile key={post.id} post={post} />)}
-              </div>
-              <LoadMore on={list.hasMore} more={list.more} busy={list.loadingMore} />
-            </>
-          ) : list.loading ? (
-            <PostSkeleton />
+            <PostList list={list} empty={none("Você ainda não publicou nada.", "Nenhuma publicação ainda.", "rows")} />
+          ) : view === "marcados" ? (
+            <Grid list={tagged} empty={none("Quando alguém citar o seu @ numa publicação, ela aparece aqui.", "Ninguém citou este perfil ainda.", "tagged")} />
           ) : (
-            <p className="rd-none">{p.me ? "Você ainda não publicou nada." : "Nenhuma publicação ainda."}</p>
+            <Grid list={list} empty={none("Suas publicações aparecem aqui. Que tal a primeira?", "Nenhuma publicação ainda.", "image")} />
           )}
         </>
+      )}
+      {watching && liveGroup && (
+        <StatusViewer groups={status.data!} start={live} from={watching} ringOf={() => watching} onClose={() => { setWatching(null); void status.reload(); }} onDeleted={() => void status.reload()} />
       )}
       {people && (
         <Modal title={people.title} onClose={() => setPeople(null)}>
@@ -1192,7 +1399,10 @@ function ProfileScreen() {
       {menu && (
         <Modal title={`@${p.handle}`} onClose={() => setMenu(false)} bare>
           {p.me ? (
-            <button type="button" className="sheet-item rd-danger" onClick={leave}><span className="ico-box"><Icon name="logout" size={17} /></span>Sair da rede e apagar tudo</button>
+            <>
+              <button type="button" className="sheet-item" onClick={() => { setMenu(false); nav("/rede/atividade"); }}><span className="ico-box"><Icon name="heart" size={17} /></span>Notificações</button>
+              <button type="button" className="sheet-item" onClick={() => { setMenu(false); nav("/rede/buscar"); }}><span className="ico-box"><Icon name="search" size={17} /></span>Buscar e explorar</button>
+            </>
           ) : p.official ? null : (
             <>
               <button type="button" className="sheet-item" onClick={block}><span className="ico-box"><Icon name="eye-off" size={17} /></span>{p.blocked ? "Desbloquear" : "Bloquear"}</button>
@@ -1200,56 +1410,141 @@ function ProfileScreen() {
             </>
           )}
           <button type="button" className="sheet-item" onClick={() => { setMenu(false); void navigator.clipboard?.writeText(`${location.origin}${profilePath(p.handle)}`); }}><span className="ico-box"><Icon name="link" size={17} /></span>Copiar link do perfil</button>
+          {p.me && <button type="button" className="sheet-item rd-danger" onClick={leave}><span className="ico-box"><Icon name="logout" size={17} /></span>Sair da rede e apagar tudo</button>}
         </Modal>
       )}
     </>
   );
 }
 
-// ---------- Atividade ----------
+// ---------- Notificações (atividade) ----------
 
+type ActivityKind = "like" | "comment" | "follow" | "mention";
 interface ActivityItem {
-  kind: "like" | "comment" | "follow";
+  kind: ActivityKind;
   actor: Person;
   post_id: string | null;
   post: string | null;
+  thumb: { media: string | null; card: string | null } | null;
   text: string | null;
   created_at: string;
   unread: boolean;
+}
+/** Uma linha da tela: uma notificação ou várias curtidas da mesma publicação juntas. */
+interface ActivityRow extends ActivityItem {
+  actors: Person[];
+}
+
+const FILTERS: [ActivityKind | "all", string][] = [
+  ["all", "Tudo"],
+  ["like", "Curtidas"],
+  ["comment", "Comentários"],
+  ["follow", "Seguidores"],
+  ["mention", "Menções"],
+];
+const BUCKETS = ["Hoje", "Ontem", "Últimos 7 dias", "Últimos 30 dias", "Mais antigas"] as const;
+
+/** Em qual grupo de data a notificação cai (pelo dia do aparelho, não por 24 horas corridas). */
+function bucketOf(iso: string, now = new Date()) {
+  const d = new Date(iso);
+  const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86_400_000);
+  return days <= 0 ? 0 : days === 1 ? 1 : days <= 7 ? 2 : days <= 30 ? 3 : 4;
+}
+
+/** Agrupa por data e junta as curtidas da mesma publicação ("ana, beto e outras 3 pessoas curtiram"). */
+function groupActivity(items: ActivityItem[]) {
+  const out: ActivityRow[][] = BUCKETS.map(() => []);
+  for (const a of items) {
+    const rows = out[bucketOf(a.created_at)]!;
+    const same = a.kind === "like" ? rows.find((r) => r.kind === "like" && r.post_id === a.post_id) : undefined;
+    if (same) {
+      if (!same.actors.some((x) => x.id === a.actor.id)) same.actors.push(a.actor);
+      same.unread = same.unread || a.unread;
+    } else rows.push({ ...a, actors: [a.actor] });
+  }
+  return out;
+}
+
+function ActivityText({ a }: { a: ActivityRow }) {
+  const [first, second] = a.actors;
+  const rest = a.actors.length - 2;
+  const who = (
+    <>
+      <b>{first!.handle}{first!.official && <Verified size={13} />}</b>
+      {second && (rest > 0 ? <>, <b>{second.handle}</b></> : <> e <b>{second.handle}</b></>)}
+      {rest > 0 && <> e {rest === 1 ? "outra pessoa" : `outras ${count(rest)} pessoas`}</>}
+    </>
+  );
+  const many = a.actors.length > 1;
+  return (
+    <>
+      {who}{" "}
+      {a.kind === "like" ? `${many ? "curtiram" : "curtiu"} sua publicação.` : a.kind === "follow" ? "começou a seguir você." : a.kind === "comment" ? <>comentou: {a.text}</> : <>citou você: {a.text}</>}
+      {" "}<time dateTime={a.created_at}>{shortTime(a.created_at)}</time>
+    </>
+  );
 }
 
 function ActivityScreen() {
   const me = useRede();
   const list = useApi<ActivityItem[]>(me.profile ? "/api/feed/activity" : null);
+  const [filter, setFilter] = useState<ActivityKind | "all">("all");
   // abrir a tela marca como visto: a bolinha do coração some
   useEffect(() => {
     if (list.data) me.reload();
   }, [list.data, me.reload]);
-  if (!me.profile) return <Blank title="Sem atividade" text="Crie seu perfil para ver quem curtiu, comentou e começou a seguir você." action={<button type="button" className="btn btn-brand" onClick={() => me.join()}>Criar perfil</button>} />;
+  const groups = useMemo(() => groupActivity((list.data ?? []).filter((a) => filter === "all" || a.kind === filter)), [list.data, filter]);
+  if (!me.profile) return <Blank title="Sem notificações" text="Crie seu perfil para ver quem curtiu, comentou e começou a seguir você." action={<button type="button" className="btn btn-brand" onClick={() => me.join()}>Criar perfil</button>} />;
   if (!list.data) return <PostSkeleton />;
-  if (!list.data.length) return <Blank title="Nada por aqui ainda" text="Curtidas, comentários e novos seguidores aparecem aqui." />;
-  const say = (a: ActivityItem) => (a.kind === "like" ? "curtiu sua publicação" : a.kind === "comment" ? "comentou" : "começou a seguir você");
+  const empty = groups.every((g) => !g.length);
   return (
-    <div className="rd-activity">
-      {list.data.map((a, i) => (
-        <div className={`rd-act-row${a.unread ? " new" : ""}`} key={i}>
-          <span className={`rd-act-ico ${a.kind}`}>
-            {a.kind === "like" ? <Heart on size={14} /> : <Icon name={a.kind === "comment" ? "message" : "user-plus"} size={14} />}
-          </span>
-          <Avatar who={a.actor} size={40} />
-          <Link to={a.post_id ? `/rede/p/${a.post_id}` : profilePath(a.actor.handle)} className="rd-act-txt">
-            <span><strong>{a.actor.name}</strong> {say(a)}{a.kind === "comment" && a.text ? `: ${a.text}` : ""}</span>
-            {a.kind === "like" && a.post && <em>{a.post}</em>}
-            <time dateTime={a.created_at}>{shortTime(a.created_at)}</time>
-          </Link>
-          {a.kind === "follow" && <FollowButton handle={a.actor.handle} following={a.actor.following} small />}
-        </div>
-      ))}
+    <div className="rd-nt">
+      <div className="rd-chips" role="tablist" aria-label="Filtrar notificações">
+        {FILTERS.map(([k, label]) => (
+          <button key={k} type="button" role="tab" aria-selected={filter === k} className={filter === k ? "on" : ""} onClick={() => { haptic(5); setFilter(k); }}>{label}</button>
+        ))}
+      </div>
+      {empty &&
+        (filter === "all" ? (
+          <Blank title="Nada por aqui ainda" text="Curtidas, comentários, menções e novos seguidores aparecem aqui." />
+        ) : (
+          <p className="rd-none">Nada {filter === "like" ? "de curtidas" : filter === "comment" ? "de comentários" : filter === "follow" ? "de seguidores novos" : "de menções"} por enquanto.</p>
+        ))}
+      {groups.map((rows, b) =>
+        rows.length ? (
+          <section key={BUCKETS[b]}>
+            <h2>{BUCKETS[b]}</h2>
+            {rows.map((a, i) => {
+              const to = a.post_id ? `/rede/p/${a.post_id}` : profilePath(a.actor.handle);
+              return (
+                <div className={`rd-nt-row${a.unread ? " new" : ""}`} key={`${a.kind}-${a.post_id}-${a.actor.id}-${i}`}>
+                  {a.actors.length > 1 ? (
+                    <Link to={to} className="rd-nt-faces" aria-hidden tabIndex={-1}>
+                      <Avatar who={a.actors[1]!} size={32} link={false} />
+                      <Avatar who={a.actors[0]!} size={32} link={false} />
+                    </Link>
+                  ) : (
+                    <Avatar who={a.actor} size={46} />
+                  )}
+                  <Link to={to} className="rd-nt-txt"><ActivityText a={a} /></Link>
+                  {a.kind === "follow" ? (
+                    <FollowButton handle={a.actor.handle} following={a.actor.following} back small />
+                  ) : a.thumb ? (
+                    <Link to={to} className={`rd-nt-thumb${a.thumb.card ? ` rd-card-${a.thumb.card}` : ""}`} aria-label="Abrir publicação">
+                      {a.thumb.media ? <img src={mediaUrl(a.thumb.media)} alt="" loading="lazy" /> : <i>{a.post}</i>}
+                    </Link>
+                  ) : null}
+                </div>
+              );
+            })}
+          </section>
+        ) : null,
+      )}
     </div>
   );
 }
 
-// ---------- Busca ----------
+// ---------- Busca e explorar ----------
 
 function SearchScreen() {
   const [params, setParams] = useSearchParams();
@@ -1262,7 +1557,8 @@ function SearchScreen() {
     }, 280);
     return () => clearTimeout(t);
   }, [q, setParams]);
-  const people = useApi<Person[]>(`/api/feed/people${term ? `?q=${encodeURIComponent(term)}` : ""}`);
+  const people = useApi<Person[]>(term ? `/api/feed/people?q=${encodeURIComponent(term)}` : null);
+  const explore = usePosts(term ? null : "/api/feed?tab=explore");
   return (
     <>
       <div className="rd-search big">
@@ -1270,8 +1566,15 @@ function SearchScreen() {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nome ou @" aria-label="Buscar pessoas" autoFocus={!matchMedia("(pointer: coarse)").matches} />
         {q && <button type="button" onClick={() => setQ("")} aria-label="Limpar"><Icon name="x" size={16} /></button>}
       </div>
-      {!term && <h2 className="rd-sub">Sugestões</h2>}
-      <PeopleList people={people.data} empty={term ? "Ninguém com esse nome ou @." : "Você já segue todo mundo que está na rede."} />
+      {term ? (
+        <PeopleList people={people.data} empty="Ninguém com esse nome ou @." />
+      ) : (
+        <>
+          <Suggest />
+          <h2 className="rd-sub rd-sub-big">Explorar</h2>
+          <Grid list={explore} empty={<p className="rd-none">Quando alguém publicar uma foto, ela aparece aqui.</p>} />
+        </>
+      )}
     </>
   );
 }
@@ -1288,8 +1591,8 @@ export function RedeProfilePage({ me }: { me: Me }) {
   return <Shell me={me} title="Perfil" back><ProfileScreen /></Shell>;
 }
 export function RedeActivityPage({ me }: { me: Me }) {
-  return <Shell me={me} title="Atividade" back><ActivityScreen /></Shell>;
+  return <Shell me={me} title="Notificações" back><ActivityScreen /></Shell>;
 }
 export function RedeSearchPage({ me }: { me: Me }) {
-  return <Shell me={me} title="Buscar" back><SearchScreen /></Shell>;
+  return <Shell me={me} title="Explorar" back><SearchScreen /></Shell>;
 }

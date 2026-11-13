@@ -18,6 +18,10 @@ export interface Author {
 export interface Person extends Author {
   bio: string;
   following: boolean;
+  /** essa pessoa me segue ("Seguir de volta") */
+  followsMe?: boolean;
+  /** quantas pessoas que eu sigo também seguem ela */
+  mutual?: number;
   me: boolean;
 }
 export interface Profile extends Author {
@@ -76,6 +80,8 @@ export interface StatusItem {
   media: Photo | null;
   created_at: string;
   seen: boolean;
+  /** destaque do perfil: não some depois de 24 horas */
+  highlight?: boolean;
   views?: number;
 }
 export interface StatusGroup {
@@ -249,7 +255,7 @@ export async function pickPhoto(file: File): Promise<PickedPhoto> {
 }
 
 /** Botão Seguir/Seguindo (muda na hora; se a rede recusar, volta). */
-export function FollowButton({ handle, following, onChange, small }: { handle: string; following: boolean; onChange?: (on: boolean) => void; small?: boolean }) {
+export function FollowButton({ handle, following, onChange, small, back }: { handle: string; following: boolean; onChange?: (on: boolean) => void; small?: boolean; /** a pessoa já me segue: o botão vira "Seguir de volta" */ back?: boolean }) {
   const [on, setOn] = useState(following);
   const [busy, setBusy] = useState(false);
   const rede = useContext(RedeMe);
@@ -272,7 +278,7 @@ export function FollowButton({ handle, following, onChange, small }: { handle: s
   };
   return (
     <button type="button" className={`rd-follow${on ? " on" : ""}${small ? " sm" : ""}`} onClick={toggle} aria-pressed={on}>
-      {on ? "Seguindo" : "Seguir"}
+      {on ? "Seguindo" : back ? "Seguir de volta" : "Seguir"}
     </button>
   );
 }
@@ -286,7 +292,7 @@ export function PersonRow({ p, extra, onNavigate }: { p: Person; extra?: ReactNo
         <span>@{p.handle}</span>
         {p.bio && <em>{p.bio}</em>}
       </Link>
-      {extra ?? (!p.me && <FollowButton handle={p.handle} following={p.following} small />)}
+      {extra ?? (!p.me && <FollowButton handle={p.handle} following={p.following} back={p.followsMe} small />)}
     </div>
   );
 }

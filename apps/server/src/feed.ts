@@ -206,13 +206,14 @@ const beforeDate = (before?: string) => {
   return d && !Number.isNaN(d.getTime()) ? d.toISOString() : null;
 };
 
-/** Feed: "all" traz todo mundo (mais novo primeiro); "following" só quem a pessoa segue e ela mesma. */
-export async function listFeed(me: string, tab: "all" | "following", before?: string) {
+/** Feed: "all" traz todo mundo (mais novo primeiro); "following" só quem a pessoa segue e ela mesma; "explore" só o que tem foto ou cartão, dos outros (grade da busca). */
+export async function listFeed(me: string, tab: "all" | "following" | "explore", before?: string) {
   const rows = await many<PostRow>(
     `SELECT ${POST_COLS} FROM feed_posts p
       WHERE ($2::timestamptz IS NULL OR p.created_at < $2)
         AND ${notBlocked("p.user_id", 1)}
         ${tab === "following" ? "AND (p.user_id = $1 OR p.user_id IN (SELECT followed_id FROM feed_follows WHERE follower_id = $1))" : ""}
+        ${tab === "explore" ? "AND p.user_id <> $1 AND (p.card IS NOT NULL OR EXISTS (SELECT 1 FROM feed_media m WHERE m.post_id = p.id))" : ""}
       ORDER BY p.created_at DESC LIMIT ${PAGE + 1}`,
     [me, beforeDate(before)],
   );
@@ -226,6 +227,21 @@ export async function listUserPosts(me: string, userId: string, before?: string)
       WHERE p.user_id = $2 AND ($3::timestamptz IS NULL OR p.created_at < $3) AND ${notBlocked("p.user_id", 1)}
       ORDER BY p.created_at DESC LIMIT ${PAGE + 1}`,
     [me, userId, beforeDate(before)],
+  );
+  const page = rows.slice(0, PAGE);
+  return { posts: await hydrate(me, page), next: rows.length > PAGE ? page[page.length - 1]!.created_at : null };
+}
+
+/** Trecho de regex (Postgres) que acha o @ da pessoa num texto, sem casar com um @ maior (ana não casa em @ana.lima). */
+const mentionRe = (handle: string) => `(^|[^a-z0-9._])@${handle.replace(/\./g, "\\.")}(?![a-z0-9_]|\\.[a-z0-9_])`;
+
+/** Aba "Marcados" do perfil: publicações de outras pessoas que citam o @ dela. */
+export async function listTagged(me: string, userId: string, handle: string, before?: string) {
+  const rows = await many<PostRow>(
+    `SELECT ${POST_COLS} FROM feed_posts p
+      WHERE p.user_id <> $2 AND p.body ~* $4 AND ($3::timestamptz IS NULL OR p.created_at < $3) AND ${notBlocked("p.user_id", 1)}
+      ORDER BY p.created_at DESC LIMIT ${PAGE + 1}`,
+    [me, userId, beforeDate(before), mentionRe(handle)],
   );
   const page = rows.slice(0, PAGE);
   return { posts: await hydrate(me, page), next: rows.length > PAGE ? page[page.length - 1]!.created_at : null };
@@ -392,7 +408,21 @@ async function people(me: string, ids: string[]) {
   const following = new Set(mine.map((r) => r.followed_id));
   const bios = ids.length ? await many<{ user_id: string; bio: string }>("SELECT user_id, bio FROM feed_profiles WHERE user_id = ANY($1)", [ids]) : [];
   const bio = new Map(bios.map((b) => [b.user_id, b.bio]));
-  return ids.filter((id) => who.has(id)).map((id) => ({ ...who.get(id)!, bio: bio.get(id) ?? "", following: following.has(id), me: id === me }));
+  // "segue você" e quantas pessoas que eu sigo também seguem cada uma ("N em comum")
+  const extra = ids.length
+    ? await many<{ id: string; follows_me: boolean; mutual: number }>(
+        `SELECT u.id,
+                EXISTS (SELECT 1 FROM feed_follows f WHERE f.follower_id = u.id AND f.followed_id = $1) AS follows_me,
+                (SELECT count(*)::int FROM feed_follows a JOIN feed_follows b ON b.follower_id = a.followed_id
+                  WHERE a.follower_id = $1 AND b.followed_id = u.id AND a.followed_id <> u.id) AS mutual
+           FROM unnest($2::uuid[]) AS u(id)`,
+        [me, ids],
+      )
+    : [];
+  const more = new Map(extra.map((e) => [e.id, e]));
+  return ids
+    .filter((id) => who.has(id))
+    .map((id) => ({ ...who.get(id)!, bio: bio.get(id) ?? "", following: following.has(id), followsMe: more.get(id)?.follows_me ?? false, mutual: more.get(id)?.mutual ?? 0, me: id === me }));
 }
 
 export async function userByHandle(handle: string) {
@@ -491,6 +521,7 @@ export async function findPeople(me: string, q: string, max = 20) {
   return people(me, rows.map((r) => r.user_id));
 }
 
+/** Tudo o que chega para a pessoa: curtida, comentário, seguidor novo e citação do @ dela ($2 = regex do @). */
 const ACTIVITY_SQL = `
   SELECT 'like' AS kind, l.user_id AS actor, l.post_id, NULL::text AS text, l.created_at
     FROM feed_likes l JOIN feed_posts p ON p.id = l.post_id WHERE p.user_id = $1 AND l.user_id <> $1
@@ -498,49 +529,70 @@ const ACTIVITY_SQL = `
   SELECT 'comment', c.user_id, c.post_id, c.body, c.created_at
     FROM feed_comments c JOIN feed_posts p ON p.id = c.post_id WHERE p.user_id = $1 AND c.user_id <> $1
   UNION ALL
-  SELECT 'follow', f.follower_id, NULL::uuid, NULL::text, f.created_at FROM feed_follows f WHERE f.followed_id = $1`;
+  SELECT 'follow', f.follower_id, NULL::uuid, NULL::text, f.created_at FROM feed_follows f WHERE f.followed_id = $1
+  UNION ALL
+  SELECT 'mention', p.user_id, p.id, p.body, p.created_at
+    FROM feed_posts p WHERE p.user_id <> $1 AND p.created_at > now() - interval '90 days' AND p.body ~* $2
+  UNION ALL
+  SELECT 'mention', c.user_id, c.post_id, c.body, c.created_at
+    FROM feed_comments c JOIN feed_posts p ON p.id = c.post_id
+   WHERE c.user_id <> $1 AND p.user_id <> $1 AND c.created_at > now() - interval '90 days' AND c.body ~* $2`;
 
 export async function activityUnread(me: string) {
   const r = await one<{ n: number }>(
     `SELECT count(*)::int AS n FROM (${ACTIVITY_SQL}) a
       WHERE a.created_at > (SELECT activity_seen_at FROM feed_profiles WHERE user_id = $1) AND ${notBlocked("a.actor", 1)}`,
-    [me],
+    [me, mentionRe((await profileOf(me))?.handle ?? "-")],
   );
   return r?.n ?? 0;
 }
 
-/** Atividade: quem curtiu, comentou ou começou a seguir. Abrir a tela marca tudo como visto. */
+export type ActivityKind = "like" | "comment" | "follow" | "mention";
+
+/** Atividade: quem curtiu, comentou, citou ou começou a seguir. Abrir a tela marca tudo como visto. */
 export async function listActivity(me: string) {
-  const seen = (await one<{ activity_seen_at: string }>("SELECT activity_seen_at FROM feed_profiles WHERE user_id = $1", [me]))?.activity_seen_at;
-  const rows = await many<{ kind: "like" | "comment" | "follow"; actor: string; post_id: string | null; text: string | null; created_at: string }>(
-    `SELECT * FROM (${ACTIVITY_SQL}) a WHERE ${notBlocked("a.actor", 1)} ORDER BY a.created_at DESC LIMIT 80`,
-    [me],
+  const mine = await one<{ handle: string; activity_seen_at: string }>("SELECT handle, activity_seen_at FROM feed_profiles WHERE user_id = $1", [me]);
+  if (!mine) return [];
+  const seen = mine.activity_seen_at;
+  const rows = await many<{ kind: ActivityKind; actor: string; post_id: string | null; text: string | null; created_at: string }>(
+    `SELECT * FROM (${ACTIVITY_SQL}) a WHERE ${notBlocked("a.actor", 1)} ORDER BY a.created_at DESC LIMIT 120`,
+    [me, mentionRe(mine.handle)],
   );
   await query("UPDATE feed_profiles SET activity_seen_at = now() WHERE user_id = $1", [me]);
   const who = await people(me, [...new Set(rows.map((r) => r.actor))]);
   const by = new Map(who.map((w) => [w.id, w]));
   const postIds = [...new Set(rows.map((r) => r.post_id).filter((id): id is string => !!id))];
-  const posts = postIds.length ? await many<{ id: string; body: string }>("SELECT id, body FROM feed_posts WHERE id = ANY($1)", [postIds]) : [];
-  const excerpt = new Map(posts.map((p) => [p.id, p.body.slice(0, 80)]));
+  // miniatura da publicação (foto, cor do cartão ou o começo do texto) para o canto da linha
+  const posts = postIds.length
+    ? await many<{ id: string; body: string; card: string | null; media: string | null }>(
+        "SELECT p.id, p.body, p.card, (SELECT m.id FROM feed_media m WHERE m.post_id = p.id ORDER BY m.pos LIMIT 1) AS media FROM feed_posts p WHERE p.id = ANY($1)",
+        [postIds],
+      )
+    : [];
+  const post = new Map(posts.map((p) => [p.id, p]));
   return rows
     .filter((r) => by.has(r.actor))
-    .map((r) => ({
-      kind: r.kind,
-      actor: by.get(r.actor)!,
-      post_id: r.post_id,
-      post: r.post_id ? (excerpt.get(r.post_id) ?? "") : null,
-      text: r.text ? r.text.slice(0, 140) : null,
-      created_at: r.created_at,
-      unread: seen ? new Date(r.created_at) > new Date(seen) : false,
-    }));
+    .map((r) => {
+      const p = r.post_id ? post.get(r.post_id) : undefined;
+      return {
+        kind: r.kind,
+        actor: by.get(r.actor)!,
+        post_id: r.post_id,
+        post: r.post_id ? (p?.body.slice(0, 80) ?? "") : null,
+        thumb: p ? { media: p.media, card: p.card } : null,
+        text: r.text ? r.text.slice(0, 140) : null,
+        created_at: r.created_at,
+        unread: seen ? new Date(r.created_at) > new Date(seen) : false,
+      };
+    });
 }
 
 // ---------- Status (24h) ----------
 
 /** Status no ar, agrupados por pessoa: os meus primeiro, depois quem tem coisa que ainda não vi (quem eu sigo antes). */
 export async function listStatus(me: string) {
-  const rows = await many<{ id: string; user_id: string; kind: "text" | "photo"; body: string; bg: string; font: string; align: string; created_at: string; expires_at: string; seen: boolean; views: number; followed: boolean }>(
-    `SELECT s.id, s.user_id, s.kind, s.body, s.bg, s.font, s.align, s.created_at, s.expires_at,
+  const rows = await many<{ id: string; user_id: string; kind: "text" | "photo"; body: string; bg: string; font: string; align: string; created_at: string; expires_at: string; highlight: boolean; seen: boolean; views: number; followed: boolean }>(
+    `SELECT s.id, s.user_id, s.kind, s.body, s.bg, s.font, s.align, s.created_at, s.expires_at, (s.highlighted_at IS NOT NULL) AS highlight,
             (s.user_id = $1 OR EXISTS (SELECT 1 FROM feed_status_views v WHERE v.status_id = s.id AND v.user_id = $1)) AS seen,
             (SELECT count(*)::int FROM feed_status_views v WHERE v.status_id = s.id AND v.user_id <> s.user_id) AS views,
             EXISTS (SELECT 1 FROM feed_follows f WHERE f.follower_id = $1 AND f.followed_id = s.user_id) AS followed
@@ -560,7 +612,7 @@ export async function listStatus(me: string) {
     const author = who.get(r.user_id);
     if (!author) continue;
     const g = groups.get(r.user_id) ?? { author, me: r.user_id === me, followed: r.followed, seen: true, last: r.created_at, items: [] };
-    g.items.push({ id: r.id, kind: r.kind, body: r.body, bg: r.bg, font: r.font, align: r.align, media: photo.get(r.id) ?? null, created_at: r.created_at, expires_at: r.expires_at, seen: r.seen, views: r.user_id === me ? r.views : undefined });
+    g.items.push({ id: r.id, kind: r.kind, body: r.body, bg: r.bg, font: r.font, align: r.align, media: photo.get(r.id) ?? null, created_at: r.created_at, expires_at: r.expires_at, seen: r.seen, highlight: r.highlight, views: r.user_id === me ? r.views : undefined });
     g.seen = g.seen && r.seen;
     g.last = r.created_at;
     groups.set(r.user_id, g);
@@ -569,7 +621,7 @@ export async function listStatus(me: string) {
   return [...groups.values()].sort((a, b) => rank(a) - rank(b) || (a.last < b.last ? 1 : -1)).slice(0, 60);
 }
 
-export async function createStatus(me: string, input: { body?: unknown; bg?: unknown; font?: unknown; align?: unknown; photo?: unknown }) {
+export async function createStatus(me: string, input: { body?: unknown; bg?: unknown; font?: unknown; align?: unknown; photo?: unknown; highlight?: unknown }) {
   const body = clean(input.body, STATUS_MAX);
   const photos = readPhotos(input.photo ? [input.photo] : [], 1);
   if (!body && !photos.length) throw new FeedError("Escreva alguma coisa ou escolha uma foto.");
@@ -577,13 +629,14 @@ export async function createStatus(me: string, input: { body?: unknown; bg?: unk
   await limit(me, "status", 30, "Você já postou bastante status hoje. Tente de novo amanhã.");
   const font = STATUS_FONTS.includes(input.font as (typeof STATUS_FONTS)[number]) ? String(input.font) : "classica";
   const align = STATUS_ALIGNS.includes(input.align as (typeof STATUS_ALIGNS)[number]) ? String(input.align) : "center";
-  const row = await one<{ id: string }>("INSERT INTO feed_status (user_id, kind, body, bg, font, align) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id", [
+  const row = await one<{ id: string }>("INSERT INTO feed_status (user_id, kind, body, bg, font, align, highlighted_at) VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $7 THEN now() END) RETURNING id", [
     me,
     photos.length ? "photo" : "text",
     body,
     bg,
     font,
     align,
+    input.highlight === true && (await highlightRoom(me)),
   ]);
   try {
     await savePhotos({ status_id: row!.id }, photos);
@@ -592,6 +645,34 @@ export async function createStatus(me: string, input: { body?: unknown; bg?: unk
     throw err;
   }
   return { id: row!.id };
+}
+
+const MAX_HIGHLIGHTS = 30;
+const highlightRoom = async (me: string) =>
+  ((await one<{ n: number }>("SELECT count(*)::int AS n FROM feed_status WHERE user_id = $1 AND highlighted_at IS NOT NULL", [me]))?.n ?? 0) < MAX_HIGHLIGHTS;
+
+/** Destaques do perfil: status que a pessoa escolheu deixar no perfil depois das 24 horas (os mais antigos primeiro). */
+export async function listHighlights(me: string, userId: string) {
+  const rows = await many<{ id: string; kind: "text" | "photo"; body: string; bg: string; font: string; align: string; created_at: string; views: number }>(
+    `SELECT s.id, s.kind, s.body, s.bg, s.font, s.align, s.created_at,
+            (SELECT count(*)::int FROM feed_status_views v WHERE v.status_id = s.id AND v.user_id <> s.user_id) AS views
+       FROM feed_status s
+      WHERE s.user_id = $2 AND s.highlighted_at IS NOT NULL AND ${notBlocked("s.user_id", 1)}
+      ORDER BY s.highlighted_at LIMIT ${MAX_HIGHLIGHTS}`,
+    [me, userId],
+  );
+  const ids = rows.map((r) => r.id);
+  const media = ids.length ? await many<{ id: string; status_id: string; width: number; height: number }>("SELECT id, status_id, width, height FROM feed_media WHERE status_id = ANY($1)", [ids]) : [];
+  const photo = new Map(media.map((m) => [m.status_id, { id: m.id, w: m.width, h: m.height }]));
+  return rows.map((r) => ({ id: r.id, kind: r.kind, body: r.body, bg: r.bg, font: r.font, align: r.align, media: photo.get(r.id) ?? null, created_at: r.created_at, seen: true, highlight: true, views: userId === me ? r.views : undefined }));
+}
+
+/** Põe ou tira um status meu dos destaques. Tirar um que já passou das 24 horas apaga na próxima limpeza. */
+export async function setHighlight(me: string, id: string, on: boolean) {
+  if (on && !(await highlightRoom(me))) throw new FeedError(`Dá para ter até ${MAX_HIGHLIGHTS} destaques. Tire um para pôr outro.`);
+  const r = await query(`UPDATE feed_status SET highlighted_at = ${on ? "COALESCE(highlighted_at, now())" : "NULL"} WHERE id = $1 AND user_id = $2`, [id, me]);
+  if (!(r.rowCount ?? 0)) throw new FeedError("Status não encontrado.", 404);
+  return { highlight: on };
 }
 
 export async function viewStatus(me: string, id: string) {
@@ -616,21 +697,21 @@ export async function deleteStatus(me: string, id: string, isSuper: boolean) {
   return (r.rowCount ?? 0) > 0;
 }
 
-/** Limpeza de hora em hora: status vencido sai com a foto e a lista de quem viu. */
+/** Limpeza de hora em hora: status vencido sai com a foto e a lista de quem viu (destaque do perfil fica). */
 export async function purgeExpiredStatus() {
-  return (await query("DELETE FROM feed_status WHERE expires_at < now()")).rowCount ?? 0;
+  return (await query("DELETE FROM feed_status WHERE expires_at < now() AND highlighted_at IS NULL")).rowCount ?? 0;
 }
 
 // ---------- Fotos ----------
 
-/** Foto de post ou de status que a pessoa pode ver (status só enquanto está no ar; nada de quem bloqueou). */
+/** Foto de post ou de status que a pessoa pode ver (status só enquanto está no ar ou em destaque; nada de quem bloqueou). */
 export async function readMedia(me: string, id: string) {
   const m = await one<{ mimetype: string; data: Buffer | null; storage_key: string | null }>(
     `SELECT m.mimetype, m.data, m.storage_key FROM feed_media m
        LEFT JOIN feed_posts p ON p.id = m.post_id
        LEFT JOIN feed_status s ON s.id = m.status_id
       WHERE m.id = $2 AND COALESCE(p.user_id, s.user_id) IS NOT NULL
-        AND (m.status_id IS NULL OR s.expires_at > now())
+        AND (m.status_id IS NULL OR s.expires_at > now() OR s.highlighted_at IS NOT NULL)
         AND ${notBlocked("COALESCE(p.user_id, s.user_id)", 1)}`,
     [me, id],
   );

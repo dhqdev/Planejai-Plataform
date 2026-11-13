@@ -749,7 +749,7 @@ function sectionsOf(items: NavItem[]) {
   return out;
 }
 
-const REDE_TITLES: Record<string, string> = { p: "Publicação", u: "Perfil", atividade: "Atividade", buscar: "Buscar" };
+const REDE_TITLES: Record<string, string> = { p: "Publicação", u: "Perfil", atividade: "Notificações", buscar: "Explorar" };
 
 /** Tela aberta é este item ou uma irmã dele (Filas conta como Execuções). */
 const isOn = (path: string, to: string) => {
@@ -760,6 +760,8 @@ const isOn = (path: string, to: string) => {
 function titleFor(path: string, items: NavItem[]) {
   const base = "/" + (path.split("/")[1] ?? "");
   if (base === "/conta") return "Conta";
+  // no perfil, o título é o @ da pessoa (como nas redes)
+  if (base === "/rede" && path.split("/")[2] === "u" && path.split("/")[3]) return `@${decodeURIComponent(path.split("/")[3]!)}`;
   if (base === "/rede") return REDE_TITLES[path.split("/")[2] ?? ""] ?? "Feed";
   if (base === "/conversa") return "Conversa";
   const hit = (items.find((i) => "to" in i && i.to === path) ?? items.find((i) => "to" in i && i.to === base)) as { label: string } | undefined;

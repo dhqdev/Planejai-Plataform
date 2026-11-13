@@ -105,9 +105,13 @@ function towards(card: HTMLElement, ring: DOMRect | null) {
   return { transform: `translate(${dx}px, ${dy}px) scale(${s})`, borderRadius: `${r.width / 2}px` };
 }
 
-function StatusViewer({ groups, start, from, ringOf, onClose, onDeleted }: {
+export function StatusViewer({ groups, start, startItem, label, from, ringOf, onClose, onDeleted }: {
   groups: StatusGroup[];
   start: number;
+  /** abre neste item do grupo (destaques do perfil); sem ele, no primeiro que a pessoa ainda não viu */
+  startItem?: number;
+  /** título no lugar de "Seu status" (ex.: "Destaques") */
+  label?: string;
   from: DOMRect | null;
   ringOf: (authorId: string) => DOMRect | null;
   onClose: () => void;
@@ -115,7 +119,8 @@ function StatusViewer({ groups, start, from, ringOf, onClose, onDeleted }: {
 }) {
   const firstUnseen = (g: StatusGroup) => Math.max(0, g.items.findIndex((it) => !it.seen));
   const [gi, setGi] = useState(start);
-  const [ii, setIi] = useState(() => firstUnseen(groups[start]!));
+  const [ii, setIi] = useState(() => startItem ?? firstUnseen(groups[start]!));
+  const [starred, setStarred] = useState<Record<string, boolean>>({});
   const [held, setHeld] = useState(false);
   const [ready, setReady] = useState(false);
   const [viewers, setViewers] = useState<Person[] | null | undefined>(undefined);
@@ -274,6 +279,19 @@ function StatusViewer({ groups, start, from, ringOf, onClose, onDeleted }: {
     setGone((g) => new Set(g).add(item.id));
     onDeleted();
   };
+  // destaque: o status fica no perfil depois das 24 horas, até a pessoa tirar
+  const isStar = item ? (starred[item.id] ?? Boolean(item.highlight)) : false;
+  const star = async () => {
+    const on = !isStar;
+    haptic(on ? 12 : 6);
+    setStarred((m) => ({ ...m, [item.id]: on }));
+    try {
+      await api(`/api/feed/status/${item.id}/highlight`, { method: "PUT", json: { on }, headers: quiet });
+      onDeleted();
+    } catch {
+      setStarred((m) => ({ ...m, [item.id]: !on }));
+    }
+  };
   const reportIt = async () => {
     setHeld(true);
     const ok = await confirmDialog({ title: "Denunciar este status?", body: "O Planejai vai olhar e tirar do ar se não devia estar aqui.", confirmLabel: "Denunciar", danger: true });
@@ -312,7 +330,7 @@ function StatusViewer({ groups, start, from, ringOf, onClose, onDeleted }: {
           <div className="rd-sv-head">
             <Avatar who={group.author} size={36} me={group.me} link={false} />
             <Link to={profilePath(group.author.handle)} onClick={onClose}>
-              <strong>{group.me ? "Seu status" : group.author.name}</strong>
+              <strong>{label ?? (group.me ? "Seu status" : group.author.name)}</strong>
               <span>{shortTime(item.created_at)}</span>
             </Link>
             <span className="spacer" />
@@ -326,6 +344,9 @@ function StatusViewer({ groups, start, from, ringOf, onClose, onDeleted }: {
               <Icon name="eye" size={16} /> {item.views ? `Visto por ${item.views}` : "Ninguém viu ainda"}
             </button>
             <span className="spacer" />
+            <button type="button" className={`rd-sv-pill rd-sv-star${isStar ? " on" : ""}`} onClick={star} aria-pressed={isStar}>
+              <Icon name="bookmark" size={15} /> {isStar ? "No perfil" : "Destacar"}
+            </button>
             <button type="button" className="rd-sv-btn" onClick={remove} aria-label="Apagar status"><Icon name="trash" size={18} /></button>
           </div>
         )}
@@ -354,7 +375,7 @@ const AlignIcon = ({ align }: { align: string }) => {
  * Editor de status em tela cheia, como nos apps de foto: o próprio cartão é a prévia. Em cima, fechar e as
  * ferramentas (letra, alinhamento, foto); embaixo, as cores (ou a legenda, com foto) e Publicar.
  */
-export function StatusComposer({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+export function StatusComposer({ onClose, onDone, highlight }: { onClose: () => void; onDone: () => void; /** já nasce como destaque do perfil */ highlight?: boolean }) {
   const [body, setBody] = useState("");
   const [bg, setBg] = useState<string>("roxo");
   const [font, setFont] = useState(0);
@@ -440,7 +461,7 @@ export function StatusComposer({ onClose, onDone }: { onClose: () => void; onDon
     try {
       await api("/api/feed/status", {
         method: "POST",
-        json: { body, bg, font: fontKey, align: alignKey, photo: photo ? { base64: photo.base64, width: photo.width, height: photo.height } : undefined },
+        json: { body, bg, font: fontKey, align: alignKey, photo: photo ? { base64: photo.base64, width: photo.width, height: photo.height } : undefined, highlight: highlight || undefined },
       });
       haptic(12);
       leave(onDone);
@@ -505,7 +526,7 @@ export function StatusComposer({ onClose, onDone }: { onClose: () => void; onDon
         )}
         {error && <div className="rd-se-err">{error}</div>}
         <div className="rd-se-send">
-          <span className={`rd-se-left${left < 20 ? " low" : ""}`}>{body.length ? `${left}` : "Some em 24 horas"}</span>
+          <span className={`rd-se-left${left < 20 ? " low" : ""}`}>{body.length ? `${left}` : highlight ? "Fica no seu perfil" : "Some em 24 horas"}</span>
           <button type="button" className="btn btn-brand rd-se-go" disabled={!can} onClick={send}>
             {busy ? "Publicando…" : "Publicar"} <Icon name="arrow-up" size={16} />
           </button>

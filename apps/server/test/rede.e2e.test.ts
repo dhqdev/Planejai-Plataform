@@ -142,6 +142,47 @@ describe.skipIf(!enabled)("rede social (e2e)", () => {
     expect((await call(beto.cookie, "DELETE", `/api/feed/status/${id}`)).statusCode).toBe(404);
   });
 
+  it("destaque fica no perfil depois das 24h; citar o @ vira menção e entra em Marcados; explorar só tem foto dos outros", async () => {
+    const { purgeExpiredStatus } = await import("../src/feed.js");
+    const hl = (await call(ana.cookie, "POST", "/api/feed/status", { photo: { base64: PNG, width: 1, height: 1 }, body: "Viagem", highlight: true })).json().id;
+    expect((await call(beto.cookie, "PUT", `/api/feed/status/${hl}/highlight`, { on: false })).statusCode).toBe(404);
+    await db.query("UPDATE feed_status SET expires_at = now() - interval '1 minute' WHERE id = $1", [hl]);
+    expect(await purgeExpiredStatus()).toBe(0);
+    // venceu: sai da fileira do feed, mas segue no perfil com a foto abrindo
+    expect((await call(beto.cookie, "GET", "/api/feed/status")).json()[0].items).toHaveLength(1);
+    let prof = (await call(beto.cookie, "GET", "/api/feed/u/ana.paula")).json();
+    expect(prof.highlights).toHaveLength(1);
+    expect(prof.highlights[0]).toMatchObject({ id: hl, kind: "photo", body: "Viagem", highlight: true });
+    expect(prof.highlights[0].views).toBeUndefined();
+    expect((await call(beto.cookie, "GET", `/api/feed/media/${prof.highlights[0].media.id}`)).statusCode).toBe(200);
+    // tirar do destaque: some do perfil e a limpeza leva
+    expect((await call(ana.cookie, "PUT", `/api/feed/status/${hl}/highlight`, { on: false })).json()).toEqual({ highlight: false });
+    expect(await purgeExpiredStatus()).toBe(1);
+    prof = (await call(beto.cookie, "GET", "/api/feed/u/ana.paula")).json();
+    expect(prof.highlights).toHaveLength(0);
+
+    // menção: só o @ exato conta (ana.paula não casa em @ana.paulatina)
+    const m = (await call(beto.cookie, "POST", "/api/feed/posts", { body: "Valeu pela dica, @Ana.Paula!" })).json().post;
+    const other = (await call(beto.cookie, "POST", "/api/feed/posts", { body: "oi @ana.paulatina e @ana" })).json().post;
+    expect((await call(ana.cookie, "GET", "/api/feed/me")).json().unread).toBe(1);
+    const act = (await call(ana.cookie, "GET", "/api/feed/activity")).json();
+    expect(act[0]).toMatchObject({ kind: "mention", post_id: m.id, unread: true, thumb: { media: null, card: null } });
+    expect(act[0].actor).toMatchObject({ handle: "beto", followsMe: true, following: false });
+    expect(act.filter((a: any) => a.kind === "mention")).toHaveLength(1);
+    expect(act.find((a: any) => a.kind === "like").thumb.media).toBeTruthy();
+    expect((await call(caio.cookie, "GET", "/api/feed/u/ana.paula/marcados")).json().posts.map((x: any) => x.id)).toEqual([m.id]);
+    expect((await call(caio.cookie, "GET", "/api/feed/u/beto/marcados")).json().posts).toHaveLength(0);
+
+    // explorar: só publicação com foto (ou cartão) de outras pessoas
+    expect((await call(beto.cookie, "GET", "/api/feed?tab=explore")).json().posts.map((x: any) => x.id)).toEqual([postId]);
+    expect((await call(ana.cookie, "GET", "/api/feed?tab=explore")).json().posts).toHaveLength(0);
+    // sugestão: "em comum" conta quem eu sigo que também segue a pessoa
+    await call(caio.cookie, "POST", "/api/feed/u/beto/follow");
+    expect((await call(caio.cookie, "GET", "/api/feed/people?q=ana")).json()[0]).toMatchObject({ handle: "ana.paula", mutual: 1, followsMe: false });
+    await call(caio.cookie, "DELETE", "/api/feed/u/beto/follow");
+    for (const id of [m.id, other.id]) expect((await call(beto.cookie, "DELETE", `/api/feed/posts/${id}`)).statusCode).toBe(200);
+  });
+
   it("bloqueio: um some para o outro (feed, perfil, foto, busca, status) e deixam de se seguir", async () => {
     expect((await call(ana.cookie, "POST", "/api/feed/u/caio/block")).json()).toEqual({ blocked: true });
     expect((await call(caio.cookie, "GET", "/api/feed")).json().posts).toHaveLength(0);

@@ -15,8 +15,10 @@ import {
   listActivity,
   listFeed,
   listFollows,
+  listHighlights,
   listLikes,
   listStatus,
+  listTagged,
   listUserPosts,
   profileOf,
   readMedia,
@@ -24,6 +26,7 @@ import {
   saveProfile,
   setBlock,
   setFollow,
+  setHighlight,
   setLike,
   statusViewers,
   suggestProfile,
@@ -99,7 +102,7 @@ export function feedRoutes(base: FastifyInstance) {
   base.get<{ Querystring: { tab?: string; before?: string } }>("/api/feed", async (req, reply) => {
     const uid = await who(req, reply);
     if (!uid) return;
-    return listFeed(uid, req.query.tab === "following" ? "following" : "all", req.query.before);
+    return listFeed(uid, req.query.tab === "following" ? "following" : req.query.tab === "explore" ? "explore" : "all", req.query.before);
   });
 
   base.post<{ Body: { body?: string; photos?: unknown } }>("/api/feed/posts", async (req, reply) => {
@@ -199,7 +202,17 @@ export function feedRoutes(base: FastifyInstance) {
     if (!uid) return;
     const profile = await getProfile(uid, req.params.handle);
     if (!profile) return notFound(reply, "Perfil não encontrado");
-    return { profile, ...(profile.blocked ? { posts: [], next: null } : await listUserPosts(uid, profile.id, req.query.before)) };
+    if (profile.blocked) return { profile, highlights: [], posts: [], next: null };
+    // os destaques vêm só com a primeira página
+    return { profile, highlights: req.query.before ? [] : await listHighlights(uid, profile.id), ...(await listUserPosts(uid, profile.id, req.query.before)) };
+  });
+
+  base.get<{ Params: { handle: string }; Querystring: { before?: string } }>("/api/feed/u/:handle/marcados", async (req, reply) => {
+    const uid = await who(req, reply);
+    if (!uid) return;
+    const profile = await getProfile(uid, req.params.handle);
+    if (!profile) return notFound(reply, "Perfil não encontrado");
+    return profile.blocked ? { posts: [], next: null } : listTagged(uid, profile.id, profile.handle, req.query.before);
   });
 
   for (const kind of ["followers", "following"] as const) {
@@ -242,7 +255,7 @@ export function feedRoutes(base: FastifyInstance) {
     return listStatus(uid);
   });
 
-  base.post<{ Body: { body?: string; bg?: string; font?: string; align?: string; photo?: unknown } }>("/api/feed/status", async (req, reply) => {
+  base.post<{ Body: { body?: string; bg?: string; font?: string; align?: string; photo?: unknown; highlight?: boolean } }>("/api/feed/status", async (req, reply) => {
     const uid = await who(req, reply, { write: true });
     if (!uid) return;
     try {
@@ -258,6 +271,17 @@ export function feedRoutes(base: FastifyInstance) {
     // quem está olhando a conta de um cliente não deixa "visto" em nome dele
     if (isUuid(req.params.id) && !req.account.impersonatedBy) await viewStatus(uid, req.params.id);
     return { ok: true };
+  });
+
+  base.put<{ Params: { id: string }; Body: { on?: boolean } }>("/api/feed/status/:id/highlight", async (req, reply) => {
+    const uid = await who(req, reply, { write: true });
+    if (!uid) return;
+    if (!isUuid(req.params.id)) return notFound(reply);
+    try {
+      return await setHighlight(uid, req.params.id, req.body?.on !== false);
+    } catch (err) {
+      return fail(reply, err);
+    }
   });
 
   base.get<{ Params: { id: string } }>("/api/feed/status/:id/viewers", async (req, reply) => {
