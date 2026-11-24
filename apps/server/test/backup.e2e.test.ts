@@ -179,12 +179,17 @@ describe.skipIf(!enabled)("backup e migração (e2e)", () => {
     await storage.putObject("arquivos/midia/so-no-bucket", Buffer.from("foto"), "image/png");
     const m = await db.one<{ id: string }>("INSERT INTO media_files (kind, mimetype, size, storage_key) VALUES ('screenshot', 'image/png', 4, 'arquivos/midia/so-no-bucket') RETURNING id");
     const sumiu = await db.one<{ id: string }>("INSERT INTO media_files (kind, mimetype, size, storage_key) VALUES ('screenshot', 'image/png', 4, 'arquivos/midia/nao-existe') RETURNING id");
-    // um arquivo que não volta: não desconecta (ele ficaria sem conteúdo)
-    await expect(backup.disconnectStorage()).rejects.toThrow(/1 arquivo não voltou/);
-    expect(await storage.storageOn()).toBe(true);
-    await db.query("DELETE FROM media_files WHERE id = $1", [sumiu!.id]);
+    // objeto que ficou no caminho antigo (media/) também volta
+    await storage.putObject("media/ficou-no-antigo", Buffer.from("velha"), "image/png");
+    const antigo = await db.one<{ id: string }>("INSERT INTO media_files (kind, mimetype, size, storage_key) VALUES ('screenshot', 'image/png', 5, 'arquivos/midia/ficou-no-antigo') RETURNING id");
 
-    expect(await backup.disconnectStorage()).toEqual({ pulled: 0 });
+    // o que não existe em lugar nenhum não segura: não tem o que trazer
+    const r = await backup.disconnectStorage();
+    // o documento do primeiro teste (só no bucket) volta junto
+    expect(r.gone).toBe(1);
+    expect(r.pulled).toBeGreaterThanOrEqual(2);
+    expect((await db.one("SELECT data FROM media_files WHERE id = $1", [antigo!.id])).data.toString()).toBe("velha");
+    await db.query("DELETE FROM media_files WHERE id = ANY($1)", [[sumiu!.id, antigo!.id]]);
     expect((await db.one("SELECT data FROM media_files WHERE id = $1", [m!.id])).data.toString()).toBe("foto");
     expect(await storage.storageOn()).toBe(false);
     expect(await storage.keepLocalCopy()).toBe(true);

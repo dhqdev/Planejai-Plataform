@@ -604,19 +604,23 @@ export async function disconnectStorage(log?: (m: string) => void) {
   if (restoreState && !["pronto", "erro"].includes(restoreState.phase)) throw new Error("Tem uma restauração andando. Espere ela terminar.");
   await saveSettings({ keepLocalCopy: true });
   let pulled = 0;
-  const failed: string[] = [];
+  const gone: string[] = [];
+  const failed: { id: string; error: string }[] = [];
   for (;;) {
-    const r = await pullBlobsFromStorage(50, failed);
+    const r = await pullBlobsFromStorage(50, [...gone, ...failed.map((f) => f.id)]);
     pulled += r.pulled;
+    gone.push(...r.gone);
     failed.push(...r.failed);
-    if (!r.more || (!r.pulled && r.failed.length === 0)) break;
+    if (!r.more || (!r.pulled && !r.gone.length && !r.failed.length)) break;
   }
   if (failed.length) {
-    throw new Error(`${failed.length === 1 ? "1 arquivo não voltou" : `${failed.length} arquivos não voltaram`} do bucket (${pulled} voltaram). Nada foi desligado: tente de novo daqui a pouco.`);
+    throw new Error(
+      `${failed.length === 1 ? "1 arquivo não voltou" : `${failed.length} arquivos não voltaram`} do bucket (${pulled} voltaram): ${failed[0]!.error}. Nada foi desligado: tente de novo daqui a pouco.`,
+    );
   }
   await saveSettings({ storageDisconnected: true });
-  log?.(`bucket desconectado no painel: ${pulled} arquivo(s) voltaram para o banco`);
-  return { pulled };
+  log?.(`bucket desconectado no painel: ${pulled} arquivo(s) voltaram para o banco, ${gone.length} já não existiam no bucket`);
+  return { pulled, gone: gone.length };
 }
 
 /** Volta a usar o bucket (as envs ainda estão na stack). O que ficou no banco sobe de novo na limpeza de hora em hora. */

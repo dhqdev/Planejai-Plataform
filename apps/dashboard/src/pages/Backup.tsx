@@ -626,9 +626,15 @@ function UnlinkModal({ bucket, onClose, onDone }: { bucket: NonNullable<Info["bu
     setBusy(true);
     setErr(null);
     try {
-      await api("/api/backup/disconnect", { method: "POST", json: { password } });
+      const r = await api<{ pulled: number; gone: number }>("/api/backup/disconnect", { method: "POST", json: { password } });
       onDone();
       onClose();
+      if (r.gone > 0) {
+        void alertDialog(
+          "Desconectado",
+          `${r.pulled} ${r.pulled === 1 ? "arquivo voltou" : "arquivos voltaram"} para a VM. ${r.gone === 1 ? "1 arquivo já não existia" : `${r.gone} arquivos já não existiam`} no bucket, então não tinha o que trazer: eles continuam sem conteúdo, como já estavam.`,
+        );
+      }
     } catch (e) {
       setErr((e as Error).message);
     } finally {

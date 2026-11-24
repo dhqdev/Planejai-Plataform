@@ -337,29 +337,55 @@ export async function moveBlobsToStorage(limit = 50) {
   return moved;
 }
 
+/** Chave antiga (documents/, media/) de um objeto que já está no formato novo, ou null. */
+function legacyKey(key: string) {
+  if (key.startsWith("arquivos/documentos/")) return `documents/${key.slice("arquivos/documentos/".length)}`;
+  if (key.startsWith("arquivos/midia/")) return `media/${key.slice("arquivos/midia/".length)}`;
+  return null;
+}
+
+const notFound = (err: unknown) => /\b404\b|NoSuchKey/.test((err as Error).message ?? "");
+
 /**
- * Caminho contrário, para desconectar o bucket: baixa para o banco (bytea) até `limit` arquivos que estavam só no bucket.
- * A storage_key fica na linha (se reconectar, o arquivo já está lá). Devolve quantos voltaram.
+ * Caminho contrário, para desconectar o bucket: baixa para o banco (bytea) até `limit` arquivos que estavam só no bucket
+ * (documentos, mídias e fotos da rede). Procura também no caminho antigo (documents/, media/).
+ * `gone` = o objeto não existe no bucket (nem no caminho antigo): não tem o que trazer, então não segura a desconexão.
+ * `failed` = erro de rede/permissão: esse sim segura. A storage_key fica na linha (se reconectar, o arquivo já está lá).
  */
 export async function pullBlobsFromStorage(limit = 50, skip: string[] = []) {
-  const rows = await many<{ t: "documents" | "media_files"; id: string; storage_key: string }>(
+  const rows = await many<{ t: "documents" | "media_files" | "feed_media"; id: string; storage_key: string }>(
     `(SELECT 'documents' AS t, id, storage_key FROM documents WHERE data IS NULL AND storage_key IS NOT NULL AND NOT (id::text = ANY($2)) ORDER BY created_at LIMIT $1)
      UNION ALL
-     (SELECT 'media_files' AS t, id, storage_key FROM media_files WHERE data IS NULL AND storage_key IS NOT NULL AND NOT (id::text = ANY($2)) ORDER BY created_at LIMIT $1)`,
+     (SELECT 'media_files' AS t, id, storage_key FROM media_files WHERE data IS NULL AND storage_key IS NOT NULL AND NOT (id::text = ANY($2)) ORDER BY created_at LIMIT $1)
+     UNION ALL
+     (SELECT 'feed_media' AS t, id, storage_key FROM feed_media WHERE data IS NULL AND storage_key IS NOT NULL AND NOT (id::text = ANY($2)) ORDER BY created_at LIMIT $1)`,
     [limit, skip],
   );
   let pulled = 0;
-  const failed: string[] = [];
+  const gone: string[] = [];
+  const failed: { id: string; error: string }[] = [];
   for (const r of rows.slice(0, limit)) {
-    try {
-      const data = await getObject(r.storage_key);
+    let data: Buffer | null = null;
+    let missing = false;
+    for (const key of [r.storage_key, relocatedKey(r.storage_key) ?? legacyKey(r.storage_key)].filter(Boolean) as string[]) {
+      try {
+        data = await getObject(key);
+        break;
+      } catch (err) {
+        if (notFound(err)) missing = true;
+        else {
+          failed.push({ id: String(r.id), error: (err as Error).message });
+          missing = false;
+          break;
+        }
+      }
+    }
+    if (data) {
       const u = await query(`UPDATE ${r.t} SET data = $3 WHERE id = $1 AND storage_key = $2 AND data IS NULL`, [r.id, r.storage_key, data]);
       if (u.rowCount) pulled++;
-    } catch {
-      failed.push(String(r.id));
-    }
+    } else if (missing) gone.push(String(r.id));
   }
-  return { pulled, failed, more: rows.length > 0 };
+  return { pulled, gone, failed, more: rows.length > 0 };
 }
 
 /** Chave nova (pastas arquivos/...) para um objeto gravado no formato antigo, ou null se já está no lugar. */
