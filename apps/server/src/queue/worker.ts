@@ -153,8 +153,8 @@ async function startChannelJobs(log: WorkerLog) {
 
   // backup do banco no bucket (Backblaze), às 3h30: dump + ficha + conferência dos arquivos (backup.ts)
   await boss.work(QUEUES.backup, { batchSize: 1, pollingIntervalSeconds: 60 }, async () => {
-    const { storageEnabled } = await import("../storage.js");
-    if (!storageEnabled()) return;
+    const { storageOn } = await import("../storage.js");
+    if (!(await storageOn())) return;
     const { runBackup } = await import("../backup.js");
     await runBackup("agenda", { log: (m) => log.info(m) }).catch((err) => log.error({ err }, "backup no bucket falhou"));
   });

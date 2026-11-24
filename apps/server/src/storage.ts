@@ -6,7 +6,7 @@ import { request as httpsRequest } from "node:https";
 import { pipeline } from "node:stream/promises";
 import { config } from "./config.js";
 import { many, one, query } from "./db/pool.js";
-import { getSettings } from "./settings.js";
+import { getSettings, storageSwitchedOff } from "./settings.js";
 
 /**
  * Arquivos fora do Postgres: storage S3 compatível (Cloudflare R2, S3, B2) configurado pelo dono.
@@ -15,8 +15,21 @@ import { getSettings } from "./settings.js";
  */
 const TIMEOUT_MS = 30_000;
 
-export function storageEnabled() {
+/** As envs STORAGE_S3_* estão na stack (mesmo com o bucket desconectado no painel). */
+export function storageConfigured() {
   return Boolean(config.STORAGE_S3_ENDPOINT && config.STORAGE_S3_BUCKET && config.STORAGE_S3_ACCESS_KEY_ID && config.STORAGE_S3_SECRET_ACCESS_KEY);
+}
+
+/** Bucket em uso: envs na stack e não desconectado em Servidor > Backup. */
+export function storageEnabled() {
+  return storageConfigured() && !storageSwitchedOff;
+}
+
+/** Igual ao storageEnabled, mas relê as configurações antes (o botão pode ter sido tocado no outro processo). */
+export async function storageOn() {
+  if (!storageConfigured()) return false;
+  await getSettings();
+  return storageEnabled();
 }
 
 /**
@@ -224,7 +237,7 @@ export async function getObjectToFile(key: string, file: string) {
 
 /** Com bucket e o interruptor ligado, o arquivo fica também no banco (VM). Sem bucket fica sempre no banco. */
 export async function keepLocalCopy() {
-  if (!storageEnabled()) return true;
+  if (!(await storageOn())) return true;
   return (await getSettings()).keepLocalCopy;
 }
 
@@ -233,7 +246,7 @@ export async function keepLocalCopy() {
  * Com cópia na VM, se o bucket falhar o arquivo fica só no banco e a limpeza de hora em hora sobe depois.
  */
 export async function storeBlob(key: string, data: Buffer, mimetype: string): Promise<{ data: Buffer | null; storage_key: string | null }> {
-  if (!storageEnabled()) return { data, storage_key: null };
+  if (!(await storageOn())) return { data, storage_key: null };
   const local = await keepLocalCopy();
   try {
     await putObject(key, data, mimetype);
@@ -272,7 +285,7 @@ export async function readBlob(row: { data?: Buffer | null; storage_key?: string
  * Sai do bucket aqui; o que falhar volta para a fila e tenta na próxima rodada.
  */
 export async function purgeStorageTrash(limit = 200) {
-  if (!storageEnabled()) return 0;
+  if (!(await storageOn())) return 0;
   const rows = await many<{ key: string }>(
     "DELETE FROM storage_trash WHERE key IN (SELECT key FROM storage_trash ORDER BY created_at LIMIT $1 FOR UPDATE SKIP LOCKED) RETURNING key",
     [limit],
@@ -294,7 +307,7 @@ export async function purgeStorageTrash(limit = 200) {
  * Com cópia na VM o bytea fica; sem, sai do banco (inclusive dos que já estavam nos dois lugares).
  */
 export async function moveBlobsToStorage(limit = 50) {
-  if (!storageEnabled()) return 0;
+  if (!(await storageOn())) return 0;
   const local = await keepLocalCopy();
   if (!local) {
     for (const t of ["documents", "media_files"]) {
@@ -324,6 +337,31 @@ export async function moveBlobsToStorage(limit = 50) {
   return moved;
 }
 
+/**
+ * Caminho contrário, para desconectar o bucket: baixa para o banco (bytea) até `limit` arquivos que estavam só no bucket.
+ * A storage_key fica na linha (se reconectar, o arquivo já está lá). Devolve quantos voltaram.
+ */
+export async function pullBlobsFromStorage(limit = 50, skip: string[] = []) {
+  const rows = await many<{ t: "documents" | "media_files"; id: string; storage_key: string }>(
+    `(SELECT 'documents' AS t, id, storage_key FROM documents WHERE data IS NULL AND storage_key IS NOT NULL AND NOT (id::text = ANY($2)) ORDER BY created_at LIMIT $1)
+     UNION ALL
+     (SELECT 'media_files' AS t, id, storage_key FROM media_files WHERE data IS NULL AND storage_key IS NOT NULL AND NOT (id::text = ANY($2)) ORDER BY created_at LIMIT $1)`,
+    [limit, skip],
+  );
+  let pulled = 0;
+  const failed: string[] = [];
+  for (const r of rows.slice(0, limit)) {
+    try {
+      const data = await getObject(r.storage_key);
+      const u = await query(`UPDATE ${r.t} SET data = $3 WHERE id = $1 AND storage_key = $2 AND data IS NULL`, [r.id, r.storage_key, data]);
+      if (u.rowCount) pulled++;
+    } catch {
+      failed.push(String(r.id));
+    }
+  }
+  return { pulled, failed, more: rows.length > 0 };
+}
+
 /** Chave nova (pastas arquivos/...) para um objeto gravado no formato antigo, ou null se já está no lugar. */
 export function relocatedKey(key: string) {
   if (key.startsWith("documents/")) return `arquivos/documentos/${key.slice("documents/".length)}`;
@@ -336,7 +374,7 @@ export function relocatedKey(key: string) {
  * na linha e só então apaga o antigo. Se a linha sumiu no meio, apaga a cópia (o antigo já foi pra lixeira).
  */
 export async function relocateLegacyObjects(limit = 100) {
-  if (!storageEnabled()) return 0;
+  if (!(await storageOn())) return 0;
   const rows = await many<{ t: "documents" | "media_files"; id: string; storage_key: string }>(
     `(SELECT 'documents' AS t, id, storage_key FROM documents WHERE storage_key LIKE 'documents/%' LIMIT $1)
      UNION ALL

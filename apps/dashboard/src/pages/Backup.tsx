@@ -66,6 +66,8 @@ interface RestoreState {
 }
 interface Info {
   bucket: { host: string; endpoint: string; region: string; bucket: string; prefix: string } | null;
+  /** envs na stack, mas desconectado aqui pelo botão */
+  disconnected: boolean;
   tools: { pgDump: string | null; pgRestore: string | null };
   keyFingerprint: string | null;
   fresh: boolean;
@@ -94,6 +96,7 @@ export function BackupPage() {
   const [restoreKey, setRestoreKey] = useState<string | null>(null);
   const [vault, setVault] = useState<"" | "save" | "open">("");
   const [ftp, setFtp] = useState(false);
+  const [unlink, setUnlink] = useState(false);
   const phase = data?.restore?.phase;
 
   // restauração andando: acompanha de perto (na troca do banco a API some uns segundos e volta)
@@ -127,11 +130,23 @@ export function BackupPage() {
     }
   };
 
+  const reconnect = async () => {
+    haptic(5);
+    try {
+      await api("/api/backup/reconnect", { method: "POST", json: {} });
+      await reload();
+    } catch (err) {
+      void alertDialog("Não deu para reconectar", (err as Error).message);
+    }
+  };
+
   // ---------- veredito: está tudo no bucket? ----------
   const ageH = lastOk ? (Date.now() - new Date(lastOk.finished_at ?? lastOk.started_at).getTime()) / 3600_000 : Infinity;
   const files = lastOk?.files ?? null;
   const problems: string[] = [];
+  const linked = !!data.bucket && !data.disconnected;
   if (!data.bucket) problems.push("O bucket não está configurado na stack");
+  else if (data.disconnected) problems.push("O bucket está desconectado: o backup não vai para fora");
   else {
     if (!data.tools.pgDump) problems.push("Esta imagem não tem o pg_dump: atualize o Planejai");
     if (!lastOk) problems.push("Nenhum backup feito pelo app ainda");
@@ -148,10 +163,10 @@ export function BackupPage() {
         subtitle="Tudo que precisa para subir o Planejai em outra VPS fica no seu bucket. Aqui você confere, testa e restaura."
         actions={
           <>
-            <button className="btn" disabled={!!busy || !!running || !data.bucket} onClick={() => void start(false)}>
+            <button className="btn" disabled={!!busy || !!running || !linked} onClick={() => void start(false)}>
               <Icon name="download" size={15} /> {busy === "run" ? "Começando" : "Fazer backup agora"}
             </button>
-            <button className="btn btn-primary" disabled={!!busy || !!running || !data.bucket} onClick={() => void start(true)}>
+            <button className="btn btn-primary" disabled={!!busy || !!running || !linked} onClick={() => void start(true)}>
               <Icon name="check" size={15} /> {running ? "Rodando" : busy === "test" ? "Começando" : "Testar backup agora"}
             </button>
           </>
@@ -227,7 +242,7 @@ export function BackupPage() {
             <Item ok={!!data.vault} warn={!data.vault} title="Chaves da stack" detail={data.vault ? `No cofre desde ${when(data.vault.savedAt)}` : "Fora do bucket"}>
               ENCRYPTION_KEY, senhas e chaves de API vêm da stack, não do banco. Sem a ENCRYPTION_KEY as integrações não abrem. O cofre guarda todas cifradas com uma senha que só você sabe.
               <span className="bk-actions">
-                <button className="btn btn-sm" onClick={() => { haptic(5); setVault("save"); }} disabled={!data.bucket}>{data.vault ? "Atualizar o cofre" : "Guardar no cofre"}</button>
+                <button className="btn btn-sm" onClick={() => { haptic(5); setVault("save"); }} disabled={!linked}>{data.vault ? "Atualizar o cofre" : "Guardar no cofre"}</button>
                 {data.vault && <button className="btn btn-sm" onClick={() => { haptic(5); setVault("open"); }}>Abrir o cofre</button>}
               </span>
               {data.vault && data.keyFingerprint && data.vault.keyFingerprint !== data.keyFingerprint && (
@@ -262,12 +277,21 @@ export function BackupPage() {
             <div className="bk-head">
               <h3>No bucket</h3>
               <span className="spacer" />
-              {data.bucket && <button className="btn btn-sm" onClick={() => { haptic(5); setFtp(true); }}><Icon name="folder" size={14} /> Abrir como pasta</button>}
+              {linked && <button className="btn btn-sm" onClick={() => { haptic(5); setFtp(true); }}><Icon name="folder" size={14} /> Abrir como pasta</button>}
             </div>
             {!data.bucket ? (
               <p className="muted bk-lead">
                 Preencha <code>STORAGE_S3_ENDPOINT</code>, <code>STORAGE_S3_BUCKET</code>, <code>STORAGE_S3_REGION</code>, <code>STORAGE_S3_ACCESS_KEY_ID</code> e <code>STORAGE_S3_SECRET_ACCESS_KEY</code> na stack (app e worker) e atualize.
               </p>
+            ) : data.disconnected ? (
+              <>
+                <p className="muted bk-lead mono-small">{data.bucket.host} · {data.bucket.bucket}/{data.bucket.prefix}</p>
+                <p className="muted bk-lead">
+                  Desconectado. Os arquivos ficam na VM e o backup diário não vai para fora. Nada foi apagado no bucket.
+                  Para tirar as chaves de vez, apague as variáveis <code>STORAGE_S3_*</code> da stack (app e worker) e atualize.
+                </p>
+                <button className="btn btn-sm" onClick={() => void reconnect()}>Reconectar</button>
+              </>
             ) : (
               <>
                 <p className="muted bk-lead mono-small">{data.bucket.host} · {data.bucket.bucket}/{data.bucket.prefix}</p>
@@ -278,6 +302,7 @@ export function BackupPage() {
                   <Folder name="LEIA-ME.txt" note="explica as pastas para quem abrir o bucket" file />
                 </div>
                 {data.remoteError && <p className="bk-warn">Não consegui listar o bucket agora: {data.remoteError}</p>}
+                <button className="btn btn-sm bk-unlink" onClick={() => { haptic(5); setUnlink(true); }}>Desconectar o bucket</button>
               </>
             )}
           </div>
@@ -342,6 +367,7 @@ export function BackupPage() {
       )}
       {vault === "save" && <VaultSave onClose={() => setVault("")} onSaved={() => void reload()} />}
       {vault === "open" && <VaultOpen onClose={() => setVault("")} />}
+      {unlink && data.bucket && <UnlinkModal bucket={data.bucket} onClose={() => setUnlink(false)} onDone={() => void reload()} />}
       {ftp && data.bucket && <FtpHelp bucket={data.bucket} onClose={() => setFtp(false)} />}
     </div>
   );
@@ -585,6 +611,44 @@ function VaultOpen({ onClose }: { onClose: () => void }) {
         ) : (
           <pre className="bk-env">{text}</pre>
         )}
+      </div>
+    </Modal>
+  );
+}
+
+/** Desconectar o bucket: pede a senha do dono, traz os arquivos de volta para o banco e para de usar o bucket. */
+function UnlinkModal({ bucket, onClose, onDone }: { bucket: NonNullable<Info["bucket"]>; onClose: () => void; onDone: () => void }) {
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const go = async () => {
+    haptic(10);
+    setBusy(true);
+    setErr(null);
+    try {
+      await api("/api/backup/disconnect", { method: "POST", json: { password } });
+      onDone();
+      onClose();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title="Desconectar o bucket"
+      icon={<Icon name="shield" />}
+      onClose={busy ? () => {} : onClose}
+      footer={<><button className="btn" disabled={busy} onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={!password || busy} onClick={() => void go()}>{busy ? "Trazendo os arquivos" : "Desconectar"}</button></>}
+    >
+      <div className="bk-form">
+        <p className="muted">
+          O Planejai para de usar <code>{bucket.bucket}/{bucket.prefix}</code>. Antes, os documentos e mídias que estão só lá voltam para a VM.
+          Nada é apagado no bucket, e o backup diário passa a ficar só na VM. Dá para reconectar depois.
+        </p>
+        <div className="field"><label>Senha do dono</label><input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && password && !busy && void go()} /></div>
+        {err && <p className="bk-err">{err}</p>}
       </div>
     </Modal>
   );

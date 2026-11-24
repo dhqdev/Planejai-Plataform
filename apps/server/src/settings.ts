@@ -57,6 +57,11 @@ export interface AgentSettings {
    * Desligado, vão só para o bucket. Interruptor do super admin na tela Armazenamento.
    */
   keepLocalCopy: boolean;
+  /**
+   * Botão "Desconectar o bucket" (Servidor > Backup): com as envs STORAGE_S3_* ainda na stack, o app para de usar o bucket.
+   * Antes de desligar, os arquivos que estavam só no bucket voltam para o banco (disconnectStorage em backup.ts).
+   */
+  storageDisconnected: boolean;
   /** Uber pelo WhatsApp (beta): desligado, só o dono testando ou todo mundo (Dia a dia e Completo) */
   uberAccess: "off" | "owner" | "all";
   /** 99 pelo WhatsApp (beta): mesmas opções da Uber */
@@ -214,11 +219,15 @@ const defaults = (): AgentSettings => ({
   privacyEmail: "",
   legalCity: "",
   keepLocalCopy: true,
+  storageDisconnected: false,
   uberAccess: "owner",
   ride99Access: "owner",
 });
 
 let cache: { at: number; value: AgentSettings } | null = null;
+
+/** Cópia síncrona do storageDisconnected para o storageEnabled() (atualizada a cada leitura das configurações). */
+export let storageSwitchedOff = false;
 
 export async function getSettings(): Promise<AgentSettings> {
   if (cache && Date.now() - cache.at < 10_000) return cache.value;
@@ -226,6 +235,7 @@ export async function getSettings(): Promise<AgentSettings> {
   const value = { ...defaults() } as any;
   for (const r of rows) if (r.key in value) value[r.key] = r.value;
   cache = { at: Date.now(), value };
+  storageSwitchedOff = value.storageDisconnected === true;
   return value;
 }
 
@@ -237,6 +247,7 @@ export async function saveSettings(patch: Partial<AgentSettings>, opts: { unchec
     rest.billingEnabled = rest.billingEnabled === true || (rest.billingEnabled as unknown) === "true";
     if (rest.billingEnabled && !(await getSettings()).billingStartedAt) (rest as Partial<AgentSettings>).billingStartedAt = new Date().toISOString();
   }
+  if (rest.storageDisconnected !== undefined) rest.storageDisconnected = rest.storageDisconnected === true || (rest.storageDisconnected as unknown) === "true";
   if (rest.keepLocalCopy !== undefined) rest.keepLocalCopy = rest.keepLocalCopy === true || (rest.keepLocalCopy as unknown) === "true";
   if (rest.uberAccess !== undefined && !["off", "owner", "all"].includes(rest.uberAccess)) throw new Error("uberAccess precisa ser off, owner ou all");
   if (rest.ride99Access !== undefined && !["off", "owner", "all"].includes(rest.ride99Access)) throw new Error("ride99Access precisa ser off, owner ou all");

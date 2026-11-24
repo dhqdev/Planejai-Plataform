@@ -173,6 +173,31 @@ describe.skipIf(!enabled)("backup e migração (e2e)", () => {
     await db.query("DELETE FROM media_files WHERE id = $1", [m!.id]);
   });
 
+  it("desconectar o bucket: traz de volta o que estava só lá, para de usar e reconecta", async () => {
+    const { saveSettings } = await import("../src/settings.js");
+    await saveSettings({ keepLocalCopy: false });
+    await storage.putObject("arquivos/midia/so-no-bucket", Buffer.from("foto"), "image/png");
+    const m = await db.one<{ id: string }>("INSERT INTO media_files (kind, mimetype, size, storage_key) VALUES ('screenshot', 'image/png', 4, 'arquivos/midia/so-no-bucket') RETURNING id");
+    const sumiu = await db.one<{ id: string }>("INSERT INTO media_files (kind, mimetype, size, storage_key) VALUES ('screenshot', 'image/png', 4, 'arquivos/midia/nao-existe') RETURNING id");
+    // um arquivo que não volta: não desconecta (ele ficaria sem conteúdo)
+    await expect(backup.disconnectStorage()).rejects.toThrow(/1 arquivo não voltou/);
+    expect(await storage.storageOn()).toBe(true);
+    await db.query("DELETE FROM media_files WHERE id = $1", [sumiu!.id]);
+
+    expect(await backup.disconnectStorage()).toEqual({ pulled: 0 });
+    expect((await db.one("SELECT data FROM media_files WHERE id = $1", [m!.id])).data.toString()).toBe("foto");
+    expect(await storage.storageOn()).toBe(false);
+    expect(await storage.keepLocalCopy()).toBe(true);
+    expect(bucketHas("arquivos/midia/so-no-bucket")).toBe(true);
+    const stored = await storage.storeBlob("arquivos/midia/novo", Buffer.from("x"), "image/png");
+    expect(stored.storage_key).toBeNull();
+    await expect(backup.runBackup("manual")).rejects.toThrow(/desconectado/);
+
+    await backup.reconnectStorage();
+    expect(await storage.storageOn()).toBe(true);
+    await db.query("DELETE FROM media_files WHERE id = $1", [m!.id]);
+  });
+
   it("cofre: guarda as variáveis cifradas com a senha e só abre com ela", async () => {
     await expect(backup.saveVault("curta")).rejects.toThrow(/10 caracteres/);
     await backup.saveVault("minha senha do cofre");

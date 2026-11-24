@@ -21,9 +21,13 @@ import {
   listObjects,
   putObject,
   putObjectFile,
+  pullBlobsFromStorage,
+  storageConfigured,
   storageEnabled,
+  storageOn,
   type StoredObject,
 } from "./storage.js";
+import { saveSettings } from "./settings.js";
 import { VERSION } from "./version.js";
 
 /**
@@ -223,7 +227,7 @@ let current: Promise<unknown> | null = null;
  * `verify`: baixa de volta e confere o hash e se o pg_restore lê o arquivo (botão "Testar backup agora").
  */
 export async function runBackup(reason: "agenda" | "manual" | "teste" | "antes-de-restaurar", opts: { verify?: boolean; log?: (m: string) => void } = {}) {
-  if (!storageEnabled()) throw new Error("Bucket não configurado (STORAGE_S3_*): o backup só vai para fora com ele.");
+  if (!(await storageOn())) throw new Error("Bucket não configurado (STORAGE_S3_*) ou desconectado no painel: o backup só vai para fora com ele.");
   const lock = await pool.connect();
   const got = (await lock.query("SELECT pg_try_advisory_lock($1) AS ok", [LOCK_ID])).rows[0]?.ok;
   if (!got) {
@@ -582,7 +586,41 @@ export function watchRestore(onRestored: () => void) {
 }
 
 export const bucketLabel = () => {
-  if (!storageEnabled()) return null;
+  if (!storageConfigured()) return null;
   const { bucket, prefix } = bucketParts();
   return { host: new URL(config.STORAGE_S3_ENDPOINT).host, endpoint: config.STORAGE_S3_ENDPOINT, region: config.STORAGE_S3_REGION, bucket, prefix };
 };
+
+// ================= Desconectar / reconectar o bucket =================
+
+/**
+ * Botão "Desconectar o bucket": traz de volta para o banco os arquivos que estavam só no bucket, liga a cópia na VM
+ * e só então para de usar o bucket. Nada é apagado no bucket; as envs STORAGE_S3_* continuam na stack até o dono tirar.
+ * Se algum arquivo não voltar, não desconecta (ele ficaria sem conteúdo) e diz quantos.
+ */
+export async function disconnectStorage(log?: (m: string) => void) {
+  if (!storageConfigured()) throw new Error("Não tem bucket configurado na stack.");
+  if (current) throw new Error("Tem um backup rodando. Espere ele terminar.");
+  if (restoreState && !["pronto", "erro"].includes(restoreState.phase)) throw new Error("Tem uma restauração andando. Espere ela terminar.");
+  await saveSettings({ keepLocalCopy: true });
+  let pulled = 0;
+  const failed: string[] = [];
+  for (;;) {
+    const r = await pullBlobsFromStorage(50, failed);
+    pulled += r.pulled;
+    failed.push(...r.failed);
+    if (!r.more || (!r.pulled && r.failed.length === 0)) break;
+  }
+  if (failed.length) {
+    throw new Error(`${failed.length === 1 ? "1 arquivo não voltou" : `${failed.length} arquivos não voltaram`} do bucket (${pulled} voltaram). Nada foi desligado: tente de novo daqui a pouco.`);
+  }
+  await saveSettings({ storageDisconnected: true });
+  log?.(`bucket desconectado no painel: ${pulled} arquivo(s) voltaram para o banco`);
+  return { pulled };
+}
+
+/** Volta a usar o bucket (as envs ainda estão na stack). O que ficou no banco sobe de novo na limpeza de hora em hora. */
+export async function reconnectStorage() {
+  if (!storageConfigured()) throw new Error("Não tem bucket configurado na stack.");
+  await saveSettings({ storageDisconnected: false });
+}

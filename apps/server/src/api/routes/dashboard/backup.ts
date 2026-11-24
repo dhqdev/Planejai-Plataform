@@ -2,10 +2,12 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   bucketLabel,
   currentDbName,
+  disconnectStorage,
   isFreshInstall,
   KEEP_DAYS,
   openVault,
   pgTools,
+  reconnectStorage,
   remoteDumps,
   restoredMark,
   restoreStatus,
@@ -18,7 +20,7 @@ import { config } from "../../../config.js";
 import { keyFingerprint, safeEqual } from "../../../crypto.js";
 import { many, one } from "../../../db/pool.js";
 import { hit } from "../../../ratelimit.js";
-import { storageEnabled } from "../../../storage.js";
+import { storageConfigured, storageOn } from "../../../storage.js";
 
 /** Só o dono da stack: restaurar troca o banco inteiro e o cofre mostra as chaves da stack. */
 async function requireOwner(req: FastifyRequest, reply: FastifyReply) {
@@ -39,7 +41,7 @@ export async function backupRoutes(api: FastifyInstance) {
                 manifest->'inventory' AS inventory
            FROM backup_runs ORDER BY started_at DESC LIMIT 12`,
       );
-      const enabled = storageEnabled();
+      const enabled = await storageOn();
       let remote: Awaited<ReturnType<typeof remoteDumps>> = [];
       let remoteError: string | null = null;
       let vault: Awaited<ReturnType<typeof vaultInfo>> = null;
@@ -60,6 +62,7 @@ export async function backupRoutes(api: FastifyInstance) {
       const restored = await restoredMark();
       return {
         bucket: bucketLabel(),
+        disconnected: storageConfigured() && !enabled,
         tools: await pgTools(),
         keyFingerprint: keyFingerprint(),
         fresh: await isFreshInstall(),
@@ -77,7 +80,7 @@ export async function backupRoutes(api: FastifyInstance) {
     });
 
     b.post<{ Body: { test?: boolean } }>("/api/backup/run", async (req, reply) => {
-      if (!storageEnabled()) return reply.code(400).send({ error: "Configure o bucket (STORAGE_S3_*) na stack primeiro." });
+      if (!(await storageOn())) return reply.code(400).send({ error: "Configure o bucket (STORAGE_S3_*) na stack ou reconecte ele primeiro." });
       try {
         startBackup(req.body?.test ? "teste" : "manual", (m) => req.log.info(m));
       } catch (err) {
@@ -87,7 +90,7 @@ export async function backupRoutes(api: FastifyInstance) {
     });
 
     b.post<{ Body: { passphrase?: string } }>("/api/backup/vault", async (req, reply) => {
-      if (!storageEnabled()) return reply.code(400).send({ error: "Configure o bucket (STORAGE_S3_*) na stack primeiro." });
+      if (!(await storageOn())) return reply.code(400).send({ error: "Configure o bucket (STORAGE_S3_*) na stack ou reconecte ele primeiro." });
       try {
         return await saveVault(String(req.body?.passphrase ?? ""));
       } catch (err) {
@@ -99,6 +102,26 @@ export async function backupRoutes(api: FastifyInstance) {
       if ((await hit(`vault:${req.ip}`, TRIES_WINDOW)) > TRIES_MAX) return reply.code(429).send({ error: "Muitas tentativas. Espere 15 minutos." });
       try {
         return { env: await openVault(String(req.body?.passphrase ?? "")) };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
+
+    // Desconectar: os arquivos voltam para o banco e o app para de usar o bucket (nada é apagado lá). Pede a senha do dono.
+    b.post<{ Body: { password?: string } }>("/api/backup/disconnect", async (req, reply) => {
+      if ((await hit(`disconnect:${req.ip}`, TRIES_WINDOW)) > TRIES_MAX) return reply.code(429).send({ error: "Muitas tentativas. Espere 15 minutos." });
+      if (!safeEqual(String(req.body?.password ?? ""), config.ADMIN_PASSWORD)) return reply.code(400).send({ error: "Senha do dono errada." });
+      try {
+        return await disconnectStorage((m) => req.log.warn(m));
+      } catch (err) {
+        return reply.code(409).send({ error: (err as Error).message });
+      }
+    });
+
+    b.post("/api/backup/reconnect", async (_req, reply) => {
+      try {
+        await reconnectStorage();
+        return { ok: true };
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message });
       }
