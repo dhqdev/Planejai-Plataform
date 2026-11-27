@@ -244,4 +244,65 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("reconexão do WhatsApp", () => 
     await until(async () => (await row()).status === "disconnected");
     expect((await row()).last_error).toContain("QR code expirou");
   });
+  it("sem sessão, se o WhatsApp não mandar QR, desiste e mostra o erro em vez de ficar 'conectando' para sempre", async () => {
+    autoOpen = false;
+    const n = sockets.length;
+    await session.handleCommand({ action: "connect" });
+    await until(async () => (await row()).status === "disconnected", 8000);
+    expect((await row()).last_error).toContain("não respondeu para gerar o QR code");
+    expect(sockets.length - n).toBe(3);
+    await new Promise((r) => setTimeout(r, 400));
+    expect(sockets.length - n).toBe(3);
+  });
+
+  it("painel preso em 'conectando' sem nada rodando volta para 'desconectado'", async () => {
+    await db.query("UPDATE wa_sessions SET status = 'connecting', updated_at = now() - interval '1 minute' WHERE id = 'default'");
+    await until(async () => (await row()).status === "disconnected");
+    expect((await row()).last_error).toContain("não andou");
+  });
+
+  it("aparelho removido (conflict device_removed, 440) limpa a sessão e pede QR", async () => {
+    autoOpen = false;
+    await session.handleCommand({ action: "connect" });
+    const s = last();
+    s.authState.creds.me = { id: "5511999990000:3@s.whatsapp.net", name: "Assistente" };
+    s.authState.creds.account = { details: Buffer.from([1]) };
+    s.openUp();
+    await until(() => session.connected);
+    void s.end(Object.assign(boom("Stream Errored (conflict)", 440), { data: { tag: "conflict", attrs: { type: "device_removed" } } }));
+    await until(async () => (await row()).status === "disconnected");
+    expect((await row()).last_error).toContain("Sessão encerrada no celular");
+  });
+
+  it("Parar não religa sozinho; Reconectar volta; Desconectar e gerar QR apaga a sessão e pede QR", async () => {
+    autoOpen = false;
+    await session.handleCommand({ action: "connect" });
+    const s = last();
+    s.authState.creds.me = { id: "5511999990000:3@s.whatsapp.net", name: "Assistente" };
+    s.authState.creds.account = { details: Buffer.from([1]) };
+    s.ev.emit("creds.update", {});
+    s.openUp();
+    await until(() => session.connected);
+    autoOpen = true;
+    await new Promise((r) => setTimeout(r, 100));
+
+    await session.handleCommand({ action: "stop" });
+    expect(session.connected).toBe(false);
+    expect((await db.one<any>("SELECT stopped_at FROM wa_sessions WHERE id = 'default'")).stopped_at).not.toBeNull();
+    const n = sockets.length;
+    await new Promise((r) => setTimeout(r, 400));
+    expect(sockets.length).toBe(n);
+    expect((await row()).status).toBe("disconnected");
+    await expect(channel.sendText("5511988887777@s.whatsapp.net", "oi")).rejects.toThrow(/parado pelo painel/);
+
+    await session.handleCommand({ action: "restart" });
+    await until(() => session.connected);
+    expect((await db.one<any>("SELECT stopped_at FROM wa_sessions WHERE id = 'default'")).stopped_at).toBeNull();
+
+    autoOpen = false;
+    await session.handleCommand({ action: "reset" });
+    expect(await db.one("SELECT COUNT(*)::int AS n FROM wa_auth WHERE session = 'default' AND key = 'creds'")).toEqual({ n: 0 });
+    last().ev.emit("connection.update", { qr: "2@abc,def,ghi" });
+    await until(async () => (await row()).status === "qr");
+  });
 });

@@ -37,7 +37,10 @@ export function WhatsAppPage() {
   }
 
   const s = data.session ?? { status: "disconnected" };
-  const [cls, label] = LABEL[s.status] ?? ["", s.status];
+  const stopped = Boolean(s.stopped_at);
+  const [cls, label] = stopped ? ["badge-warn", "Parada"] : LABEL[s.status] ?? ["", s.status];
+  // sem nada para controlar: desconectado sem sessão já tem o botão de gerar QR no cartão
+  const controls = stopped || s.status !== "disconnected";
   const act = async (path: string, json?: unknown) => {
     setBusy(true);
     setErr(null);
@@ -57,18 +60,25 @@ export function WhatsAppPage() {
         title="WhatsApp"
         subtitle="Conexão própria do agente com o WhatsApp, sem serviço externo. Use um número só para o assistente."
         actions={
-          s.status === "connected" || s.status === "reconnecting" ? (
+          controls ? (
             <>
-              <button className="btn" disabled={busy} onClick={() => act("/api/whatsapp/restart")}>Reiniciar conexão</button>
+              {stopped ? (
+                <button className="btn btn-primary" disabled={busy} onClick={() => act("/api/whatsapp/restart")}>Reconectar</button>
+              ) : (
+                <>
+                  <button className="btn" disabled={busy} onClick={() => act("/api/whatsapp/stop")}>Parar conexão</button>
+                  <button className="btn" disabled={busy} onClick={() => act("/api/whatsapp/restart")}>Reiniciar conexão</button>
+                </>
+              )}
               <button className="btn btn-danger" disabled={busy} onClick={async () => {
                   const ok = await confirmDialog({
-                    title: "Desconectar este número?",
-                    body: "O assistente para de receber e responder mensagens até você ler um QR code novo.",
-                    confirmLabel: "Desconectar",
+                    title: "Desconectar e gerar um QR novo?",
+                    body: "A sessão salva é apagada e o assistente para de responder até você ler o QR code novo no celular do número.",
+                    confirmLabel: "Desconectar e gerar QR",
                     danger: true,
                   });
-                  if (ok) void act("/api/whatsapp/logout");
-                }}>Desconectar</button>
+                  if (ok) void act("/api/whatsapp/reset");
+                }}>Desconectar e gerar novo QR</button>
             </>
           ) : null
         }
@@ -116,7 +126,15 @@ export function WhatsAppPage() {
             </div>
           )}
 
-          {s.status === "connecting" && <p className="muted">Abrindo conexão com o WhatsApp…</p>}
+          {s.status === "connecting" && (
+            <div>
+              <p className="muted">Abrindo conexão com o WhatsApp…</p>
+              {s.last_error && <p className="muted" style={{ fontSize: 12 }}>Motivo: {s.last_error}</p>}
+              <p className="muted" style={{ fontSize: 12 }}>
+                Demorando? Toque em <strong>Reiniciar conexão</strong>. Se você tirou o aparelho do celular, use <strong>Desconectar e gerar novo QR</strong>.
+              </p>
+            </div>
+          )}
 
           {s.status === "reconnecting" && (
             <div>
@@ -128,7 +146,13 @@ export function WhatsAppPage() {
             </div>
           )}
 
-          {(s.status === "disconnected" || s.status === "qr" || s.status === "pairing") && (
+          {stopped && s.status === "disconnected" && (
+            <div className="notice notice-warn" style={{ marginTop: 4 }}>
+              A conexão está parada e não volta sozinha. A sessão continua salva: toque em <strong>Reconectar</strong> para voltar sem QR code.
+            </div>
+          )}
+
+          {!stopped && (s.status === "disconnected" || s.status === "qr" || s.status === "pairing") && (
             <div style={{ marginTop: 12 }}>
               {s.last_error && <div className="error-box" style={{ marginBottom: 12 }}>{s.last_error}</div>}
               <div className="tabs">

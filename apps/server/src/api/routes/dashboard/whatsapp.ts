@@ -8,13 +8,13 @@ import { SCENES, makeDraft, monthlyCostUsd, postDraft, saveStatusSettings, statu
 export function whatsappRoutes(api: FastifyInstance) {
   // ---------- WhatsApp embutido (Baileys) ----------
   api.get("/api/whatsapp", async () => {
-    const session = await one("SELECT status, qr, pairing_code, phone, name, last_error, updated_at, heartbeat_at, last_message_at, down_since, COALESCE(heartbeat_at > now() - interval '60 seconds', false) AS listening FROM wa_sessions WHERE id = $1", [SESSION_ID]);
+    const session = await one("SELECT status, qr, pairing_code, phone, name, last_error, updated_at, heartbeat_at, last_message_at, down_since, stopped_at, COALESCE(heartbeat_at > now() - interval '60 seconds', false) AS listening FROM wa_sessions WHERE id = $1", [SESSION_ID]);
     return { provider: config.WHATSAPP_PROVIDER, session };
   });
   api.post<{ Body: { phone?: string } }>("/api/whatsapp/connect", async (req, reply) => {
     if (config.WHATSAPP_PROVIDER !== "baileys") return reply.code(400).send({ error: "WHATSAPP_PROVIDER não é baileys" });
     const phone = req.body?.phone?.replace(/\D/g, "");
-    await query("UPDATE wa_sessions SET status = 'connecting', qr = NULL, pairing_code = NULL, last_error = NULL, updated_at = now() WHERE id = $1", [SESSION_ID]);
+    await query("UPDATE wa_sessions SET status = 'connecting', qr = NULL, pairing_code = NULL, last_error = NULL, stopped_at = NULL, updated_at = now() WHERE id = $1", [SESSION_ID]);
     await sendWaCommand({ action: "connect", phone: phone || undefined });
     return { ok: true };
   });
@@ -69,8 +69,24 @@ export function whatsappRoutes(api: FastifyInstance) {
     const settings = await saveStatusSettings({ enabled: b.enabled, everyDays: b.everyDays, hour: b.hour, blogEvery: b.blogEvery });
     return { settings, monthlyUsd: monthlyCostUsd(settings) };
   });
+  // Reiniciar/Reconectar: abre de novo com a sessão salva (ou QR, se não houver)
   api.post("/api/whatsapp/restart", async () => {
+    await query("UPDATE wa_sessions SET status = 'connecting', qr = NULL, pairing_code = NULL, last_error = NULL, stopped_at = NULL, updated_at = now() WHERE id = $1", [SESSION_ID]);
     await sendWaCommand({ action: "restart" });
+    return { ok: true };
+  });
+  // Parar: derruba e não religa sozinho (nem depois de redeploy) até Reconectar. Grava aqui também,
+  // para valer mesmo se o worker estiver trocando de mãos.
+  api.post("/api/whatsapp/stop", async () => {
+    await query("UPDATE wa_sessions SET stopped_at = now() WHERE id = $1", [SESSION_ID]);
+    await sendWaCommand({ action: "stop" });
+    return { ok: true };
+  });
+  // Desconectar e gerar QR novo: sai da conta, apaga a sessão salva e já pede um QR
+  api.post("/api/whatsapp/reset", async () => {
+    if (config.WHATSAPP_PROVIDER !== "baileys") return { ok: false };
+    await query("UPDATE wa_sessions SET status = 'connecting', qr = NULL, pairing_code = NULL, last_error = NULL, stopped_at = NULL, updated_at = now() WHERE id = $1", [SESSION_ID]);
+    await sendWaCommand({ action: "reset" });
     return { ok: true };
   });
 }

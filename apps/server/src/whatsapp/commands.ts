@@ -25,6 +25,10 @@ export class CommandListener {
       if (this.client === client) this.client = null;
       client.release(err);
     });
+    // conexão do LISTEN fechada sem erro (banco reiniciado, proxy): sem isso os botões do painel paravam de chegar
+    client.on("end", () => {
+      if (this.client === client) this.client = null;
+    });
     client.on("notification", (msg) => {
       if (msg.channel !== "wa_command" || !msg.payload) return;
       this.onCommand(JSON.parse(msg.payload) as WaCommand);

@@ -89,7 +89,7 @@ apps/server/src/
                            commands.ts, status.ts, disconnect.ts, auth-state.ts (chaves Signal na tabela wa_auth),
                            rpc.ts/rpc-server.ts (ROLE=conversations envia pelo channel: fila whatsapp.send + NOTIFY).
                            Pareado = creds.account + me. Queda de sessão pareada vira 'reconnecting' + backoff 2s..60s;
-                           só loggedOut/403 pede QR. Teste com socket falso: test/whatsapp-reconnect.e2e.test.ts
+                           só loggedOut/403/device_removed pede QR. Teste com socket falso: test/whatsapp-reconnect.e2e.test.ts
   agent/
     orchestrator.ts        processConversation: mídia, contexto (Redis), memórias, CTO, entrega em balões; resumo/compactação
     media.ts               interpreta mídia 1 vez: áudio->texto, foto->descrição (linha FINANCEIRO: p/ comprovantes),

@@ -4,7 +4,11 @@ export type Status = "disconnected" | "connecting" | "reconnecting" | "qr" | "pa
 export type Log = { info: (...a: any[]) => void; warn: (...a: any[]) => void; error: (...a: any[]) => void };
 
 export interface WaCommand {
-  action: "connect" | "logout" | "restart";
+  /**
+   * connect/restart: (re)abre a conexão (com a sessão salva, ou QR se não houver); stop: para e não religa
+   * sozinho até um connect/restart; logout: sai e apaga a sessão; reset: sai, apaga e já gera um QR novo.
+   */
+  action: "connect" | "logout" | "restart" | "stop" | "reset";
   /** quando informado, conecta por código de pareamento em vez de QR */
   phone?: string;
 }

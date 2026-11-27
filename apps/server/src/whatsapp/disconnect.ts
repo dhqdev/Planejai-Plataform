@@ -17,6 +17,18 @@ export function statusCodeOf(err: unknown): number | undefined {
   return (err as any)?.output?.statusCode;
 }
 
+/**
+ * O celular tirou este aparelho (ou a conta foi bloqueada): as credenciais salvas não valem mais e só um
+ * QR novo resolve. Além de loggedOut/forbidden, o WhatsApp às vezes manda `<conflict type="device_removed"/>`
+ * sem código, que o Baileys traduz como connectionReplaced (440); sem tratar, ficava religando para sempre.
+ */
+export function isLoggedOut(err: unknown) {
+  const code = statusCodeOf(err);
+  if (code === DisconnectReason.loggedOut || code === DisconnectReason.forbidden) return true;
+  const data = (err as any)?.data;
+  return data?.tag === "conflict" && data?.attrs?.type === "device_removed";
+}
+
 export function reasonName(code: number | undefined) {
   return code !== undefined ? REASON_NAMES[code] ?? `código ${code}` : "sem código";
 }

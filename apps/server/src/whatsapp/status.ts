@@ -47,6 +47,31 @@ export class SessionStatus {
     return query("UPDATE wa_sessions SET phone = NULL, name = NULL WHERE id = $1", [SESSION_ID]);
   }
 
+  /** Parada pelo painel? (vale para qualquer processo que assumir a conexão depois) */
+  async isStopped() {
+    const r = await query<{ stopped: boolean }>("SELECT stopped_at IS NOT NULL AS stopped FROM wa_sessions WHERE id = $1", [SESSION_ID]);
+    return Boolean(r.rows[0]?.stopped);
+  }
+
+  markStopped(on: boolean) {
+    return this.queue(() => query(`UPDATE wa_sessions SET stopped_at = ${on ? "now()" : "NULL"} WHERE id = $1`, [SESSION_ID]));
+  }
+
+  /**
+   * Painel preso em "conectando" sem nada rodando de verdade (comando perdido, tentativa que morreu):
+   * volta para "desconectado" com o motivo, para aparecer o botão de gerar QR.
+   */
+  releaseStuck() {
+    return this.queue(() =>
+      query(
+        `UPDATE wa_sessions SET status = 'disconnected', qr = NULL, pairing_code = NULL, down_since = NULL, updated_at = now(),
+           last_error = 'A conexão não andou. Toque em Gerar QR code para tentar de novo.'
+          WHERE id = $1 AND status IN ('connecting', 'reconnecting', 'qr', 'pairing') AND updated_at < now() - interval '30 seconds'`,
+        [SESSION_ID],
+      ),
+    );
+  }
+
   /** Termina quando tudo que estava na fila foi gravado (ou falhou). */
   settled() {
     return this.chain;
